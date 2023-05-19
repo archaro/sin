@@ -1,9 +1,9 @@
 // The interpreter
 
-#include <stdio.h>
 #include <string.h>
 
 #include "interpret.h"
+#include "log.h"
 #include "value.h"
 #include "stack.h"
 
@@ -15,18 +15,46 @@ char *op_nop(char *nextop, STACK_t *stack) {
 }
 
 char *op_undefined(char *nextop, STACK_t *stack) {
-  printf("Undefined opcode: %c\n", *(nextop-1));
+  logerr("Undefined opcode: %c\n", *(nextop-1));
   return nextop;
 }
 
 char *op_pushint(char *nextop, STACK_t *stack) {
   // Push an int64 onto the stack.
   // Read the next 8 bytes and make an VALUE_t
-  VALUE_t o;
-  o.type = 'i';
-  memcpy(&o.i, nextop, 8);
-  push_stack(stack, o);
+  VALUE_t v;
+  v.type = 'i';
+  memcpy(&v.i, nextop, 8);
+  push_stack(stack, v);
   return nextop+8;
+}
+
+char *op_addint(char *nextop, STACK_t *stack) {
+  // Pop two int64s, add them together, then push the result onto the stack.
+  // We assume that the parser and the programmer know what they are doing,
+  // So whatever the two values are on the stack, this will be an integer
+  // addition, and the result will also be an integer.
+  VALUE_t v1, v2;
+  v1 = pop_stack(stack);
+  v2 = pop_stack(stack);
+  v2.i += v1.i;
+  v2.type = 'i';
+  push_stack(stack, v2);
+  return nextop;
+}
+
+char *op_subtractint(char *nextop, STACK_t *stack) {
+  // Pop two int64s, subtract the last from the first, then push the result
+  // onto the stack. onto the stack. We assume that the parser and the
+  // programmer know what they are doing, so whatever the two values are on
+  // the stack, this will be an integer result.
+  VALUE_t v1, v2;
+  v1 = pop_stack(stack);
+  v2 = pop_stack(stack);
+  v2.i -= v1.i;
+  v2.type = 'i';
+  push_stack(stack, v2);
+  return nextop;
 }
 
 void init_interpreter() {
@@ -35,7 +63,9 @@ void init_interpreter() {
     opcode[o] = op_undefined;
   }
   opcode[0] = op_nop;
+  opcode['a'] = op_addint;
   opcode['p'] = op_pushint;
+  opcode['s'] = op_subtractint;
 }
 
 int interpret(ITEM_t *item) {
@@ -46,5 +76,8 @@ int interpret(ITEM_t *item) {
   while (*op != 'h') {
     op = opcode[*op](++op, item->stack);
   }
-  return 0;
+  // THERE MUST BE SOMETHING ON THE STACK!
+  // Pop it, and return its integer value, whatever it actuallt is.
+  VALUE_t v = pop_stack(item->stack);
+  return v.i;
 }

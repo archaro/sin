@@ -1,0 +1,9 @@
+All single byte opcodes which may, or may not, have following arguments.
+
+a - add ints.  Pop the top two values from the stack, add them together as ints,
+    then push the result back on the stack.
+s - subtract ints.  Pop the top two values from the stack, subtract the last from
+    the first, then push the result back on the stack.
+p - push int.  Interpret the next 8 bytes as an 64-bit integer and push onto the
+    stack.
+h - halt.  Stop interpreting.
