@@ -18,8 +18,9 @@ typedef struct {
   char *name;
   STACK_t *stack;
   char *bytecode, *ip;
+  int bytecode_len;
   VALUE_t val;
 } ITEM_t;
 
-ITEM_t *make_item(char *name, ITEM_e type, VALUE_t val, char *code);
+ITEM_t *make_item(char *name, ITEM_e type, VALUE_t val, char *code, int len);
 void free_item(ITEM_t *item);

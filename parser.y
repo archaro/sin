@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <strings.h>
 
+#include "memory.h"
+
 int yylex(void);
 void yyerror(char const *);
 
@@ -18,7 +20,7 @@ int maxsize = 1024;
 
 void init_output() {
   // Set up the output buffer
-  bytecode = (char *)malloc(maxsize);
+  bytecode = GROW_ARRAY(unsigned char, bytecode, 0, maxsize);
   nextbyte = bytecode;
 }
 
@@ -26,8 +28,9 @@ void emit_byte(unsigned char c) {
   *nextbyte++ = c;
   int size = nextbyte - bytecode;
   if (size >= maxsize) {
-    maxsize *= 2;
-    bytecode = realloc(bytecode, maxsize);
+    int oldsize = maxsize;
+    maxsize = GROW_CAPACITY(maxsize);
+    bytecode = GROW_ARRAY(unsigned char, bytecode, oldsize, maxsize);
     nextbyte = bytecode + size;
   }
 }
@@ -100,6 +103,7 @@ printf("Starting...\n");
   printf("\nParse completed.\n");
   fwrite(bytecode, nextbyte - bytecode, 1, out);
   fclose(out);
+  FREE_ARRAY(unsigned char, bytecode, maxsize);
 }
 
 

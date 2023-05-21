@@ -6,12 +6,13 @@
 #include <string.h>
 
 #include "log.h"
+#include "memory.h"
 
 bool log_to_file(char *logfile) {
   // Log to file.  The logfile parameter is suffixed with .log and .err
   // for stdout and stderr respectively.
   int len = strlen(logfile) + 5;
-  char *newlog = (char *)malloc(len);
+  char *newlog = GROW_ARRAY(char, newlog, 0, len);
   bool result = false;
   snprintf(newlog, len, "%s.log", logfile);
   if (!freopen(newlog,"a",stdout)) {
@@ -24,7 +25,7 @@ bool log_to_file(char *logfile) {
       result = true;
     }
   }
-  free(newlog);
+  FREE_ARRAY(char, newlog, len);
   return result;
 }
 

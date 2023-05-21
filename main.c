@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <getopt.h>
 
+#include "memory.h"
 #include "log.h"
 #include "value.h"
 #include "item.h"
@@ -21,7 +22,7 @@ void usage() {
 
 int main(int argc, char **argv) {
   int filesize = 0;
-  char *bytecode = NULL;
+  unsigned char *bytecode = NULL;
 
   if (argc < 2) {
     usage();
@@ -68,7 +69,7 @@ int main(int argc, char **argv) {
         fseek(in, 0, SEEK_END);
         filesize = ftell(in);
         fseek(in, 0, SEEK_SET);
-        bytecode = (char *)malloc(filesize);
+        bytecode = GROW_ARRAY(unsigned char, bytecode, 0, filesize);
         fread(bytecode, filesize, sizeof(char), in);
         fclose(in);
         logmsg("Bytecode loaded: %d bytes.\n", filesize);
@@ -87,7 +88,7 @@ int main(int argc, char **argv) {
 
   // Do some preparations
   init_interpreter();
-  ITEM_t *start = make_item("start", ITEM_code, VALUE_NIL, bytecode);
+  ITEM_t *start = make_item("start", ITEM_code, VALUE_NIL, bytecode, filesize);
 
   // Now we have some bytecode, let's see what it does.
   int ret = interpret(start);

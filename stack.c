@@ -5,13 +5,17 @@
 #include <stdio.h>
 
 #include "stack.h"
+#include "memory.h"
 
 STACK_t *new_stack(uint32_t size) {
   // Create a new stack of VALUE_t structs, and return a pointer to it.
-  STACK_t *newstack =  (STACK_t*)malloc(sizeof(STACK_t));
+  STACK_t *newstack = NULL;
+  newstack = GROW_ARRAY(STACK_t, newstack, 0, sizeof(STACK_t));
   newstack->max = size;
   newstack->current = -1;
-  newstack->stack = (VALUE_t*)malloc(sizeof(VALUE_t) * size);
+  newstack->stack = NULL;
+  newstack->stack = GROW_ARRAY(VALUE_t, newstack->stack, 0,
+                                            sizeof(VALUE_t) * size);
   return newstack;
 }
 
@@ -19,9 +23,9 @@ void free_stack(STACK_t* stack) {
   // Given a stack, free its associated memorY
   if (stack) {
     if (stack->stack) {
-      free(stack->stack);
+      FREE_ARRAY(VALUE_t, stack->stack, stack->max);
     }
-    free(stack);
+    FREE_ARRAY(STACK_t, stack, sizeof(STACK_t));
   }
 }
 
