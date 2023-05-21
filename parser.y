@@ -56,6 +56,7 @@ void emit_int(int i) {
 %nonassoc TSEMI
 
 %left TPLUS TMINUS
+%left TMULT TDIV
 
 %%
 
@@ -73,6 +74,8 @@ stmt:     expr                      { }
 
 expr:     expr TPLUS expr           { emit_byte('a'); }
 	      |	expr TMINUS expr          { emit_byte('s'); }
+	      |	expr TMULT expr           { emit_byte('m'); }
+	      |	expr TDIV expr            { emit_byte('d'); }
         |	TINTEGER                  { emit_byte('p'); emit_int(atoi(yylval.string)); }
 ;
 

@@ -45,13 +45,47 @@ char *op_addint(char *nextop, STACK_t *stack) {
 
 char *op_subtractint(char *nextop, STACK_t *stack) {
   // Pop two int64s, subtract the last from the first, then push the result
-  // onto the stack. onto the stack. We assume that the parser and the
-  // programmer know what they are doing, so whatever the two values are on
-  // the stack, this will be an integer result.
+  // onto the stack. We assume that the parser and the programmer know what
+  // they are doing, so whatever the two values are on the stack, this will
+  // be an integer result.
   VALUE_t v1, v2;
   v1 = pop_stack(stack);
   v2 = pop_stack(stack);
   v2.i -= v1.i;
+  v2.type = 'i';
+  push_stack(stack, v2);
+  return nextop;
+}
+
+char *op_divideint(char *nextop, STACK_t *stack) {
+  // Pop two int64s, divide the last by the first, then push the result
+  // onto the stack. We assume that the parser and the programmer know what
+  // they are doing, so whatever the two values are on the stack, this will
+  // be an integer result.
+  // Trap divide by zero and substitute a result of zero.
+  VALUE_t v1, v2;
+  v1 = pop_stack(stack);
+  v2 = pop_stack(stack);
+  if (v1.i == 0) {
+    logerr("Attempt to divide by zero.  Substitute zero as result.\n");
+    v2.i = 0;
+  } else {
+    v2.i /= v1.i;
+  }
+  v2.type = 'i';
+  push_stack(stack, v2);
+  return nextop;
+}
+
+char *op_multiplyint(char *nextop, STACK_t *stack) {
+  // Pop two int64s, multiply them together, then push the result onto the stack.
+  // We assume that the parser and the programmer know what they are doing,
+  // So whatever the two values are on the stack, this will be an integer
+  // addition, and the result will also be an integer.
+  VALUE_t v1, v2;
+  v1 = pop_stack(stack);
+  v2 = pop_stack(stack);
+  v2.i *= v1.i;
   v2.type = 'i';
   push_stack(stack, v2);
   return nextop;
@@ -64,6 +98,8 @@ void init_interpreter() {
   }
   opcode[0] = op_nop;
   opcode['a'] = op_addint;
+  opcode['d'] = op_divideint;
+  opcode['m'] = op_multiplyint;
   opcode['p'] = op_pushint;
   opcode['s'] = op_subtractint;
 }
