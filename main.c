@@ -1,5 +1,6 @@
 // sin - a bytecode interpreter
 #include <stdio.h>
+#include <string.h>
 #include <getopt.h>
 
 #include "memory.h"
@@ -87,15 +88,28 @@ int main(int argc, char **argv) {
   }
 
   // Do some preparations
+#ifdef DEBUG
+  logerr("DEBUG IS DEFINED\n");
+#endif
   init_interpreter();
   ITEM_t *start = make_item("start", ITEM_code, VALUE_NIL, bytecode, filesize);
 
   // Now we have some bytecode, let's see what it does.
-  int ret = interpret(start);
-  logmsg("Bytecode interpreter returned: %d\n", ret);
+  VALUE_t ret = interpret(start);
+  if (ret.type == VALUE_int) {
+    logmsg("Bytecode interpreter returned: %ld\n", ret.i);
+  } else if (ret.type == VALUE_str) {
+    logmsg("Bytecode interpreter returned: %s\n", ret.s);
+    FREE_ARRAY(char, ret.s, strlen(ret.s)+1);
+  } else {
+    logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
+  }
 
   // Clean up
   logmsg("Shutting down.\n");
+#ifdef DEBUG
+  logerr("DEBUG IS DEFINED\n");
+#endif
   free_item(start);
   close_log();
   exit(EXIT_SUCCESS);

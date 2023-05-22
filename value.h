@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-typedef enum {VALUE_int, VALUE_nil} VALUE_e;
+typedef enum {VALUE_int, VALUE_str, VALUE_nil} VALUE_e;
 
 typedef struct {
   VALUE_e type; // What sort of value am I?

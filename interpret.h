@@ -5,6 +5,7 @@
 #pragma once
 
 #include "item.h"
+#include "value.h"
 
 void init_interpreter();
-int interpret(ITEM_t *item);
+VALUE_t interpret(ITEM_t *item);

@@ -4,6 +4,7 @@
 
 #include "interpret.h"
 #include "log.h"
+#include "memory.h"
 #include "value.h"
 #include "stack.h"
 
@@ -23,23 +24,61 @@ char *op_pushint(char *nextop, STACK_t *stack) {
   // Push an int64 onto the stack.
   // Read the next 8 bytes and make an VALUE_t
   VALUE_t v;
-  v.type = 'i';
+  v.type = VALUE_int;
   memcpy(&v.i, nextop, 8);
   push_stack(stack, v);
   return nextop+8;
 }
 
-char *op_addint(char *nextop, STACK_t *stack) {
-  // Pop two int64s, add them together, then push the result onto the stack.
-  // We assume that the parser and the programmer know what they are doing,
-  // So whatever the two values are on the stack, this will be an integer
-  // addition, and the result will also be an integer.
+char *op_pushstr(char *nextop, STACK_t *stack) {
+  // Push a string literal onto the stack.
+  VALUE_t v;
+  v.type = VALUE_str;
+  uint16_t len;
+  // Get the length
+  memcpy(&len, nextop, 2);
+  nextop += 2;
+  v.s = GROW_ARRAY(char, NULL, 0, len+1);
+  memcpy(v.s, nextop, len);
+  v.s[len] = 0;
+  push_stack(stack, v);
+  return nextop + len;
+}
+
+char *op_add(char *nextop, STACK_t *stack) {
+  // Pop two values from the stack.  If both ints, add them and push the
+  // result onto the stack.  If both strings, concatenate them and do same.
+  // If disparate types, push NIL onto the stack.
   VALUE_t v1, v2;
   v1 = pop_stack(stack);
   v2 = pop_stack(stack);
-  v2.i += v1.i;
-  v2.type = 'i';
-  push_stack(stack, v2);
+#ifdef DEBUG
+  logmsg("OP_ADD: types %d and %d\n", v1.type, v2.type);
+#endif
+  if (v1.type == VALUE_int && v2.type == VALUE_int) {
+    v2.i += v1.i;
+    v2.type = VALUE_int;
+    push_stack(stack, v2);
+  } else if (v1.type == VALUE_str && v2.type == VALUE_str) {
+    char *newstring;
+    newstring = GROW_ARRAY(char, NULL, 0, strlen(v1.s) + strlen(v2.s) + 1);
+    memcpy(newstring, v2.s, strlen(v2.s));
+    memcpy(newstring + strlen(v2.s), v1.s, strlen(v1.s) + 1);
+    FREE_ARRAY(char, v1.s, strlen(v1.s) + 1);
+    FREE_ARRAY(char, v2.s, strlen(v2.s) + 1);
+    v2.s = newstring;
+    push_stack(stack, v2);
+  } else {
+    if (v1.type == VALUE_str) {
+      free(v1.s);
+    }
+    if (v2.type == VALUE_str) {
+      free(v2.s);
+    }
+    logerr("Trying to add mismatched types '%c' and '%c'.  Result is NIL.\n",
+    v1.type, v2.type);
+    push_stack(stack, VALUE_NIL);
+  }
   return nextop;
 }
 
@@ -52,7 +91,7 @@ char *op_subtractint(char *nextop, STACK_t *stack) {
   v1 = pop_stack(stack);
   v2 = pop_stack(stack);
   v2.i -= v1.i;
-  v2.type = 'i';
+  v2.type = VALUE_int;
   push_stack(stack, v2);
   return nextop;
 }
@@ -72,7 +111,7 @@ char *op_divideint(char *nextop, STACK_t *stack) {
   } else {
     v2.i /= v1.i;
   }
-  v2.type = 'i';
+  v2.type = VALUE_int;
   push_stack(stack, v2);
   return nextop;
 }
@@ -86,7 +125,7 @@ char *op_multiplyint(char *nextop, STACK_t *stack) {
   v1 = pop_stack(stack);
   v2 = pop_stack(stack);
   v2.i *= v1.i;
-  v2.type = 'i';
+  v2.type = VALUE_int;
   push_stack(stack, v2);
   return nextop;
 }
@@ -97,14 +136,15 @@ void init_interpreter() {
     opcode[o] = op_undefined;
   }
   opcode[0] = op_nop;
-  opcode['a'] = op_addint;
+  opcode['a'] = op_add;
   opcode['d'] = op_divideint;
+  opcode['l'] = op_pushstr;
   opcode['m'] = op_multiplyint;
   opcode['p'] = op_pushint;
   opcode['s'] = op_subtractint;
 }
 
-int interpret(ITEM_t *item) {
+VALUE_t interpret(ITEM_t *item) {
   // Given some bytecode, interpret it until the HALT instruction is seen
   // NB: The HALT opcode (currently represented by the character 'h') does
   // not have an associated 
@@ -113,7 +153,6 @@ int interpret(ITEM_t *item) {
     op = opcode[*op](++op, item->stack);
   }
   // THERE MUST BE SOMETHING ON THE STACK!
-  // Pop it, and return its integer value, whatever it actuallt is.
-  VALUE_t v = pop_stack(item->stack);
-  return v.i;
+  // Pop it, and return it.
+  return pop_stack(item->stack);
 }

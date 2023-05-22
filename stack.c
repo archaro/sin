@@ -6,6 +6,7 @@
 
 #include "stack.h"
 #include "memory.h"
+#include "log.h"
 
 STACK_t *new_stack(uint32_t size) {
   // Create a new stack of VALUE_t structs, and return a pointer to it.
@@ -22,6 +23,9 @@ STACK_t *new_stack(uint32_t size) {
 void free_stack(STACK_t* stack) {
   // Given a stack, free its associated memorY
   if (stack) {
+#ifdef DEBUG
+  logerr("Stack size at destruction: %d\n", size_stack(stack));
+#endif
     if (stack->stack) {
       FREE_ARRAY(VALUE_t, stack->stack, stack->max);
     }
