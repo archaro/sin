@@ -130,6 +130,21 @@ char *op_multiplyint(char *nextop, STACK_t *stack) {
   return nextop;
 }
 
+char *op_negateint(char *nextop, STACK_t *stack) {
+  // Pop the top value, negate it, and push it back.  This opcode assumes
+  // that the value on the top of the stack is an int.  If it, erm, in't,
+  // the result is going to be very unhappy.
+  VALUE_t v1;
+  v1 = pop_stack(stack);
+  if (v1.type == VALUE_int) {
+    v1.i = 0 - v1.i;
+  } else {
+    logerr("Attempt to negate a value of type '%d'.\n", v1.type);
+  }
+  push_stack(stack, v1);
+  return nextop;
+}
+
 void init_interpreter() {
   // This function simply sets up the opcode dispatch table.
   for (int o=0; o<256; o++) {
@@ -140,6 +155,7 @@ void init_interpreter() {
   opcode['d'] = op_divideint;
   opcode['l'] = op_pushstr;
   opcode['m'] = op_multiplyint;
+  opcode['n'] = op_negateint;
   opcode['p'] = op_pushint;
   opcode['s'] = op_subtractint;
 }

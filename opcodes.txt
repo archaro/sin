@@ -10,6 +10,8 @@ l - push string literal.  Interpret the next 2 bytes as the string length,
     then read in that number of bytes as a string, then push onto the stack.
 m - multiply ints.  Pop the top two values from the stack, multiply them
     together as ints, then push the reult back on the stack.
+n - negate.  Pop the top value from the stack, negate it, and push back.
+    Note - this assumes that the value on the stack is an int!
 s - subtract ints.  Pop the top two values from the stack, subtract the
     last from the first, then push the result back on the stack.
 p - push int.  Interpret the next 8 bytes as an 64-bit integer and push

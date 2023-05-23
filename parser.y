@@ -111,6 +111,7 @@ void yyerror(yyscan_t locp, OUTPUT_t *out, char const *s) {
 
 %left TPLUS TMINUS
 %left TMULT TDIV
+%left UMINUS
 
 %%
 
@@ -131,6 +132,7 @@ expr:     expr TPLUS expr         { emit_byte('a', out); }
 	      |	expr TMULT expr         { emit_byte('m', out); }
 	      |	expr TDIV expr          { emit_byte('d', out); }
         | TLPAREN expr TRPAREN    { }
+        | TMINUS expr %prec UMINUS { emit_byte('n', out); }
         |	TINTEGER                { emit_byte('p', out);
                                     emit_int64(atoi(yylval.string), out); }
         |	TSTRINGLIT              { emit_byte('l', out);
