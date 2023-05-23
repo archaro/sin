@@ -17,6 +17,8 @@ stringlit \"([^\\\"]|\\.)*\"
 "-"         { return TMINUS; }
 "*"         { return TMULT; }
 "/"         { return TDIV; }
+"("         { return TLPAREN; }
+")"         { return TRPAREN; }
 ";"         { return TSEMI; }
 {ws}        ;
 
