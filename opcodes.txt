@@ -4,8 +4,16 @@ a - add values.  Pop the top two values from the stack.  If they are both
     ints, add them together as ints.  If they are both strings, concatenate.
     If only one is a string, use that value as the result.  Push the result
     onto the stack.
+c - save local.  Interpret the next byte as an index into the stack, and
+    store the top of the stack in that location.
 d - divide ints.  Pop the top two values from the stack, divide the last by
     the first, then push the reult back on the stack.
+e - retrieve local.  Interpret the next byte as an index into the stack,
+    and push the value of the local stored at that location onto the stack.
+f - increment local.  Interpret the next byte as an index into the stack.
+    If the local stored there is an integer, increment it.  Complain if not.
+g - decrement local.  Interpret the next byte as an index into the stack.
+    If the local stored there is an integer, decrement it.  Complain if not.
 l - push string literal.  Interpret the next 2 bytes as the string length,
     then read in that number of bytes as a string, then push onto the stack.
 m - multiply ints.  Pop the top two values from the stack, multiply them

@@ -30,6 +30,62 @@ char *op_pushint(char *nextop, STACK_t *stack) {
   return nextop+8;
 }
 
+char *op_inclocal(char *nextop, STACK_t *stack) {
+  // Interpret the next byte as an index into the locals.
+  // If that local is an int, increment it.  Otherwise complain.
+  uint8_t index = *nextop;
+  if (stack->stack[index].type == VALUE_int) {
+    stack->stack[index].i++;
+  } else {
+    logerr("Trying to increment non integer local variable.\n");
+  }
+
+  return nextop+1;
+}
+
+char *op_declocal(char *nextop, STACK_t *stack) {
+  // Interpret the next byte as an index into the locals.
+  // If that local is an int, decrement it.  Otherwise complain.
+  uint8_t index = *nextop;
+  if (stack->stack[index].type == VALUE_int) {
+    stack->stack[index].i--;
+  } else {
+    logerr("Trying to decrement non integer local variable.\n");
+  }
+
+  return nextop+1;
+}
+
+char *op_savelocal(char *nextop, STACK_t *stack) {
+  // This is the quickest way, without extra pushes and pops.
+  // Interpret the next byte as an index into the stack.
+  uint8_t index = *nextop;
+
+  // Then copy the top of the stack into that location.
+  memcpy(&(stack->stack[index]), &(stack->stack[stack->current]),
+                                                    sizeof(VALUE_t));
+
+  // Then reduce the size of the stack.
+  stack->current--;
+
+  return nextop+1;
+}
+
+char *op_getlocal(char *nextop, STACK_t *stack) {
+  // This is the quickest way, without extra pushes and pops.
+  // Interpret the next byte as an index into the stack.
+  uint8_t index = *nextop;
+
+  // Then increase the size of the stack.
+  stack->current++;
+
+  // Then copy that location to the top of the stack.
+  memcpy(&(stack->stack[stack->current]), &(stack->stack[index]),
+                                                    sizeof(VALUE_t));
+
+  return nextop+1;
+}
+
 char *op_pushstr(char *nextop, STACK_t *stack) {
   // Push a string literal onto the stack.
   VALUE_t v;
@@ -152,7 +208,11 @@ void init_interpreter() {
   }
   opcode[0] = op_nop;
   opcode['a'] = op_add;
+  opcode['c'] = op_savelocal;
   opcode['d'] = op_divideint;
+  opcode['e'] = op_getlocal;
+  opcode['f'] = op_inclocal;
+  opcode['g'] = op_declocal;
   opcode['l'] = op_pushstr;
   opcode['m'] = op_multiplyint;
   opcode['n'] = op_negateint;
@@ -163,12 +223,27 @@ void init_interpreter() {
 VALUE_t interpret(ITEM_t *item) {
   // Given some bytecode, interpret it until the HALT instruction is seen
   // NB: The HALT opcode (currently represented by the character 'h') does
-  // not have an associated 
-  char *op = item->bytecode;
+  // not have an associated function.
+
+  // First set up the locals
+  uint8_t numlocals = *item->bytecode;
+  item->stack->current += numlocals;
+  item->stack->locals = numlocals;
+#ifdef DEBUG
+  logmsg("Making space for %d locals.\n", numlocals);
+  logmsg("Stack size before interpreting begins: %d\n", size_stack(item->stack));
+#endif
+  // The actual bytecode starts at the second byte.
+  char *op = item->bytecode + 1; 
   while (*op != 'h') {
     op = opcode[*op](++op, item->stack);
   }
-  // THERE MUST BE SOMETHING ON THE STACK!
-  // Pop it, and return it.
-  return pop_stack(item->stack);
+
+  // There maybe somethign on the stack.  Return it if there is.
+  if (size_stack(item->stack)) {
+    return pop_stack(item->stack);
+  }
+
+  // Otherwise return a nill.
+  return VALUE_NIL;
 }
