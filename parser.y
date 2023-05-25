@@ -7,6 +7,8 @@
 %parse-param {void *scanner}{OUTPUT_t *out}{LOCAL_t *local}
 
 %code requires {
+  #include <stdbool.h>
+
   typedef struct {
     unsigned char *bytecode;
     unsigned char *nextbyte;
@@ -18,7 +20,7 @@
     int count;
   } LOCAL_t;
 
-  void parse_source(char *source, int sourcelen, OUTPUT_t *out);
+  bool parse_source(char *source, int sourcelen, OUTPUT_t *out);
 }
 
 %{
@@ -55,7 +57,7 @@ void emit_byte(unsigned char c, OUTPUT_t *out) {
   grow_output_buffer(out, 1);
 }
 
-void parse_source(char *source, int sourcelen, OUTPUT_t *out) {
+bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
   // source holds the source input string
   // sourcelen holds the length of the input
   // out is a pointer to a struct which holds the output buffer
@@ -77,18 +79,27 @@ void parse_source(char *source, int sourcelen, OUTPUT_t *out) {
   // of locals - we will backfill the actual number later.
   emit_byte(0, out);
 
-  yyparse(sc, out, &local);
+  bool failed = yyparse(sc, out, &local);
 
-  // ...and now we know how many locals there are, update the first
-  // byte of the bytecode.
-  out->bytecode[0] = local.count;
-
-  logmsg("Parse completed: %ld bytes.\n", out->nextbyte - out->bytecode);
+  // Clean up
   for (int l = 0; l < local.count; l++) {
+    // This frees any locals which were put on the stack.
     free(local.id[l]);
   }
   fclose(in);
   yylex_destroy(sc);
+
+  if (!failed) {
+    // ...and now we know how many locals there are, update the first
+    // byte of the bytecode.
+    out->bytecode[0] = local.count;
+    logmsg("Compilation completed: %ld bytes.\n",
+                                          out->nextbyte - out->bytecode);
+    return true;
+  } else {
+    logerr("Compilation failed.\n");
+    return false;
+  }
 }
 
 void emit_int64(uint64_t i, OUTPUT_t *out) {
@@ -232,13 +243,13 @@ stmt:     expr                    { }
         | TLOCAL TDEC             { emit_local_decrement($1, out, local); }
 ;
 
-expr:     TLOCAL                  { emit_local(yylval.string, out, local); }
+expr:     TLOCAL                  { emit_local($1, out, local); }
         |	TINTEGER                { emit_byte('p', out);
-                                    emit_int64(atoi(yylval.string), out);
-                                    free(yylval.string); }
+                                    emit_int64(atoi($1), out);
+                                    free($1); }
         |	TSTRINGLIT              { emit_byte('l', out);
-                                    emit_string(yylval.string, out);
-                                    free(yylval.string); }
+                                    emit_string($1, out);
+                                    free($1); }
         | expr TPLUS expr         { emit_byte('a', out); }
 	      |	expr TMINUS expr        { emit_byte('s', out); }
 	      |	expr TMULT expr         { emit_byte('m', out); }
