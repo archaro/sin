@@ -27,6 +27,9 @@ char *op_pushint(char *nextop, STACK_t *stack) {
   v.type = VALUE_int;
   memcpy(&v.i, nextop, 8);
   push_stack(stack, v);
+#ifdef DEBUG
+  logmsg("OP_PUSHINT: %ld\n", v.i);
+#endif
   return nextop+8;
 }
 
@@ -39,7 +42,9 @@ char *op_inclocal(char *nextop, STACK_t *stack) {
   } else {
     logerr("Trying to increment non integer local variable.\n");
   }
-
+#ifdef DEBUG
+  logmsg("OP_INCLOCAL: index %d\n", index);
+#endif
   return nextop+1;
 }
 
@@ -52,7 +57,9 @@ char *op_declocal(char *nextop, STACK_t *stack) {
   } else {
     logerr("Trying to decrement non integer local variable.\n");
   }
-
+#ifdef DEBUG
+  logmsg("OP_DECLOCAL: index %d\n", index);
+#endif
   return nextop+1;
 }
 
@@ -64,10 +71,11 @@ char *op_savelocal(char *nextop, STACK_t *stack) {
   // Then copy the top of the stack into that location.
   memcpy(&(stack->stack[index]), &(stack->stack[stack->current]),
                                                     sizeof(VALUE_t));
-
   // Then reduce the size of the stack.
   stack->current--;
-
+#ifdef DEBUG
+  logmsg("OP_SAVELOCAL: index %d\n", index);
+#endif
   return nextop+1;
 }
 
@@ -78,11 +86,12 @@ char *op_getlocal(char *nextop, STACK_t *stack) {
 
   // Then increase the size of the stack.
   stack->current++;
-
   // Then copy that location to the top of the stack.
   memcpy(&(stack->stack[stack->current]), &(stack->stack[index]),
                                                     sizeof(VALUE_t));
-
+#ifdef DEBUG
+  logmsg("OP_GETLOCAL: index %d\n", index);
+#endif
   return nextop+1;
 }
 
@@ -98,6 +107,9 @@ char *op_pushstr(char *nextop, STACK_t *stack) {
   memcpy(v.s, nextop, len);
   v.s[len] = 0;
   push_stack(stack, v);
+#ifdef DEBUG
+  logmsg("OP_PUSHSTR: %s\n", v.s);
+#endif
   return nextop + len;
 }
 
@@ -108,9 +120,6 @@ char *op_add(char *nextop, STACK_t *stack) {
   VALUE_t v1, v2;
   v1 = pop_stack(stack);
   v2 = pop_stack(stack);
-#ifdef DEBUG
-  logmsg("OP_ADD: types %d and %d\n", v1.type, v2.type);
-#endif
   if (v1.type == VALUE_int && v2.type == VALUE_int) {
     v2.i += v1.i;
     v2.type = VALUE_int;
@@ -135,6 +144,9 @@ char *op_add(char *nextop, STACK_t *stack) {
     v1.type, v2.type);
     push_stack(stack, VALUE_NIL);
   }
+#ifdef DEBUG
+  logmsg("OP_ADD: types %d and %d\n", v1.type, v2.type);
+#endif
   return nextop;
 }
 
@@ -149,6 +161,9 @@ char *op_subtractint(char *nextop, STACK_t *stack) {
   v2.i -= v1.i;
   v2.type = VALUE_int;
   push_stack(stack, v2);
+#ifdef DEBUG
+  logmsg("OP_SUB: types %d and %d\n", v1.type, v2.type);
+#endif
   return nextop;
 }
 
@@ -169,6 +184,9 @@ char *op_divideint(char *nextop, STACK_t *stack) {
   }
   v2.type = VALUE_int;
   push_stack(stack, v2);
+#ifdef DEBUG
+  logmsg("OP_DIV: types %d and %d\n", v1.type, v2.type);
+#endif
   return nextop;
 }
 
@@ -183,6 +201,9 @@ char *op_multiplyint(char *nextop, STACK_t *stack) {
   v2.i *= v1.i;
   v2.type = VALUE_int;
   push_stack(stack, v2);
+#ifdef DEBUG
+  logmsg("OP_MUL: types %d and %d\n", v1.type, v2.type);
+#endif
   return nextop;
 }
 
@@ -195,6 +216,9 @@ char *op_negateint(char *nextop, STACK_t *stack) {
     logerr("Attempt to negate a value of type '%d'.\n",
                                     stack->stack[stack->current].type);
   }
+#ifdef DEBUG
+  logmsg("OP_NEGATE: type %d\n", stack->stack[stack->current].type);
+#endif
   return nextop;
 }
 
