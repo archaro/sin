@@ -187,17 +187,14 @@ char *op_multiplyint(char *nextop, STACK_t *stack) {
 }
 
 char *op_negateint(char *nextop, STACK_t *stack) {
-  // Pop the top value, negate it, and push it back.  This opcode assumes
-  // that the value on the top of the stack is an int.  If it, erm, in't,
-  // the result is going to be very unhappy.
-  VALUE_t v1;
-  v1 = pop_stack(stack);
-  if (v1.type == VALUE_int) {
-    v1.i = 0 - v1.i;
+  // If the top value on the stack is an int, negate it.
+  //  Complain bitterly if not.
+  if (stack->stack[stack->current].type == VALUE_int) {
+    stack->stack[stack->current].i = -stack->stack[stack->current].i;
   } else {
-    logerr("Attempt to negate a value of type '%d'.\n", v1.type);
+    logerr("Attempt to negate a value of type '%d'.\n",
+                                    stack->stack[stack->current].type);
   }
-  push_stack(stack, v1);
   return nextop;
 }
 
