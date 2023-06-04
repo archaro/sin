@@ -8,7 +8,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 
-bool log_to_file(char *logfile);
+bool log_to_file(const char *logfile);
 void close_log();
-void logmsg(char *msg, ...);
-void logerr(char *msg, ...);
+void logmsg(const char *msg, ...);
+void logerr(const char *msg, ...);

@@ -6,7 +6,8 @@
 #include "item.h"
 #include "memory.h"
 
-ITEM_t *make_item(char *name, ITEM_e type, VALUE_t val, char *code, int len) {
+ITEM_t *make_item(const char *name, ITEM_e type, VALUE_t val, uint8_t *code,
+                                                                int len) {
   // Make a nice, shiny new item and return it.
   ITEM_t *item = NULL;
   item = GROW_ARRAY(ITEM_t, item, 0, (sizeof(ITEM_t)));

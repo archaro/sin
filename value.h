@@ -6,9 +6,9 @@
 typedef enum {VALUE_int, VALUE_str, VALUE_nil} VALUE_e;
 
 typedef struct {
-  VALUE_e type; // What sort of value am I?
+  VALUE_e type = VALUE_nil; // What sort of value am I?
   union {
-    int64_t i;  // This is an integer value
+    int64_t i = 0;  // This is an integer value
     char *s; // This is a char* value
   };
 } VALUE_t;

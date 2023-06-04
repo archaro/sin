@@ -1,5 +1,5 @@
-CC=gcc
-CFLAGS=-g
+CC=g++
+CFLAGS=-g -fPIC
 LDFLAGS=
 LIBS=
 YACC=bison
@@ -15,7 +15,7 @@ clean:
 
 .PHONY: all clean
 
-sin: main.o stack.o interpret.o item.o log.o value.o memory.o \
+sin: value.o main.o stack.o interpret.o item.o log.o memory.o \
      murmur3.o stringtable.o
 	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS)
 

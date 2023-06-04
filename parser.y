@@ -150,6 +150,7 @@ bool emit_local_index(char *id, OUTPUT_t *out, LOCAL_t *local) {
   }
   free(id);
   emit_byte(l, out);
+  return true;
 }
 
 bool emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
@@ -185,13 +186,13 @@ bool emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
 }
 
 
-bool emit_local_increment(char *id, OUTPUT_t *out, LOCAL_t *local) {
+void emit_local_increment(char *id, OUTPUT_t *out, LOCAL_t *local) {
   // emit the "increment local" opcode, followed by the local to increment.
   emit_byte('f', out);
   emit_local_index(id, out, local);
 }
 
-bool emit_local_decrement(char *id, OUTPUT_t *out, LOCAL_t *local) {
+void emit_local_decrement(char *id, OUTPUT_t *out, LOCAL_t *local) {
   // emit the "decrement local" opcode, followed by the local to decrement.
   emit_byte('g', out);
   emit_local_index(id, out, local);

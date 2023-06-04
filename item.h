@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 #include "value.h"
 #include "stack.h"
 
@@ -17,10 +19,11 @@ typedef struct {
   ITEM_e type;
   char *name;
   STACK_t *stack;
-  char *bytecode, *ip;
+  uint8_t *bytecode, *ip;
   int bytecode_len;
   VALUE_t val;
 } ITEM_t;
 
-ITEM_t *make_item(char *name, ITEM_e type, VALUE_t val, char *code, int len);
+ITEM_t *make_item(const char *name, ITEM_e type, VALUE_t val, uint8_t *code,
+                                                                  int len);
 void free_item(ITEM_t *item);

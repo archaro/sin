@@ -1,5 +1,6 @@
 // sin - a bytecode interpreter
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include <getopt.h>
 
@@ -22,8 +23,9 @@ void usage() {
 }
 
 int main(int argc, char **argv) {
+  FILE *in;
   int filesize = 0;
-  unsigned char *bytecode = NULL;
+  uint8_t *bytecode = NULL;
 
   if (argc < 2) {
     usage();
@@ -62,7 +64,7 @@ int main(int argc, char **argv) {
         // Mandatory: Name of the object code file.
         // Load a file to interpret, otherwise what's the point?
         // The file is always the last argument.
-        FILE *in = fopen(optarg, "r");
+        in = fopen(optarg, "r");
         if (!in) {
           logerr("Unable to open input file: %s\n", optarg);
           exit(EXIT_FAILURE);

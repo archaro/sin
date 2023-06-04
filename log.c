@@ -8,7 +8,7 @@
 #include "log.h"
 #include "memory.h"
 
-bool log_to_file(char *logfile) {
+bool log_to_file(const char *logfile) {
   // Log to file.  The logfile parameter is suffixed with .log and .err
   // for stdout and stderr respectively.
   int len = strlen(logfile) + 5;
@@ -33,14 +33,14 @@ void close_log() {
   freopen("/dev/tty","a",stderr);
 }
 
-void logerr(char *msg, ...) {
+void logerr(const char *msg, ...) {
   va_list args;
   va_start(args, msg);
   vfprintf(stderr, msg, args);
   va_end(args);
 }
 
-void logmsg(char *msg, ...) {
+void logmsg(const char *msg, ...) {
   va_list args;
   va_start(args, msg);
   vfprintf(stdout, msg, args);

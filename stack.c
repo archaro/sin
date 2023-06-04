@@ -69,10 +69,10 @@ VALUE_t pop_stack(STACK_t *stack) {
     if (stack->current >= 0) {
       stack->current--;
       return stack->stack[stack->current + 1];
-    } else {
-      printf("Stack underflow.\n");
     }
   }
+  printf("Stack underflow.\n");
+  return VALUE_NIL;
 }
 
 VALUE_t peek_stack(STACK_t *stack) {
@@ -81,10 +81,10 @@ VALUE_t peek_stack(STACK_t *stack) {
   if (stack) {
     if (stack->current >= 0) {
       return stack->stack[stack->current];
-    } else {
-      printf("Peeking at empty stack.\n");
     }
   }
+  printf("Peeking at empty stack.\n");
+  return VALUE_NIL;
 }
 
 int size_stack(STACK_t *stack) {
