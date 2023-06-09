@@ -2,25 +2,28 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 
 typedef enum {STR_comp, STR_interp}  STR_e;
 
-typedef struct STRING_t {
-  unsigned __int128 hash;
-  uint16_t len;
-  STR_e from;
-  char *ptr;
-  struct STRING_t *next;
-} STRING_t;
+class String {
+  public:
+    unsigned __int128 hash;
+    uint16_t len;
+    STR_e from;
+    char *ptr;
+    String *next;
+};
 
-typedef struct {
-  uint16_t count;
-  uint16_t capacity;
-  STRING_t **hash;
-} STRTABLE_t;
+class StrTable {
+  private:
+    uint16_t count;
+    uint16_t capacity;
+    void grow_string_table();
+  public:
+    String **hash;
+    StrTable(uint16_t capacity);
+    unsigned __int128 hash_string(char *str, STR_e from);
+    void destroy_stringtable();
+};
 
-STRTABLE_t * make_stringtable(STRTABLE_t *table, uint16_t capacity);
-unsigned __int128 hash_string(char *str, STR_e from, STRTABLE_t *table);
-void grow_string_table(STRTABLE_t *table);
-void destroy_stringtable(STRTABLE_t *table);

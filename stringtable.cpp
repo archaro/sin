@@ -5,8 +5,8 @@
 // are runtime strings - this is so that runtime strings can be
 // periodically cleaned up to reduce the load factor.
 
-#include <string.h>
-#include <stdbool.h>
+#include <cstring>
+#include <cstdbool>
 
 #include "stringtable.h"
 #include "memory.h"
@@ -20,21 +20,18 @@
 // If the string table load gets above this, the table needs to grow.
 #define TABLE_MAX_LOAD  0.75
 
-STRTABLE_t *make_stringtable(STRTABLE_t *table, uint16_t capacity) {
-  // Create the global string hash table.
-  table = GROW_ARRAY(STRTABLE_t, NULL, 0, sizeof(STRTABLE_t));
-  table->count = 0;
-  table->capacity = capacity;
-  table->hash = GROW_ARRAY(STRING_t *, NULL, 0,
-                                          sizeof(STRING_t *) * capacity);
+StrTable::StrTable(uint16_t capacity) {
+  // Initialise the global string hash table.
+  count = 0;
+  capacity = capacity;
+  hash = GROW_ARRAY(String *, NULL, 0, sizeof(String *) * capacity);
   // An empty bucket is represented by NULL
   for (int i = 0; i < capacity; i++) {
-    table->hash[i] = NULL;
+    hash[i] = NULL;
   }
-  return table;
 }
 
-unsigned __int128 hash_string(char *str, STR_e from, STRTABLE_t *table) {
+unsigned __int128 StrTable::hash_string(char *str, STR_e from) {
   // Hash a string and insert it into the string table if not there already.
   // Grow the string table if the load factor is exceeded.
   // NOTE: once a string is added to the string table, the table
@@ -44,11 +41,11 @@ unsigned __int128 hash_string(char *str, STR_e from, STRTABLE_t *table) {
   uint16_t len = strlen(str);
   unsigned __int128 hash;
   MurmurHash3_x86_128(str, len, MURMUR_SEED, &hash);
-  uint16_t index = hash % table->capacity;
+  uint16_t index = hash % this->capacity;
 
   // Check to see if this hash is in the table aready
   bool found = false;
-  STRING_t *next = table->hash[index];
+  String *next = this->hash[index];
   while (next) {
     if (next->hash == hash) {
       found = true;
@@ -58,28 +55,28 @@ unsigned __int128 hash_string(char *str, STR_e from, STRTABLE_t *table) {
   }
   if (!found) {
     // Not found, so insert a new one.
-    STRING_t *newstr = GROW_ARRAY(STRING_t, NULL, 0, sizeof(STRING_t));
+    String *newstr = GROW_ARRAY(String, NULL, 0, sizeof(String));
     newstr->ptr = str;
     newstr->len = strlen(str);
     newstr->from = from;
     newstr->hash = hash;
     newstr->next = NULL;
-    if (!table->hash[index]) {
+    if (!this->hash[index]) {
       // First string in this bucket
-      table->hash[index] = newstr;
+      this->hash[index] = newstr;
     } else {
-      STRING_t *lastentry = table->hash[index];
+      String *lastentry = this->hash[index];
       while (lastentry->next) {
         // Find the end of the chain
         lastentry = lastentry->next;
       }
       lastentry->next = newstr;
     }
-    table->count++;
-    if (table->count > table->capacity * TABLE_MAX_LOAD) {
+    this->count++;
+    if (this->count > this->capacity * TABLE_MAX_LOAD) {
       // The hash table is getting a bit too big.  Increase the size
       // and re-balance it.
-      grow_string_table(table);
+      grow_string_table();
     }
   } else {
     // This one already exists, so free the string that was passed in
@@ -91,34 +88,34 @@ unsigned __int128 hash_string(char *str, STR_e from, STRTABLE_t *table) {
   return hash;
 }
 
-void grow_string_table(STRTABLE_t *table) {
+void StrTable::grow_string_table() {
   // Increase the size of the string table and reallocate the hashed
   // strings to new buckets.  This is a SLOW process, so should be done
   // infrequently!
 
-  uint16_t newcapacity =  GROW_CAPACITY(table->capacity);
-  if (newcapacity < table->capacity) {
+  uint16_t newcapacity =  GROW_CAPACITY(this->capacity);
+  if (newcapacity < this->capacity) {
     // We have overflowed the string table.  This is a problem.
     // (Unlikely, since we have over 2 billion entries, but still...)
     logerr("Unable to grow string interning table - overflow.\n");
     return;
   }
-  STRING_t **newhash = GROW_ARRAY(STRING_t *, NULL, 0,
-                                        sizeof(STRING_t *) * newcapacity);
+  String **newhash = GROW_ARRAY(String *, NULL, 0,
+                                        sizeof(String *) * newcapacity);
   // An empty bucket is represented by NULL
   for (int i = 0; i < newcapacity; i++) {
     newhash[i] = NULL;
   }
   // Iterate over every string in the old table, recalculate its bucket
   // and insert it into the new table.
-  for (uint16_t index = 0; index < table->capacity; index++) {
-    if (!table->hash[index]) {
+  for (uint16_t index = 0; index < this->capacity; index++) {
+    if (!this->hash[index]) {
       // No hashes here...
       continue;
     }
     // We have at least one string in this bucket.  Iterate over the
     // chain and move each entry to the new table.
-    STRING_t *moveme = table->hash[index];
+    String *moveme = this->hash[index];
     do {
       uint16_t newindex = moveme->hash % newcapacity;
       if (!newhash[newindex]) {
@@ -126,7 +123,7 @@ void grow_string_table(STRTABLE_t *table) {
         moveme = moveme->next;
         newhash[newindex]->next = NULL;
       } else {
-        STRING_t *end = newhash[newindex];
+        String *end = newhash[newindex];
         while (end->next) {
           end = end->next;
         }
@@ -136,27 +133,25 @@ void grow_string_table(STRTABLE_t *table) {
       }
     } while (moveme);
   }
-  // Clean up and update the STRTABLE_t record.
-  FREE_ARRAY(STRING_t *, table->hash, table->capacity);
-  table->capacity = newcapacity;
-  table->hash = newhash;
+  // Clean up and update the StrTable record.
+  FREE_ARRAY(String *, this->hash, this->capacity);
+  this->capacity = newcapacity;
+  this->hash = newhash;
 }
 
-void destroy_stringtable(STRTABLE_t *table) {
-  // Iterate through each STRING_t*, freeing the associated char* and
-  // then the STRING_t* itself.  Finally free the STRTABLE_t*
-  for (uint16_t i = 0; i < table->capacity; i++) {
-    if (table->hash[i]) {
-      STRING_t *next = table->hash[i];
+void StrTable::destroy_stringtable() {
+  // Iterate through each String*, freeing the associated char* and
+  // then the String* itself.
+  for (uint16_t i = 0; i < this->capacity; i++) {
+    if (this->hash[i]) {
+      String *next = this->hash[i];
       while (next) {
         FREE_ARRAY(char, next->ptr, next->len+1);
-        STRING_t *next2 = next->next;
-        FREE_ARRAY(STRING_t, next, sizeof(STRING_t));
+        String *next2 = next->next;
+        FREE_ARRAY(String, next, sizeof(String));
         next = next2;
       }
     }
   }
-  FREE_ARRAY(STRTABLE_t *, table->hash, 
-                                  sizeof(STRTABLE_t *) * table->capacity);
-  FREE_ARRAY(STRTABLE_t, table, sizeof(STRTABLE_t));
+  FREE_ARRAY(StrTable *, this->hash, sizeof(StrTable *) * this->capacity);
 }

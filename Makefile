@@ -8,6 +8,9 @@ DEBUG=-DDEBUG=1
 %.o : %.c
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
+%.o : %.cpp
+	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
+
 all: sin scomp
 
 clean:
@@ -33,7 +36,7 @@ murmur3.o: murmur3.c murmur3.h
 parser.o: parser.c parser.h memory.h log.h
 scomp.o: scomp.c parser.h memory.h log.h
 stack.o: stack.c stack.h value.h memory.h
-stringtable.o: stringtable.c stringtable.h murmur3.h
+stringtable.o: stringtable.cpp stringtable.h murmur3.h
 value.o: value.c value.h
 
 
