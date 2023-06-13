@@ -21,6 +21,9 @@ class Page {
   //   char *space = the block of memory to store strings in
   //   uint16_t size = the size of the block
   //   uint16_t nextfree = the offset to the next free byte
+  // This may all be a bit overengineered, and it may work out just as
+  // performant to intern strings directly into the hash table using
+  // std::Strings, but we'll see.
   private:
     // Copying Pages is not allowed.  Verboten.
     Page (const Page&) = delete;

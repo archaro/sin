@@ -1,5 +1,7 @@
 #include "Intern.h"
 
+using namespace std;
+
 // Boost serialisation functions to serialise tsl::robin_map
 namespace boost { namespace serialization {
     template<class Archive, class Key, class T>
@@ -22,17 +24,21 @@ namespace boost { namespace serialization {
 
 template<class Archive>
 void String::serialize(Archive & ar, const unsigned int version) {
+  // This is a very simple class, with only three uint64_t members.
+  // Serialisation is uncomplicated.
   ar & pagenum;
   ar & offset;
   ar & hash;
 }
 
 Page::Page (Page&& other): space(other.space), nextfree(other.nextfree), size(other.size) {
-  // We've moved this block of memory so don't try to reference or close it
+  // We only move, never copy Pages.  Once the page is moved, set the space pointer to
+  // NULL, to prevent accidental free().
   other.space = NULL;
 }
 
 Page::Page(uint16_t s): size(s) {
+  // Pages are all of uniform size.  The Intern class knows this.
   space = (char *)calloc(s, sizeof(char *));
   nextfree = 0;
 }
@@ -43,11 +49,16 @@ Page::~Page() {
 }
 
 uint16_t Page::free_space() {
+  // This is a simple function to return how much space is left in the
+  // current page.
   return size - nextfree;
 }
 
 template<class Archive>
 void Page::serialize(Archive & ar, const unsigned int version) {
+  // Pages are slightly complicated by having a blob of memory in them.
+  // Serialising is fine, but unserialising requires that the memory is
+  // allocated prior to reading the data in.
   ar & size;
   ar & nextfree;
   using boost::serialization::make_binary_object;
@@ -58,10 +69,10 @@ void Page::serialize(Archive & ar, const unsigned int version) {
 }
 
 const String& Intern::insert(const char *str) {
-  // Return the String object
+  // Add a string to the interning database.
+  // If the string already exists, then return that.
+  // Otherwise insert this string and return the new String object.
   const uint64_t h = hash(str);
-  // Only insert the string if it isn't already there.
-  // Otherwise the value of h maps to the string already interned
   const auto &found = map.find(h);
   if (found != map.end()) {
     // We have seen this string already.
@@ -89,11 +100,12 @@ uint64_t Intern::hash(const char *str) {
   return XXH3_64bits(str, strlen(str));
 }
 
-void Intern::serialise(const std::string filename = "strings.dat") {
-  // Given a filename, backup the string database
-  std::ofstream ofs;
+void Intern::serialise(const string filename = "strings.dat") {
+  // Given a filename, backup the string database.
+  // This is an interface to the Boost::serialization library.
+  ofstream ofs;
   ofs.exceptions(ofs.badbit | ofs.failbit);
-  ofs.open(filename, std::ios::binary);
+  ofs.open(filename, ios::binary);
   boost::iostreams::filtering_ostream fo;
   fo.push(boost::iostreams::zlib_compressor());
   fo.push(ofs);
@@ -102,12 +114,13 @@ void Intern::serialise(const std::string filename = "strings.dat") {
   oa << pages;
 }
 
-void Intern::unserialise(const std::string filename = "strings.dat") {
+void Intern::unserialise(const string filename = "strings.dat") {
   // Import a string intern database
+  // This is an interface to the Boost::serialization library.
   // THIS MUST ONLY BE DONE WITH AN EMPTY Intern OBJECT!
-  std::ifstream ifs;
+  ifstream ifs;
   ifs.exceptions(ifs.badbit | ifs.failbit | ifs.eofbit);
-  ifs.open(filename, std::ios::binary);
+  ifs.open(filename, ios::binary);
   boost::iostreams::filtering_istream fi;
   fi.push(boost::iostreams::zlib_decompressor());
   fi.push(ifs);
@@ -119,7 +132,7 @@ void Intern::unserialise(const std::string filename = "strings.dat") {
 uint16_t Intern::allocate_page() {
   // Create a new page, and return its index in the vector
   Page newpage(pagesize);
-  pages.push_back(std::move(newpage));
+  pages.push_back(move(newpage));
   return (pages.end() - 1) - pages.begin();
 }
 
@@ -136,7 +149,7 @@ uint16_t Intern::get_page_index(uint16_t strsize) {
   return allocate_page();
 }
 
-uint16_t Intern::intern_string(const uint16_t pidx, const std::string str) {
+uint16_t Intern::intern_string(const uint16_t pidx, const string str) {
   // Inserts the string into pages[pidx]
   // Note that this function assumes that there is enough space!
   // pidx should be calculated by calling get_page_index()
