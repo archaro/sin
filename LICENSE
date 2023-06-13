@@ -1,0 +1,8 @@
+THIS CODE DOES NOT HAVE ANY LICENCE TERMS AND NOT RELEASED.
+You can't use it.
+
+It uses the Tessil robin-map library (MIT licence),
+and the xxHash fast string hashing library (BSD-2 licence).
+
+It will probably be released under the MIT licence...
+... if it ever does get released.
