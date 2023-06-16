@@ -1,12 +1,3 @@
-# Sinistra
-*.src
-*.obj
-sin
-scomp
-lexer.c
-parser.c
-parser.h
-
 # Prerequisites
 *.d
 
