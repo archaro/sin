@@ -5,5 +5,4 @@
 #define VALUE_INTERNAL
 #include "value.h"
 
-VALUE_t VALUE_NIL;
-
+const VALUE_t VALUE_NIL = {VALUE_nil, 0};
