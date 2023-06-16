@@ -106,7 +106,7 @@ uint64_t Intern::hash(const char *str) {
   return XXH3_64bits(str, strlen(str));
 }
 
-void Intern::serialise(const string& filename = "strings.dat") {
+void Intern::serialise(const string& filename) {
   // Given a filename, backup the string database.
   // This is an interface to the Boost::serialization library.
   ofstream ofs;
@@ -120,7 +120,7 @@ void Intern::serialise(const string& filename = "strings.dat") {
   oa << pages;
 }
 
-void Intern::unserialise(const string& filename = "strings.dat") {
+void Intern::unserialise(const string& filename) {
   // Import a string intern database
   // This is an interface to the Boost::serialization library.
   // THIS MUST ONLY BE DONE WITH AN EMPTY Intern OBJECT!

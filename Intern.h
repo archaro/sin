@@ -76,7 +76,9 @@ class Intern {
     char *find(const uint64_t hash);
     static uint64_t hash(const char *str);
     void serialise(const std::string& filename);
+    inline void serialise() { serialise("strings.dat"); }
     void unserialise(const std::string& filename);
+    inline void unserialise() { serialise("strings.dat"); }
   private:
     static char emptystring[];
     tsl::robin_map<uint64_t, String> map;
