@@ -1,8 +1,5 @@
 #pragma once
 
-#include <cstdio>
-#include <cstring>
-#include <malloc.h>
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
@@ -11,10 +8,8 @@
 #include <boost/serialization/utility.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/binary_object.hpp>
-#include <fstream>
 
 #include "tsl/robin_map.h"
-#include "xxhash.h"
 
 class Page {
   // A page of memory for storing strings in:
@@ -38,9 +33,9 @@ class Page {
     void serialize(Archive & ar, const unsigned int version);
   public:
     Page (Page&& other);
-    Page(uint16_t s);
+    explicit Page(uint16_t s);
     ~Page();
-    uint16_t free_space();
+    constexpr uint16_t free_space();
     uint16_t size;
     uint16_t nextfree;
     char *space;
@@ -80,16 +75,17 @@ class Intern {
     const String& insert(const char *str);
     char *find(const uint64_t hash);
     static uint64_t hash(const char *str);
-    void serialise(const std::string filename);
-    void unserialise(const std::string filename);
+    void serialise(const std::string& filename);
+    inline void serialise() { serialise("strings.dat"); }
+    void unserialise(const std::string& filename);
+    inline void unserialise() { serialise("strings.dat"); }
   private:
-    inline static char emptystring[] = "";
+    static char emptystring[];
     tsl::robin_map<uint64_t, String> map;
     std::vector<Page> pages;
     const uint64_t pagesize = 32768; // 32k per string page
-    char *nextspace;
     uint16_t allocate_page();
     uint16_t get_page_index(uint16_t strsize);
-    uint16_t intern_string(const uint16_t pidx, const std::string str);
+    uint16_t intern_string(const uint16_t pidx, const std::string& str);
 };
 

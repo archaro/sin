@@ -1,3 +1,9 @@
+#include <malloc.h>
+#include <cstring>
+#include <fstream>
+
+
+#include "xxhash.h"
 #include "Intern.h"
 
 using namespace std;
@@ -31,7 +37,7 @@ void String::serialize(Archive & ar, const unsigned int version) {
   ar & hash;
 }
 
-Page::Page (Page&& other): space(other.space), nextfree(other.nextfree), size(other.size) {
+Page::Page (Page&& other): size(other.size), nextfree(other.nextfree), space(other.space) {
   // We only move, never copy Pages.  Once the page is moved, set the space pointer to
   // NULL, to prevent accidental free().
   other.space = NULL;
@@ -48,7 +54,7 @@ Page::~Page() {
     free(space);
 }
 
-uint16_t Page::free_space() {
+constexpr uint16_t Page::free_space() {
   // This is a simple function to return how much space is left in the
   // current page.
   return size - nextfree;
@@ -100,7 +106,7 @@ uint64_t Intern::hash(const char *str) {
   return XXH3_64bits(str, strlen(str));
 }
 
-void Intern::serialise(const string filename = "strings.dat") {
+void Intern::serialise(const string& filename) {
   // Given a filename, backup the string database.
   // This is an interface to the Boost::serialization library.
   ofstream ofs;
@@ -114,7 +120,7 @@ void Intern::serialise(const string filename = "strings.dat") {
   oa << pages;
 }
 
-void Intern::unserialise(const string filename = "strings.dat") {
+void Intern::unserialise(const string& filename) {
   // Import a string intern database
   // This is an interface to the Boost::serialization library.
   // THIS MUST ONLY BE DONE WITH AN EMPTY Intern OBJECT!
@@ -128,6 +134,8 @@ void Intern::unserialise(const string filename = "strings.dat") {
   ia >> map;
   ia >> pages;
 }
+
+char Intern::emptystring[] = "";
 
 uint16_t Intern::allocate_page() {
   // Create a new page, and return its index in the vector
@@ -149,7 +157,7 @@ uint16_t Intern::get_page_index(uint16_t strsize) {
   return allocate_page();
 }
 
-uint16_t Intern::intern_string(const uint16_t pidx, const string str) {
+uint16_t Intern::intern_string(const uint16_t pidx, const string& str) {
   // Inserts the string into pages[pidx]
   // Note that this function assumes that there is enough space!
   // pidx should be calculated by calling get_page_index()
