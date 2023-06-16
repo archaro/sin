@@ -1,3 +1,11 @@
+# Sinistra
+boot.src
+lexer.c
+parser.c
+parser.h
+scomp
+sin
+
 # Prerequisites
 *.d
 
