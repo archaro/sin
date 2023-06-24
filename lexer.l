@@ -18,6 +18,12 @@ local       @{identifier}
 {stringlit}   { yylval->string = strdup(yytext); return TSTRINGLIT; }
 {local}       { yylval->string = strdup(yytext); return TLOCAL; }
 "="           { return TASSIGN; }
+"=="          { return TEQUAL; }
+"!="          { return TNOTEQUAL; }
+"<"           { return TLESSTHAN; }
+"<="          { return TLTEQ; }
+">"           { return TGREATERTHAN; }
+">="          { return TGTEQ; }
 "++"          { return TINC; }
 "+"           { return TPLUS; }
 "--"          { return TDEC; }

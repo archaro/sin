@@ -223,6 +223,173 @@ uint8_t *op_negateint(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
+uint8_t *op_equal(uint8_t *nextop, STACK_t *stack) {
+  // Compare the top two items on the stack and push back a VALUE_bool
+  // that is either true or false.  Be sensible about what is equal.
+  // At the moment pairs of bools, ints, or strings are considered.
+  VALUE_t v1, v2, result;
+  v1 = pop_stack(stack);
+  v2 = pop_stack(stack);
+  result.type = VALUE_bool;
+  result.i = 1; // default to true
+  if (v1.type == VALUE_int && v2.type == VALUE_int && v1.i == v2.i) {
+    push_stack(stack, result);
+    return nextop;
+  } else if (v1.type == VALUE_str && v2.type == VALUE_str &&
+                                                strcmp(v1.s, v2.s) == 0) {
+    push_stack(stack, result);
+    return nextop;
+  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
+                                                   && v1.i == v2.i) {
+    push_stack(stack, result);
+    return nextop;
+  } 
+  // If we get here, there is no equality
+  result.i = 0;
+  push_stack(stack, result);
+#ifdef DEBUG
+  logmsg("OP_EQUAL: types %d and %d\n", v1.type, v2.type);
+#endif
+  return nextop;
+}
+
+uint8_t *op_notequal(uint8_t *nextop, STACK_t *stack) {
+  // The logical reverse of op_equal.
+  // Note that mismatched types are always not equal.
+  VALUE_t v1, v2, result;
+  v1 = pop_stack(stack);
+  v2 = pop_stack(stack);
+  result.type = VALUE_bool;
+  result.i = 1; // default to false
+  if (v1.type == VALUE_int && v2.type == VALUE_int && v1.i != v2.i) {
+    push_stack(stack, result);
+    return nextop;
+  } else if (v1.type == VALUE_str && v2.type == VALUE_str &&
+                                                strcmp(v1.s, v2.s) != 0) {
+    push_stack(stack, result);
+    return nextop;
+  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
+                                                   && v1.i != v2.i) {
+    push_stack(stack, result);
+    return nextop;
+  } else if (v1.type != v2.type) {
+    // If the types do not match, there is no equality
+    push_stack(stack, result);
+    return nextop;
+  }
+  // If we get here there is equality, so return false.
+  result.i = 0;
+  push_stack(stack, result);
+#ifdef DEBUG
+  logmsg("OP_NOTEQUAL: types %d and %d\n", v1.type, v2.type);
+#endif
+  return nextop;
+}
+
+uint8_t *op_lessthan(uint8_t *nextop, STACK_t *stack) {
+  // Compare the top two items on the stack and push back a VALUE_bool
+  // that is either true or false.
+  // At the moment pairs of bools or ints are considered.
+  VALUE_t v1, v2, result;
+  v1 = pop_stack(stack);
+  v2 = pop_stack(stack);
+  result.type = VALUE_bool;
+  result.i = 1; // default to true
+  if (v1.type == VALUE_int && v2.type == VALUE_int && v2.i < v1.i) {
+    push_stack(stack, result);
+    return nextop;
+  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
+                                                   && v2.i < v1.i) {
+    push_stack(stack, result);
+    return nextop;
+  } 
+  // If we get here the comparison is false
+  result.i = 0;
+  push_stack(stack, result);
+#ifdef DEBUG
+  logmsg("OP_LESSTHAN: types %d and %d\n", v1.type, v2.type);
+#endif
+  return nextop;
+}
+
+uint8_t *op_lessthanorequal(uint8_t *nextop, STACK_t *stack) {
+  // Compare the top two items on the stack and push back a VALUE_bool
+  // that is either true or false.
+  // At the moment pairs of bools or ints are considered.
+  VALUE_t v1, v2, result;
+  v1 = pop_stack(stack);
+  v2 = pop_stack(stack);
+  result.type = VALUE_bool;
+  result.i = 1; // default to true
+  if (v1.type == VALUE_int && v2.type == VALUE_int && v2.i <= v1.i) {
+    push_stack(stack, result);
+    return nextop;
+  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
+                                                   && v2.i <= v1.i) {
+    push_stack(stack, result);
+    return nextop;
+  } 
+  // If we get here the comparison is false
+  result.i = 0;
+  push_stack(stack, result);
+#ifdef DEBUG
+  logmsg("OP_LTEQ: types %d and %d\n", v1.type, v2.type);
+#endif
+  return nextop;
+}
+
+uint8_t *op_greaterthan(uint8_t *nextop, STACK_t *stack) {
+  // Compare the top two items on the stack and push back a VALUE_bool
+  // that is either true or false.
+  // At the moment pairs of bools or ints are considered.
+  VALUE_t v1, v2, result;
+  v1 = pop_stack(stack);
+  v2 = pop_stack(stack);
+  result.type = VALUE_bool;
+  result.i = 1; // default to true
+  if (v1.type == VALUE_int && v2.type == VALUE_int && v2.i > v1.i) {
+    push_stack(stack, result);
+    return nextop;
+  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
+                                                   && v2.i > v1.i) {
+    push_stack(stack, result);
+    return nextop;
+  } 
+  // If we get here the comparison is false
+  result.i = 0;
+  push_stack(stack, result);
+#ifdef DEBUG
+  logmsg("OP_GREATERTHAN: types %d and %d\n", v1.type, v2.type);
+#endif
+  return nextop;
+}
+
+uint8_t *op_greaterthanorequal(uint8_t *nextop, STACK_t *stack) {
+  // Compare the top two items on the stack and push back a VALUE_bool
+  // that is either true or false.
+  // At the moment pairs of bools or ints are considered.
+  VALUE_t v1, v2, result;
+  v1 = pop_stack(stack);
+  v2 = pop_stack(stack);
+  result.type = VALUE_bool;
+  result.i = 1; // default to true
+  if (v1.type == VALUE_int && v2.type == VALUE_int && v2.i >= v1.i) {
+    push_stack(stack, result);
+    return nextop;
+  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
+                                                   && v2.i >= v1.i) {
+    push_stack(stack, result);
+    return nextop;
+  } 
+  // If we get here the comparison is false
+  result.i = 0;
+  push_stack(stack, result);
+#ifdef DEBUG
+  logmsg("OP_GTEQ: types %d and %d\n", v1.type, v2.type);
+#endif
+  return nextop;
+}
+
 void init_interpreter() {
   // This function simply sets up the opcode dispatch table.
   for (int o=0; o<256; o++) {
@@ -238,8 +405,14 @@ void init_interpreter() {
   opcode['l'] = op_pushstr;
   opcode['m'] = op_multiplyint;
   opcode['n'] = op_negateint;
+  opcode['o'] = op_equal;
   opcode['p'] = op_pushint;
+  opcode['q'] = op_notequal;
+  opcode['r'] = op_lessthan;
+  opcode['u'] = op_lessthanorequal;
   opcode['s'] = op_subtractint;
+  opcode['t'] = op_greaterthan;
+  opcode['v'] = op_greaterthanorequal;
 }
 
 VALUE_t interpret(ITEM_t *item) {

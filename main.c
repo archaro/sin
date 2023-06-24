@@ -103,6 +103,8 @@ int main(int argc, char **argv) {
   } else if (ret.type == VALUE_str) {
     logmsg("Bytecode interpreter returned: %s\n", ret.s);
     FREE_ARRAY(char, ret.s, strlen(ret.s)+1);
+  } else if (ret.type == VALUE_bool) {
+    logmsg("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
   } else {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }

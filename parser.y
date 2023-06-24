@@ -221,6 +221,7 @@ bool emit_local(char *id, OUTPUT_t *out, LOCAL_t *local) {
 %nonassoc TSEMI
 
 %right TASSIGN
+%left TEQUAL TNOTEQUAL TLESSTHAN TGREATERTHAN TLTEQ TGTEQ
 %left TPLUS TMINUS
 %left TMULT TDIV
 %left TINC TDEC
@@ -251,6 +252,12 @@ expr:     TLOCAL                  { emit_local($1, out, local); }
         |	TSTRINGLIT              { emit_byte('l', out);
                                     emit_string($1, out);
                                     free($1); }
+        | expr TEQUAL expr        { emit_byte('o', out); }
+        | expr TNOTEQUAL expr     { emit_byte('q', out); }
+        | expr TLESSTHAN expr     { emit_byte('r', out); }
+        | expr TLTEQ expr         { emit_byte('u', out); }
+        | expr TGREATERTHAN expr  { emit_byte('t', out); }
+        | expr TGTEQ expr         { emit_byte('v', out); }
         | expr TPLUS expr         { emit_byte('a', out); }
 	      |	expr TMINUS expr        { emit_byte('s', out); }
 	      |	expr TMULT expr         { emit_byte('m', out); }
