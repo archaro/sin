@@ -15,6 +15,11 @@ f - increment local.  Interpret the next byte as an index into the stack.
 g - decrement local.  Interpret the next byte as an index into the stack.
     If the local stored there is an integer, decrement it.  Complain if not.
 h - halt.  Stop interpreting.
+j - unconditional jump.  Interpret the next two bytes as a SIGNED short, and
+    jump forward or backward in the code by this offset.
+k - jump if false.  Interpret the next two bytes as a SIGNED short.  If
+    The top of the stack is false, jump forward or backward in the code
+    by this offset.  Otherwise, proceed to the next instruction.
 l - push string literal.  Interpret the next 2 bytes as the string length,
     then read in that number of bytes as a string, then push onto the stack.
 m - multiply ints.  Pop the top two values from the stack, multiply them

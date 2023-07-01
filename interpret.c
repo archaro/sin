@@ -64,6 +64,45 @@ uint8_t *op_declocal(uint8_t *nextop, STACK_t *stack) {
   return nextop+1;
 }
 
+uint8_t *op_jump(uint8_t *nextop, STACK_t *stack) {
+  // Unconditional jump.  Interpret the next two bytes as a
+  // SIGNED int, and then modify the bytecode pointer by that amount.
+  int16_t offset;
+  memcpy(&offset, nextop, 2);
+#ifdef DEBUG
+  logmsg("OP_JUMP: offset is  %d.\n", offset);
+#endif
+  return nextop + offset;
+}
+
+uint8_t *op_jumpfalse(uint8_t *nextop, STACK_t *stack) {
+  // Evaluate the top of the stack.  If false, interpret next
+  // two bytes as a SIGNED int, and modify the bytecode pointer
+  // by that amount.  Alternatively, if true, simply skip the next
+  // two bytes and go on to the next instruction.
+
+  VALUE_t v1;
+  v1 = pop_stack(stack);
+  // "true" is a true bool value, or an int value != 0.
+  // Everything else is false.
+  if ((v1.type == VALUE_bool || v1.type == VALUE_int) && v1.i != 0) {
+    // A true value means that we don't branch.  Skip over
+    // the next two bytes.
+#ifdef DEBUG
+    logmsg("OP_JUMPFALSE: evaluates to true (no jump).\n");
+#endif
+    return nextop + 2;
+  } else {
+    // If not true then it must be false.  That's logic.
+    int16_t offset;
+    memcpy(&offset, nextop, 2);
+#ifdef DEBUG
+    logmsg("OP_JUMPFALSE: evaluates to false (jump offset %d).\n", offset);
+#endif
+    return nextop + offset;
+  }
+}
+
 uint8_t *op_savelocal(uint8_t *nextop, STACK_t *stack) {
   // This is the quickest way, without extra pushes and pops.
   // Interpret the next byte as an index into the stack.
@@ -91,7 +130,9 @@ uint8_t *op_getlocal(uint8_t *nextop, STACK_t *stack) {
   memcpy(&(stack->stack[stack->current]), &(stack->stack[index]),
                                                     sizeof(VALUE_t));
 #ifdef DEBUG
-  logmsg("OP_GETLOCAL: index %d\n", index);
+  VALUE_t v;
+  v = peek_stack(stack);
+  logmsg("OP_GETLOCAL: index %d value %d.\n", index, v.i);
 #endif
   return nextop+1;
 }
@@ -141,8 +182,7 @@ uint8_t *op_add(uint8_t *nextop, STACK_t *stack) {
     if (v2.type == VALUE_str) {
       free(v2.s);
     }
-    logerr("Trying to add mismatched types '%c' and '%c'.  Result is NIL.\n",
-    v1.type, v2.type);
+    logerr("Trying to add mismatched types '%c' and '%c'.  Result is NIL.\n", v1.type, v2.type);
     push_stack(stack, VALUE_NIL);
   }
 #ifdef DEBUG
@@ -402,6 +442,8 @@ void init_interpreter() {
   opcode['e'] = op_getlocal;
   opcode['f'] = op_inclocal;
   opcode['g'] = op_declocal;
+  opcode['j'] = op_jump;
+  opcode['k'] = op_jumpfalse;
   opcode['l'] = op_pushstr;
   opcode['m'] = op_multiplyint;
   opcode['n'] = op_negateint;
@@ -409,9 +451,9 @@ void init_interpreter() {
   opcode['p'] = op_pushint;
   opcode['q'] = op_notequal;
   opcode['r'] = op_lessthan;
-  opcode['u'] = op_lessthanorequal;
   opcode['s'] = op_subtractint;
   opcode['t'] = op_greaterthan;
+  opcode['u'] = op_lessthanorequal;
   opcode['v'] = op_greaterthanorequal;
 }
 

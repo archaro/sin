@@ -2,11 +2,11 @@
 #include "parser.h"
 %}
 
-%option noyywrap reentrant bison-bridge
+%option noyywrap reentrant bison-bridge case-insensitive
 
 ws          [ \t\n]+
 digit       [0-9]
-alpha 		  [a-zA-Z]
+alpha 		  [a-z]
 alnum 		  {alpha}|{digit}
 integer     {digit}+
 stringlit   \"([^\\\"]|\\.)*\"
@@ -17,6 +17,10 @@ local       @{identifier}
 {integer}     { yylval->string = strdup(yytext); return TINTEGER; }
 {stringlit}   { yylval->string = strdup(yytext); return TSTRINGLIT; }
 {local}       { yylval->string = strdup(yytext); return TLOCAL; }
+"code"        { return TCODE; }
+"do"          { return TDO; }
+"endwhile"    { return TENDWHILE; }
+"while"       { return TWHILE; }
 "="           { return TASSIGN; }
 "=="          { return TEQUAL; }
 "!="          { return TNOTEQUAL; }

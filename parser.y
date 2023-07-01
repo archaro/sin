@@ -4,21 +4,38 @@
 
 %define api.pure full
 %lex-param {void *scanner}
-%parse-param {void *scanner}{OUTPUT_t *out}{LOCAL_t *local}
+%parse-param {void *scanner}{SCANNER_STATE_t *state}
 
 %code requires {
   #include <stdbool.h>
+  #include <stdint.h>
+
+  #define MAX_NESTED_LOOPS 32
 
   typedef struct {
     unsigned char *bytecode;
     unsigned char *nextbyte;
-    int maxsize;
+    uint64_t maxsize;
   } OUTPUT_t;
 
   typedef struct {
     char *id[256];
     int count;
   } LOCAL_t;
+
+  typedef struct {
+    unsigned char *loop_start;
+    unsigned char *loop_end;
+    unsigned char *jump_to_start;
+    unsigned char *jump_to_end;
+  } LOOP_FIXUP_t;
+
+  typedef struct {
+    OUTPUT_t *out;
+    LOCAL_t *local;
+    int8_t loop_count;
+    LOOP_FIXUP_t loop[MAX_NESTED_LOOPS];
+  } SCANNER_STATE_t;
 
   bool parse_source(char *source, int sourcelen, OUTPUT_t *out);
 }
@@ -39,7 +56,7 @@ void yyset_in(FILE *_in_str, yyscan_t yyscanner);
 int yylex_destroy(yyscan_t yyscanner);
 int yyparse();
 
-void grow_output_buffer(OUTPUT_t *out, unsigned int size) {
+void grow_output_buffer(OUTPUT_t *out, uint64_t size) {
   // Check that the output buffer is big enough to hold another size bytes.
   // Grow it if necessary.
   int maybesize = out->nextbyte - out->bytecode + size;
@@ -66,9 +83,14 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
   // Set up the locals table.  There are a maximum of 256 locals per
   // item, so just define an array on the stack.
   LOCAL_t local;
-
-  local.id;
   local.count = 0;
+
+  // Now wrap all these bits of state up into a nice package
+  // for ease of transport
+  SCANNER_STATE_t scanner_state;
+  scanner_state.out = out;
+  scanner_state.local = &local;
+  scanner_state.loop_count = -1; // We start in no loop.
 
   logmsg("Parsing...\n");
   yylex_init(&sc);
@@ -79,7 +101,7 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
   // of locals - we will backfill the actual number later.
   emit_byte(0, out);
 
-  bool failed = yyparse(sc, out, &local);
+  bool failed = yyparse(sc, &scanner_state);
 
   // Clean up
   for (int l = 0; l < local.count; l++) {
@@ -103,15 +125,23 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
 }
 
 void emit_int64(uint64_t i, OUTPUT_t *out) {
-  union { unsigned char c[8]; uint64_t i; } u;
+  union { unsigned char c[8]; int64_t i; } u;
   u.i = i;
   for (int x = 0; x < 8; x++) {
     emit_byte(u.c[x], out);
   }
 }
 
-void emit_int16(uint16_t i, OUTPUT_t *out) {
+void emit_uint16(uint16_t i, OUTPUT_t *out) {
   union { unsigned char c[2]; uint16_t i; } u;
+  u.i = i;
+  for (int x = 0; x < 2; x++) {
+    emit_byte(u.c[x], out);
+  }
+}
+
+void emit_int16(uint16_t i, OUTPUT_t *out) {
+  union { unsigned char c[2]; int16_t i; } u;
   u.i = i;
   for (int x = 0; x < 2; x++) {
     emit_byte(u.c[x], out);
@@ -121,13 +151,13 @@ void emit_int16(uint16_t i, OUTPUT_t *out) {
 void emit_string(char *s, OUTPUT_t *out) {
   // First get the length of the string (minus the enclosing ")
   uint16_t l = strlen(s) - 2;
-  // Then write out that 16-bit int
-  emit_int16(l, out);
+  // Then write out that uint16_t
+  emit_uint16(l, out);
   // Then write out the string (again, minus the ")
   memcpy(out->nextbyte, s+1, l);
   out->nextbyte += l;
 }
-void yyerror(yyscan_t locp, OUTPUT_t *out, LOCAL_t *local, char const *s) {
+void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
   logerr("%s\n",s);
 }
 
@@ -206,6 +236,46 @@ bool emit_local(char *id, OUTPUT_t *out, LOCAL_t *local) {
   return true;
 }
 
+bool prepare_loop(SCANNER_STATE_t *state) {
+  // We have encountered the start of a loop, so record it for
+  // fixing up later.
+  if (state->loop_count >= MAX_NESTED_LOOPS) {
+    return false;
+  }
+  state->loop_count++; // We be looping.
+  state->loop[state->loop_count].loop_start = state->out->nextbyte;
+  return true;
+}
+
+bool finalise_loop(SCANNER_STATE_t *state) {
+  // Calculate the offset from the jump-to-end to the actual end
+  // Then fix up the jump instruction with the calculated value.
+  int16_t offset = state->out->nextbyte
+                          - state->loop[state->loop_count].jump_to_end;
+  unsigned char *store_nextbyte = state->out->nextbyte; // Ugh
+  state->out->nextbyte = state->loop[state->loop_count].jump_to_end;
+  emit_int16(offset, state->out);
+  state->out->nextbyte = store_nextbyte;
+  state->loop_count--; // Loop be gone.
+}
+
+void emit_jump_to_end(SCANNER_STATE_t *state) {
+  // Emit a conditional jump opcode with a dummy offset.  Record this in
+  // the current loop record for fixing up later.
+  emit_byte('k', state->out);
+  state->loop[state->loop_count].jump_to_end = state->out->nextbyte;
+  emit_int16(0, state->out);
+}
+
+void emit_jump_to_start(SCANNER_STATE_t *state) {
+  // Emit an unconditional jump opcode and the offset to jump back
+  // to the start of the loop.
+  emit_byte('j', state->out);
+  int16_t offset = state->loop[state->loop_count].loop_start
+                                                  - state->out->nextbyte;
+  emit_uint16(offset, state->out);
+}
+
 %}
 
 %union{
@@ -213,57 +283,68 @@ bool emit_local(char *id, OUTPUT_t *out, LOCAL_t *local) {
   int token;
 }
 
-%start code
 
 %token <string> TINTEGER
 %token <string> TSTRINGLIT
 %token <string> TLOCAL
-%nonassoc TSEMI
+%nonassoc TSEMI TCODE TWHILE TDO TENDWHILE
 
 %right TASSIGN
 %left TEQUAL TNOTEQUAL TLESSTHAN TGREATERTHAN TLTEQ TGTEQ
 %left TPLUS TMINUS
 %left TMULT TDIV
 %left TINC TDEC
-%left UMINUS
+%right UMINUS
 %nonassoc TLPAREN TRPAREN
 
 %%
 
-code:                             { emit_byte('h', out); }
-        | stmts                   { emit_byte('h', out); }
-        | stmts TSEMI             { emit_byte('h', out); }
+program:  stmtlist { emit_byte('h', state->out); }
+        ;
+
+stmtlist: /* empty */
+        | stmtlist stmtsemi
+        ;
+
+stmtsemi: stmt TSEMI
 ;
 
-stmts:    stmt                    { }
-        | stmts TSEMI stmt        { }
+stmt:   TWHILE                  {
+                if (!prepare_loop(state)) {
+                  yyerror(scanner, state, "Maximum loop depth exceeded.\n");
+                  YYERROR;
+                }
+                                  } expr {
+                emit_jump_to_end(state);
+                                  } TDO stmtlist TENDWHILE {
+                emit_jump_to_start(state);
+                finalise_loop(state);
+                }
+        | TLOCAL TASSIGN expr   { emit_local_assign($1, state->out, state->local); }
+        | TLOCAL TINC           { emit_local_increment($1, state->out, state->local); }
+        | TLOCAL TDEC           { emit_local_decrement($1, state->out, state->local); }
+        | expr                  { }
+        ;
 
-
-stmt:     expr                    { }
-        | TLOCAL TASSIGN expr     { emit_local_assign($1, out, local); }
-        | TLOCAL TINC             { emit_local_increment($1, out, local); }
-        | TLOCAL TDEC             { emit_local_decrement($1, out, local); }
-;
-
-expr:     TLOCAL                  { emit_local($1, out, local); }
-        |	TINTEGER                { emit_byte('p', out);
-                                    emit_int64(atoi($1), out);
-                                    free($1); }
-        |	TSTRINGLIT              { emit_byte('l', out);
-                                    emit_string($1, out);
-                                    free($1); }
-        | expr TEQUAL expr        { emit_byte('o', out); }
-        | expr TNOTEQUAL expr     { emit_byte('q', out); }
-        | expr TLESSTHAN expr     { emit_byte('r', out); }
-        | expr TLTEQ expr         { emit_byte('u', out); }
-        | expr TGREATERTHAN expr  { emit_byte('t', out); }
-        | expr TGTEQ expr         { emit_byte('v', out); }
-        | expr TPLUS expr         { emit_byte('a', out); }
-	      |	expr TMINUS expr        { emit_byte('s', out); }
-	      |	expr TMULT expr         { emit_byte('m', out); }
-	      |	expr TDIV expr          { emit_byte('d', out); }
-        | TLPAREN expr TRPAREN    { }
-        | TMINUS expr %prec UMINUS { emit_byte('n', out); }
+expr:     TLOCAL                { emit_local($1, state->out, state->local); }
+        |	TINTEGER              { emit_byte('p', state->out);
+                                  emit_int64(atoi($1), state->out);
+                                  free($1); }
+        |	TSTRINGLIT            { emit_byte('l', state->out);
+                                  emit_string($1, state->out);
+                                  free($1); }
+        | expr TEQUAL expr      { emit_byte('o', state->out); }
+        | expr TNOTEQUAL expr   { emit_byte('q', state->out); }
+        | expr TLESSTHAN expr   { emit_byte('r', state->out); }
+        | expr TLTEQ expr       { emit_byte('u', state->out); }
+        | expr TGREATERTHAN expr { emit_byte('t', state->out); }
+        | expr TGTEQ expr       { emit_byte('v', state->out); }
+        | expr TPLUS expr       { emit_byte('a', state->out); }
+	      |	expr TMINUS expr      { emit_byte('s', state->out); }
+	      |	expr TMULT expr       { emit_byte('m', state->out); }
+	      |	expr TDIV expr        { emit_byte('d', state->out); }
+        | TLPAREN expr TRPAREN  { }
+        | TMINUS expr %prec UMINUS { emit_byte('n', state->out); }
 ;
 
 %%
