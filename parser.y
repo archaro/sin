@@ -31,10 +31,16 @@
   } LOOP_FIXUP_t;
 
   typedef struct {
+    unsigned char *jump_to_false;
+    unsigned char *jump_to_end;
+  } IF_FIXUP_t;
+
+  typedef struct {
     OUTPUT_t *out;
     LOCAL_t *local;
     int8_t loop_count;
     LOOP_FIXUP_t loop[MAX_NESTED_LOOPS];
+    IF_FIXUP_t ifelse[MAX_NESTED_LOOPS];
   } SCANNER_STATE_t;
 
   bool parse_source(char *source, int sourcelen, OUTPUT_t *out);
@@ -236,6 +242,17 @@ bool emit_local(char *id, OUTPUT_t *out, LOCAL_t *local) {
   return true;
 }
 
+bool prepare_if(SCANNER_STATE_t *state) {
+  // We have encountered the start of an IF..THEN..ELSE..ENDIF construct.
+  // We use the loop counter to keep track of these as well as actual
+  // loops.  A nesting depth of 32 control structures is enough for anyone.
+  if (state->loop_count >= MAX_NESTED_LOOPS) {
+    return false;
+  }
+  state->loop_count++; // We be looping.
+  return true;
+}
+
 bool prepare_loop(SCANNER_STATE_t *state) {
   // We have encountered the start of a loop, so record it for
   // fixing up later.
@@ -287,7 +304,7 @@ void emit_jump_to_start(SCANNER_STATE_t *state) {
 %token <string> TINTEGER
 %token <string> TSTRINGLIT
 %token <string> TLOCAL
-%nonassoc TSEMI TCODE TWHILE TDO TENDWHILE
+%nonassoc TSEMI TCODE TWHILE TDO TENDWHILE TIF TTHEN TELSE TENDIF
 
 %right TASSIGN
 %left TEQUAL TNOTEQUAL TLESSTHAN TGREATERTHAN TLTEQ TGTEQ
@@ -311,7 +328,7 @@ stmtsemi: stmt TSEMI
 
 stmt:   TWHILE                  {
                 if (!prepare_loop(state)) {
-                  yyerror(scanner, state, "Maximum loop depth exceeded.\n");
+                  yyerror(scanner, state, "Maximum control structure depth exceeded.\n");
                   YYERROR;
                 }
                                   } expr {
@@ -320,6 +337,12 @@ stmt:   TWHILE                  {
                 emit_jump_to_start(state);
                 finalise_loop(state);
                 }
+        | TIF                   {
+                if (!prepare_loop(state)) {
+                  yyerror(scanner, state, "Maximum control structure depth exceeded.\n");
+                  YYERROR;
+                }
+                                } expr TTHEN stmtlist TELSE stmtlist TENDIF
         | TLOCAL TASSIGN expr   { emit_local_assign($1, state->out, state->local); }
         | TLOCAL TINC           { emit_local_increment($1, state->out, state->local); }
         | TLOCAL TDEC           { emit_local_decrement($1, state->out, state->local); }
