@@ -5,18 +5,11 @@
 %option noinput nounput noyywrap reentrant bison-bridge case-insensitive
 
 ws          [ \t\n]+
-digit       [0-9]
-alpha 		  [a-z]
-alnum 		  {alpha}|{digit}
-integer     {digit}+
+integer     [0-9]+
 stringlit   \"([^\\\"]|\\.)*\"
-identifier  {alpha}+{alnum}*
-local       @{identifier}
+local       @[a-z_][a-z0-9_]*
 %%
 
-{integer}     { yylval->string = strdup(yytext); return TINTEGER; }
-{stringlit}   { yylval->string = strdup(yytext); return TSTRINGLIT; }
-{local}       { yylval->string = strdup(yytext); return TLOCAL; }
 "code"        { return TCODE; }
 "do"          { return TDO; }
 "endwhile"    { return TENDWHILE; }
@@ -38,6 +31,9 @@ local       @{identifier}
 ")"           { return TRPAREN; }
 ";"           { return TSEMI; }
 {ws}          ;
+{integer}     { yylval->string = strdup(yytext); return TINTEGER; }
+{stringlit}   { yylval->string = strdup(yytext); return TSTRINGLIT; }
+{local}       { yylval->string = strdup(yytext); return TLOCAL; }
 
 %%
 
