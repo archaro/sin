@@ -247,7 +247,7 @@ bool prepare_loop(SCANNER_STATE_t *state) {
   return true;
 }
 
-bool finalise_loop(SCANNER_STATE_t *state) {
+void finalise_loop(SCANNER_STATE_t *state) {
   // Calculate the offset from the jump-to-end to the actual end
   // Then fix up the jump instruction with the calculated value.
   int16_t offset = state->out->nextbyte

@@ -2,7 +2,7 @@
 #include "parser.h"
 %}
 
-%option noyywrap reentrant bison-bridge case-insensitive
+%option noinput nounput noyywrap reentrant bison-bridge case-insensitive
 
 ws          [ \t\n]+
 digit       [0-9]

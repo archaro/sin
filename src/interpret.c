@@ -473,7 +473,10 @@ VALUE_t interpret(ITEM_t *item) {
   // The actual bytecode starts at the second byte.
   uint8_t *op = item->bytecode + 1; 
   while (*op != 'h') {
-    op = opcode[*op](++op, item->stack);
+    // We do it this way to avoid undefined behaviour between
+    // two sequence points:
+    uint8_t *nextop = op + 1;
+    op = opcode[*op](nextop, item->stack);
   }
 
   // There maybe somethign on the stack.  Return it if there is.
