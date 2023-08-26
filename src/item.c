@@ -17,6 +17,7 @@ ITEM_t *make_item(const char *name, ITEM_e type, VALUE_t val, uint8_t *code,
   if (type == ITEM_code) {
     // The bytecode buffer was allocated elsewhere.
     item->bytecode = code;
+    item->bytecode_len = len;
     item->stack.max = STACK_SIZE;
     item->stack.current = -1;
   } else {
