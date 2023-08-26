@@ -152,78 +152,56 @@ void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
 }
 
 bool emit_local_index(char *id, OUTPUT_t *out, LOCAL_t *local) {
-  // Find the identifier in the list, and return its index.
+  // Find the identifier in the list and return its index.
   // Complain if not found.
-  uint8_t l;
- 
-  // First check to see if the local exists
-  for (l = 0; l < local->count; l++) {
+  for (uint8_t l = 0; l < local->count; l++) {
     if (strcmp(id, local->id[l]) == 0) {
-      break;
+      emit_byte(l, out);
+      return true; // Found, no need to continue searching.
     }
   }
-  if (l == local->count) {
-    // No local found, so this is a syntax error.
-    logerr("Local variable used before assignment.\n");
-    free(id);
-    return false;
-  }
-  free(id);
-  emit_byte(l, out);
-  return true;
+  
+  // No local found, this is a syntax error.
+  logerr("Local variable used before assignment: %s\n", id);
+  return false;
 }
 
 bool emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
-  // This function is called when a local assignment statement is
-  // parsed.  It adds the the local to the list of locals and gives
-  // it a unique index.  Up to 255 locals are permitted per item.
-
-  uint8_t l;
-
-  // First check to see if the local exists
-  for (l = 0; l < local->count; l++) {
-    if (strcmp(id, local->id[l]) == 0) break;
+  // Check if the local variable already exists.
+  for (uint8_t l = 0; l < local->count; l++) {
+    if (strcmp(id, local->id[l]) == 0) {
+      // Local variable already exists, emit bytecode to assign it.
+      emit_byte('c', out);
+      emit_byte(l, out);
+      free(id); // Free the id here since we don't add it to the list.
+      return true;
+    }
   }
-  // If there is space, add it
+  
+  // Check if the maximum number of locals has been reached.
   if (local->count >= 256) {
-    logerr("Too many local variables.\n");
+    logerr("Error: Maximum number of local variables (256) reached.\n");
     free(id);
     return false;
   }
-  // If we get here, there is space for the local. 
-  // We don't free the id here because it is needed for lookups.
-  // It is freed in parse_source().
-  if (local->count == l) {
-    local->id[local->count] = id;
-    local->count++;
-  }
-    
-  // We now have a new local.  Emit the bytecode to store the top
-  // of the stack in the indexed stack location.
+
+  // Add the new local variable.
+  local->id[local->count] = id;
+  local->count++;
+
+  // Emit bytecode to assign the new local.
   emit_byte('c', out);
-  emit_byte(l, out);
+  emit_byte(local->count - 1, out);
+
   return true;
 }
 
-
-void emit_local_increment(char *id, OUTPUT_t *out, LOCAL_t *local) {
-  // emit the "increment local" opcode, followed by the local to increment.
-  emit_byte('f', out);
+void emit_local_op(char *id, OUTPUT_t *out, LOCAL_t *local, char op) {
+  // Emit the specified local operation ('f' for increment, 'g' for decrement),
+  // followed by the local to increment or decrement.
+  emit_byte(op, out);
   emit_local_index(id, out, local);
-}
-
-void emit_local_decrement(char *id, OUTPUT_t *out, LOCAL_t *local) {
-  // emit the "decrement local" opcode, followed by the local to decrement.
-  emit_byte('g', out);
-  emit_local_index(id, out, local);
-}
-
-bool emit_local(char *id, OUTPUT_t *out, LOCAL_t *local) {
-  // This function emits the bytecode necessary to push the value of a local
-  // variable onto the stack.
-  emit_byte('e', out);
-  emit_local_index(id, out, local);
-  return true;
+  free(id);
 }
 
 bool prepare_loop(SCANNER_STATE_t *state) {
@@ -321,12 +299,12 @@ stmt:   TWHILE                  {
                 finalise_loop(state);
                 }
         | TLOCAL TASSIGN expr   { emit_local_assign($1, state->out, state->local); }
-        | TLOCAL TINC           { emit_local_increment($1, state->out, state->local); }
-        | TLOCAL TDEC           { emit_local_decrement($1, state->out, state->local); }
+        | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
+        | TLOCAL TDEC           { emit_local_op($1, state->out, state->local, 'g'); }
         | expr                  { }
         ;
 
-expr:     TLOCAL                { emit_local($1, state->out, state->local); }
+expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e'); }
         |	TINTEGER              { emit_byte('p', state->out);
                                   emit_int64(atoi($1), state->out);
                                   free($1); }
