@@ -4,7 +4,6 @@
 
 %option noinput nounput noyywrap reentrant bison-bridge case-insensitive
 
-ws          [ \t\n]+
 integer     [0-9]+
 stringlit   \"([^\\\"]|\\.)*\"
 local       @[a-z_][a-z0-9_]*
@@ -30,7 +29,7 @@ local       @[a-z_][a-z0-9_]*
 "("           { return TLPAREN; }
 ")"           { return TRPAREN; }
 ";"           { return TSEMI; }
-{ws}          ;
+[ \t\n]+      ; /* inline whitespace handling */
 {integer}     { yylval->string = strdup(yytext); return TINTEGER; }
 {stringlit}   { yylval->string = strdup(yytext); return TSTRINGLIT; }
 {local}       { yylval->string = strdup(yytext); return TLOCAL; }
