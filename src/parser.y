@@ -287,6 +287,7 @@ void emit_jump_to_start(SCANNER_STATE_t *state) {
 %token <string> TINTEGER
 %token <string> TSTRINGLIT
 %token <string> TLOCAL
+%token <string> TUNKNOWNCHAR
 %nonassoc TSEMI TCODE TWHILE TDO TENDWHILE
 
 %right TASSIGN
@@ -298,6 +299,15 @@ void emit_jump_to_start(SCANNER_STATE_t *state) {
 %nonassoc TLPAREN TRPAREN
 
 %%
+
+input:    program
+        | input TUNKNOWNCHAR    {
+              char errmsg[100];
+              snprintf(errmsg, 99, "Unknown character in input: %s\n", $2);
+              yyerror(scanner, state, errmsg);
+              YYERROR;
+        }
+        ;
 
 program:  stmtlist { emit_byte('h', state->out); }
         ;

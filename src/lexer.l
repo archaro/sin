@@ -34,6 +34,7 @@ local       @[a-z_][a-z0-9_]*
 {integer}     { yylval->string = strdup(yytext); return TINTEGER; }
 {stringlit}   { yylval->string = strdup(yytext); return TSTRINGLIT; }
 {local}       { yylval->string = strdup(yytext); return TLOCAL; }
+.             { yylval->string = strdup(yytext); return TUNKNOWNCHAR; }
 
 %%
 
