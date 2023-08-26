@@ -56,22 +56,23 @@ void yyset_in(FILE *_in_str, yyscan_t yyscanner);
 int yylex_destroy(yyscan_t yyscanner);
 int yyparse();
 
-void grow_output_buffer(OUTPUT_t *out, uint64_t size) {
-  // Check that the output buffer is big enough to hold another size bytes.
-  // Grow it if necessary.
-  int maybesize = out->nextbyte - out->bytecode + size;
-  if (maybesize >= out->maxsize) {
-    int oldsize = out->maxsize;
-    out->maxsize = GROW_CAPACITY(out->maxsize + size);
-    out->bytecode = GROW_ARRAY(unsigned char, out->bytecode, oldsize,
-                                                              out->maxsize);
-    out->nextbyte = out->bytecode + size;
-  }
-}
-
 void emit_byte(unsigned char c, OUTPUT_t *out) {
-  *out->nextbyte++ = c;
-  grow_output_buffer(out, 1);
+    // Check if there is enough space in the buffer
+    if (out->nextbyte - out->bytecode >= out->maxsize) {
+        // Calculate the new buffer size
+        int oldsize = out->maxsize;
+        out->maxsize = GROW_CAPACITY(oldsize * 1.25);
+        
+        // Reallocate the buffer
+        unsigned char *new_buffer = GROW_ARRAY(unsigned char, out->bytecode, oldsize, out->maxsize);
+        
+        // Update buffer pointers
+        out->nextbyte = new_buffer + (out->nextbyte - out->bytecode);
+        out->bytecode = new_buffer;
+    }
+    
+    // Add the byte directly
+    *out->nextbyte++ = c;
 }
 
 bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
@@ -125,38 +126,27 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
 }
 
 void emit_int64(uint64_t i, OUTPUT_t *out) {
-  union { unsigned char c[8]; int64_t i; } u;
-  u.i = i;
-  for (int x = 0; x < 8; x++) {
-    emit_byte(u.c[x], out);
-  }
-}
-
-void emit_uint16(uint16_t i, OUTPUT_t *out) {
-  union { unsigned char c[2]; uint16_t i; } u;
-  u.i = i;
-  for (int x = 0; x < 2; x++) {
-    emit_byte(u.c[x], out);
+  for (int j = 0; j < 8; j++) {
+    emit_byte((unsigned char)(i & 0xFF), out);
+    i >>= 8;
   }
 }
 
 void emit_int16(uint16_t i, OUTPUT_t *out) {
-  union { unsigned char c[2]; int16_t i; } u;
-  u.i = i;
-  for (int x = 0; x < 2; x++) {
-    emit_byte(u.c[x], out);
-  }
+  // This is signedness-agnostic.  It just spits out two bytes.
+  // It is up to the interpreter to know what to do with them.
+  emit_byte((unsigned char)(i & 0xFF), out);
+  emit_byte((unsigned char)((i >> 8) & 0xFF), out);
 }
 
-void emit_string(char *s, OUTPUT_t *out) {
-  // First get the length of the string (minus the enclosing ")
-  uint16_t l = strlen(s) - 2;
-  // Then write out that uint16_t
-  emit_uint16(l, out);
-  // Then write out the string (again, minus the ")
-  memcpy(out->nextbyte, s+1, l);
+void emit_string(const char *s, OUTPUT_t *out) {
+  s++; // Ignore the opening quote
+  uint16_t l = strlen(s) - 1; // Don't include the closing quote
+  emit_int16(l, out);  // Write the length of the string (uint16_t)
+  memcpy(out->nextbyte, s, l); // And copy the string directly (minus quotes)
   out->nextbyte += l;
 }
+
 void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
   logerr("%s\n",s);
 }
@@ -273,7 +263,7 @@ void emit_jump_to_start(SCANNER_STATE_t *state) {
   emit_byte('j', state->out);
   int16_t offset = state->loop[state->loop_count].loop_start
                                                   - state->out->nextbyte;
-  emit_uint16(offset, state->out);
+  emit_int16(offset, state->out);
 }
 
 %}
