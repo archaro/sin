@@ -464,8 +464,8 @@ VALUE_t interpret(ITEM_t *item) {
 
   // First set up the locals
   uint8_t numlocals = *item->bytecode;
-  item->stack->current += numlocals;
-  item->stack->locals = numlocals;
+  item->stack.current += numlocals;
+  item->stack.locals = numlocals;
 #ifdef DEBUG
   logmsg("Making space for %d locals.\n", numlocals);
   logmsg("Stack size before interpreting begins: %d\n", size_stack(item->stack));
@@ -473,12 +473,15 @@ VALUE_t interpret(ITEM_t *item) {
   // The actual bytecode starts at the second byte.
   uint8_t *op = item->bytecode + 1; 
   while (*op != 'h') {
-    op = opcode[*op](++op, item->stack);
+    // We do it this way to avoid undefined behaviour between
+    // two sequence points:
+    uint8_t *nextop = op + 1;
+    op = opcode[*op](nextop, &item->stack);
   }
 
   // There maybe somethign on the stack.  Return it if there is.
   if (size_stack(item->stack)) {
-    return pop_stack(item->stack);
+    return pop_stack(&item->stack);
   }
 
   // Otherwise return a nill.

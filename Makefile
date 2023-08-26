@@ -1,42 +1,42 @@
 CC=gcc
-CFLAGS=-g -fPIC
+CFLAGS=-g -Wall -MMD -MP
 LDFLAGS=
 LIBS=
 YACC=bison
-DEBUG=-DDEBUG=1
+LEX=flex
+#DEBUG=-DDEBUG=1
 
-%.o : %.c
+SRC_DIR := src
+OBJ_DIR := obj
+
+# Collect source files (excluding scomp.c) and generate object file paths
+SOURCES := $(filter-out $(SRC_DIR)/scomp.c, $(wildcard $(SRC_DIR)/*.c))
+OBJECTS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SOURCES))
+DEPS := $(OBJECTS:.o=.d)
+
+$(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
+	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
+
+.PHONY: all clean
 
 all: sin scomp
 
 clean:
-	rm -f *.o sin scomp parser.c parser.h lexer.c
+	rm -rf $(OBJ_DIR)/*.o $(OBJ_DIR)/*.d sin scomp $(SRC_DIR)/parser.c \
+         $(SRC_DIR)/parser.h $(SRC_DIR)/lexer.c
 
-.PHONY: all clean
-
-sin: main.o stack.o interpret.o item.o log.o value.o memory.o
+sin: $(OBJECTS)
 	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS)
 
-scomp: parser.o lexer.o memory.o log.o scomp.o
+scomp: $(OBJ_DIR)/parser.o $(OBJ_DIR)/lexer.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/log.o $(OBJ_DIR)/scomp.o
 	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS)
-
-interpret.o: interpret.c interpret.h item.h value.h stack.h log.h \
- memory.h
-item.o: item.c item.h value.h stack.h memory.h
-lexer.o: lexer.c parser.h
-log.o: log.c log.h memory.h
-main.o: main.c memory.h log.h value.h item.h stack.h interpret.h
-memory.o: memory.c memory.h log.h
-parser.o: parser.c parser.h memory.h log.h
-scomp.o: scomp.c parser.h memory.h log.h
-stack.o: stack.c stack.h value.h memory.h
-value.o: value.c value.h
-
-
-parser.c: parser.y
-	$(YACC) -o parser.c --defines=parser.h parser.y
+ 
+$(SRC_DIR)/parser.c $(SRC_DIR)/parser.h: $(SRC_DIR)/parser.y
+	$(YACC) -o $(SRC_DIR)/parser.c --defines=$(SRC_DIR)/parser.h \
+          $(SRC_DIR)/parser.y
   
-lexer.c: lexer.l parser.h
-	$(LEX) -o lexer.c lexer.l
+$(SRC_DIR)/lexer.c: $(SRC_DIR)/lexer.l $(SRC_DIR)/parser.h
+	$(LEX) -o $(SRC_DIR)/lexer.c $(SRC_DIR)/lexer.l
 
+-include $(DEPS)

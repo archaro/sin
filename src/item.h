@@ -12,13 +12,11 @@
 #include "value.h"
 #include "stack.h"
 
-#define STACK_DEFAULT_SIZE 1024
-
 typedef enum {ITEM_value, ITEM_code} ITEM_e;
 typedef struct {
   ITEM_e type;
   char *name;
-  STACK_t *stack;
+  STACK_t stack;
   uint8_t *bytecode, *ip;
   int bytecode_len;
   VALUE_t val;

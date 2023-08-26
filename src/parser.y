@@ -62,22 +62,23 @@ void yyset_in(FILE *_in_str, yyscan_t yyscanner);
 int yylex_destroy(yyscan_t yyscanner);
 int yyparse();
 
-void grow_output_buffer(OUTPUT_t *out, uint64_t size) {
-  // Check that the output buffer is big enough to hold another size bytes.
-  // Grow it if necessary.
-  int maybesize = out->nextbyte - out->bytecode + size;
-  if (maybesize >= out->maxsize) {
-    int oldsize = out->maxsize;
-    out->maxsize = GROW_CAPACITY(out->maxsize + size);
-    out->bytecode = GROW_ARRAY(unsigned char, out->bytecode, oldsize,
-                                                              out->maxsize);
-    out->nextbyte = out->bytecode + size;
-  }
-}
-
 void emit_byte(unsigned char c, OUTPUT_t *out) {
-  *out->nextbyte++ = c;
-  grow_output_buffer(out, 1);
+    // Check if there is enough space in the buffer
+    if (out->nextbyte - out->bytecode >= out->maxsize) {
+        // Calculate the new buffer size
+        int oldsize = out->maxsize;
+        out->maxsize = GROW_CAPACITY(oldsize * 1.25);
+        
+        // Reallocate the buffer
+        unsigned char *new_buffer = GROW_ARRAY(unsigned char, out->bytecode, oldsize, out->maxsize);
+        
+        // Update buffer pointers
+        out->nextbyte = new_buffer + (out->nextbyte - out->bytecode);
+        out->bytecode = new_buffer;
+    }
+    
+    // Add the byte directly
+    *out->nextbyte++ = c;
 }
 
 bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
@@ -131,115 +132,82 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
 }
 
 void emit_int64(uint64_t i, OUTPUT_t *out) {
-  union { unsigned char c[8]; int64_t i; } u;
-  u.i = i;
-  for (int x = 0; x < 8; x++) {
-    emit_byte(u.c[x], out);
-  }
-}
-
-void emit_uint16(uint16_t i, OUTPUT_t *out) {
-  union { unsigned char c[2]; uint16_t i; } u;
-  u.i = i;
-  for (int x = 0; x < 2; x++) {
-    emit_byte(u.c[x], out);
+  for (int j = 0; j < 8; j++) {
+    emit_byte((unsigned char)(i & 0xFF), out);
+    i >>= 8;
   }
 }
 
 void emit_int16(uint16_t i, OUTPUT_t *out) {
-  union { unsigned char c[2]; int16_t i; } u;
-  u.i = i;
-  for (int x = 0; x < 2; x++) {
-    emit_byte(u.c[x], out);
-  }
+  // This is signedness-agnostic.  It just spits out two bytes.
+  // It is up to the interpreter to know what to do with them.
+  emit_byte((unsigned char)(i & 0xFF), out);
+  emit_byte((unsigned char)((i >> 8) & 0xFF), out);
 }
 
-void emit_string(char *s, OUTPUT_t *out) {
-  // First get the length of the string (minus the enclosing ")
-  uint16_t l = strlen(s) - 2;
-  // Then write out that uint16_t
-  emit_uint16(l, out);
-  // Then write out the string (again, minus the ")
-  memcpy(out->nextbyte, s+1, l);
+void emit_string(const char *s, OUTPUT_t *out) {
+  s++; // Ignore the opening quote
+  uint16_t l = strlen(s) - 1; // Don't include the closing quote
+  emit_int16(l, out);  // Write the length of the string (uint16_t)
+  memcpy(out->nextbyte, s, l); // And copy the string directly (minus quotes)
   out->nextbyte += l;
 }
+
 void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
   logerr("%s\n",s);
 }
 
 bool emit_local_index(char *id, OUTPUT_t *out, LOCAL_t *local) {
-  // Find the identifier in the list, and return its index.
+  // Find the identifier in the list and return its index.
   // Complain if not found.
-  uint8_t l;
- 
-  // First check to see if the local exists
-  for (l = 0; l < local->count; l++) {
+  for (uint8_t l = 0; l < local->count; l++) {
     if (strcmp(id, local->id[l]) == 0) {
-      break;
+      emit_byte(l, out);
+      return true; // Found, no need to continue searching.
     }
   }
-  if (l == local->count) {
-    // No local found, so this is a syntax error.
-    logerr("Local variable used before assignment.\n");
-    free(id);
-    return false;
-  }
-  free(id);
-  emit_byte(l, out);
-  return true;
+  
+  // No local found, this is a syntax error.
+  logerr("Local variable used before assignment: %s\n", id);
+  return false;
 }
 
 bool emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
-  // This function is called when a local assignment statement is
-  // parsed.  It adds the the local to the list of locals and gives
-  // it a unique index.  Up to 255 locals are permitted per item.
-
-  uint8_t l;
-
-  // First check to see if the local exists
-  for (l = 0; l < local->count; l++) {
-    if (strcmp(id, local->id[l]) == 0) break;
+  // Check if the local variable already exists.
+  for (uint8_t l = 0; l < local->count; l++) {
+    if (strcmp(id, local->id[l]) == 0) {
+      // Local variable already exists, emit bytecode to assign it.
+      emit_byte('c', out);
+      emit_byte(l, out);
+      free(id); // Free the id here since we don't add it to the list.
+      return true;
+    }
   }
-  // If there is space, add it
+  
+  // Check if the maximum number of locals has been reached.
   if (local->count >= 256) {
-    logerr("Too many local variables.\n");
+    logerr("Error: Maximum number of local variables (256) reached.\n");
     free(id);
     return false;
   }
-  // If we get here, there is space for the local. 
-  // We don't free the id here because it is needed for lookups.
-  // It is freed in parse_source().
-  if (local->count == l) {
-    local->id[local->count] = id;
-    local->count++;
-  }
-    
-  // We now have a new local.  Emit the bytecode to store the top
-  // of the stack in the indexed stack location.
+
+  // Add the new local variable.
+  local->id[local->count] = id;
+  local->count++;
+
+  // Emit bytecode to assign the new local.
   emit_byte('c', out);
-  emit_byte(l, out);
+  emit_byte(local->count - 1, out);
+
   return true;
 }
 
-
-void emit_local_increment(char *id, OUTPUT_t *out, LOCAL_t *local) {
-  // emit the "increment local" opcode, followed by the local to increment.
-  emit_byte('f', out);
+void emit_local_op(char *id, OUTPUT_t *out, LOCAL_t *local, char op) {
+  // Emit the specified local operation ('f' for increment, 'g' for decrement),
+  // followed by the local to increment or decrement.
+  emit_byte(op, out);
   emit_local_index(id, out, local);
-}
-
-void emit_local_decrement(char *id, OUTPUT_t *out, LOCAL_t *local) {
-  // emit the "decrement local" opcode, followed by the local to decrement.
-  emit_byte('g', out);
-  emit_local_index(id, out, local);
-}
-
-bool emit_local(char *id, OUTPUT_t *out, LOCAL_t *local) {
-  // This function emits the bytecode necessary to push the value of a local
-  // variable onto the stack.
-  emit_byte('e', out);
-  emit_local_index(id, out, local);
-  return true;
+  free(id);
 }
 
 bool prepare_if(SCANNER_STATE_t *state) {
@@ -264,7 +232,7 @@ bool prepare_loop(SCANNER_STATE_t *state) {
   return true;
 }
 
-bool finalise_loop(SCANNER_STATE_t *state) {
+void finalise_loop(SCANNER_STATE_t *state) {
   // Calculate the offset from the jump-to-end to the actual end
   // Then fix up the jump instruction with the calculated value.
   int16_t offset = state->out->nextbyte
@@ -290,7 +258,7 @@ void emit_jump_to_start(SCANNER_STATE_t *state) {
   emit_byte('j', state->out);
   int16_t offset = state->loop[state->loop_count].loop_start
                                                   - state->out->nextbyte;
-  emit_uint16(offset, state->out);
+  emit_int16(offset, state->out);
 }
 
 %}
@@ -304,6 +272,7 @@ void emit_jump_to_start(SCANNER_STATE_t *state) {
 %token <string> TINTEGER
 %token <string> TSTRINGLIT
 %token <string> TLOCAL
+%token <string> TUNKNOWNCHAR
 %nonassoc TSEMI TCODE TWHILE TDO TENDWHILE TIF TTHEN TELSE TENDIF
 
 %right TASSIGN
@@ -315,6 +284,15 @@ void emit_jump_to_start(SCANNER_STATE_t *state) {
 %nonassoc TLPAREN TRPAREN
 
 %%
+
+input:    program
+        | input TUNKNOWNCHAR    {
+              char errmsg[100];
+              snprintf(errmsg, 99, "Unknown character in input: %s\n", $2);
+              yyerror(scanner, state, errmsg);
+              YYERROR;
+        }
+        ;
 
 program:  stmtlist { emit_byte('h', state->out); }
         ;
@@ -344,12 +322,12 @@ stmt:   TWHILE                  {
                 }
                                 } expr TTHEN stmtlist TELSE stmtlist TENDIF
         | TLOCAL TASSIGN expr   { emit_local_assign($1, state->out, state->local); }
-        | TLOCAL TINC           { emit_local_increment($1, state->out, state->local); }
-        | TLOCAL TDEC           { emit_local_decrement($1, state->out, state->local); }
+        | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
+        | TLOCAL TDEC           { emit_local_op($1, state->out, state->local, 'g'); }
         | expr                  { }
         ;
 
-expr:     TLOCAL                { emit_local($1, state->out, state->local); }
+expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e'); }
         |	TINTEGER              { emit_byte('p', state->out);
                                   emit_int64(atoi($1), state->out);
                                   free($1); }

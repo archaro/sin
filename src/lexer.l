@@ -2,21 +2,13 @@
 #include "parser.h"
 %}
 
-%option noyywrap reentrant bison-bridge case-insensitive
+%option noinput nounput noyywrap reentrant bison-bridge case-insensitive
 
-ws          [ \t\n]+
-digit       [0-9]
-alpha 		  [a-z]
-alnum 		  {alpha}|{digit}
-integer     {digit}+
+integer     [0-9]+
 stringlit   \"([^\\\"]|\\.)*\"
-identifier  {alpha}+{alnum}*
-local       @{identifier}
+local       @[a-z_][a-z0-9_]*
 %%
 
-{integer}     { yylval->string = strdup(yytext); return TINTEGER; }
-{stringlit}   { yylval->string = strdup(yytext); return TSTRINGLIT; }
-{local}       { yylval->string = strdup(yytext); return TLOCAL; }
 "code"        { return TCODE; }
 "do"          { return TDO; }
 "else"        { return TELSE; }
@@ -41,7 +33,11 @@ local       @{identifier}
 "("           { return TLPAREN; }
 ")"           { return TRPAREN; }
 ";"           { return TSEMI; }
-{ws}          ;
+[ \t\n]+      ; /* inline whitespace handling */
+{integer}     { yylval->string = strdup(yytext); return TINTEGER; }
+{stringlit}   { yylval->string = strdup(yytext); return TSTRINGLIT; }
+{local}       { yylval->string = strdup(yytext); return TLOCAL; }
+.             { yylval->string = strdup(yytext); return TUNKNOWNCHAR; }
 
 %%
 
