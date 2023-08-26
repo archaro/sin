@@ -7,17 +7,17 @@
 
 #include "value.h"
 
+#define STACK_SIZE 1024
+
 typedef struct {
   int32_t max;
   int32_t current;
   uint8_t locals;
-  VALUE_t *stack;
+  VALUE_t stack[STACK_SIZE];
 } STACK_t;
 
-STACK_t *new_stack(uint32_t size);
-void free_stack(STACK_t *stack);
-void flatten_stack(STACK_t *stack);
+void reset_stack(STACK_t *stack);
 void push_stack(STACK_t *stack, VALUE_t obj);
 VALUE_t pop_stack(STACK_t *stack);
 VALUE_t peek_stack(STACK_t *stack);
-int size_stack(STACK_t *stack);
+int size_stack(STACK_t stack);
