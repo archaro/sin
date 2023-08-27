@@ -28,9 +28,7 @@ uint8_t *op_pushint(uint8_t *nextop, STACK_t *stack) {
   v.type = VALUE_int;
   memcpy(&v.i, nextop, 8);
   push_stack(stack, v);
-#ifdef DEBUG
-  logmsg("OP_PUSHINT: %ld\n", v.i);
-#endif
+  DEBUG_LOG("OP_PUSHINT: %ld\n", v.i);
   return nextop+8;
 }
 
@@ -43,9 +41,7 @@ uint8_t *op_inclocal(uint8_t *nextop, STACK_t *stack) {
   } else {
     logerr("Trying to increment non integer local variable.\n");
   }
-#ifdef DEBUG
-  logmsg("OP_INCLOCAL: index %d\n", index);
-#endif
+  DEBUG_LOG("OP_INCLOCAL: index %d\n", index);
   return nextop+1;
 }
 
@@ -58,9 +54,7 @@ uint8_t *op_declocal(uint8_t *nextop, STACK_t *stack) {
   } else {
     logerr("Trying to decrement non integer local variable.\n");
   }
-#ifdef DEBUG
-  logmsg("OP_DECLOCAL: index %d\n", index);
-#endif
+  DEBUG_LOG("OP_DECLOCAL: index %d\n", index);
   return nextop+1;
 }
 
@@ -69,9 +63,7 @@ uint8_t *op_jump(uint8_t *nextop, STACK_t *stack) {
   // SIGNED int, and then modify the bytecode pointer by that amount.
   int16_t offset;
   memcpy(&offset, nextop, 2);
-#ifdef DEBUG
-  logmsg("OP_JUMP: offset is  %d.\n", offset);
-#endif
+  DEBUG_LOG("OP_JUMP: offset is  %d.\n", offset);
   return nextop + offset;
 }
 
@@ -88,17 +80,13 @@ uint8_t *op_jumpfalse(uint8_t *nextop, STACK_t *stack) {
   if ((v1.type == VALUE_bool || v1.type == VALUE_int) && v1.i != 0) {
     // A true value means that we don't branch.  Skip over
     // the next two bytes.
-#ifdef DEBUG
-    logmsg("OP_JUMPFALSE: evaluates to true (no jump).\n");
-#endif
+    DEBUG_LOG("OP_JUMPFALSE: evaluates to true (no jump).\n");
     return nextop + 2;
   } else {
     // If not true then it must be false.  That's logic.
     int16_t offset;
     memcpy(&offset, nextop, 2);
-#ifdef DEBUG
-    logmsg("OP_JUMPFALSE: evaluates to false (jump offset %d).\n", offset);
-#endif
+    DEBUG_LOG("OP_JUMPFALSE: evaluates to false (jump offset %d).\n", offset);
     return nextop + offset;
   }
 }
@@ -113,9 +101,7 @@ uint8_t *op_savelocal(uint8_t *nextop, STACK_t *stack) {
                                                     sizeof(VALUE_t));
   // Then reduce the size of the stack.
   stack->current--;
-#ifdef DEBUG
-  logmsg("OP_SAVELOCAL: index %d\n", index);
-#endif
+  DEBUG_LOG("OP_SAVELOCAL: index %d\n", index);
   return nextop+1;
 }
 
@@ -132,8 +118,8 @@ uint8_t *op_getlocal(uint8_t *nextop, STACK_t *stack) {
 #ifdef DEBUG
   VALUE_t v;
   v = peek_stack(stack);
-  logmsg("OP_GETLOCAL: index %d value %d.\n", index, v.i);
 #endif
+  DEBUG_LOG("OP_GETLOCAL: index %d value %d.\n", index, v.i);
   return nextop+1;
 }
 
@@ -149,9 +135,7 @@ uint8_t *op_pushstr(uint8_t *nextop, STACK_t *stack) {
   memcpy(v.s, nextop, len);
   v.s[len] = 0;
   push_stack(stack, v);
-#ifdef DEBUG
-  logmsg("OP_PUSHSTR: %s\n", v.s);
-#endif
+  DEBUG_LOG("OP_PUSHSTR: %s\n", v.s);
   return nextop + len;
 }
 
@@ -185,9 +169,7 @@ uint8_t *op_add(uint8_t *nextop, STACK_t *stack) {
     logerr("Trying to add mismatched types '%c' and '%c'.  Result is NIL.\n", v1.type, v2.type);
     push_stack(stack, VALUE_NIL);
   }
-#ifdef DEBUG
-  logmsg("OP_ADD: types %d and %d\n", v1.type, v2.type);
-#endif
+  DEBUG_LOG("OP_ADD: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
@@ -202,9 +184,7 @@ uint8_t *op_subtractint(uint8_t *nextop, STACK_t *stack) {
   v2.i -= v1.i;
   v2.type = VALUE_int;
   push_stack(stack, v2);
-#ifdef DEBUG
-  logmsg("OP_SUB: types %d and %d\n", v1.type, v2.type);
-#endif
+  DEBUG_LOG("OP_SUB: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
@@ -225,9 +205,7 @@ uint8_t *op_divideint(uint8_t *nextop, STACK_t *stack) {
   }
   v2.type = VALUE_int;
   push_stack(stack, v2);
-#ifdef DEBUG
-  logmsg("OP_DIV: types %d and %d\n", v1.type, v2.type);
-#endif
+  DEBUG_LOG("OP_DIV: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
@@ -242,9 +220,7 @@ uint8_t *op_multiplyint(uint8_t *nextop, STACK_t *stack) {
   v2.i *= v1.i;
   v2.type = VALUE_int;
   push_stack(stack, v2);
-#ifdef DEBUG
-  logmsg("OP_MUL: types %d and %d\n", v1.type, v2.type);
-#endif
+  DEBUG_LOG("OP_MUL: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
@@ -257,9 +233,7 @@ uint8_t *op_negateint(uint8_t *nextop, STACK_t *stack) {
     logerr("Attempt to negate a value of type '%d'.\n",
                                     stack->stack[stack->current].type);
   }
-#ifdef DEBUG
-  logmsg("OP_NEGATE: type %d\n", stack->stack[stack->current].type);
-#endif
+  DEBUG_LOG("OP_NEGATE: type %d\n", stack->stack[stack->current].type);
   return nextop;
 }
 
@@ -287,9 +261,7 @@ uint8_t *op_equal(uint8_t *nextop, STACK_t *stack) {
   // If we get here, there is no equality
   result.i = 0;
   push_stack(stack, result);
-#ifdef DEBUG
-  logmsg("OP_EQUAL: types %d and %d\n", v1.type, v2.type);
-#endif
+  DEBUG_LOG("OP_EQUAL: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
@@ -320,9 +292,7 @@ uint8_t *op_notequal(uint8_t *nextop, STACK_t *stack) {
   // If we get here there is equality, so return false.
   result.i = 0;
   push_stack(stack, result);
-#ifdef DEBUG
-  logmsg("OP_NOTEQUAL: types %d and %d\n", v1.type, v2.type);
-#endif
+  DEBUG_LOG("OP_NOTEQUAL: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
@@ -346,9 +316,7 @@ uint8_t *op_lessthan(uint8_t *nextop, STACK_t *stack) {
   // If we get here the comparison is false
   result.i = 0;
   push_stack(stack, result);
-#ifdef DEBUG
-  logmsg("OP_LESSTHAN: types %d and %d\n", v1.type, v2.type);
-#endif
+  DEBUG_LOG("OP_LESSTHAN: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
@@ -372,9 +340,7 @@ uint8_t *op_lessthanorequal(uint8_t *nextop, STACK_t *stack) {
   // If we get here the comparison is false
   result.i = 0;
   push_stack(stack, result);
-#ifdef DEBUG
-  logmsg("OP_LTEQ: types %d and %d\n", v1.type, v2.type);
-#endif
+  DEBUG_LOG("OP_LTEQ: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
@@ -398,9 +364,7 @@ uint8_t *op_greaterthan(uint8_t *nextop, STACK_t *stack) {
   // If we get here the comparison is false
   result.i = 0;
   push_stack(stack, result);
-#ifdef DEBUG
-  logmsg("OP_GREATERTHAN: types %d and %d\n", v1.type, v2.type);
-#endif
+  DEBUG_LOG("OP_GREATERTHAN: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
@@ -424,9 +388,7 @@ uint8_t *op_greaterthanorequal(uint8_t *nextop, STACK_t *stack) {
   // If we get here the comparison is false
   result.i = 0;
   push_stack(stack, result);
-#ifdef DEBUG
-  logmsg("OP_GTEQ: types %d and %d\n", v1.type, v2.type);
-#endif
+  DEBUG_LOG("OP_GTEQ: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
@@ -466,10 +428,8 @@ VALUE_t interpret(ITEM_t *item) {
   uint8_t numlocals = *item->bytecode;
   item->stack.current += numlocals;
   item->stack.locals = numlocals;
-#ifdef DEBUG
-  logmsg("Making space for %d locals.\n", numlocals);
-  logmsg("Stack size before interpreting begins: %d\n", size_stack(item->stack));
-#endif
+  DEBUG_LOG("Making space for %d locals.\n", numlocals);
+  DEBUG_LOG("Stack size before interpreting begins: %d\n", size_stack(item->stack));
   // The actual bytecode starts at the second byte.
   uint8_t *op = item->bytecode + 1; 
   while (*op != 'h') {

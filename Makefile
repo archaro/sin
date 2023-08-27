@@ -4,7 +4,7 @@ LDFLAGS=
 LIBS=
 YACC=bison
 LEX=flex
-#DEBUG=-DDEBUG=1
+DEBUG=-DDEBUG=1
 
 SRC_DIR := src
 OBJ_DIR := obj

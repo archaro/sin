@@ -31,12 +31,14 @@ bool log_to_file(const char *logfile) {
 
 void close_log() {
   freopen("/dev/tty","a",stderr);
+  freopen("/dev/tty","a",stdout);
 }
 
 void logerr(const char *msg, ...) {
   va_list args;
   va_start(args, msg);
   vfprintf(stderr, msg, args);
+  fflush(stderr);
   va_end(args);
 }
 
@@ -44,6 +46,7 @@ void logmsg(const char *msg, ...) {
   va_list args;
   va_start(args, msg);
   vfprintf(stdout, msg, args);
+  fflush(stdout);
   va_end(args);
 }
 
