@@ -26,7 +26,7 @@ uint8_t *op_pushint(uint8_t *nextop, STACK_t *stack) {
   // Read the next 8 bytes and make an VALUE_t
   VALUE_t v;
   v.type = VALUE_int;
-  memcpy(&v.i, nextop, 8);
+  v.i = *(int64_t*)nextop;
   push_stack(stack, v);
   DEBUG_LOG("OP_PUSHINT: %ld\n", v.i);
   return nextop+8;
