@@ -90,9 +90,7 @@ int main(int argc, char **argv) {
   }
 
   // Do some preparations
-#ifdef DEBUG
-  logerr("DEBUG IS DEFINED\n");
-#endif
+  DEBUG_LOG("DEBUG IS DEFINED\n");
   init_interpreter();
   ITEM_t *start = make_item("start", ITEM_code, VALUE_NIL, bytecode, filesize);
 
@@ -111,9 +109,7 @@ int main(int argc, char **argv) {
 
   // Clean up
   logmsg("Shutting down.\n");
-#ifdef DEBUG
-  logerr("DEBUG IS DEFINED\n");
-#endif
+  DEBUG_LOG("DEBUG IS DEFINED\n");
   free_item(start);
   close_log();
   exit(EXIT_SUCCESS);
