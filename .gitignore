@@ -5,6 +5,7 @@ parser.c
 parser.h
 scomp
 sin
+sdiss
 
 # Prerequisites
 *.d
