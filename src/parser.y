@@ -221,6 +221,55 @@ bool prepare_if(SCANNER_STATE_t *state) {
   return true;
 }
 
+void handle_then(SCANNER_STATE_t *state) {
+  // When we encounter a THEN, we need to output a jump-if-false op
+  // and a placeholder offset.  This will be fixed up when we encounter
+  // the ELSE clause.
+  emit_byte('k', state->out);
+  state->ifelse[state->loop_count].jump_to_false = state->out->nextbyte;
+  emit_int16(0, state->out);
+}
+
+void handle_else(SCANNER_STATE_t *state) {
+  // When we encounter an ELSE, we first emit an unconditional jump op
+  // and a placeholder offset, then we go back to the THEN placeholder
+  // and replace it with the calculated offset to the current
+  // bytecode pointer.
+  emit_byte('j', state->out);
+  state->ifelse[state->loop_count].jump_to_end = state->out->nextbyte;
+  emit_int16(0, state->out);
+  int16_t offset = state->out->nextbyte
+                          - state->ifelse[state->loop_count].jump_to_false;
+  unsigned char *store_nextbyte = state->out->nextbyte; // Ugh
+  state->out->nextbyte = state->ifelse[state->loop_count].jump_to_false;
+  emit_int16(offset, state->out);
+  state->out->nextbyte = store_nextbyte;
+}
+
+void finalise_if(SCANNER_STATE_t *state) {
+  // When we encounter an ENDIF, we calculate the offset to the current
+  // bytecode pointer, and then go back to the ELSE placeholder and
+  // update it.
+  int16_t offset = state->out->nextbyte
+                          - state->ifelse[state->loop_count].jump_to_end;
+  unsigned char *store_nextbyte = state->out->nextbyte; // Ugh
+  state->out->nextbyte = state->ifelse[state->loop_count].jump_to_end;
+  emit_int16(offset, state->out);
+  state->out->nextbyte = store_nextbyte;
+  state->loop_count--; // Loop be gone
+}
+
+void finalise_simple_if(SCANNER_STATE_t *state) {
+  // A simple IF statement just has a jump-if-false.  There is no
+  // alternative branch. So we just update the jump after THEN.
+  int16_t offset = state->out->nextbyte
+                          - state->ifelse[state->loop_count].jump_to_false;
+  unsigned char *store_nextbyte = state->out->nextbyte; // Ugh
+  state->out->nextbyte = state->ifelse[state->loop_count].jump_to_false;
+  emit_int16(offset, state->out);
+  state->out->nextbyte = store_nextbyte;
+}
+
 bool prepare_loop(SCANNER_STATE_t *state) {
   // We have encountered the start of a loop, so record it for
   // fixing up later.
@@ -315,16 +364,36 @@ stmt:   TWHILE                  {
                 emit_jump_to_start(state);
                 finalise_loop(state);
                 }
+/*
         | TIF                   {
                 if (!prepare_loop(state)) {
                   yyerror(scanner, state, "Maximum control structure depth exceeded.\n");
                   YYERROR;
                 }
-                                } expr TTHEN stmtlist TELSE stmtlist TENDIF
+                                } expr TTHEN {
+                handle_then(state);
+                                } stmtlist TELSE {
+                handle_else(state);
+                                } stmtlist TENDIF {
+                finalise_if(state);
+                                }
+*/
+        | TIF                   {
+                if (!prepare_loop(state)) {
+                  yyerror(scanner, state, "Maximum control structure depth exceeded.\n");
+                  YYERROR;
+                }
+                                } expr TTHEN {
+                handle_then(state);
+                                } stmtlist if_tail
         | TLOCAL TASSIGN expr   { emit_local_assign($1, state->out, state->local); }
         | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
         | TLOCAL TDEC           { emit_local_op($1, state->out, state->local, 'g'); }
         | expr                  { }
+        ;
+
+if_tail:  TENDIF { finalise_simple_if(state); }
+        | TELSE { handle_else(state); } stmtlist TENDIF { finalise_if(state); }
         ;
 
 expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e'); }
