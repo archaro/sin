@@ -353,6 +353,7 @@ stmt:   TWHILE                  {
                 emit_jump_to_start(state);
                 finalise_loop(state);
                 }
+/*
         | TIF                   {
                 if (!prepare_loop(state)) {
                   yyerror(scanner, state, "Maximum control structure depth exceeded.\n");
@@ -365,10 +366,22 @@ stmt:   TWHILE                  {
                                 } stmtlist TENDIF {
                 finalise_if(state);
                                 }
+*/
+        | TIF                   {
+                if (!prepare_loop(state)) {
+                  yyerror(scanner, state, "Maximum control structure depth exceeded.\n");
+                  YYERROR;
+                }
+                                } expr TTHEN {
+                handle_then(state);
+                                } stmtlist if_tail
         | TLOCAL TASSIGN expr   { emit_local_assign($1, state->out, state->local); }
         | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
         | TLOCAL TDEC           { emit_local_op($1, state->out, state->local, 'g'); }
         | expr                  { }
+        ;
+
+if_tail:  TELSE { handle_else(state); } stmtlist TENDIF { finalise_if(state); }
         ;
 
 expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e'); }
