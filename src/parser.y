@@ -259,6 +259,17 @@ void finalise_if(SCANNER_STATE_t *state) {
   state->loop_count--; // Loop be gone
 }
 
+void finalise_simple_if(SCANNER_STATE_t *state) {
+  // A simple IF statement just has a jump-if-false.  There is no
+  // alternative branch. So we just update the jump after THEN.
+  int16_t offset = state->out->nextbyte
+                          - state->ifelse[state->loop_count].jump_to_false;
+  unsigned char *store_nextbyte = state->out->nextbyte; // Ugh
+  state->out->nextbyte = state->ifelse[state->loop_count].jump_to_false;
+  emit_int16(offset, state->out);
+  state->out->nextbyte = store_nextbyte;
+}
+
 bool prepare_loop(SCANNER_STATE_t *state) {
   // We have encountered the start of a loop, so record it for
   // fixing up later.
@@ -381,7 +392,8 @@ stmt:   TWHILE                  {
         | expr                  { }
         ;
 
-if_tail:  TELSE { handle_else(state); } stmtlist TENDIF { finalise_if(state); }
+if_tail:  TENDIF { finalise_simple_if(state); }
+        | TELSE { handle_else(state); } stmtlist TENDIF { finalise_if(state); }
         ;
 
 expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e'); }
