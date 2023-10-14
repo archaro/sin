@@ -11,11 +11,7 @@ local       @[a-z_][a-z0-9_]*
 
 "code"        { return TCODE; }
 "do"          { return TDO; }
-"else"        { return TELSE; }
-"endif"       { return TENDIF; }
 "endwhile"    { return TENDWHILE; }
-"if"          { return TIF; }
-"then"        { return TTHEN; }
 "while"       { return TWHILE; }
 "="           { return TASSIGN; }
 "=="          { return TEQUAL; }
