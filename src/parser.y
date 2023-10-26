@@ -9,8 +9,12 @@
 %code requires {
   #include <stdbool.h>
   #include <stdint.h>
+  #include <malloc.h>
 
-  #define MAX_NESTED_LOOPS 32
+  /* This controls the depth of control structures
+     (loops, IF statements, etc)
+  */
+  #define MAX_NESTED_CONTROLS 32
 
   typedef struct {
     unsigned char *bytecode;
@@ -31,10 +35,21 @@
   } LOOP_FIXUP_t;
 
   typedef struct {
+    unsigned char *addr;
+    void *next;
+  } IF_FIXUP_ADDR_t;
+
+  typedef struct {
+    unsigned char *next_else;
+    IF_FIXUP_ADDR_t *list;
+  } IF_FIXUP_t;
+
+  typedef struct {
     OUTPUT_t *out;
     LOCAL_t *local;
-    int8_t loop_count;
-    LOOP_FIXUP_t loop[MAX_NESTED_LOOPS];
+    int8_t control_count;
+    LOOP_FIXUP_t loop[MAX_NESTED_CONTROLS];
+    IF_FIXUP_t if_stmt[MAX_NESTED_CONTROLS];
   } SCANNER_STATE_t;
 
   bool parse_source(char *source, int sourcelen, OUTPUT_t *out);
@@ -91,7 +106,7 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
   SCANNER_STATE_t scanner_state;
   scanner_state.out = out;
   scanner_state.local = &local;
-  scanner_state.loop_count = -1; // We start in no loop.
+  scanner_state.control_count = -1; // We start in no loop.
 
   logmsg("Parsing...\n");
   yylex_init(&sc);
@@ -207,11 +222,11 @@ void emit_local_op(char *id, OUTPUT_t *out, LOCAL_t *local, char op) {
 bool prepare_loop(SCANNER_STATE_t *state) {
   // We have encountered the start of a loop, so record it for
   // fixing up later.
-  if (state->loop_count >= MAX_NESTED_LOOPS) {
+  if (state->control_count >= MAX_NESTED_CONTROLS) {
     return false;
   }
-  state->loop_count++; // We be looping.
-  state->loop[state->loop_count].loop_start = state->out->nextbyte;
+  state->control_count++; // We be looping.
+  state->loop[state->control_count].loop_start = state->out->nextbyte;
   return true;
 }
 
@@ -219,19 +234,19 @@ void finalise_loop(SCANNER_STATE_t *state) {
   // Calculate the offset from the jump-to-end to the actual end
   // Then fix up the jump instruction with the calculated value.
   int16_t offset = state->out->nextbyte
-                          - state->loop[state->loop_count].jump_to_end;
+                          - state->loop[state->control_count].jump_to_end;
   unsigned char *store_nextbyte = state->out->nextbyte; // Ugh
-  state->out->nextbyte = state->loop[state->loop_count].jump_to_end;
+  state->out->nextbyte = state->loop[state->control_count].jump_to_end;
   emit_int16(offset, state->out);
   state->out->nextbyte = store_nextbyte;
-  state->loop_count--; // Loop be gone.
+  state->control_count--; // Loop be gone.
 }
 
 void emit_jump_to_end(SCANNER_STATE_t *state) {
   // Emit a conditional jump opcode with a dummy offset.  Record this in
   // the current loop record for fixing up later.
   emit_byte('k', state->out);
-  state->loop[state->loop_count].jump_to_end = state->out->nextbyte;
+  state->loop[state->control_count].jump_to_end = state->out->nextbyte;
   emit_int16(0, state->out);
 }
 
@@ -239,9 +254,89 @@ void emit_jump_to_start(SCANNER_STATE_t *state) {
   // Emit an unconditional jump opcode and the offset to jump back
   // to the start of the loop.
   emit_byte('j', state->out);
-  int16_t offset = state->loop[state->loop_count].loop_start
+  int16_t offset = state->loop[state->control_count].loop_start
                                                   - state->out->nextbyte;
   emit_int16(offset, state->out);
+}
+
+bool prepare_if(SCANNER_STATE_t *state) {
+  // Called before the first IF expression.
+  // We have encountered the start of an if statement, so record it for
+  // fixing up later.
+  if (state->control_count >= MAX_NESTED_CONTROLS) {
+    return false;
+  }
+  state->control_count++;
+  state->if_stmt[state->control_count].next_else = NULL;
+  state->if_stmt[state->control_count].list = NULL;
+  return true;
+}
+
+void emit_jump_to_next_else(SCANNER_STATE_t *state) {
+  // After every IF or ELSIF condition, there needs to be a jump-if-false
+  // to the next condition (or to the end of the structure).  Insert a
+  // placeholder for later updating.
+  emit_byte('k', state->out);
+  state->if_stmt[state->control_count].next_else = state->out->nextbyte;
+  emit_int16(0, state->out);
+}
+
+void fixup_last_else_jump(SCANNER_STATE_t *state) {
+  // When we encounter an ELSE/ELSIF, update the last jump-to-next-else
+  // with the correct offset.
+  logmsg("Fixing last ELSE jump...\n");
+  int16_t offset = state->out->nextbyte
+                          - state->if_stmt[state->control_count].next_else;
+  unsigned char *store_nextbyte = state->out->nextbyte; // Ugh
+  state->out->nextbyte = state->if_stmt[state->control_count].next_else;
+  emit_int16(offset, state->out);
+  state->out->nextbyte = store_nextbyte;
+  state->if_stmt[state->control_count].next_else = NULL;
+}
+
+void emit_jump_to_endif(SCANNER_STATE_t *state) {
+  // After every statement block in an IF statement, emit an unconditional
+  // jump to the end of the statement with a placeholder for the offset.
+  // Remember where the offset is, for later fixing-up
+  emit_byte('j', state->out);
+  IF_FIXUP_ADDR_t *fixup = malloc(sizeof(IF_FIXUP_ADDR_t));
+  fixup->addr = state->out->nextbyte;
+  fixup->next = NULL;
+  if (state->if_stmt[state->control_count].list) {
+    fixup->next = state->if_stmt[state->control_count].list;
+  }
+  state->if_stmt[state->control_count].list = fixup;
+  emit_int16(0, state->out);
+}
+
+void finalise_if(SCANNER_STATE_t *state) {
+  // Update all of the jump-to-end addresses with the correct offset.
+  unsigned char *store_nextbyte = state->out->nextbyte;
+  // There might be an ELSE jump still to fix, if this statement had no
+  // ELSE clause.
+  if (state->if_stmt[state->control_count].next_else) {
+    fixup_last_else_jump(state);
+  } else {
+    logmsg("Called fixup_last_else_jump with no next_else. Ignoring.\n");
+  }
+  // Loop through state->if_stmt[state->control_count].list.
+  // .list will be NULL if there are no more addresses to process.
+  while (state->if_stmt[state->control_count].list) {
+    // Calculate the offset to the end of the IF statement.
+    int16_t offset = store_nextbyte -
+                            state->if_stmt[state->control_count].list->addr;
+    // Update the placeholder with the correct offset.
+    state->out->nextbyte = state->if_stmt[state->control_count].list->addr;
+    emit_int16(offset, state->out);
+    // Free this address and loop to the next in the list.
+    IF_FIXUP_ADDR_t *last = state->if_stmt[state->control_count].list;
+    state->if_stmt[state->control_count].list =
+                        state->if_stmt[state->control_count].list->next;
+    free(last);
+  }
+  // All done.
+  state->out->nextbyte = store_nextbyte;
+  state->control_count--;
 }
 
 %}
@@ -256,7 +351,7 @@ void emit_jump_to_start(SCANNER_STATE_t *state) {
 %token <string> TSTRINGLIT
 %token <string> TLOCAL
 %token <string> TUNKNOWNCHAR
-%nonassoc TSEMI TCODE TWHILE TDO TENDWHILE
+%nonassoc TSEMI TCODE TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF
 
 %right TASSIGN
 %left TEQUAL TNOTEQUAL TLESSTHAN TGREATERTHAN TLTEQ TGTEQ
@@ -289,15 +384,18 @@ stmtsemi: stmt TSEMI
 
 stmt:   TWHILE                  {
                 if (!prepare_loop(state)) {
-                  yyerror(scanner, state, "Maximum loop depth exceeded.\n");
+                  yyerror(scanner, state, "Maximum control structure depth exceeded.\n");
                   YYERROR;
                 }
-                                  } expr {
+                                } expr {
                 emit_jump_to_end(state);
-                                  } TDO stmtlist TENDWHILE {
+                                } TDO stmtlist TENDWHILE {
                 emit_jump_to_start(state);
                 finalise_loop(state);
                 }
+        | TIF { prepare_if(state); } expr { emit_jump_to_next_else(state); }
+          TTHEN stmtlist { emit_jump_to_endif(state); }
+          elsif_else_opt TENDIF { finalise_if(state); }
         | TLOCAL TASSIGN expr   { emit_local_assign($1, state->out, state->local); }
         | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
         | TLOCAL TDEC           { emit_local_op($1, state->out, state->local, 'g'); }
@@ -323,7 +421,14 @@ expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e
 	      |	expr TDIV expr        { emit_byte('d', state->out); }
         | TLPAREN expr TRPAREN  { }
         | TMINUS expr %prec UMINUS { emit_byte('n', state->out); }
-;
+        ;
+
+elsif_else_opt : /* empty */
+        | TELSIF { fixup_last_else_jump(state); }
+          expr { emit_jump_to_next_else(state); }
+          TTHEN stmtlist { emit_jump_to_endif(state); } elsif_else_opt
+        | TELSE { fixup_last_else_jump(state); } stmtlist
+        ;
 
 %%
 

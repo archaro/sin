@@ -6,6 +6,8 @@ parser.h
 scomp
 sin
 sdiss
+.vscode/
+sin.code-workspace
 
 # Prerequisites
 *.d
