@@ -73,6 +73,7 @@ int main(int argc, char **argv) {
   logmsg("Beginning disassembly...\n");
   opcodeptr = bytecode;
 
+
   // First, do we have any locals?
   uint8_t locals = *opcodeptr;
   opcodeptr++;
@@ -87,6 +88,7 @@ int main(int argc, char **argv) {
   while (*opcodeptr != 'h') {
     int16_t offset;
     int64_t ival;
+    logmsg("Byte %05u: ", opcodeptr - bytecode - 1); // -1 for the locals
     switch (*opcodeptr) {
       case 'a':
         logmsg("ADD\n");
