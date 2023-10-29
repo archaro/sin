@@ -20,6 +20,7 @@ local       @[a-z_][a-z0-9_]*
 "while"       { return TWHILE; }
 "="           { return TASSIGN; }
 "=="          { return TEQUAL; }
+"!"           { return TNOT; }
 "!="          { return TNOTEQUAL; }
 "<"           { return TLESSTHAN; }
 "<="          { return TLTEQ; }

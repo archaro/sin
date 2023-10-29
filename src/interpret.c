@@ -392,6 +392,40 @@ uint8_t *op_greaterthanorequal(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
+uint8_t *op_logicalnot(uint8_t *nextop, STACK_t *stack) {
+  // Logically negate the value on top of the stack.
+  // Note that this operation CONVERTS the value on top of the stack to a
+  // VALUE_bool if it is not already.
+  switch (stack->stack[stack->current].type) {
+    case VALUE_bool:
+      stack->stack[stack->current].i = !(stack->stack[stack->current].i);
+      break;
+    case VALUE_int:
+      // If the int value is nonzero, then false, else true.
+      stack->stack[stack->current].type = VALUE_bool;
+      if (stack->stack[stack->current].i) {
+        stack->stack[stack->current].i = 0;
+      } else {
+        stack->stack[stack->current].i = 1;
+      }
+      break;
+    case VALUE_nil:
+      // A logically-negated nil value is always true
+      stack->stack[stack->current].type = VALUE_bool;
+      stack->stack[stack->current].i = 1;
+      break;
+    case VALUE_str:
+      // A logically-negated string value is always false
+      // Tidy up the old string value
+      FREE_ARRAY(char, stack->stack[stack->current].s,
+                              strlen(stack->stack[stack->current].s) + 1);
+      stack->stack[stack->current].type = VALUE_bool;
+      stack->stack[stack->current].i = 0;
+      break;
+  }
+  return nextop;
+}
+
 void init_interpreter() {
   // This function simply sets up the opcode dispatch table.
   for (int o=0; o<256; o++) {
@@ -417,6 +451,7 @@ void init_interpreter() {
   opcode['t'] = op_greaterthan;
   opcode['u'] = op_lessthanorequal;
   opcode['v'] = op_greaterthanorequal;
+  opcode['x'] = op_logicalnot;
 }
 
 VALUE_t interpret(ITEM_t *item) {

@@ -37,3 +37,4 @@ s - subtract ints.  Pop the top two values from the stack, subtract the
 t - boolean greater than.
 u - boolean less than or equal to.
 v - boolean greater than or equal to.
+x - logical not the value on top of the stack.

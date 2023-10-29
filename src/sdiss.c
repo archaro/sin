@@ -182,6 +182,10 @@ int main(int argc, char **argv) {
         logmsg("BOOL GTEQ\n");
         opcodeptr++;
         break;
+      case 'x':
+        logmsg("LOGICAL NOT\n");
+        opcodeptr++;
+        break;
       default:
         logerr("Undefined opcode: %c (%d)\n", *opcodeptr, *opcodeptr);
         opcodeptr++;

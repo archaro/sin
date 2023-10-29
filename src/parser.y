@@ -356,7 +356,7 @@ void finalise_if(SCANNER_STATE_t *state) {
 %left TPLUS TMINUS
 %left TMULT TDIV
 %left TINC TDEC
-%right UMINUS
+%right UMINUS TNOT
 %nonassoc TLPAREN TRPAREN
 
 %%
@@ -418,6 +418,7 @@ expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e
 	      |	expr TMULT expr       { emit_byte('m', state->out); }
 	      |	expr TDIV expr        { emit_byte('d', state->out); }
         | TLPAREN expr TRPAREN  { }
+        | TNOT expr             { emit_byte('x', state->out); }
         | TMINUS expr %prec UMINUS { emit_byte('n', state->out); }
         ;
 
