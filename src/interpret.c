@@ -444,6 +444,12 @@ VALUE_t interpret(ITEM_t *item) {
     return pop_stack(&item->stack);
   }
 
+  // There shouldn't be anything else on the stack!
+  if (size_stack(item->stack) > 0) {
+    logerr("Error! Stack contains %d entries at end of intepretation.\n",
+                                                  size_stack(item->stack));
+  }
+
   // Otherwise return a nill.
   return VALUE_NIL;
 }
