@@ -284,7 +284,6 @@ void emit_jump_to_next_else(SCANNER_STATE_t *state) {
 void fixup_last_else_jump(SCANNER_STATE_t *state) {
   // When we encounter an ELSE/ELSIF, update the last jump-to-next-else
   // with the correct offset.
-  logmsg("Fixing last ELSE jump...\n");
   int16_t offset = state->out->nextbyte
                           - state->if_stmt[state->control_count].next_else;
   unsigned char *store_nextbyte = state->out->nextbyte; // Ugh
@@ -317,7 +316,6 @@ void finalise_if(SCANNER_STATE_t *state) {
   if (state->if_stmt[state->control_count].next_else) {
     fixup_last_else_jump(state);
   } else {
-    logmsg("Called fixup_last_else_jump with no next_else. Ignoring.\n");
   }
   // Loop through state->if_stmt[state->control_count].list.
   // .list will be NULL if there are no more addresses to process.
