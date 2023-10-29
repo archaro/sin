@@ -400,10 +400,6 @@ stmt:   TWHILE                  {
         | expr                  { }
         ;
 
-if_tail:  TENDIF { finalise_simple_if(state); }
-        | TELSE { handle_else(state); } stmtlist TENDIF { finalise_if(state); }
-        ;
-
 expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e'); }
         |	TINTEGER              { emit_byte('p', state->out);
                                   emit_int64(atoi($1), state->out);
