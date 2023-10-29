@@ -12,6 +12,7 @@ local       @[a-z_][a-z0-9_]*
 "code"        { return TCODE; }
 "do"          { return TDO; }
 "else"        { return TELSE; }
+"elsif"       { return TELSIF; }
 "endif"       { return TENDIF; }
 "endwhile"    { return TENDWHILE; }
 "if"          { return TIF; }
