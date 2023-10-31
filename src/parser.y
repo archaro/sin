@@ -352,7 +352,7 @@ void finalise_if(SCANNER_STATE_t *state) {
 %nonassoc TSEMI TCODE TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF
 
 %right TASSIGN
-%left TEQUAL TNOTEQUAL TLESSTHAN TGREATERTHAN TLTEQ TGTEQ
+%left TEQUAL TNOTEQUAL TLESSTHAN TGREATERTHAN TLTEQ TGTEQ TAND TOR
 %left TPLUS TMINUS
 %left TMULT TDIV
 %left TINC TDEC
@@ -409,6 +409,8 @@ expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e
                                   free($1); }
         | expr TEQUAL expr      { emit_byte('o', state->out); }
         | expr TNOTEQUAL expr   { emit_byte('q', state->out); }
+        | expr TOR expr         { emit_byte('z', state->out); }
+        | expr TAND expr        { emit_byte('y', state->out); }
         | expr TLESSTHAN expr   { emit_byte('r', state->out); }
         | expr TLTEQ expr       { emit_byte('u', state->out); }
         | expr TGREATERTHAN expr { emit_byte('t', state->out); }

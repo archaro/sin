@@ -9,6 +9,7 @@ stringlit   \"([^\\\"]|\\.)*\"
 local       @[a-z_][a-z0-9_]*
 %%
 
+"and"         { return TAND; }
 "code"        { return TCODE; }
 "do"          { return TDO; }
 "else"        { return TELSE; }
@@ -16,6 +17,7 @@ local       @[a-z_][a-z0-9_]*
 "endif"       { return TENDIF; }
 "endwhile"    { return TENDWHILE; }
 "if"          { return TIF; }
+"or"          { return TOR; }
 "then"        { return TTHEN; }
 "while"       { return TWHILE; }
 "="           { return TASSIGN; }

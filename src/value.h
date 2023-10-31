@@ -16,3 +16,5 @@ typedef struct {
 #ifndef VALUE_INTERNAL
 extern VALUE_t VALUE_NIL;
 #endif
+
+VALUE_t convert_to_bool(VALUE_t from);

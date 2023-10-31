@@ -426,6 +426,28 @@ uint8_t *op_logicalnot(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
+uint8_t *op_logicaland(uint8_t *nextop, STACK_t *stack) {
+  // Pop two values from the stack, convert to bools
+  // AND the result and push it.
+  VALUE_t v1 = convert_to_bool(pop_stack(stack));
+  VALUE_t v2 = convert_to_bool(pop_stack(stack));
+  // v2 is guaranteed to be boolean now, whatever it was.
+  v2.i = v1.i && v2.i; // Logical AND
+  push_stack(stack, v2);
+  return nextop;
+}
+
+uint8_t *op_logicalor(uint8_t *nextop, STACK_t *stack) {
+  // Pop two values from the stack, convert to bools
+  // OR the result and push it.
+  VALUE_t v1 = convert_to_bool(pop_stack(stack));
+  VALUE_t v2 = convert_to_bool(pop_stack(stack));
+  // v2 is guaranteed to be boolean now, whatever it was.
+  v2.i = v1.i || v2.i; // Logical OR
+  push_stack(stack, v2);
+  return nextop;
+}
+
 void init_interpreter() {
   // This function simply sets up the opcode dispatch table.
   for (int o=0; o<256; o++) {
@@ -452,6 +474,8 @@ void init_interpreter() {
   opcode['u'] = op_lessthanorequal;
   opcode['v'] = op_greaterthanorequal;
   opcode['x'] = op_logicalnot;
+  opcode['y'] = op_logicaland;
+  opcode['z'] = op_logicalor;
 }
 
 VALUE_t interpret(ITEM_t *item) {
