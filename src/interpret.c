@@ -2,12 +2,18 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <time.h>
 
 #include "interpret.h"
 #include "log.h"
 #include "memory.h"
 #include "value.h"
 #include "stack.h"
+
+// If we have been running for longer than this number of seconds, and
+// a jump instruction is executed with a negative offset, then we are in
+// a loop.
+#define LOOP_TRAP 5
 
 typedef uint8_t *(*OP_t)(uint8_t *nextop, STACK_t *stack, ITEM_t *item);
 static OP_t opcode[256];
@@ -64,6 +70,11 @@ uint8_t *op_jump(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   int16_t offset;
   memcpy(&offset, nextop, 2);
   DEBUG_LOG("OP_JUMP: offset is  %d.\n", offset);
+  if (offset <= 0 && (time(NULL) - item->execution_start) > LOOP_TRAP) {
+    // If we are jumping backwards, we are looping.  If we have been running
+    // for longer than LOOP_TRAP seconds, we should exit this item.
+    item->keeprunning = false;    
+  }
   return nextop + offset;
 }
 
@@ -87,6 +98,12 @@ uint8_t *op_jumpfalse(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
     int16_t offset;
     memcpy(&offset, nextop, 2);
     DEBUG_LOG("OP_JUMPFALSE: evaluates to false (jump offset %d).\n", offset);
+    if (offset <= 0 && (time(NULL) - item->execution_start) > LOOP_TRAP) {
+      // If we are jumping backwards, we are looping.  If we have been running
+      // for longer than LOOP_TRAP seconds, we should exit this item.
+      item->keeprunning = false;    
+    }
+    // The value of offset includes its own size (2 bytes)
     return nextop + offset;
   }
 }
@@ -487,26 +504,35 @@ VALUE_t interpret(ITEM_t *item) {
   uint8_t numlocals = *item->bytecode;
   item->stack.current += numlocals;
   item->stack.locals = numlocals;
+  item->keeprunning = true;
+  item->execution_start = time(NULL);
   DEBUG_LOG("Making space for %d locals.\n", numlocals);
   DEBUG_LOG("Stack size before interpreting begins: %d\n", size_stack(item->stack));
   // The actual bytecode starts at the second byte.
   uint8_t *op = item->bytecode + 1; 
-  while (*op != 'h') {
+  while (item->keeprunning && *op != 'h') {
     // We do it this way to avoid undefined behaviour between
     // two sequence points:
     uint8_t *nextop = op + 1;
     op = opcode[*op](nextop, &item->stack, item);
   }
 
-  // There maybe somethign on the stack.  Return it if there is.
-  if (size_stack(item->stack)) {
-    return pop_stack(&item->stack);
-  }
-
-  // There shouldn't be anything else on the stack!
-  if (size_stack(item->stack) > 0) {
-    logerr("Error! Stack contains %d entries at end of intepretation.\n",
-                                                  size_stack(item->stack));
+  if (item->keeprunning) {
+    // Normal completion
+    // There maybe somethign on the stack.  Return it if there is.
+    if (size_stack(item->stack)) {
+      return pop_stack(&item->stack);
+    }
+    // There shouldn't be anything else on the stack!
+    if (size_stack(item->stack) > 0) {
+      logerr("Error! Stack contains %d entries at end of intepretation.\n",
+                                                    size_stack(item->stack));
+    }
+  } else {
+    // If keeprunning is set to false, we ended this item early.
+    logerr("Error! Eternal loop trapped in item '%s'\n", item->name);
+    // Need to do some tidying up here.
+    reset_stack(&item->stack);
   }
 
   // Otherwise return a nill.
