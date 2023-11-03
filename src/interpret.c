@@ -9,19 +9,19 @@
 #include "value.h"
 #include "stack.h"
 
-typedef uint8_t *(*OP_t)(uint8_t *nextop, STACK_t* stack);
+typedef uint8_t *(*OP_t)(uint8_t *nextop, STACK_t *stack, ITEM_t *item);
 static OP_t opcode[256];
 
-uint8_t *op_nop(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_nop(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *op_undefined(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_undefined(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   logerr("Undefined opcode: %c\n", *(nextop-1));
   return nextop;
 }
 
-uint8_t *op_pushint(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_pushint(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Push an int64 onto the stack.
   // Read the next 8 bytes and make an VALUE_t
   VALUE_t v;
@@ -32,7 +32,7 @@ uint8_t *op_pushint(uint8_t *nextop, STACK_t *stack) {
   return nextop+8;
 }
 
-uint8_t *op_inclocal(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_inclocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Interpret the next byte as an index into the locals.
   // If that local is an int, increment it.  Otherwise complain.
   uint8_t index = *nextop;
@@ -45,7 +45,7 @@ uint8_t *op_inclocal(uint8_t *nextop, STACK_t *stack) {
   return nextop+1;
 }
 
-uint8_t *op_declocal(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_declocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Interpret the next byte as an index into the locals.
   // If that local is an int, decrement it.  Otherwise complain.
   uint8_t index = *nextop;
@@ -58,7 +58,7 @@ uint8_t *op_declocal(uint8_t *nextop, STACK_t *stack) {
   return nextop+1;
 }
 
-uint8_t *op_jump(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_jump(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Unconditional jump.  Interpret the next two bytes as a
   // SIGNED int, and then modify the bytecode pointer by that amount.
   int16_t offset;
@@ -67,7 +67,7 @@ uint8_t *op_jump(uint8_t *nextop, STACK_t *stack) {
   return nextop + offset;
 }
 
-uint8_t *op_jumpfalse(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_jumpfalse(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Evaluate the top of the stack.  If false, interpret next
   // two bytes as a SIGNED int, and modify the bytecode pointer
   // by that amount.  Alternatively, if true, simply skip the next
@@ -91,7 +91,7 @@ uint8_t *op_jumpfalse(uint8_t *nextop, STACK_t *stack) {
   }
 }
 
-uint8_t *op_savelocal(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_savelocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // This is the quickest way, without extra pushes and pops.
   // Interpret the next byte as an index into the stack.
   uint8_t index = *nextop;
@@ -105,7 +105,7 @@ uint8_t *op_savelocal(uint8_t *nextop, STACK_t *stack) {
   return nextop+1;
 }
 
-uint8_t *op_getlocal(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_getlocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // This is the quickest way, without extra pushes and pops.
   // Interpret the next byte as an index into the stack.
   uint8_t index = *nextop;
@@ -123,7 +123,7 @@ uint8_t *op_getlocal(uint8_t *nextop, STACK_t *stack) {
   return nextop+1;
 }
 
-uint8_t *op_pushstr(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_pushstr(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Push a string literal onto the stack.
   VALUE_t v;
   v.type = VALUE_str;
@@ -139,7 +139,7 @@ uint8_t *op_pushstr(uint8_t *nextop, STACK_t *stack) {
   return nextop + len;
 }
 
-uint8_t *op_add(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_add(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Pop two values from the stack.  If both ints, add them and push the
   // result onto the stack.  If both strings, concatenate them and do same.
   // If disparate types, push NIL onto the stack.
@@ -173,7 +173,7 @@ uint8_t *op_add(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_subtractint(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_subtractint(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Pop two int64s, subtract the last from the first, then push the result
   // onto the stack. We assume that the parser and the programmer know what
   // they are doing, so whatever the two values are on the stack, this will
@@ -188,7 +188,7 @@ uint8_t *op_subtractint(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_divideint(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_divideint(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Pop two int64s, divide the last by the first, then push the result
   // onto the stack. We assume that the parser and the programmer know what
   // they are doing, so whatever the two values are on the stack, this will
@@ -209,7 +209,7 @@ uint8_t *op_divideint(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_multiplyint(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_multiplyint(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Pop two int64s, multiply them together, then push the result onto the stack.
   // We assume that the parser and the programmer know what they are doing,
   // So whatever the two values are on the stack, this will be an integer
@@ -224,7 +224,7 @@ uint8_t *op_multiplyint(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_negateint(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_negateint(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // If the top value on the stack is an int, negate it.
   //  Complain bitterly if not.
   if (stack->stack[stack->current].type == VALUE_int) {
@@ -237,7 +237,7 @@ uint8_t *op_negateint(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_equal(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_equal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Compare the top two items on the stack and push back a VALUE_bool
   // that is either true or false.  Be sensible about what is equal.
   // At the moment pairs of bools, ints, or strings are considered.
@@ -265,7 +265,7 @@ uint8_t *op_equal(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_notequal(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_notequal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // The logical reverse of op_equal.
   // Note that mismatched types are always not equal.
   VALUE_t v1, v2, result;
@@ -296,7 +296,7 @@ uint8_t *op_notequal(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_lessthan(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_lessthan(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Compare the top two items on the stack and push back a VALUE_bool
   // that is either true or false.
   // At the moment pairs of bools or ints are considered.
@@ -320,7 +320,7 @@ uint8_t *op_lessthan(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_lessthanorequal(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_lessthanorequal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Compare the top two items on the stack and push back a VALUE_bool
   // that is either true or false.
   // At the moment pairs of bools or ints are considered.
@@ -344,7 +344,7 @@ uint8_t *op_lessthanorequal(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_greaterthan(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_greaterthan(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Compare the top two items on the stack and push back a VALUE_bool
   // that is either true or false.
   // At the moment pairs of bools or ints are considered.
@@ -368,7 +368,7 @@ uint8_t *op_greaterthan(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_greaterthanorequal(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_greaterthanorequal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Compare the top two items on the stack and push back a VALUE_bool
   // that is either true or false.
   // At the moment pairs of bools or ints are considered.
@@ -392,7 +392,7 @@ uint8_t *op_greaterthanorequal(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_logicalnot(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_logicalnot(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Logically negate the value on top of the stack.
   // Note that this operation CONVERTS the value on top of the stack to a
   // VALUE_bool if it is not already.
@@ -426,7 +426,7 @@ uint8_t *op_logicalnot(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_logicaland(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_logicaland(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Pop two values from the stack, convert to bools
   // AND the result and push it.
   VALUE_t v1 = convert_to_bool(pop_stack(stack));
@@ -437,7 +437,7 @@ uint8_t *op_logicaland(uint8_t *nextop, STACK_t *stack) {
   return nextop;
 }
 
-uint8_t *op_logicalor(uint8_t *nextop, STACK_t *stack) {
+uint8_t *op_logicalor(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Pop two values from the stack, convert to bools
   // OR the result and push it.
   VALUE_t v1 = convert_to_bool(pop_stack(stack));
@@ -495,7 +495,7 @@ VALUE_t interpret(ITEM_t *item) {
     // We do it this way to avoid undefined behaviour between
     // two sequence points:
     uint8_t *nextop = op + 1;
-    op = opcode[*op](nextop, &item->stack);
+    op = opcode[*op](nextop, &item->stack, item);
   }
 
   // There maybe somethign on the stack.  Return it if there is.
