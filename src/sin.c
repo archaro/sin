@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
   } else if (ret.type == VALUE_bool) {
     logmsg("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
   } else if (ret.type == VALUE_nil) {
-    logmsg("Butecode interpreter returned with no value.\n");
+    logmsg("Bytecode interpreter returned with no value.\n");
   } else {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }
