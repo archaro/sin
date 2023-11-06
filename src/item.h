@@ -8,8 +8,6 @@
 #pragma once
 
 #include <stdint.h>
-#include <stdbool.h>
-#include <time.h>
 
 #include "value.h"
 #include "stack.h"
@@ -18,8 +16,6 @@ typedef enum {ITEM_value, ITEM_code} ITEM_e;
 typedef struct {
   ITEM_e type;
   char *name;
-  bool keeprunning;
-  time_t execution_start;
   STACK_t stack;
   uint8_t *bytecode, *ip;
   int bytecode_len;
