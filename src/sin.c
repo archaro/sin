@@ -11,6 +11,9 @@
 #include "stack.h"
 #include "interpret.h"
 
+// The slab allocator
+Allocator allocator;
+
 void usage() {
   logmsg("Sin interpreter.\nSyntax: sin <options> <input file>\n");
   logmsg("Options:\n");
@@ -91,11 +94,17 @@ int main(int argc, char **argv) {
 
   // Do some preparations
   DEBUG_LOG("DEBUG IS DEFINED\n");
+  init_allocator(&allocator);
   init_interpreter();
-  ITEM_t *start = make_item("start", ITEM_code, VALUE_NIL, bytecode, filesize);
+  // Boot is a special item, which sits outside of the itemstore.
+  // We have to abuse the API slightly here. :(
+  ITEM_t *boot = make_root_item("boot");
+  boot->type = ITEM_code;
+  boot->bytecode = bytecode;
+  boot->bytecode_len = filesize;
 
   // Now we have some bytecode, let's see what it does.
-  VALUE_t ret = interpret(start);
+  VALUE_t ret = interpret(boot);
   if (ret.type == VALUE_int) {
     logmsg("Bytecode interpreter returned: %ld\n", ret.i);
   } else if (ret.type == VALUE_str) {
@@ -112,7 +121,8 @@ int main(int argc, char **argv) {
   // Clean up
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");
-  free_item(start);
+  destroy_item(boot);
+  destroy_allocator(&allocator);
   close_log();
   exit(EXIT_SUCCESS);
 }

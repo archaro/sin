@@ -8,6 +8,20 @@
 #include "memory.h"
 #include "log.h"
 
+STACK_t *make_stack() {
+  // Allocate space for a new stack, and return it.
+  STACK_t *stack = NULL;
+  stack = GROW_ARRAY(STACK_t, stack, 0, 1);
+  stack->max = STACK_SIZE;
+  stack->current = -1;
+  return stack;
+}
+
+void destroy_stack(STACK_t *stack) {
+  // Byebye stack
+  FREE_ARRAY(STACK_t, stack, sizeof(STACK_t));
+}
+
 void reset_stack(STACK_t *stack) {
   // Given a stack, throw away everything on it.
   // Really simple!
@@ -53,10 +67,10 @@ VALUE_t peek_stack(STACK_t *stack) {
   return VALUE_NIL;
 }
 
-int size_stack(STACK_t stack) {
+int size_stack(STACK_t *stack) {
   // How many items are on me?
   // An empty stack is size -1.  Also don't include any sneaky locals
   // which are freeloading at the bottom of the stack.
-  return (stack.current + 1 - stack.locals);
+  return (stack->current + 1 - stack->locals);
 }
 
