@@ -35,15 +35,14 @@ struct HashTable {
 typedef enum {ITEM_value, ITEM_code} ITEM_e;
 struct Item {
   ITEM_e type;           // 4 bytes
-  int bytecode_len;      // 4 bytes - align with 'type'
+  int bytecode_len;      // 4 bytes
   char name[33];         // 33 bytes (32 characters + null terminator)
-  uint8_t pad[3];        // 3 bytes of padding to align the next 8-byte member
+  uint8_t pad[7];        // 7 bytes of padding for 8-byte alignment
   ITEM_t *parent;        // 8 bytes - Pointer to the parent item
   HASHTABLE_t *children; // 8 bytes - Hash table for immediate children
-  uint8_t *bytecode;     // 8 bytes
-  uint8_t *ip;           // 8 bytes
-  STACK_t *stack;        // 8 bytes
-  VALUE_t value;         // Size of VALUE_t currently 16 bytes
+  uint8_t *bytecode;     // 8 bytes - Bytecode if a code item
+  STACK_t *stack;        // 8 bytes - Stack for when this item runs
+  VALUE_t value;         // 16 bytes - At present
 };
 
 // These functions are not intended to be called externally.
@@ -78,11 +77,11 @@ ITEM_t *make_root_item(const char *name);
 ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
                                 VALUE_t value, uint8_t *bytecode, int len);
 void destroy_item(ITEM_t *item);    
-ITEM_t *insert_item(ITEM_t *root, const char *key_path, VALUE_t value);
-ITEM_t *find_item(ITEM_t *root, const char *key);
-void delete_item(ITEM_t *root, const char *key);
-void set_item(ITEM_t *root, const char *key, VALUE_t value);
+ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value);
+ITEM_t *find_item(ITEM_t *root, const char *item_name);
+void delete_item(ITEM_t *root, const char *item_name);
+void set_item(ITEM_t *root, const char *item_name, VALUE_t value);
 void save_itemstore(const char *filename, ITEM_t *root); 
 ITEM_t *load_itemstore(const char *filename); 
-void dump_item(ITEM_t *item, char *path, bool isroot);
+void dump_item(ITEM_t *item, char *item_name, bool isroot);
 

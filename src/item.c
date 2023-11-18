@@ -1,14 +1,15 @@
-// The Item.
+// The Item.  The nub and the gist of the whole brouhaha in a nutshell.
 
 #include <stdlib.h>
 #include <string.h>
 
-#include "item.h"
 #include "memory.h"
 #include "log.h"
+#include "item.h"
 
 // The slab allocator
-// This needs to be defined elsewhere, and it is used by everything
+// This is used to handle memory allocation for all uniform objects.
+// It is defined in sin.c
 extern Allocator allocator;
 
 HASHTABLE_t *create_hashtable(int size) {
@@ -86,15 +87,15 @@ float calculate_load_factor(HASHTABLE_t *hashtable) {
 }
 
 HASHTABLE_t *maybe_resize_hashtable(HASHTABLE_t *hashtable) {
-    float loadfactor = calculate_load_factor(hashtable);
-    const float maxloadfactor = 0.75; // Tweak for performance as needed
-    if (loadfactor > maxloadfactor) {
-        // Double the size - maybe tweak for performance
-        int newsize = (hashtable->size * 2) + 1;
-        return resize_hashtable(hashtable, newsize);
-    }
-    // hashtable has not changed.
-    return hashtable;
+  float loadfactor = calculate_load_factor(hashtable);
+  const float maxloadfactor = 0.75; // Tweak for performance as needed
+  if (loadfactor > maxloadfactor) {
+    // Double the size - maybe tweak for performance
+    int newsize = (hashtable->size * 2) + 1;
+    return resize_hashtable(hashtable, newsize);
+  }
+  // hashtable has not changed.
+  return hashtable;
 }
 
 void insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child) {
@@ -109,7 +110,6 @@ void insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child) {
     hashindex = murmur3_32(key, keylen, 0);
   }
   hashindex %= hashtable->size;
-
   // Create a new entry
   ENTRY_t *newEntry = allocate_entry(&allocator);
   newEntry->key = strdup(key);
@@ -166,10 +166,8 @@ void delete_hashtable(HASHTABLE_t *hashtable, const char *key) {
     hashindex = murmur3_32(key, keylen, 0);
   }
   hashindex %= hashtable->size;
-
   ENTRY_t *current = hashtable->table[hashindex];
   ENTRY_t *previous = NULL;
-
   while (current) {
     if (strcmp(current->key, key) == 0) {
       if (previous == NULL) {
@@ -212,7 +210,6 @@ uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
   uint32_t m = 5;
   uint32_t n = 0xe6546b64;
   uint32_t hash = seed;
-
   const int nblocks = len / 4;
   const uint32_t* blocks = (const uint32_t*)key;
   int i;
@@ -221,14 +218,11 @@ uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
     k *= c1;
     k = (k << r1) | (k >> (32 - r1));
     k *= c2;
-
     hash ^= k;
     hash = ((hash << r2) | (hash >> (32 - r2))) * m + n;
   }
-
   const uint8_t *tail = (const uint8_t*)(key + nblocks * 4);
   uint32_t k1 = 0;
-
   switch (len & 3) {
     case 3:
       k1 ^= tail[2] << 16;
@@ -241,14 +235,12 @@ uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
       k1 *= c2;
       hash ^= k1;
   }
-
   hash ^= len;
   hash ^= (hash >> 16);
   hash *= 0x85ebca6b;
   hash ^= (hash >> 13);
   hash *= 0xc2b2ae35;
   hash ^= (hash >> 16);
-
   return hash;
 }
 
@@ -261,48 +253,48 @@ char *substr(const char *str, size_t begin, size_t len) {
   }
 }
 
-// Allocator API: Create the slab allocator with a separate pool for each
-// block size: ITEM_t, HASHTABLE_t and ENTRY_t
 void init_allocator(Allocator *allocator) {
+  // Allocator API: Create the slab allocator with a separate pool for each
+  // block size: ITEM_t, HASHTABLE_t and ENTRY_t
   init_slab(&allocator->entry_slab, sizeof(ENTRY_t));
   init_slab(&allocator->hashtable_slab, sizeof(HASHTABLE_t));
   init_slab(&allocator->item_slab, sizeof(ITEM_t));
 }
 
-// Allocator API: Finalise the slab allocator, releasing all memory.
 void destroy_allocator(Allocator *allocator) {
+  // Allocator API: Finalise the slab allocator, releasing all memory.
   destroy_slab(&allocator->entry_slab);
   destroy_slab(&allocator->hashtable_slab);
   destroy_slab(&allocator->item_slab);
 }
 
-// Allocator API: Gimme a new ENTRY_t
 ENTRY_t *allocate_entry(Allocator *allocator) {
+  // Allocator API: Gimme a new ENTRY_t
   return (ENTRY_t*)allocate_from_slab(&allocator->entry_slab);
 }
 
-// Allocator API: Gimme a new HASHTABLE_t
 HASHTABLE_t *allocate_hashtable(Allocator *allocator) {
+  // Allocator API: Gimme a new HASHTABLE_t
   return (HASHTABLE_t*)allocate_from_slab(&allocator->hashtable_slab);
 }
 
-// Allocator API: Gimme a new Item
 ITEM_t *allocate_item(Allocator *allocator) {
+  // Allocator API: Gimme a new Item
   return (ITEM_t*)allocate_from_slab(&allocator->item_slab);
 }
 
-// Allocator API: Take this ENTRY_t back.
 void deallocate_entry(Allocator *allocator, ENTRY_t *entry) {
+  // Allocator API: Take this ENTRY_t back.
   deallocate_to_slab(&allocator->entry_slab, entry);
 }
 
-// Allocator API: Take this HashTable back.
 void deallocate_hashtable(Allocator *allocator, HASHTABLE_t *hashtable) {
+  // Allocator API: Take this HashTable back.
   deallocate_to_slab(&allocator->hashtable_slab, hashtable);
 }
 
-// Allocator API: Take this Item back.
 void deallocate_item(Allocator *allocator, ITEM_t *item) {
+  // Allocator API: Take this Item back.
   deallocate_to_slab(&allocator->item_slab, item);
 }
 
@@ -334,9 +326,10 @@ ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
 
 ITEM_t *make_root_item(const char* name) {
   // This is exactly the same as make_item, except that it doesn't try to
-  // insert the item into its parent's hashtable.  This is a separate function
-  // for performance reasons - it is only ever used ONCE, so there is no point
-  // having an additional if statement that always evaluates one way.
+  // insert the item into its parent's hashtable.  This is a separate
+  // function for performance reasons - it is only ever used ONCE, so there
+  // is no point having an additional if statement that always evaluates
+  // one way.
   ITEM_t *item = allocate_item(&allocator);
   item->parent = NULL;
   item->type = ITEM_value;
@@ -359,86 +352,89 @@ void destroy_item(ITEM_t *item) {
   deallocate_item(&allocator, item);
 }
 
-// Function to insert a new item into the tree at the specified key path.
-// If parts of the path don't exist, they are created with a default value of 0.
-ITEM_t *insert_item(ITEM_t *root, const char *key_path, VALUE_t value) {
+ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
+  // Function to insert a new item into the tree at the specified node.
+  // If layers of the item don't exist, they are created with a default
+  // value of 0.
   ITEM_t *current_item = root;
-  const char *current_pos = key_path;
-  // Buffer to hold each part of the key path, with space for null terminator
-  char part[33];
-
-  printf("Creating new item %s\n", key_path);
+  const char *current_pos = item_name;
+  // Buffer to hold each layer of the item, with space for null terminator
+  char layer[33];
+  DEBUG_LOG("Creating new item %s\n", item_name);
   while (current_item != NULL && *current_pos != '\0') {
     const char *next_dot = strchr(current_pos, '.');
-    size_t part_length = (next_dot != NULL) ? (size_t)(next_dot - current_pos) : strlen(current_pos);
-    // Copy the current part of the key into the buffer and null-terminate it
-    memcpy(part, current_pos, part_length);
-    part[part_length] = '\0';
-    // Check if the current part exists as a child of the current item
-    ITEM_t *child_item = search_hashtable(current_item->children, part);
+    size_t layer_len = (next_dot != NULL) ?
+                     (size_t)(next_dot - current_pos) : strlen(current_pos);
+    // Copy the current layer into the buffer and null-terminate it
+    memcpy(layer, current_pos, layer_len);
+    layer[layer_len] = '\0';
+    // Check if the current layer exists as a child of the current item
+    ITEM_t *child_item = search_hashtable(current_item->children, layer);
     if (child_item == NULL) {
       // If the child does not exist, create it with a default value of 0
       VALUE_t nil = {VALUE_nil, {0}};
-      child_item = make_item(part, current_item, ITEM_value, nil, NULL, 0);
+      child_item = make_item(layer, current_item, ITEM_value, nil, NULL, 0);
     }
     // Move to the child item
     current_item = child_item;
-    // If there's no next dot, we've reached the last part of the key
     if (next_dot == NULL) {
-      // Now we've reached the final part of the key path, so we set the value
+      // If there's no next dot, we've reached the last layer
+      // Set the value
       current_item->value = value;
       break;
     }
-    // Otherwise, move past the dot to the beginning of the next part
+    // Otherwise, move past the dot to the beginning of the next layer
     current_pos = next_dot + 1;
   }
   // Return a pointer to the last-created item
   return current_item;
 }
 
-// Function to dereference an item by a multi-layer key.
-ITEM_t *find_item(ITEM_t *root, const char *key) {
+ITEM_t *find_item(ITEM_t *root, const char *item_name) {
+  // Function to dereference an item by a multi-layer item.
   ITEM_t *current_item = root;
-  const char *current_pos = key;
-  char part[33]; // 32 characters + 1 for null-terminator
+  const char *current_pos = item_name;
+  char layer[33]; // 32 characters + 1 for null-terminator
 
   while (current_item != NULL && *current_pos != '\0') {
-    // Find the length of the next part of the key
+    // Find the length of the next layer of the item
     const char *next_dot = strchr(current_pos, '.');
-    size_t part_length = (next_dot != NULL) ? (size_t)(next_dot - current_pos) : strlen(current_pos);
-    // Since the constraints guarantee that part_length will be <= 32, we don't need to check for overflow
-    memcpy(part, current_pos, part_length);
-    part[part_length] = '\0'; // Null-terminate the part string
-    // Move to the next item in the tree
-    current_item = search_hashtable(current_item->children, part);
-    // If there's no next dot, we've reached the last part of the key
+    size_t layer_len = (next_dot != NULL) ? (size_t)(next_dot - current_pos) : strlen(current_pos);
+    // Since the constraints guarantee that layer_len will be <= 32,
+    // we don't need to check for overflow
+    memcpy(layer, current_pos, layer_len);
+    layer[layer_len] = '\0'; // Null-terminate the layer string
+    // Move to the next layer of the item
+    current_item = search_hashtable(current_item->children, layer);
+    // If there's no next dot, we've reached the last layer
     if (next_dot == NULL) {
       break;
     }
-    // Otherwise, move past the dot to the beginning of the next part
+    // Otherwise, move past the dot to the beginning of the next layer
     current_pos = next_dot + 1;
   }
   return current_item;
 }
 
-// Find an item and then delete it and all of its children.
-void delete_item(ITEM_t *root, const char *key) {
-  ITEM_t *item = find_item(root, key);
+void delete_item(ITEM_t *root, const char *item_name) {
+  // Find an item and then delete it and all of its children.
+  ITEM_t *item = find_item(root, item_name);
   if (item) {
     // We don't care about items that don't exist, just silently ignore the
-    // delete request.  It's not there anyway, so why are they complaining?
-    // First, remove the item from its parent's hashtable
+    // delete request.  It's not there anyway, so why the complaining?
+    // First, remove the item from its parent's hashtable:
     delete_hashtable(item->parent->children, item->name);
     // Now we have isolated this item, delete it and all its children.
     destroy_item(item);
-    printf("Item %s has been deleted, along with all of its children.\n", key);
+    DEBUG_LOG("Item %s has been deleted, along with all of its children.\n",
+                                                                 item_name);
   }
 }
 
-// Find an item, and set its value.
-// If the item does not exist, it will be created, and then set.
-void set_item(ITEM_t *root, const char *key, VALUE_t value) {
-  ITEM_t *item = find_item(root, key);
+void set_item(ITEM_t *root, const char *item_name, VALUE_t value) {
+  // Find an item, and set its value.
+  // If the item does not exist, it will be created, and then set.
+  ITEM_t *item = find_item(root, item_name);
   if (item) {
     // Item exists, so just update its value.
     if (item->value.type == VALUE_str) {
@@ -447,7 +443,7 @@ void set_item(ITEM_t *root, const char *key, VALUE_t value) {
     item->value = value;
   } else {
     // Item doesn't exist, so create it.
-    insert_item(root, key, value);
+    insert_item(root, item_name, value);
   }
 }
 
@@ -572,49 +568,49 @@ ITEM_t *load_itemstore(const char *filename) {
   return root;
 }
 
-// Recursive function to construct and print the fully-qualified itemstore
-// from a given node.
-// If passing the root of the itemstore, path == NULL and isroot == true
-void dump_item(ITEM_t *item, char *path, bool isroot) {
-    // Base case: if the item is NULL, return
-    if (item == NULL) return;
-    // Buffer to hold the full path of the current item
-    char currentpath[265]; // 8 layers + 7 dots + 1 \0
-    if (isroot) {
-        // For the root item, we initialize the path as empty
-        currentpath[0] = '\0';
+void dump_item(ITEM_t *item, char *item_name, bool isroot) {
+  // Recursive function to construct and print the fully-qualified itemstore
+  // from a given node. If passing the root of the itemstore,
+  // item_name == NULL and isroot == true
+  // Base case: if the item is NULL, return
+  if (item == NULL) return;
+  // Buffer to hold the full name of the current item
+  char currentpath[265]; // 8 layers + 7 dots + 1 \0
+  if (isroot) {
+    // For the root item, we initialize the path as empty
+    currentpath[0] = '\0';
+  } else {
+    // If a path is provided, use it
+    // otherwise start with the current item's name
+    if (item_name && item_name[0] != '\0') {
+      snprintf(currentpath, sizeof(currentpath), "%s.%s", item_name,
+                                                             item->name);
     } else {
-        // If a path is provided, use it
-        // otherwise start with the current item's name
-        if (path && path[0] != '\0') {
-            snprintf(currentpath, sizeof(currentpath), "%s.%s", path,
-                                                              item->name);
-        } else {
-            snprintf(currentpath, sizeof(currentpath), "%s", item->name);
-        }
+      snprintf(currentpath, sizeof(currentpath), "%s", item->name);
     }
-    // Only print if this is not the root item
-    if (!isroot) {
-      if (item->value.type == VALUE_int) {
-        printf("Item: %s, Value: %llu\n", currentpath,
-                                       (unsigned long long)item->value.i);
-      } else if (item->value.type == VALUE_str) {
-        printf("Item: %s, Value: '%s'\n", currentpath, item->value.s);
-      } else {
-        printf("Item: %s, Value: (unknown)\n", currentpath);
+  }
+  // Only print if this is not the root item
+  if (!isroot) {
+    if (item->value.type == VALUE_int) {
+      logmsg("Item: %s, Value: %llu\n", currentpath,
+                                     (unsigned long long)item->value.i);
+    } else if (item->value.type == VALUE_str) {
+      logmsg("Item: %s, Value: '%s'\n", currentpath, item->value.s);
+    } else {
+      logmsg("Item: %s, Value: (unknown)\n", currentpath);
+    }
+  }
+  // If the item has children, iterate over the hash table and calli
+  // dumpItem on each
+  if (item->children != NULL) {
+    for (int i = 0; i < item->children->size; ++i) {
+      ENTRY_t *entry = item->children->table[i];
+      while (entry != NULL) {
+        // Pass isroot as false because we are past the root now
+        dump_item(entry->child, currentpath, false);
+        entry = entry->next;
       }
     }
-    // If the item has children, iterate over the hash table and calli
-    // dumpItem on each
-    if (item->children != NULL) {
-        for (int i = 0; i < item->children->size; ++i) {
-            ENTRY_t *entry = item->children->table[i];
-            while (entry != NULL) {
-                // Pass isroot as false because we are past the root now
-                dump_item(entry->child, currentpath, false);
-                entry = entry->next;
-            }
-        }
-    }
+  }
 }
 
