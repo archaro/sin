@@ -186,6 +186,28 @@ int main(int argc, char **argv) {
         logmsg("LOGICAL NOT\n");
         opcodeptr++;
         break;
+      case 'I':
+        opcodeptr++;
+        offset = *(int16_t*)opcodeptr; // Length of item name
+        opcodeptr += 2;
+        logmsg("RETRIEVE ITEM: ");
+        for (uint16_t s = 0; s < offset; s++) {
+          logmsg("%c", *opcodeptr);
+          opcodeptr++;
+        }
+        logmsg("\n");
+        break;
+      case 'C':
+        opcodeptr++;
+        offset = *(int16_t*)opcodeptr; // Length of item name
+        opcodeptr += 2;
+        logmsg("SAVE ITEM: ");
+        for (uint16_t s = 0; s < offset; s++) {
+          logmsg("%c", *opcodeptr);
+          opcodeptr++;
+        }
+        logmsg("\n");
+        break;
       default:
         logerr("Undefined opcode: %c (%d)\n", *opcodeptr, *opcodeptr);
         opcodeptr++;

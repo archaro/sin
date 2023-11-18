@@ -158,8 +158,19 @@ void emit_string(const char *s, OUTPUT_t *out) {
   s++; // Ignore the opening quote
   uint16_t l = strlen(s) - 1; // Don't include the closing quote
   emit_int16(l, out);  // Write the length of the string (uint16_t)
-  memcpy(out->nextbyte, s, l); // And copy the string directly (minus quotes)
+  memcpy(out->nextbyte, s, l); // Copy the string directly (minus quotes)
   out->nextbyte += l;
+}
+
+void emit_item(char *id, OUTPUT_t *out) {
+  // At the moment this is just emitted as a string which the I opcode
+  // parses as an item - so just use the string emitter.  Tidy up later.
+  emit_byte('I', out);
+  uint16_t l = strlen(id);
+  emit_int16(l, out);  // Write the length of the string (uint16_t)
+  memcpy(out->nextbyte, id, l); // Copy the string directly (minus quotes)
+  out->nextbyte += l;
+  free(id);
 }
 
 void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
@@ -209,6 +220,17 @@ bool emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
   emit_byte(local->count - 1, out);
 
   return true;
+}
+
+void emit_item_assign(char *id, OUTPUT_t *out) {
+  // The value to assign is already at the top of the stack,
+  // so emit the item to assign it to:
+  emit_byte('C', out);
+  uint16_t l = strlen(id);
+  emit_int16(l, out);  // Write the length of the string (uint16_t)
+  memcpy(out->nextbyte, id, l); // Copy the string directly (minus quotes)
+  out->nextbyte += l;
+  free(id);
 }
 
 void emit_local_op(char *id, OUTPUT_t *out, LOCAL_t *local, char op) {
@@ -348,6 +370,7 @@ void finalise_if(SCANNER_STATE_t *state) {
 %token <string> TINTEGER
 %token <string> TSTRINGLIT
 %token <string> TLOCAL
+%token <string> TITEM
 %token <string> TUNKNOWNCHAR
 %nonassoc TSEMI TCODE TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF
 
@@ -395,6 +418,7 @@ stmt:   TWHILE                  {
           TTHEN stmtlist { emit_jump_to_endif(state); }
           elsif_else_opt TENDIF { finalise_if(state); }
         | TLOCAL TASSIGN expr   { emit_local_assign($1, state->out, state->local); }
+        | TITEM TASSIGN expr    { emit_item_assign($1, state->out); }
         | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
         | TLOCAL TDEC           { emit_local_op($1, state->out, state->local, 'g'); }
         | expr                  { }
@@ -407,6 +431,7 @@ expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e
         |	TSTRINGLIT            { emit_byte('l', state->out);
                                   emit_string($1, state->out);
                                   free($1); }
+        |	TITEM                 { emit_item($1, state->out); }
         | expr TEQUAL expr      { emit_byte('o', state->out); }
         | expr TNOTEQUAL expr   { emit_byte('q', state->out); }
         | expr TOR expr         { emit_byte('z', state->out); }

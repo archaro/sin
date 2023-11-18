@@ -1,5 +1,6 @@
 # Sinistra
 boot.src
+items.dat
 lexer.c
 parser.c
 parser.h

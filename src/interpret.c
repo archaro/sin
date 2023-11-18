@@ -8,6 +8,11 @@
 #include "memory.h"
 #include "value.h"
 #include "stack.h"
+#include "item.h"
+
+// This is defined in sin.c, and it is the root of the itemstore.
+// It must be initialised before any function in this file is called.
+extern ITEM_t *itemroot;
 
 typedef uint8_t *(*OP_t)(uint8_t *nextop, STACK_t *stack, ITEM_t *item);
 static OP_t opcode[256];
@@ -146,7 +151,9 @@ uint8_t *op_add(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   VALUE_t v1, v2;
   v1 = pop_stack(stack);
   v2 = pop_stack(stack);
-  if (v1.type == VALUE_int && v2.type == VALUE_int) {
+  // It makes sense to treat nil as 0 in this context.
+  if ((v1.type == VALUE_nil || v1.type == VALUE_int) &&
+                            (v2.type==VALUE_nil || v2.type == VALUE_int)) {
     v2.i += v1.i;
     v2.type = VALUE_int;
     push_stack(stack, v2);
@@ -448,6 +455,53 @@ uint8_t *op_logicalor(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *op_assignitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // Save a value into an item.
+  // Interpret the following string as an item, and look it up.
+  // If it doesn't exist, create it.
+  char *itemname;
+  uint16_t len;
+  // Get the length
+  memcpy(&len, nextop, 2);
+  nextop += 2;
+  itemname = GROW_ARRAY(char, NULL, 0, len+1);
+  memcpy(itemname, nextop, len);
+  itemname[len] = 0;
+  // Ok, we have the item name.  Let's see if it exists.
+  // Now let's set it.
+  VALUE_t val = pop_stack(stack);
+  set_item(itemroot, itemname, val);
+  FREE_ARRAY(char, itemname, len+1);
+  // Skip the item and return a pointer to the next opcode.
+  return nextop + len;
+}
+
+uint8_t *op_pushitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // Interpret the following string as an item, and look it up.
+  // If found, push its value onto the stack.
+  // If not found, push nil onto the stack.
+  char *itemname;
+  uint16_t len;
+  // Get the length
+  memcpy(&len, nextop, 2);
+  nextop += 2;
+  itemname = GROW_ARRAY(char, NULL, 0, len+1);
+  memcpy(itemname, nextop, len);
+  itemname[len] = 0;
+  // Ok, we have the item name.  Let's see if it exists.
+  ITEM_t *found = find_item(itemroot, itemname);
+  if (found) {
+    // Item is found, so push its value onto the stack.
+    push_stack(stack, found->value);
+  } else {
+    // Item not found.  Result is therefore nil.
+    push_stack(stack, VALUE_NIL);
+  }
+  FREE_ARRAY(char, itemname, len+1);
+  // Skip the item and return a pointer to the next opcode.
+  return nextop + len;
+}
+
 void init_interpreter() {
   // This function simply sets up the opcode dispatch table.
   for (int o=0; o<256; o++) {
@@ -476,6 +530,8 @@ void init_interpreter() {
   opcode['x'] = op_logicalnot;
   opcode['y'] = op_logicaland;
   opcode['z'] = op_logicalor;
+  opcode['C'] = op_assignitem;
+  opcode['I'] = op_pushitem;
 }
 
 VALUE_t interpret(ITEM_t *item) {

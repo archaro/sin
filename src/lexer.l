@@ -7,6 +7,7 @@
 integer     [0-9]+
 stringlit   \"([^\\\"]|\\.)*\"
 local       @[a-z_][a-z0-9_]*
+item        [a-z0-9_]+(\.[a-z0-9_]+)*
 %%
 
 "and"         { return TAND; }
@@ -41,6 +42,7 @@ local       @[a-z_][a-z0-9_]*
 {integer}     { yylval->string = strdup(yytext); return TINTEGER; }
 {stringlit}   { yylval->string = strdup(yytext); return TSTRINGLIT; }
 {local}       { yylval->string = strdup(yytext); return TLOCAL; }
+{item}        { yylval->string = strdup(yytext); return TITEM; }
 .             { yylval->string = strdup(yytext); return TUNKNOWNCHAR; }
 
 %%

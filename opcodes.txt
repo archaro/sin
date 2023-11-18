@@ -38,3 +38,10 @@ t - boolean greater than.
 u - boolean less than or equal to.
 v - boolean greater than or equal to.
 x - logical not the value on top of the stack.
+y 0 logical and the two values on the top of the stack.
+z - logical or the two values on the top of the stack.
+C - save item.  Interpret the value on the top of the stack as an item,
+    then save into it the value directly below that.
+I - push item. Interpret the next 2 bytes as the string length, then read
+    that number of bytes as the item name.  Find the item, evaluate it,
+    and push the result onto the stack.

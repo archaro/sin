@@ -459,12 +459,12 @@ void write_item(FILE *file, ITEM_t *item) {
   fwrite(&(item->type), sizeof(item->type), 1, file);
   if (item->type == ITEM_value) {
     fwrite(&(item->value.type), sizeof(item->value.type), 1, file);
-    if (item->value.type == VALUE_int) {
-      fwrite(&(item->value.i), sizeof(item->value.i), 1, file);
-    } else {
+    if (item->value.type == VALUE_str) {
       int l = strlen(item->value.s);
       fwrite(&(l), sizeof(l), 1, file);
       fwrite(item->value.s, sizeof(char), l, file);
+    } else {
+      fwrite(&(item->value.i), sizeof(item->value.i), 1, file);
     }
   } else if (item->type == ITEM_code) {
     fwrite(&(item->bytecode_len), sizeof(item->bytecode_len), 1, file);
