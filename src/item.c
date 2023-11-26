@@ -494,11 +494,12 @@ void write_item(FILE *file, ITEM_t *item) {
 void save_itemstore(const char *filename, ITEM_t *root) {
   FILE* file = fopen(filename, "wb");
   if (file == NULL) {
-    perror("Failed to open file for writing");
+    logerr("Failed to open itemstore for writing");
     return;
+  } else {
+    write_item(file, root);
+    fclose(file);
   }
-  write_item(file, root);
-  fclose(file);
 }
 
 ITEM_t *read_item(FILE *file, ITEM_t *parent) {
@@ -560,12 +561,13 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent) {
 ITEM_t *load_itemstore(const char *filename) {
   FILE *file = fopen(filename, "rb");
   if (file == NULL) {
-    perror("Failed to open file for reading");
+    logerr("Failed to open itemstore for reading");
     return NULL;
+  } else {
+    ITEM_t *root = read_item(file, NULL); // Build the itemstore from root.
+    fclose(file);
+    return root;
   }
-  ITEM_t *root = read_item(file, NULL); // The first call, root has no parent
-  fclose(file);
-  return root;
 }
 
 void dump_item(ITEM_t *item, char *item_name, bool isroot) {
