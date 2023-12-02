@@ -10,6 +10,12 @@
 #include "item.h"
 #include "stack.h"
 
+uint8_t *process_item(uint8_t *opcodeptr);
+uint8_t *process_dereference(uint8_t *opcodeptr);
+
+// This is used by a few functions to calculate the current opcode location
+uint8_t *bytecode;
+
 void usage() {
   logmsg("Sinistra disassembler.\nSyntax: sdiss <options>\n");
   logmsg("Options:\n");
@@ -20,7 +26,8 @@ void usage() {
 int main(int argc, char **argv) {
   FILE *in;
   int filesize = 0;
-  uint8_t *bytecode = NULL, *opcodeptr;
+  uint8_t *opcodeptr;
+  bytecode = NULL;
 
   if (argc < 2) {
     usage();
@@ -88,49 +95,40 @@ int main(int argc, char **argv) {
     int16_t offset;
     int64_t ival;
     logmsg("Byte %05u: ", opcodeptr - bytecode - 1); // -1 for the locals
-    switch (*opcodeptr) {
+    switch (*opcodeptr++) {
       case 'a':
         logmsg("ADD\n");
-        opcodeptr++;
         break;
       case 'c':
-        opcodeptr++;
         logmsg("SAVE LOCAL %d\n", *opcodeptr);
         opcodeptr++;
         break;
       case 'd':
         logmsg("DIVIDE\n");
-        opcodeptr++;
         break;
       case 'e':
-        opcodeptr++;
         logmsg("RETRIEVE LOCAL %d\n", *opcodeptr);
         opcodeptr++;
         break;
       case 'f':
-        opcodeptr++;
         logmsg("INCREMENT LOCAL %d\n", *opcodeptr);
         opcodeptr++;
         break;
       case 'g':
-        opcodeptr++;
         logmsg("DECREMENT LOCAL %d\n", *opcodeptr);
         opcodeptr++;
         break;
       case 'j':
-        opcodeptr++;
         offset = *(int16_t*)opcodeptr;
         opcodeptr += 2;
         logmsg("JUMP %d\n", offset);
         break;
       case 'k':
-        opcodeptr++;
         offset = *(int16_t*)opcodeptr;
         opcodeptr += 2;
         logmsg("JUMP IF FALSE %d\n", offset);
         break;
       case 'l':
-        opcodeptr++;
         offset = *(int16_t*)opcodeptr; // Length of string
         opcodeptr += 2;
         logmsg("STRINGLIT: ");
@@ -142,82 +140,108 @@ int main(int argc, char **argv) {
         break;
       case 'm':
         logmsg("MULTIPLY\n");
-        opcodeptr++;
         break;
       case 'n':
         logmsg("NEGATE\n");
-        opcodeptr++;
         break;
       case 'o':
         logmsg("BOOL EQ\n");
-        opcodeptr++;
         break;
       case 'p':
-        opcodeptr++;
         ival = *(int64_t*)opcodeptr;
         logmsg("INTEGER %ld\n", ival);
         opcodeptr += 8;
         break;
       case 'q':
         logmsg("BOOL NOTEQ\n");
-        opcodeptr++;
         break;
       case 'r':
         logmsg("BOOL LT\n");
-        opcodeptr++;
         break;
       case 's':
         logmsg("SUBTRACT\n");
-        opcodeptr++;
         break;
       case 't':
         logmsg("BOOL GT\n");
-        opcodeptr++;
         break;
       case 'u':
         logmsg("BOOL LTEQ\n");
-        opcodeptr++;
         break;
       case 'v':
         logmsg("BOOL GTEQ\n");
-        opcodeptr++;
         break;
       case 'x':
         logmsg("LOGICAL NOT\n");
-        opcodeptr++;
         break;
       case 'I':
-        opcodeptr++;
-        offset = *(int16_t*)opcodeptr; // Length of item name
-        opcodeptr += 2;
-        logmsg("RETRIEVE ITEM: ");
-        for (uint16_t s = 0; s < offset; s++) {
-          logmsg("%c", *opcodeptr);
-          opcodeptr++;
-        }
-        logmsg("\n");
+        logmsg("BEGIN ITEM ASSEMBLY\n");
+        opcodeptr = process_item(opcodeptr);
         break;
       case 'C':
-        opcodeptr++;
-        offset = *(int16_t*)opcodeptr; // Length of item name
-        opcodeptr += 2;
-        logmsg("SAVE ITEM: ");
-        for (uint16_t s = 0; s < offset; s++) {
-          logmsg("%c", *opcodeptr);
-          opcodeptr++;
-        }
-        logmsg("\n");
+        opcodeptr = process_item(opcodeptr);
+        logmsg("SAVE ITEM\n");
         break;
       default:
-        logerr("Undefined opcode: %c (%d)\n", *opcodeptr, *opcodeptr);
-        opcodeptr++;
+        logerr("Undefined opcode: %c (%d)\n", *opcodeptr-1, *opcodeptr-1);
     }
   }
+  logmsg("Byte %05u: ", opcodeptr - bytecode - 1); // -1 for the locals
   logmsg("HALT\n");
 
   // Clean up
   logmsg("Shutting down.\n");
   FREE_ARRAY(unsigned char, bytecode, filesize);
   exit(EXIT_SUCCESS);
+}
+
+uint8_t *process_item(uint8_t *opcodeptr) {
+  // Recursive sub-processor to handle items.  Called whenever an I opcode
+  // is encountered.  Returns when an E opcode is encountered.
+  while (*opcodeptr != 'E') {
+    switch (*opcodeptr++) {
+      case 'L':
+        // Standard layer
+        logmsg("Byte %05u: ", opcodeptr - bytecode - 2);
+        uint8_t len = *opcodeptr++;
+        char layer[256];
+        strncpy(layer, (const char*)opcodeptr, len);
+        opcodeptr += len;
+        layer[len] = '\0';
+        logmsg("LAYER: %s\n", layer);
+        break;
+      case 'D':
+        // Dereference!
+        logmsg("Byte %05u: ", opcodeptr - bytecode - 2);
+        logmsg("BEGIN DEREFERENCE LAYER\n");
+        opcodeptr = process_dereference(opcodeptr);
+        break;
+      default:
+        logmsg("Unknown opcode in item assembly %c (%d)\n",
+                                                  opcodeptr-1, opcodeptr-1);
+    }
+  }
+  // End of the item
+  logmsg("Byte %05u: ", opcodeptr - bytecode - 1);
+  logmsg("END ITEM LAYER ASSEMBLY\n");
+  return ++opcodeptr;
+}
+
+uint8_t *process_dereference(uint8_t *opcodeptr) {
+  // Process a dereference layer.  This can recurse through process_item().
+  // This can either be a local variable or an item.
+  uint8_t layertype = *opcodeptr++;
+  if (layertype == 'V') {
+    logmsg("Byte %05u: ", opcodeptr - bytecode - 2);
+    uint8_t localvar = *opcodeptr++;
+    logmsg("LOCALVAR %d\n", localvar);
+  } else if (layertype == 'I') {
+    logmsg("Byte %05u: ", opcodeptr - bytecode - 2);
+    logmsg("BEGIN ITEM ASSEMBLY\n");
+    opcodeptr = process_item(opcodeptr);
+  } else {
+    logmsg("Byte %05u: ", opcodeptr - bytecode - 2);
+    logmsg ("Unknown dereference type: %c (%d)\n",  layertype, layertype);
+  }
+  return opcodeptr;
 }
 

@@ -52,6 +52,11 @@
     IF_FIXUP_t if_stmt[MAX_NESTED_CONTROLS];
   } SCANNER_STATE_t;
 
+  typedef struct yy_extra_type {
+    int deref_depth;
+  } yy_extra_type;
+
+  #define YY_EXTRA_TYPE yy_extra_type
   bool parse_source(char *source, int sourcelen, OUTPUT_t *out);
 }
 
@@ -67,6 +72,7 @@
 typedef void *yyscan_t;
 int yylex (YYSTYPE *yylval_param, yyscan_t yyscanner);
 int yylex_init(yyscan_t* scanner);
+int yylex_init_extra(yy_extra_type my_extra, yyscan_t* sc);
 void yyset_in(FILE *_in_str, yyscan_t yyscanner);
 int yylex_destroy(yyscan_t yyscanner);
 int yyparse();
@@ -95,6 +101,8 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
   // sourcelen holds the length of the input
   // out is a pointer to a struct which holds the output buffer
   yyscan_t sc;
+  yy_extra_type my_extra;
+  my_extra.deref_depth = 0;
 
   // Set up the locals table.  There are a maximum of 256 locals per
   // item, so just define an array on the stack.
@@ -109,7 +117,7 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
   scanner_state.control_count = -1; // We start in no loop.
 
   logmsg("Parsing...\n");
-  yylex_init(&sc);
+  yylex_init_extra(my_extra, &sc);
   FILE *in = fmemopen(source, sourcelen, "r");
   yyset_in(in, sc);
 
@@ -162,15 +170,13 @@ void emit_string(const char *s, OUTPUT_t *out) {
   out->nextbyte += l;
 }
 
-void emit_item(char *id, OUTPUT_t *out) {
-  // At the moment this is just emitted as a string which the I opcode
-  // parses as an item - so just use the string emitter.  Tidy up later.
-  emit_byte('I', out);
-  uint16_t l = strlen(id);
-  emit_int16(l, out);  // Write the length of the string (uint16_t)
-  memcpy(out->nextbyte, id, l); // Copy the string directly (minus quotes)
+void emit_layer(const char *s, OUTPUT_t *out) {
+  // A bit like emit_string, but emits layers, which are not enclosed by
+  // quotes, and have a maximum length of 255.
+  uint8_t l = strlen(s);
+  emit_byte(l, out);  // Write the length of the string (uint8_t)
+  memcpy(out->nextbyte, s, l); // Copy the string directly (minus quotes)
   out->nextbyte += l;
-  free(id);
 }
 
 void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
@@ -220,17 +226,6 @@ bool emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
   emit_byte(local->count - 1, out);
 
   return true;
-}
-
-void emit_item_assign(char *id, OUTPUT_t *out) {
-  // The value to assign is already at the top of the stack,
-  // so emit the item to assign it to:
-  emit_byte('C', out);
-  uint16_t l = strlen(id);
-  emit_int16(l, out);  // Write the length of the string (uint16_t)
-  memcpy(out->nextbyte, id, l); // Copy the string directly (minus quotes)
-  out->nextbyte += l;
-  free(id);
 }
 
 void emit_local_op(char *id, OUTPUT_t *out, LOCAL_t *local, char op) {
@@ -370,7 +365,7 @@ void finalise_if(SCANNER_STATE_t *state) {
 %token <string> TINTEGER
 %token <string> TSTRINGLIT
 %token <string> TLOCAL
-%token <string> TITEM
+%token <string> TLAYER
 %token <string> TUNKNOWNCHAR
 %nonassoc TSEMI TCODE TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF
 
@@ -379,6 +374,9 @@ void finalise_if(SCANNER_STATE_t *state) {
 %left TPLUS TMINUS
 %left TMULT TDIV
 %left TINC TDEC
+%left TLAYERSEP
+%right TDEREFSTART
+%left TDEREFEND
 %right UMINUS TNOT
 %nonassoc TLPAREN TRPAREN
 
@@ -418,7 +416,7 @@ stmt:   TWHILE                  {
           TTHEN stmtlist { emit_jump_to_endif(state); }
           elsif_else_opt TENDIF { finalise_if(state); }
         | TLOCAL TASSIGN expr   { emit_local_assign($1, state->out, state->local); }
-        | TITEM TASSIGN expr    { emit_item_assign($1, state->out); }
+        | item TASSIGN expr    { /*emit_item_assign($1, state->out); */}
         | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
         | TLOCAL TDEC           { emit_local_op($1, state->out, state->local, 'g'); }
         | expr                  { }
@@ -431,7 +429,7 @@ expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e
         |	TSTRINGLIT            { emit_byte('l', state->out);
                                   emit_string($1, state->out);
                                   free($1); }
-        |	TITEM                 { emit_item($1, state->out); }
+        |	item                  { emit_byte('E', state->out); }
         | expr TEQUAL expr      { emit_byte('o', state->out); }
         | expr TNOTEQUAL expr   { emit_byte('q', state->out); }
         | expr TOR expr         { emit_byte('z', state->out); }
@@ -454,6 +452,25 @@ elsif_else_opt : /* empty */
           expr { emit_jump_to_next_else(state); }
           TTHEN stmtlist { emit_jump_to_endif(state); } elsif_else_opt
         | TELSE { fixup_last_else_jump(state); } stmtlist
+        ;
+
+item:   first_layer
+        | item TLAYERSEP layer
+        ;
+
+first_layer: { emit_byte('I', state->out); } layer
+        ;
+
+layer:  TLAYER { emit_byte('L', state->out);
+                 emit_layer($1, state->out); free($1); }
+        | dereference
+        ;
+
+dereference:  TDEREFSTART       { emit_byte('D', state->out); } deref_content TDEREFEND
+        ;
+
+deref_content: TLOCAL           { emit_local_op($1, state->out, state->local , 'V'); }
+        | item                  { emit_byte('E', state->out); }
         ;
 
 %%
