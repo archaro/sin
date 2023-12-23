@@ -19,12 +19,17 @@ void* reallocate(void* ptr, size_t oldcount, size_t newcount) {
     return NULL;
   }
 
-  // realloc() with ptr == NULL behaves like malloc().
-  void *res = realloc(ptr, newcount);
-  if (res == NULL) {
-    logerr("Unable to allocate memory.  This is bad.");
-    exit(EXIT_FAILURE);
+  void *res;
+  if (ptr) {
+    res = realloc(ptr, newcount);
+    if (res == NULL) {
+      logerr("Unable to allocate memory.  This is bad.");
+      exit(EXIT_FAILURE);
+    }
+  } else {
+    res = calloc(1, newcount); // zero all bytes
   }
+
   return res;
 
   // We don't use oldcount yet.  But we will.

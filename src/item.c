@@ -380,6 +380,10 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
     if (next_dot == NULL) {
       // If there's no next dot, we've reached the last layer
       // Set the value
+      if (current_item->value.type == VALUE_str) {
+        FREE_ARRAY(char, current_item->value.s,
+                                           strlen(current_item->value.s+1));
+      }
       current_item->value = value;
       break;
     }
@@ -614,5 +618,26 @@ void dump_item(ITEM_t *item, char *item_name, bool isroot) {
       }
     }
   }
+}
+
+bool is_valid_layer(const char *str) {
+  // Courtesy of ChatGPT.
+  // Layer names may be no longer than 32 characters, and may also
+  // consist of characters in the set: A-Za-Z0-9_
+
+  // Early exit if too big
+  if (strlen(str) > 32) {
+    return false;
+  }
+
+  // Character validation
+  for (const char *p = str; *p; ++p) {
+    if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
+          (*p >= '0' && *p <= '9') || *p == '_')) {
+      return false;
+    }
+  }
+
+  return true;
 }
 

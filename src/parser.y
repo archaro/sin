@@ -416,7 +416,8 @@ stmt:   TWHILE                  {
           TTHEN stmtlist { emit_jump_to_endif(state); }
           elsif_else_opt TENDIF { finalise_if(state); }
         | TLOCAL TASSIGN expr   { emit_local_assign($1, state->out, state->local); }
-        | item TASSIGN expr    { /*emit_item_assign($1, state->out); */}
+        | item { emit_byte('E', state->out); } TASSIGN expr {
+                                  emit_byte('C', state->out);}
         | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
         | TLOCAL TDEC           { emit_local_op($1, state->out, state->local, 'g'); }
         | expr                  { }
@@ -429,7 +430,8 @@ expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e
         |	TSTRINGLIT            { emit_byte('l', state->out);
                                   emit_string($1, state->out);
                                   free($1); }
-        |	item                  { emit_byte('E', state->out); }
+        |	item                  { emit_byte('E', state->out);
+                                  emit_byte('F', state->out); }
         | expr TEQUAL expr      { emit_byte('o', state->out); }
         | expr TNOTEQUAL expr   { emit_byte('q', state->out); }
         | expr TOR expr         { emit_byte('z', state->out); }

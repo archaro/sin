@@ -2,7 +2,9 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <stdlib.h>
 
+#include "itoa.h"
 #include "interpret.h"
 #include "log.h"
 #include "memory.h"
@@ -100,7 +102,10 @@ uint8_t *op_savelocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // This is the quickest way, without extra pushes and pops.
   // Interpret the next byte as an index into the stack.
   uint8_t index = *nextop;
-
+  // First check if the current value is a string.  If so, free it.
+  if (stack->stack[index].type == VALUE_str) {
+    free(stack->stack[index].s);
+  }
   // Then copy the top of the stack into that location.
   memcpy(&(stack->stack[index]), &(stack->stack[stack->current]),
                                                     sizeof(VALUE_t));
@@ -123,8 +128,8 @@ uint8_t *op_getlocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
 #ifdef DEBUG
   VALUE_t v;
   v = peek_stack(stack);
-#endif
   DEBUG_LOG("OP_GETLOCAL: index %d value %d.\n", index, v.i);
+#endif
   return nextop+1;
 }
 
@@ -457,49 +462,226 @@ uint8_t *op_logicalor(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
 
 uint8_t *op_assignitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Save a value into an item.
-  // Interpret the following string as an item, and look it up.
-  // If it doesn't exist, create it.
-  char *itemname;
-  uint16_t len;
-  // Get the length
-  memcpy(&len, nextop, 2);
-  nextop += 2;
-  itemname = GROW_ARRAY(char, NULL, 0, len+1);
-  memcpy(itemname, nextop, len);
-  itemname[len] = 0;
-  // Ok, we have the item name.  Let's see if it exists.
-  // Now let's set it.
-  VALUE_t val = pop_stack(stack);
-  set_item(itemroot, itemname, val);
-  FREE_ARRAY(char, itemname, len+1);
-  // Skip the item and return a pointer to the next opcode.
-  return nextop + len;
+  VALUE_t val = pop_stack(stack); // value to be saved
+  VALUE_t itemname = pop_stack(stack); // Name of item to save into
+  // If the item name could not be assembled (possible with a deref of
+  // an invalid type or containing invalid characters), this operation
+  // must fail.
+  if (itemname.type == VALUE_str) {
+    ITEM_t *i = insert_item(itemroot, itemname.s, val);
+    if (!i) {
+      logerr("Unable to create item '%s'.\n", itemname.s);
+    }
+    DEBUG_LOG("Saved value of type %d in item %s\n", val.type, itemname.s);
+    FREE_ARRAY(char, itemname.s, strlen(itemname.s));
+  } else {
+    logerr("Unable to create item: invalid name type %d\n", itemname.type);
+    FREE_ARRAY(char, val.s, strlen(val.s));
+  }
+  return nextop;
 }
 
-uint8_t *op_pushitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
-  // Interpret the following string as an item, and look it up.
-  // If found, push its value onto the stack.
-  // If not found, push nil onto the stack.
-  char *itemname;
-  uint16_t len;
-  // Get the length
-  memcpy(&len, nextop, 2);
-  nextop += 2;
-  itemname = GROW_ARRAY(char, NULL, 0, len+1);
-  memcpy(itemname, nextop, len);
-  itemname[len] = 0;
-  // Ok, we have the item name.  Let's see if it exists.
-  ITEM_t *found = find_item(itemroot, itemname);
-  if (found) {
-    // Item is found, so push its value onto the stack.
-    push_stack(stack, found->value);
+uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // Fetch a value from an item, and push it onto the stack.
+  // The item name is a string at the top of the stack.
+  // If the item does not exist, nil is pushed onto the stack.
+  VALUE_t itemname = pop_stack(stack);
+
+  // First check to see if there is a valid item to look up
+  if (itemname.type == VALUE_str) {
+    ITEM_t *i = find_item(itemroot, itemname.s);
+    if (i) {
+      VALUE_t v;
+      v.type = i->value.type;
+      if (v.type == VALUE_str) {
+        v.s = strdup(i->value.s);
+      } else {
+        v.i = i->value.i;
+      }
+      push_stack(stack, v);
+    } else {
+      push_stack(stack, VALUE_NIL);
+    }
+    DEBUG_LOG("Fetched item %s\n", itemname.s);
+    FREE_ARRAY(char, itemname.s, strlen(itemname.s));
   } else {
-    // Item not found.  Result is therefore nil.
+    logerr("Unable to fetch item: invalid item type %d.\n", itemname.type);
     push_stack(stack, VALUE_NIL);
   }
-  FREE_ARRAY(char, itemname, len+1);
-  // Skip the item and return a pointer to the next opcode.
-  return nextop + len;
+  return nextop;
+}
+
+uint8_t *assembleitem_helper(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // Interpret the following bytecode as an item.  If an item can be
+  // assembled, push the full item name onto the stack as a string.
+  // Return a pointer to the bytecode after the item assembly.
+  // May recurse - necessary for the handling of nested derefs.
+  bool invalid = false;
+  int size = 128;
+  char *itemname = GROW_ARRAY(char, NULL, 0, size+2);
+  itemname[0] = '\0';
+
+  while (*nextop != 'E' && !invalid) {
+    switch (*nextop++) {
+      case 'L': {
+        // Simple layer
+        int s = *nextop++; // Length of layer name
+        if (strlen(itemname) + s + 2 >= size) {
+          itemname = GROW_ARRAY(char, itemname, size, (size*2)+2);
+          size = (size * 2) + 2;
+        }
+        strncat(itemname, (char *)nextop, s);
+        nextop += s;
+        break;
+      }
+      case 'D': {
+        // Deref layer - either a V (localvar) or another I (item)
+        switch (*nextop++) {
+          case 'V': {
+            int idx = *nextop++; // Local variable index
+            switch (stack->stack[idx].type) {
+              case VALUE_str: {
+                // This is easy, just concatenate the context of this local
+                // Assuming it is a valid layer name, anyway.
+                if (is_valid_layer(stack->stack[idx].s)) {
+                  int sl = strlen(stack->stack[idx].s);
+                  if (strlen(itemname) + sl + 2 >= size) {
+                    itemname = GROW_ARRAY(char, itemname, size, (size*2)+2);
+                    size = (size * 2) + 2;
+                  }
+                  strncat(itemname, stack->stack[idx].s, sl);
+                } else {
+                  logerr("Invalid layer name '%s'.\n", stack->stack[idx].s);
+                  invalid = true;
+                }
+                break;
+              }
+              case VALUE_int: {
+                // Slightly more complicated.  Turn the int into a string.
+                char str[22]; // Big enough for MAXINT.
+                itoa(stack->stack[idx].i, str, 10);
+                int sl = strlen(str);
+                if (strlen(itemname) + sl + 2 >= size) {
+                  itemname = GROW_ARRAY(char, itemname, size, (size*2)+2);
+                  size = (size * 2) + 2;
+                }
+                strncat(itemname, str, sl);
+                break;
+              }
+              default: {
+                // Not a valid value type to convert into a layer name.
+                logerr("Layer type (%d) not int or string.\n", *nextop);
+                invalid = true;
+              }
+            }
+            break;
+          }
+          case 'I': {
+            // This is a bit more complicated.  We need to dereference an
+            // item, then evaluate it, and use the result as the layer name.
+            nextop = assembleitem_helper(nextop, stack, item);
+            VALUE_t layername = pop_stack(stack);
+            if (layername.type == VALUE_str) {
+              //  This is basically the same as op_fetchitem
+              ITEM_t *i = find_item(itemroot, layername.s);
+              if (i) {
+                // We have an item.  Only two value types are allowed.
+                switch (i->value.type) {
+                  case VALUE_str: {
+                    // This is the easiest one
+                    if (is_valid_layer(i->value.s)) {
+                      int sl = strlen(i->value.s);
+                      if (strlen(itemname) + sl + 2 >= size) {
+                        itemname = GROW_ARRAY(char, itemname, size, (size*2)+2);
+                        size = (size * 2) + 2;
+                      }
+                      strncat(itemname, i->value.s, sl);
+                    } else {
+                      logerr("Invalid layer name '%s'.\n", i->value.s);
+                      invalid = true;
+                    }
+                    break;
+                  }
+                  case VALUE_int: {
+                    // This needs to be converted to a string.
+                    char str[22]; // Big enough for MAXINT.
+                    itoa(i->value.i, str, 10);
+                    int sl = strlen(str);
+                    if (strlen(itemname) + sl + 2 >= size) {
+                      itemname = GROW_ARRAY(char, itemname, size, (size*2)+2);
+                      size = (size * 2) + 2;
+                    }
+                    strncat(itemname, str, sl);
+                    break;
+                  }
+                  default: {
+                    logerr("Item dereference failed for '%s': invalid type.\n", layername.s);
+                    invalid = true;
+                  }
+                }
+              } else {
+                logerr("Item dereference failed for '%s'.\n", layername.s);
+                invalid = true;
+              }
+              FREE_ARRAY(char, layername.s, strlen(layername.s));
+            } else {
+              logerr("Invalid item layer type %d.\n", layername.type);
+              invalid = true;
+            }
+            break;
+          }
+          default: {
+            logerr("Invalid dereference layer type '%c' (%d).\n", *nextop, *nextop);
+            invalid = true;
+          }
+        }
+        break;
+      }
+      default: {
+        logerr("Invalid layer type '%c' (%d).\n", *nextop, *nextop);
+        invalid = true;
+      }
+    }
+    if (*nextop != 'E') {
+      // Another layer to process, so add a dot separator.
+      strcat(itemname, ".");
+    } else {
+      // End of item definition.
+      break;
+    }
+  }
+
+  if (invalid) {
+    // Not a valid item name, so push nil.
+    FREE_ARRAY(char, itemname, size);
+    push_stack(stack, VALUE_NIL);
+  } else {
+    VALUE_t name;
+    name.type = VALUE_str;
+    name.s = itemname; // Don't free itemname - it's on the stack!
+    push_stack(stack, name);
+    DEBUG_LOG("Item assembled: %s\n", itemname);
+  }
+
+  return nextop + 1;
+}
+
+uint8_t *op_assembleitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // Here beginneth an item definition.  Items are made up of layers, and
+  // each layer may be either a simple layer name (a string matching the
+  // regexp [_a-z0-9]), or it may be a dereference.  Dereferences are
+  // either items (which may also contain dereferences), or they are
+  // local variables.  In both cases, once the local variable or the item
+  // has been fully determined, it needs to be looked up, and the
+  // content should be substituted into that layer.  Nil values and empty
+  // strings are prohibited.
+
+  // When this function is called, the I opcode has been eaten.
+
+  // To facilitate ease of recusive dereferences, this is just a wrapper
+  // to the help function which does all the work.
+  nextop = assembleitem_helper(nextop, stack, item);
+  return nextop;
 }
 
 void init_interpreter() {
@@ -531,7 +713,8 @@ void init_interpreter() {
   opcode['y'] = op_logicaland;
   opcode['z'] = op_logicalor;
   opcode['C'] = op_assignitem;
-  opcode['I'] = op_pushitem;
+  opcode['F'] = op_fetchitem;
+  opcode['I'] = op_assembleitem;
 }
 
 VALUE_t interpret(ITEM_t *item) {

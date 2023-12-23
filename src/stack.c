@@ -19,13 +19,15 @@ STACK_t *make_stack() {
 
 void destroy_stack(STACK_t *stack) {
   // Byebye stack
+  reset_stack(stack);
   FREE_ARRAY(STACK_t, stack, sizeof(STACK_t));
 }
 
 void reset_stack(STACK_t *stack) {
   // Given a stack, throw away everything on it.
+  // Note that this includes any local variables!
   // Really simple!
-  for (int v = 0; v < stack->current; v++) {
+  for (int v = 0; v < (stack->current + stack->locals); v++) {
     if (stack->stack[v].type == VALUE_str) {
       logmsg("Freeing string #%d: %s\n", v, stack->stack[v].s);
       FREE_ARRAY(char, stack->stack[v].s,

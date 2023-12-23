@@ -15,7 +15,8 @@ DEPS := $(OBJECTS:.o=.d)
 
 # Library of shared functions
 LIB := $(LIB_DIR)/libsinshared.a
-LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/slab.o
+LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/slab.o \
+               $(OBJ_DIR)/itoa.o
 
 # Source files for scomp
 SCOMP_SOURCES := $(SRC_DIR)/scomp.c

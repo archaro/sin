@@ -85,3 +85,5 @@ void save_itemstore(const char *filename, ITEM_t *root);
 ITEM_t *load_itemstore(const char *filename); 
 void dump_item(ITEM_t *item, char *item_name, bool isroot);
 
+// Other item-related API functions
+bool is_valid_layer(const char *str);

@@ -178,8 +178,10 @@ int main(int argc, char **argv) {
         opcodeptr = process_item(opcodeptr);
         break;
       case 'C':
-        opcodeptr = process_item(opcodeptr);
         logmsg("SAVE ITEM\n");
+        break;
+      case 'F':
+        logmsg("FETCH ITEM\n");
         break;
       default:
         logerr("Undefined opcode: %c (%d)\n", *opcodeptr-1, *opcodeptr-1);
