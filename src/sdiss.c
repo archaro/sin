@@ -173,15 +173,19 @@ int main(int argc, char **argv) {
       case 'x':
         logmsg("LOGICAL NOT\n");
         break;
-      case 'I':
-        logmsg("BEGIN ITEM ASSEMBLY\n");
-        opcodeptr = process_item(opcodeptr);
-        break;
       case 'C':
         logmsg("SAVE ITEM\n");
         break;
       case 'F':
         logmsg("FETCH ITEM\n");
+        break;
+      case 'I':
+        logmsg("BEGIN ITEM ASSEMBLY\n");
+        opcodeptr = process_item(opcodeptr);
+        break;
+      case 'S':
+        logmsg("LIBRARY CALL: %d, %d\n", *opcodeptr, *(opcodeptr+1));
+        opcodeptr += 2; //skip the library call bytes
         break;
       default:
         logerr("Undefined opcode: %c (%d)\n", *opcodeptr-1, *opcodeptr-1);

@@ -21,6 +21,7 @@ integer     [0-9]+
   "endwhile"    { return TENDWHILE; }
   "if"          { return TIF; }
   "or"          { return TOR; }
+  "sys.compile" { return TLIBSYSCOMPILE; }
   "then"        { return TTHEN; }
   "while"       { return TWHILE; }
   "="           { return TASSIGN; }

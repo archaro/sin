@@ -53,6 +53,8 @@ I - begin item definition.  Start interpreting the bytecode as layer names
     proceeds.
 L - start of simple layer name.  Interpret the next byte as an unsigned int
     and then read that number of bytes as the layer name.
+S - execute library call.   The next two bytes denote the library and
+    the function within that library.
 V - Interpret the next byte as a local variable index, turn the contents
     of that variable into a string, and use that as the layer name.
 

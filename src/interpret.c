@@ -684,6 +684,18 @@ uint8_t *op_assembleitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *op_librarycall(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // Call a built-in function.  Interpret the next two bytes as the
+  // library and the function within the library, call it, then return
+  // the result on the stack.
+
+  uint8_t libnum = *nextop++;
+  uint8_t funcnum = *nextop++;
+
+  DEBUG_LOG("CALL LIB %d, FUNC %d\n", libnum, funcnum);
+  return nextop;
+}
+
 void init_interpreter() {
   // This function simply sets up the opcode dispatch table.
   for (int o=0; o<256; o++) {
@@ -715,6 +727,7 @@ void init_interpreter() {
   opcode['C'] = op_assignitem;
   opcode['F'] = op_fetchitem;
   opcode['I'] = op_assembleitem;
+  opcode['S'] = op_librarycall;
 }
 
 VALUE_t interpret(ITEM_t *item) {

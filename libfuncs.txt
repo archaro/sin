@@ -1,0 +1,15 @@
+When library functions are recognised, the parser spits out opcode 'S'
+followed by a two-byte function identifier.  The first byte identifies the
+library, and the second byte identifies the function within the library.
+
+This could ultimately lead to the ability to attach libraries at hoc, but
+that is a goal for the far future.  For now:
+
+Library 1: sys - System calls
+  1 - compile: compiles a string into bytecode, and returns up to two
+               values on the stack.  The top of the stack is the status,
+               which is a boolean which states whether the compilation
+               was successful (true) or failed (false).  The second value
+               on the stack is either the bytestream (if successful) or
+               an error message (if not).
+

@@ -368,6 +368,8 @@ void finalise_if(SCANNER_STATE_t *state) {
 %token <string> TLAYER
 %token <string> TUNKNOWNCHAR
 %nonassoc TSEMI TCODE TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF
+/* Library functions */
+%nonassoc TLIBSYSCOMPILE
 
 %right TASSIGN
 %left TEQUAL TNOTEQUAL TLESSTHAN TGREATERTHAN TLTEQ TGTEQ TAND TOR
@@ -401,7 +403,8 @@ stmtlist: /* empty */
 stmtsemi: stmt TSEMI
 ;
 
-stmt:   TWHILE                  {
+stmt:    libcall
+         | TWHILE                  {
                 if (!prepare_loop(state)) {
                   yyerror(scanner, state, "Maximum control structure depth exceeded.\n");
                   YYERROR;
@@ -475,5 +478,9 @@ deref_content: TLOCAL           { emit_local_op($1, state->out, state->local , '
         | item                  { emit_byte('E', state->out); }
         ;
 
+libcall:  TLIBSYSCOMPILE        { emit_byte('S', state->out);
+                                  emit_byte(1, state->out);
+                                  emit_byte(1, state->out); }
+          ;
 %%
 
