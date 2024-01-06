@@ -77,6 +77,16 @@ void yyset_in(FILE *_in_str, yyscan_t yyscanner);
 int yylex_destroy(yyscan_t yyscanner);
 int yyparse();
 
+void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
+  logerr("%s\n",s);
+}
+
+void invalid_input(yyscan_t locp, SCANNER_STATE_t *state, char *msg) {
+  char errmsg[100];
+  snprintf(errmsg, 99, "Parse error: %s\n", msg);
+  yyerror(locp, state, errmsg);
+}
+
 void emit_byte(unsigned char c, OUTPUT_t *out) {
     // Check if there is enough space in the buffer
     if (out->nextbyte - out->bytecode >= out->maxsize) {
@@ -163,8 +173,7 @@ void emit_int16(uint16_t i, OUTPUT_t *out) {
 }
 
 void emit_string(const char *s, OUTPUT_t *out) {
-  s++; // Ignore the opening quote
-  uint16_t l = strlen(s) - 1; // Don't include the closing quote
+  uint16_t l = strlen(s);
   emit_int16(l, out);  // Write the length of the string (uint16_t)
   memcpy(out->nextbyte, s, l); // Copy the string directly (minus quotes)
   out->nextbyte += l;
@@ -177,10 +186,6 @@ void emit_layer(const char *s, OUTPUT_t *out) {
   emit_byte(l, out);  // Write the length of the string (uint8_t)
   memcpy(out->nextbyte, s, l); // Copy the string directly (minus quotes)
   out->nextbyte += l;
-}
-
-void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
-  logerr("%s\n",s);
 }
 
 bool emit_local_index(char *id, OUTPUT_t *out, LOCAL_t *local) {
@@ -198,34 +203,44 @@ bool emit_local_index(char *id, OUTPUT_t *out, LOCAL_t *local) {
   return false;
 }
 
-bool emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
-  // Check if the local variable already exists.
+bool prepare_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
+  // Called before actually assigning a local variable.
+  // This is necessary to enable the parser to clean up in the event
+  // of a syntax error.
+
+  // First check to see if the variable has been seen already
   for (uint8_t l = 0; l < local->count; l++) {
     if (strcmp(id, local->id[l]) == 0) {
-      // Local variable already exists, emit bytecode to assign it.
-      emit_byte('c', out);
-      emit_byte(l, out);
-      free(id); // Free the id here since we don't add it to the list.
+      // Yes, so do nothing.
       return true;
     }
   }
-  
+  // This is the first time we have seen this local, so add it.
   // Check if the maximum number of locals has been reached.
   if (local->count >= 256) {
     logerr("Error: Maximum number of local variables (256) reached.\n");
     free(id);
     return false;
   }
-
   // Add the new local variable.
   local->id[local->count] = id;
   local->count++;
-
-  // Emit bytecode to assign the new local.
-  emit_byte('c', out);
-  emit_byte(local->count - 1, out);
-
   return true;
+}
+
+bool emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
+  // prepare_local_assign() must be called before this!
+  // Otherwise there will be no matching local variable.
+  for (uint8_t l = 0; l < local->count; l++) {
+    if (strcmp(id, local->id[l]) == 0) {
+      // Local variable already exists, emit bytecode to assign it.
+      emit_byte('c', out);
+      emit_byte(l, out);
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 void emit_local_op(char *id, OUTPUT_t *out, LOCAL_t *local, char op) {
@@ -382,16 +397,7 @@ void finalise_if(SCANNER_STATE_t *state) {
 
 %%
 
-input:    program
-        | input TUNKNOWNCHAR    {
-              char errmsg[100];
-              snprintf(errmsg, 99, "Unknown character in input: %s\n", $2);
-              yyerror(scanner, state, errmsg);
-              YYERROR;
-        }
-        ;
-
-program:  stmtlist { emit_byte('h', state->out); }
+input:  stmtlist { emit_byte('h', state->out); }
         ;
 
 stmtlist: /* empty */
@@ -415,7 +421,7 @@ stmt:   TWHILE                  {
         | TIF { prepare_if(state); } expr { emit_jump_to_next_else(state); }
           TTHEN stmtlist { emit_jump_to_endif(state); }
           elsif_else_opt TENDIF { finalise_if(state); }
-        | TLOCAL TASSIGN expr   { emit_local_assign($1, state->out, state->local); }
+        | TLOCAL TASSIGN { prepare_local_assign($1, state->out, state->local); } expr   { emit_local_assign($1, state->out, state->local); }
         | item { emit_byte('E', state->out); } TASSIGN expr {
                                   emit_byte('C', state->out);}
         | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
@@ -447,6 +453,11 @@ expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e
         | TLPAREN expr TRPAREN  { }
         | TNOT expr             { emit_byte('x', state->out); }
         | TMINUS expr %prec UMINUS { emit_byte('n', state->out); }
+        | TUNKNOWNCHAR          {
+                                  invalid_input(scanner, state, $1);
+                                  free($1);
+                                  YYERROR;
+                                }
         ;
 
 elsif_else_opt : /* empty */

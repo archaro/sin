@@ -150,7 +150,6 @@ int main(int argc, char **argv) {
     logmsg("Bytecode interpreter returned: %ld\n", ret.i);
   } else if (ret.type == VALUE_str) {
     logmsg("Bytecode interpreter returned: %s\n", ret.s);
-    FREE_ARRAY(char, ret.s, strlen(ret.s)+1);
   } else if (ret.type == VALUE_bool) {
     logmsg("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
   } else if (ret.type == VALUE_nil) {
@@ -159,7 +158,10 @@ int main(int argc, char **argv) {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }
 
-  // Clean up
+  // No more executing.  No more stack.
+  destroy_stack(boot->stack);
+
+  // Clean up before shutdown.
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");
   save_itemstore(itemstore, itemroot);
