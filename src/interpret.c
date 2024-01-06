@@ -128,7 +128,16 @@ uint8_t *op_getlocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
 #ifdef DEBUG
   VALUE_t v;
   v = peek_stack(stack);
-  DEBUG_LOG("OP_GETLOCAL: index %d value %d.\n", index, v.i);
+  switch (v.type) {
+    case VALUE_int:
+      DEBUG_LOG("OP_GETLOCAL: index %d value %d.\n", index, v.i);
+      break;
+    case VALUE_str:
+      DEBUG_LOG("OP_GETLOCAL: index %d value '%s'.\n", index, v.s);
+      break;
+    default:
+      DEBUG_LOG("OP_GETLOCAL: index %d type %d.\n", index, v.type);
+  }
 #endif
   return nextop+1;
 }
@@ -754,8 +763,6 @@ VALUE_t interpret(ITEM_t *item) {
                                                   size_stack(item->stack));
   }
 
-  // No more executing.  No more stack.
-  destroy_stack(item->stack);
   // Otherwise return a nil.
   return value;
 }
