@@ -15,6 +15,7 @@
      (loops, IF statements, etc)
   */
   #define MAX_NESTED_CONTROLS 32
+  #define MAX_LOCAL_VARS 256
 
   typedef struct {
     unsigned char *bytecode;
@@ -23,7 +24,7 @@
   } OUTPUT_t;
 
   typedef struct {
-    char *id[256];
+    char *id[MAX_LOCAL_VARS];
     int count;
   } LOCAL_t;
 
@@ -217,7 +218,7 @@ bool prepare_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
   }
   // This is the first time we have seen this local, so add it.
   // Check if the maximum number of locals has been reached.
-  if (local->count >= 256) {
+  if (local->count >= MAX_LOCAL_VARS) {
     logerr("Error: Maximum number of local variables (256) reached.\n");
     free(id);
     return false;
@@ -228,7 +229,7 @@ bool prepare_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
   return true;
 }
 
-bool emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
+void emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
   // prepare_local_assign() must be called before this!
   // Otherwise there will be no matching local variable.
   for (uint8_t l = 0; l < local->count; l++) {
@@ -236,11 +237,8 @@ bool emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
       // Local variable already exists, emit bytecode to assign it.
       emit_byte('c', out);
       emit_byte(l, out);
-      return true;
     }
   }
-  
-  return false;
 }
 
 void emit_local_op(char *id, OUTPUT_t *out, LOCAL_t *local, char op) {
@@ -409,7 +407,7 @@ stmtsemi: stmt TSEMI
 
 stmt:   TWHILE                  {
                 if (!prepare_loop(state)) {
-                  yyerror(scanner, state, "Maximum control structure depth exceeded.\n");
+                  invalid_input(scanner, state, "Maximum control structure depth exceeded.\n");
                   YYERROR;
                 }
                                 } expr {
@@ -421,7 +419,12 @@ stmt:   TWHILE                  {
         | TIF { prepare_if(state); } expr { emit_jump_to_next_else(state); }
           TTHEN stmtlist { emit_jump_to_endif(state); }
           elsif_else_opt TENDIF { finalise_if(state); }
-        | TLOCAL TASSIGN { prepare_local_assign($1, state->out, state->local); } expr   { emit_local_assign($1, state->out, state->local); }
+        | TLOCAL TASSIGN { if (!prepare_local_assign($1, state->out,
+                                                      state->local)) {
+                           invalid_input(scanner, state, 
+                                            "Too many local variables.");
+                           YYERROR; }
+                                                                                                     } expr { emit_local_assign($1, state->out, state->local); }
         | item { emit_byte('E', state->out); } TASSIGN expr {
                                   emit_byte('C', state->out);}
         | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
