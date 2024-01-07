@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -g -Wall -MMD -MP
-LDFLAGS =
+LDFLAGS = -g
 LIBS =
 YACC = bison
 LEX = flex
