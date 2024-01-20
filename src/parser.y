@@ -79,13 +79,7 @@ int yylex_destroy(yyscan_t yyscanner);
 int yyparse();
 
 void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
-  logerr("%s\n",s);
-}
-
-void invalid_input(yyscan_t locp, SCANNER_STATE_t *state, char *msg) {
-  char errmsg[100];
-  snprintf(errmsg, 99, "Parse error: %s\n", msg);
-  yyerror(locp, state, errmsg);
+  logerr("Parse error: %s\n",s);
 }
 
 void emit_byte(unsigned char c, OUTPUT_t *out) {
@@ -176,7 +170,7 @@ void emit_int16(uint16_t i, OUTPUT_t *out) {
 void emit_string(const char *s, OUTPUT_t *out) {
   uint16_t l = strlen(s);
   emit_int16(l, out);  // Write the length of the string (uint16_t)
-  memcpy(out->nextbyte, s, l); // Copy the string directly (minus quotes)
+  memcpy(out->nextbyte, s, l); // Copy the string directly
   out->nextbyte += l;
 }
 
@@ -367,6 +361,12 @@ void finalise_if(SCANNER_STATE_t *state) {
   state->control_count--;
 }
 
+void emit_embedded_code(OUTPUT_t *out, char *code) {
+  // Emit embedded code to be compiled by the interpreter.
+  emit_byte('B', out);
+  emit_string(code, out); // Aaaand the code.
+}
+
 %}
 
 %union{
@@ -379,8 +379,9 @@ void finalise_if(SCANNER_STATE_t *state) {
 %token <string> TSTRINGLIT
 %token <string> TLOCAL
 %token <string> TLAYER
+%token <string> TCODEBODY
 %token <string> TUNKNOWNCHAR
-%nonassoc TSEMI TCODE TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF
+%nonassoc TSEMI TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF
 
 %right TASSIGN
 %left TEQUAL TNOTEQUAL TLESSTHAN TGREATERTHAN TLTEQ TGTEQ TAND TOR
@@ -388,7 +389,7 @@ void finalise_if(SCANNER_STATE_t *state) {
 %left TMULT TDIV
 %left TINC TDEC
 %left TLAYERSEP
-%right TDEREFSTART
+%right TDEREFSTART TCODE
 %left TDEREFEND
 %right UMINUS TNOT
 %nonassoc TLPAREN TRPAREN
@@ -407,7 +408,7 @@ stmtsemi: stmt TSEMI
 
 stmt:   TWHILE                  {
                 if (!prepare_loop(state)) {
-                  invalid_input(scanner, state, "Maximum control structure depth exceeded.\n");
+                  yyerror(scanner, state, "Maximum control structure depth exceeded.\n");
                   YYERROR;
                 }
                                 } expr {
@@ -421,12 +422,11 @@ stmt:   TWHILE                  {
           elsif_else_opt TENDIF { finalise_if(state); }
         | TLOCAL TASSIGN { if (!prepare_local_assign($1, state->out,
                                                       state->local)) {
-                           invalid_input(scanner, state, 
+                           yyerror(scanner, state, 
                                             "Too many local variables.");
                            YYERROR; }
                                                                                                      } expr { emit_local_assign($1, state->out, state->local); }
-        | item { emit_byte('E', state->out); } TASSIGN expr {
-                                  emit_byte('C', state->out);}
+        | item { emit_byte('E', state->out); } TASSIGN item_assignment
         | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
         | TLOCAL TDEC           { emit_local_op($1, state->out, state->local, 'g'); }
         | expr                  { }
@@ -457,7 +457,7 @@ expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e
         | TNOT expr             { emit_byte('x', state->out); }
         | TMINUS expr %prec UMINUS { emit_byte('n', state->out); }
         | TUNKNOWNCHAR          {
-                                  invalid_input(scanner, state, $1);
+                                  yyerror(scanner, state, $1);
                                   free($1);
                                   YYERROR;
                                 }
@@ -472,6 +472,13 @@ elsif_else_opt : /* empty */
 
 item:   first_layer
         | item TLAYERSEP layer
+        ;
+
+item_assignment: expr { emit_byte('C', state->out); }
+        | TCODE TCODEBODY { emit_byte('B', state->out);
+                            emit_string($2, state->out);
+                            free($2);
+                          }
         ;
 
 first_layer: { emit_byte('I', state->out); } layer

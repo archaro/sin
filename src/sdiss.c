@@ -173,6 +173,17 @@ int main(int argc, char **argv) {
       case 'x':
         logmsg("LOGICAL NOT\n");
         break;
+      case 'B': {
+        uint16_t len = *(uint16_t*)opcodeptr;
+        opcodeptr += 2;
+        logmsg("EMBEDDED CODE (%d bytes):\n", len);
+        for (uint16_t s = 0; s < len; s++) {
+          logmsg("%c", *opcodeptr);
+          opcodeptr++;
+        }
+        logmsg("\n");
+        break;
+      }
       case 'I':
         logmsg("BEGIN ITEM ASSEMBLY\n");
         opcodeptr = process_item(opcodeptr);

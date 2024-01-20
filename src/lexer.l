@@ -37,6 +37,9 @@
 %option noinput nounput noyywrap reentrant bison-bridge case-insensitive
 %x DEREF
 %x STRINGLIT
+%x CODE
+%x CODEBODY
+%x CODESTREMBED
 
 local       @[a-z_][a-z0-9_]*
 layer       [a-z0-9_]+
@@ -45,10 +48,11 @@ integer     [0-9]+
                 // Maximum length of string literal is uint16_t
                 char *strbuf, *strbuf_ptr;
                 int strbuf_size, strbuf_capacity;
+                int code_paren;
 
 <INITIAL>{
   "and"         { return TAND; }
-  "code"        { return TCODE; }
+  "code"        { BEGIN(CODE); return TCODE; }
   "do"          { return TDO; }
   "else"        { return TELSE; }
   "elsif"       { return TELSIF; }
@@ -102,7 +106,7 @@ integer     [0-9]+
                 }
   \n            {
                   BEGIN(INITIAL);
-                  yylval->string = strdup("Newline in string.\n");
+                  yylval->string = strdup("Newline in string.");
                   free(strbuf);
                   return TUNKNOWNCHAR;
                 }
@@ -112,7 +116,7 @@ integer     [0-9]+
                   (void) sscanf( yytext + 1, "%o", &result );
                   if ( result > 0xff ) {
                     BEGIN(INITIAL);
-                    yylval->string = strdup("Escape sequence too big.\n");
+                    yylval->string = strdup("Escape sequence too big.");
                     free(strbuf);
                     return TUNKNOWNCHAR;
                   }
@@ -147,10 +151,68 @@ integer     [0-9]+
                   }
                   return TDEREFEND;
                 }
-
 }
-.             { yylval->string = strdup(yytext); return TUNKNOWNCHAR; }
-
+<CODE>{
+  "("           { code_paren = 0;
+                  strbuf_capacity = 512;
+                  strbuf = (char *)malloc(strbuf_capacity + 1);
+                  strbuf_ptr = strbuf;
+                  strbuf_size = 0;
+                  BEGIN(CODEBODY);
+                }
+  [ \t\n]+      ; // Inline whitespace handling
+}
+<CODEBODY>{
+  "("           { // Keep track of parentheses so that we know when
+                  // the code segment actually ends.
+                  code_paren++;
+                  str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
+                                            &strbuf_capacity, '(');
+                }
+  ")"           { code_paren--;
+                  if (code_paren > 0) {
+                    // This is just an ordinary close parenthesis
+                    str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
+                                            &strbuf_capacity, ')');
+                  } else {
+                    // This ends the code segment.  Return the buffer.
+                    BEGIN(INITIAL);
+                    *strbuf_ptr = '\0';
+                    yylval->string = strdup(strbuf);
+                    free(strbuf);
+                    return TCODEBODY;
+                  }
+                }
+  "\""          {
+                  // Begin an embedded string.  Copy the " then switch
+                  // to another state to eat the rest of the string.
+                  str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
+                                            &strbuf_capacity, '"');
+                  BEGIN(CODESTREMBED);
+                }
+  .             { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
+                                              &strbuf_capacity, yytext); }
+}
+<CODESTREMBED>{
+  "\\\""        {
+                  // Embedded quote.  Copy it!
+                  str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
+                                            &strbuf_capacity, '\\');
+                  str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
+                                            &strbuf_capacity, '"');
+                }
+  "\""          {
+                  // End of embedded quote.  Copy it and change state.
+                  str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
+                                            &strbuf_capacity, '"');
+                  BEGIN(CODEBODY);
+                }
+  [^\"]+        { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
+                                              &strbuf_capacity, yytext); }
+}
+<INITIAL,DEREF,CODE>{
+  .             { yylval->string = strdup(yytext); return TUNKNOWNCHAR; }
+}
 %%
 
 

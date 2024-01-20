@@ -469,6 +469,28 @@ uint8_t *op_logicalor(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // Extract the embedded code from the bytestream, and compile it.
+  // If the compilation is successful, assign its value to the item
+  // on the top of the stack.  Otherwise, assign nil to the item.
+
+  // First, how much code do we have?
+  uint16_t len;
+  memcpy(&len, nextop, 2);
+  nextop += 2;
+  // Now create a temporary buffer to hold the source code.
+  char *sourcecode = GROW_ARRAY(char, NULL, 0, len + 1);
+  memcpy(sourcecode, nextop, len);
+  sourcecode[len] = '\0';
+  nextop += len;
+
+  // We have the source.  Compile it.
+  logmsg("Source to compile: %s\n", sourcecode);
+
+  FREE_ARRAY(char, sourcecode, len + 1);
+  return nextop;
+}
+
 uint8_t *op_assignitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Save a value into an item.
   VALUE_t val = pop_stack(stack); // value to be saved
@@ -721,6 +743,7 @@ void init_interpreter() {
   opcode['x'] = op_logicalnot;
   opcode['y'] = op_logicaland;
   opcode['z'] = op_logicalor;
+  opcode['B'] = op_assigncodeitem;
   opcode['C'] = op_assignitem;
   opcode['F'] = op_fetchitem;
   opcode['I'] = op_assembleitem;

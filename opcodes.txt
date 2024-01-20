@@ -40,6 +40,10 @@ v - boolean greater than or equal to.
 x - logical not the value on top of the stack.
 y - logical and the two values on the top of the stack.
 z - logical or the two values on the top of the stack.
+B - embedded code.  Interpret the next two bytes as the length of the
+    embedded code, then fetch that embedded code from the bytestream.
+    Pass the embedded code to the compiler, and put the compiled code on 
+    the stack.  If the compilation fails, put nil on the stack.
 C - save item.  Interpret the value on the top of the stack as an item,
     then save into it the value directly below that.
 D - dereference layer.  The next layer needs to be dereferenced, so it will
