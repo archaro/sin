@@ -16,19 +16,19 @@ DEPS := $(OBJECTS:.o=.d)
 # Library of shared functions
 LIB := $(LIB_DIR)/libsinshared.a
 LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/slab.o \
-               $(OBJ_DIR)/itoa.o
+               $(OBJ_DIR)/itoa.o $(OBJ_DIR)/parser.o $(OBJ_DIR)/lexer.o
+
+# Parser files for library
+PARSER_SOURCES := $(SRC_DIR)/parser.y
+PARSER_GENERATED := $(SRC_DIR)/parser.c $(SRC_DIR)/parser.h
+
+# Lexer files for library
+LEXER_SOURCES := $(SRC_DIR)/lexer.l
+LEXER_GENERATED := $(SRC_DIR)/lexer.c
 
 # Source files for scomp
 SCOMP_SOURCES := $(SRC_DIR)/scomp.c
 SCOMP_OBJECTS := $(SCOMP_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
-
-# Parser files for scomp
-PARSER_SOURCES := $(SRC_DIR)/parser.y
-PARSER_GENERATED := $(SRC_DIR)/parser.c $(SRC_DIR)/parser.h
-
-# Lexer files for scomp
-LEXER_SOURCES := $(SRC_DIR)/lexer.l
-LEXER_GENERATED := $(SRC_DIR)/lexer.c
 
 # Source files for sdiss
 SDISS_SOURCES := $(SRC_DIR)/sdiss.c
@@ -53,7 +53,7 @@ $(LIB): $(LIB_OBJECTS)
 	@mkdir -p $(LIB_DIR)
 	ar rcs $@ $^
 
-scomp: $(PARSER_GENERATED) $(LEXER_GENERATED) $(SCOMP_OBJECTS) $(LIB)
+scomp: $(SCOMP_OBJECTS) $(LIB)
 	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 sdiss: $(SDISS_OBJECTS) $(LIB)
@@ -68,9 +68,18 @@ $(PARSER_GENERATED): $(PARSER_SOURCES)
 $(LEXER_GENERATED): $(LEXER_SOURCES) $(PARSER_GENERATED)
 	$(LEX) -o $(SRC_DIR)/lexer.c $<
 
+# Make sure parser.o and lexer.o dependences are tracked
+$(OBJ_DIR)/parser.o: $(SRC_DIR)/parser.c $(SRC_DIR)/parser.h
+	@mkdir -p $(@D)
+	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
+$(OBJ_DIR)/lexer.o: $(SRC_DIR)/lexer.c
+	@mkdir -p $(@D)
+	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
+
 # Include dependency files
 -include $(DEPS)
 
 clean:
-	rm -rf $(OBJ_DIR)/*.o $(OBJ_DIR)/*.d $(LIB) $(LIB_DIR)
+	rm -rf $(OBJ_DIR)/*.o $(OBJ_DIR)/*.d $(LIB) $(LIB_DIR) \
+         $(PARSER_GENERATED) $(LEXER_GENERATED)
 
