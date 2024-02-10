@@ -8,6 +8,7 @@
 #include "interpret.h"
 #include "log.h"
 #include "memory.h"
+#include "parser.h"
 #include "value.h"
 #include "stack.h"
 #include "item.h"
@@ -469,11 +470,39 @@ uint8_t *op_logicalor(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop;
 }
 
+void assignitem(VALUE_t *itemname, VALUE_t val) {
+  // Given two values, use the first as the name of an item, and
+  // the second as the value to assign to it.  The item name must be
+  // freed after insertion.
+  // If the itemname does not resolve into a valid item, this function
+  // must fail silently (log messages are fine).  In this case, if the
+  // value to be saved has memory allocated to it, that must be freed.
+  // In other words, this is an end stage for values - they are either
+  // used or discarded.  The interpreter no longer cares.
+  if (itemname->type == VALUE_str) {
+    ITEM_t *i = insert_item(itemroot, itemname->s, val);
+    if (!i) {
+      logerr("Unable to create item '%s'.\n", itemname->s);
+      if (val.type == VALUE_str) {
+        FREE_ARRAY(char, val.s, strlen(val.s));
+      }
+    }
+    DEBUG_LOG("Saved value of type %d in item %s\n", val.type, itemname->s);
+  } else {
+    logerr("Unable to create item: invalid name type %d\n", itemname->type);
+    if (val.type == VALUE_str) {
+      FREE_ARRAY(char, val.s, strlen(val.s));
+    }
+  }
+  FREE_ARRAY(char, itemname->s, strlen(itemname->s));
+}
+
 uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Extract the embedded code from the bytestream, and compile it.
   // If the compilation is successful, assign its value to the item
   // on the top of the stack.  Otherwise, assign nil to the item.
 
+  VALUE_t itemname = pop_stack(stack);
   // First, how much code do we have?
   uint16_t len;
   memcpy(&len, nextop, 2);
@@ -485,9 +514,35 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   nextop += len;
 
   // We have the source.  Compile it.
-  logmsg("Source to compile: %s\n", sourcecode);
+  DEBUG_LOG("Source to compile: %s\n", sourcecode);
+  OUTPUT_t *out = GROW_ARRAY(OUTPUT_t, NULL, 0, sizeof(OUTPUT_t));
+  out->maxsize = 1024;
+  out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, out->maxsize);
+  out->nextbyte = out->bytecode;
+  bool result =  parse_source(sourcecode, len, out);
 
+  if (result) {
+    // Compilation succeeded.  Assign it to the item.
+    // The item type is ITEM_code.
+    uint32_t len = out->nextbyte - out->bytecode;
+    insert_code_item(itemroot, itemname.s, len, out->bytecode);
+    // Set the error item to a nil value.
+    set_item(itemroot, "sys.error", VALUE_NIL);
+  } else {
+    // Compilation failed.
+    // Assign nil to the item.
+    assignitem(&itemname, VALUE_NIL);
+    // Set the error item to the compiler error.
+    // FIXME: This will need correcting when the compiler
+    // returns proper error codes!
+    set_item(itemroot, "sys.error", VALUE_NIL);
+    FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
+  }
+
+  // Clean up.
+  FREE_ARRAY(OUTPUT_t, out, sizeof(OUTPUT_t));
   FREE_ARRAY(char, sourcecode, len + 1);
+  FREE_ARRAY(char, itemname.s, strlen(itemname.s));
   return nextop;
 }
 
@@ -495,20 +550,7 @@ uint8_t *op_assignitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Save a value into an item.
   VALUE_t val = pop_stack(stack); // value to be saved
   VALUE_t itemname = pop_stack(stack); // Name of item to save into
-  // If the item name could not be assembled (possible with a deref of
-  // an invalid type or containing invalid characters), this operation
-  // must fail.
-  if (itemname.type == VALUE_str) {
-    ITEM_t *i = insert_item(itemroot, itemname.s, val);
-    if (!i) {
-      logerr("Unable to create item '%s'.\n", itemname.s);
-    }
-    DEBUG_LOG("Saved value of type %d in item %s\n", val.type, itemname.s);
-    FREE_ARRAY(char, itemname.s, strlen(itemname.s));
-  } else {
-    logerr("Unable to create item: invalid name type %d\n", itemname.type);
-    FREE_ARRAY(char, val.s, strlen(val.s));
-  }
+  assignitem(&itemname, val);
   return nextop;
 }
 

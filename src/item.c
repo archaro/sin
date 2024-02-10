@@ -394,6 +394,56 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
   return current_item;
 }
 
+ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
+                                                      uint8_t *bytecode) {
+  // This function is basically the same as insert_item() but creates a
+  // code item instead of a value item.
+  ITEM_t *current_item = root;
+  const char *current_pos = item_name;
+  // Buffer to hold each layer of the item, with space for null terminator
+  char layer[33];
+  DEBUG_LOG("Creating new item %s\n", item_name);
+  while (current_item != NULL && *current_pos != '\0') {
+    const char *next_dot = strchr(current_pos, '.');
+    size_t layer_len = (next_dot != NULL) ?
+                     (size_t)(next_dot - current_pos) : strlen(current_pos);
+    // Copy the current layer into the buffer and null-terminate it
+    memcpy(layer, current_pos, layer_len);
+    layer[layer_len] = '\0';
+    // Check if the current layer exists as a child of the current item
+    ITEM_t *child_item = search_hashtable(current_item->children, layer);
+    if (child_item == NULL) {
+      // If the child does not exist, create it with a default value of 0
+      VALUE_t nil = {VALUE_nil, {0}};
+      child_item = make_item(layer, current_item, ITEM_value, nil, NULL, 0);
+    }
+    // Move to the child item
+    current_item = child_item;
+    if (next_dot == NULL) {
+      // If there's no next dot, we've reached the last layer
+      // It's code item, remember!
+      if (current_item->type == ITEM_value
+                              && current_item->value.type == VALUE_str) {
+        FREE_ARRAY(char, current_item->value.s,
+                                           strlen(current_item->value.s+1));
+      }
+      current_item->type = ITEM_code;
+      current_item->value.type = VALUE_nil; // Just to be safe
+      if (current_item->bytecode_len > 0) {
+        FREE_ARRAY(unsigned char, current_item->bytecode,
+                                           current_item->bytecode_len);
+      }
+      current_item->bytecode_len = len;
+      current_item->bytecode = bytecode;
+      break;
+    }
+    // Otherwise, move past the dot to the beginning of the next layer
+    current_pos = next_dot + 1;
+  }
+  // Return a pointer to the last-created item
+  return current_item;
+}
+
 ITEM_t *find_item(ITEM_t *root, const char *item_name) {
   // Function to dereference an item by a multi-layer item.
   ITEM_t *current_item = root;
@@ -515,6 +565,7 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent) {
   int64_t value;
   char *strvalue;
   uint8_t *bytecode;
+  uint32_t bytecode_len;
   VALUE_e valtype;
   VALUE_t itemval;
   if (type == ITEM_value) {
@@ -542,11 +593,7 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent) {
       }
     }
   } else if(type == ITEM_code) {
-    int bytecode_len;
-    // Length of bytecode is 4 bytes
     fread(&bytecode_len, sizeof(bytecode_len), 1, file);
-    // Length of value is 8 bytes
-    value = bytecode_len;
     bytecode = (uint8_t*)malloc(bytecode_len);
     fread(bytecode, sizeof(uint8_t), bytecode_len, file);
   }
@@ -554,7 +601,7 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent) {
   fread(&numchildren, sizeof(numchildren), 1, file);
     // Create the item with its value
   ITEM_t *item = (parent == NULL) ? make_root_item(name)
-                    : make_item(name, parent, ITEM_value, itemval, NULL, 0);
+         : make_item(name, parent, type, itemval, bytecode, bytecode_len);
   // Read children if they exist
   for (uint32_t i = 0; i < numchildren; i++) {
     read_item(file, item);

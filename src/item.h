@@ -78,6 +78,8 @@ ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
                                 VALUE_t value, uint8_t *bytecode, int len);
 void destroy_item(ITEM_t *item);    
 ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value);
+ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
+                                                        uint8_t *bytecode);
 ITEM_t *find_item(ITEM_t *root, const char *item_name);
 void delete_item(ITEM_t *root, const char *item_name);
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value);
