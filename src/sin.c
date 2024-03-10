@@ -158,9 +158,6 @@ int main(int argc, char **argv) {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }
 
-  // No more executing.  No more stack.
-  destroy_stack(boot->stack);
-
   // Clean up before shutdown.
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");

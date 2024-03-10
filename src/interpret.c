@@ -801,33 +801,37 @@ VALUE_t interpret(ITEM_t *item) {
   VALUE_t value;
 
   // Set up the stack before executing it
-  item->stack = make_stack();
-  item->stack->current += numlocals;
-  item->stack->locals = numlocals;
+  STACK_t *stack;
+  stack = make_stack();
+  stack->current += numlocals;
+  stack->locals = numlocals;
   DEBUG_LOG("Making space for %d locals.\n", numlocals);
-  DEBUG_LOG("Stack size before interpreting begins: %d\n", size_stack(item->stack));
+  DEBUG_LOG("Stack size before interpreting begins: %d\n", size_stack(stack));
   // The actual bytecode starts at the second byte.
   uint8_t *op = item->bytecode + 1; 
   while (*op != 'h') {
     // We do it this way to avoid undefined behaviour between
     // two sequence points:
     uint8_t *nextop = op + 1;
-    op = opcode[*op](nextop, item->stack, item);
+    op = opcode[*op](nextop, stack, item);
   }
 
-  // There maybe somethign on the stack.  Return it if there is.
-  if (size_stack(item->stack)) {
-    value =  pop_stack(item->stack);
+  if (size_stack(stack)) {
+    // There maybe somethign on the stack.  Return it if there is.
+    value =  pop_stack(stack);
   } else {
+    // Otherwise return a nil.
     value = VALUE_NIL;
   }
 
   // There shouldn't be anything else on the stack!
-  if (size_stack(item->stack) > 0) {
+  if (size_stack(stack) > 0) {
     logerr("Error! Stack contains %d entries at end of intepretation.\n",
-                                                  size_stack(item->stack));
+                                                  size_stack(stack));
   }
 
-  // Otherwise return a nil.
+  // No more executing.  No more stack.
+  destroy_stack(stack);
+
   return value;
 }

@@ -13,7 +13,6 @@
 
 #include "slab.h"
 #include "value.h"
-#include "stack.h"
 
 typedef struct Item ITEM_t;
 typedef struct Entry ENTRY_t;
@@ -28,21 +27,20 @@ struct Entry {
 
 // This hashtable contains pointers to all the children of this Item.
 struct HashTable {
-  int size;
+  uint32_t size;
   ENTRY_t **table; // An array of pointers to ENTRY_t
 };
 
 typedef enum {ITEM_value, ITEM_code} ITEM_e;
 struct Item {
   ITEM_e type;           // 4 bytes
-  int bytecode_len;      // 4 bytes
+  uint32_t bytecode_len; // 4 bytes
   char name[33];         // 33 bytes (32 characters + null terminator)
   uint8_t pad[7];        // 7 bytes of padding for 8-byte alignment
   ITEM_t *parent;        // 8 bytes - Pointer to the parent item
   HASHTABLE_t *children; // 8 bytes - Hash table for immediate children
   uint8_t *bytecode;     // 8 bytes - Bytecode if a code item
-  STACK_t *stack;        // 8 bytes - Stack for when this item runs
-  VALUE_t value;         // 16 bytes - At present
+  VALUE_t value;         // 16 bytes - (at present)
 };
 
 // These functions are not intended to be called externally.
