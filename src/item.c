@@ -488,6 +488,7 @@ void delete_item(ITEM_t *root, const char *item_name) {
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value) {
   // Find an item, and set its value.
   // If the item does not exist, it will be created, and then set.
+  DEBUG_LOG("Trying to set item '%s'\n", item_name);
   ITEM_t *item = find_item(root, item_name);
   if (item) {
     // Item exists, so just update its value.
@@ -506,6 +507,7 @@ void write_item(FILE *file, ITEM_t *item) {
   char name[33]; // 32 characters + 1 for null-terminator
   strncpy(name, item->name, 32);
   name[32] = '\0'; // Ensure null-termination
+  DEBUG_LOG("Writing item '%s'\n", name);
   fwrite(name, sizeof(char), 33, file); // Write the fixed size name
   // Write the type of the item - there are several types but on disk they
   // degrade to either an int or a string.  When reading the item back
@@ -522,7 +524,7 @@ void write_item(FILE *file, ITEM_t *item) {
     }
   } else if (item->type == ITEM_code) {
     fwrite(&(item->bytecode_len), sizeof(item->bytecode_len), 1, file);
-    fwrite(item->bytecode, sizeof(item->bytecode_len), item->bytecode_len, file);
+    fwrite(item->bytecode, sizeof(uint8_t), item->bytecode_len, file);
   }
   // Write the number of children
   uint32_t numchildren = 0;
@@ -560,6 +562,7 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent) {
   char name[33];
   fread(name, sizeof(char), 33, file);
   name[32] = '\0'; // Ensure null-termination
+  DEBUG_LOG("Reading item '%s'\n", name);
   ITEM_e type;
   fread(&type, sizeof(ITEM_e), 1, file);
   int64_t value;

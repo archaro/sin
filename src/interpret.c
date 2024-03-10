@@ -9,9 +9,13 @@
 #include "log.h"
 #include "memory.h"
 #include "parser.h"
+#include "vm.h"
 #include "value.h"
 #include "stack.h"
 #include "item.h"
+
+// This is the virtual machine object, defined in sin.c
+extern VM_t vm;
 
 // This is defined in sin.c, and it is the root of the itemstore.
 // It must be initialised before any function in this file is called.
@@ -557,6 +561,8 @@ uint8_t *op_assignitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
 uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Fetch a value from an item, and push it onto the stack.
   // The item name is a string at the top of the stack.
+  // If the item is a code item, it is executed and the result pushed
+  // onto the stack.
   // If the item does not exist, nil is pushed onto the stack.
   VALUE_t itemname = pop_stack(stack);
 
@@ -564,21 +570,38 @@ uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   if (itemname.type == VALUE_str) {
     ITEM_t *i = find_item(itemroot, itemname.s);
     if (i) {
-      VALUE_t v;
-      v.type = i->value.type;
-      if (v.type == VALUE_str) {
-        v.s = strdup(i->value.s);
+      DEBUG_LOG("Fetched item %s\n", itemname.s);
+      // Just push the item value onto the stack.
+      if (i->type == ITEM_value) {
+        VALUE_t v;
+        v.type = i->value.type;
+        if (v.type == VALUE_str) {
+          v.s = strdup(i->value.s);
+        } else {
+          v.i = i->value.i;
+        }
+        push_stack(stack, v);
       } else {
-        v.i = i->value.i;
+        // Save our current state.
+        push_callstack(item, nextop);
+        // Execute the item.
+        DEBUG_LOG("Executing item %s\n", i->name);
+        VALUE_t value = interpret(i);
+        // Now go back to the status quo ante.
+        FRAME_t *prev_frame = pop_callstack();
+        item = prev_frame->item;
+        nextop = prev_frame->nextop;
+        // Having restored the old state, push the result
+        // of the executed item.
+        push_stack(stack, value);
       }
-      push_stack(stack, v);
     } else {
+      // Item not found.
       push_stack(stack, VALUE_NIL);
     }
-    DEBUG_LOG("Fetched item %s\n", itemname.s);
     FREE_ARRAY(char, itemname.s, strlen(itemname.s));
   } else {
-    logerr("Unable to fetch item: invalid item type %d.\n", itemname.type);
+    logerr("Unable to fetch item: invalid item type for name: %d.\n", itemname.type);
     push_stack(stack, VALUE_NIL);
   }
   return nextop;
@@ -798,40 +821,32 @@ VALUE_t interpret(ITEM_t *item) {
 
   // First set up the locals
   uint8_t numlocals = *item->bytecode;
-  VALUE_t value;
 
   // Set up the stack before executing it
-  STACK_t *stack;
-  stack = make_stack();
-  stack->current += numlocals;
-  stack->locals = numlocals;
+  vm.stack->current += numlocals;
+  vm.stack->locals = numlocals;
   DEBUG_LOG("Making space for %d locals.\n", numlocals);
-  DEBUG_LOG("Stack size before interpreting begins: %d\n", size_stack(stack));
+  DEBUG_LOG("Stack size before interpreting begins: %d\n", size_stack(vm.stack));
   // The actual bytecode starts at the second byte.
   uint8_t *op = item->bytecode + 1; 
   while (*op != 'h') {
     // We do it this way to avoid undefined behaviour between
     // two sequence points:
     uint8_t *nextop = op + 1;
-    op = opcode[*op](nextop, stack, item);
+    op = opcode[*op](nextop, vm.stack, item);
   }
 
-  if (size_stack(stack)) {
-    // There maybe somethign on the stack.  Return it if there is.
-    value =  pop_stack(stack);
+  // There should be no more than one value on the stack
+  int stacksize = size_stack(vm.stack);
+  if (stacksize > 1) {
+    logerr("Error! Stack contains %d entries at end of intepretation.\n",
+                                                  size_stack(vm.stack));
+  }
+
+  if (stacksize > 0) {
+    return pop_stack(vm.stack);
   } else {
     // Otherwise return a nil.
-    value = VALUE_NIL;
+    return VALUE_NIL;
   }
-
-  // There shouldn't be anything else on the stack!
-  if (size_stack(stack) > 0) {
-    logerr("Error! Stack contains %d entries at end of intepretation.\n",
-                                                  size_stack(stack));
-  }
-
-  // No more executing.  No more stack.
-  destroy_stack(stack);
-
-  return value;
 }

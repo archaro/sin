@@ -29,12 +29,24 @@ void reset_stack(STACK_t *stack) {
   // Really simple!
   for (int v = 0; v < (stack->current + stack->locals); v++) {
     if (stack->stack[v].type == VALUE_str) {
-      logmsg("Freeing string #%d: %s\n", v, stack->stack[v].s);
+      DEBUG_LOG("Freeing string: %s\n", stack->stack[v].s);
       FREE_ARRAY(char, stack->stack[v].s,
                                     strlen(stack->stack[v].s) + 1);
     }
   }
   stack->current = -1;
+}
+
+void reset_stack_to(STACK_t *stack, int32_t top) {
+  // Like reset_stack, but only throw away values above 'top'
+  while (stack->current > top) {
+    if (stack->stack[stack->current].type == VALUE_str) {
+      DEBUG_LOG("Freeing string: %s\n", stack->stack[stack->current].s);
+      FREE_ARRAY(char, stack->stack[stack->current].s,
+                               strlen(stack->stack[stack->current].s) + 1);
+    }
+    stack->current--;
+  }
 }
 
 void push_stack(STACK_t *stack, VALUE_t obj) {

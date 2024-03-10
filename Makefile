@@ -35,7 +35,7 @@ SDISS_SOURCES := $(SRC_DIR)/sdiss.c
 SDISS_OBJECTS := $(SDISS_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
 # Source files for sin
-SIN_SOURCES := $(SRC_DIR)/sin.c $(SRC_DIR)/interpret.c \
+SIN_SOURCES := $(SRC_DIR)/sin.c $(SRC_DIR)/vm.c $(SRC_DIR)/interpret.c \
                $(SRC_DIR)/item.c $(SRC_DIR)/stack.c $(SRC_DIR)/value.c
 SIN_OBJECTS := $(SIN_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 

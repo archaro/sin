@@ -10,7 +10,11 @@
 #include "value.h"
 #include "item.h"
 #include "stack.h"
+#include "vm.h"
 #include "interpret.h"
+
+// The Virtual Machine
+VM_t vm;
 
 // The slab allocator
 Allocator allocator;
@@ -124,6 +128,9 @@ int main(int argc, char **argv) {
 
   // Do some preparations
   DEBUG_LOG("DEBUG IS DEFINED\n");
+  vm.stack = make_stack();
+  vm.callstack = make_callstack();
+
   init_interpreter();
   // If the itemstore hasn't been loaded, do so now.
   if (!itemroot) {
@@ -153,7 +160,7 @@ int main(int argc, char **argv) {
   } else if (ret.type == VALUE_bool) {
     logmsg("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
   } else if (ret.type == VALUE_nil) {
-    logmsg("Bytecode interpreter returned with no value.\n");
+    logmsg("Bytecode interpreter returned nil.\n");
   } else {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }
@@ -162,6 +169,8 @@ int main(int argc, char **argv) {
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");
   save_itemstore(itemstore, itemroot);
+  destroy_stack(vm.stack);
+  destroy_callstack(vm.callstack);
   free(itemstore);
   destroy_item(itemroot);
   destroy_item(boot);

@@ -19,6 +19,7 @@ typedef struct {
 STACK_t *make_stack();
 void destroy_stack(STACK_t *stack);
 void reset_stack(STACK_t *stack);
+void reset_stack_to(STACK_t *stack, int32_t top);
 void push_stack(STACK_t *stack, VALUE_t obj);
 VALUE_t pop_stack(STACK_t *stack);
 VALUE_t peek_stack(STACK_t *stack);
