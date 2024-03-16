@@ -381,7 +381,7 @@ void emit_embedded_code(OUTPUT_t *out, char *code) {
 %token <string> TLAYER
 %token <string> TCODEBODY
 %token <string> TUNKNOWNCHAR
-%nonassoc TSEMI TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF
+%nonassoc TSEMI TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF TRETURN
 
 %right TASSIGN
 %left TEQUAL TNOTEQUAL TLESSTHAN TGREATERTHAN TLTEQ TGTEQ TAND TOR
@@ -420,6 +420,7 @@ stmt:   TWHILE                  {
         | TIF { prepare_if(state); } expr { emit_jump_to_next_else(state); }
           TTHEN stmtlist { emit_jump_to_endif(state); }
           elsif_else_opt TENDIF { finalise_if(state); }
+        | TRETURN { emit_byte('h', state->out); }
         | TLOCAL TASSIGN { if (!prepare_local_assign($1, state->out,
                                                       state->local)) {
                            yyerror(scanner, state, 

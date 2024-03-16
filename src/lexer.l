@@ -60,6 +60,7 @@ integer     [0-9]+
   "endwhile"    { return TENDWHILE; }
   "if"          { return TIF; }
   "or"          { return TOR; }
+  "return"      { return TRETURN; }
   "then"        { return TTHEN; }
   "while"       { return TWHILE; }
   "="           { return TASSIGN; }
