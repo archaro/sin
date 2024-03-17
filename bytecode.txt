@@ -2,4 +2,5 @@ Bytecode layout:
 
 Byte  Size  Usage
 0     1     How many locals are in use?
-1     end   Bytecode for interpreter to run.
+1     1     Of which locals, how many are parameters?
+2     end   Bytecode for interpreter to run.

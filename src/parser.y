@@ -26,6 +26,7 @@
   typedef struct {
     char *id[MAX_LOCAL_VARS];
     int count;
+    int param_count;
   } LOCAL_t;
 
   typedef struct {
@@ -113,6 +114,7 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
   // item, so just define an array on the stack.
   LOCAL_t local;
   local.count = 0;
+  local.param_count = 0;
 
   // Now wrap all these bits of state up into a nice package
   // for ease of transport
@@ -128,6 +130,10 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
 
   // Before we start parsing, make space in the output for the number
   // of locals - we will backfill the actual number later.
+  emit_byte(0, out);
+  // And the number of parameters this item can receive.
+  // NOTE! Parameters are treated internally as local variables, so the
+  // number of local variables will INCLUDE the number of parameters.
   emit_byte(0, out);
 
   bool failed = yyparse(sc, &scanner_state);

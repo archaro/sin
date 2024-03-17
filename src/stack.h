@@ -14,6 +14,7 @@ typedef struct {
   int32_t current;  // Current top of the stack
   int32_t base;     // Base of the stack in this frame
   uint8_t locals;   // Locals in this frame
+  uint8_t params;   // Of which, this many are parameters
   VALUE_t stack[STACK_SIZE];
 } STACK_t;
 

@@ -820,15 +820,17 @@ VALUE_t interpret(ITEM_t *item) {
   // not have an associated function.
 
   // First set up the locals
-  uint8_t numlocals = *item->bytecode;
+  uint8_t numlocals = item->bytecode[0];
+  uint8_t numparams = item->bytecode[1];
 
   // Set up the stack before executing it
   vm.stack->current += numlocals;
   vm.stack->locals = numlocals;
+  vm.stack->params = numparams;
   DEBUG_LOG("Making space for %d locals.\n", numlocals);
   DEBUG_LOG("Stack size before interpreting begins: %d\n", size_stack(vm.stack));
-  // The actual bytecode starts at the second byte.
-  uint8_t *op = item->bytecode + 1; 
+  // The actual bytecode starts at the third byte.
+  uint8_t *op = item->bytecode + 2; 
   while (*op != 'h') {
     // We do it this way to avoid undefined behaviour between
     // two sequence points:

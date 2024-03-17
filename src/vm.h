@@ -14,6 +14,7 @@ typedef struct {
   int32_t current_stack;
   int32_t current_base;
   uint8_t current_locals;
+  uint8_t current_params;
 } FRAME_t;
 
 typedef struct {
