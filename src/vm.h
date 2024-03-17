@@ -12,11 +12,13 @@ typedef struct {
   ITEM_t *item;
   uint8_t *nextop;
   int32_t current_stack;
+  int32_t current_base;
+  uint8_t current_locals;
 } FRAME_t;
 
 typedef struct {
   int32_t max;
-  int32_t current;
+  int32_t current;  // Current top of stack
   FRAME_t entry[CALLSTACK_SIZE];
 } CALLSTACK_t;
 

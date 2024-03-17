@@ -29,6 +29,13 @@ void push_callstack(ITEM_t *item, uint8_t *nextop) {
     vm.callstack->entry[vm.callstack->current].nextop = nextop;
     vm.callstack->entry[vm.callstack->current].current_stack =
                                                           vm.stack->current;
+    vm.callstack->entry[vm.callstack->current].current_base =
+                                                          vm.stack->base;
+    vm.callstack->entry[vm.callstack->current].current_locals =
+                                                          vm.stack->locals;
+    // The base is used when indexing into the stack in the current
+    // frame (eg for accessing local variables).
+    vm.stack->base = vm.stack->current + 1;
   } else {
     logerr("Callstack overflow.\n");
   }
@@ -43,6 +50,10 @@ FRAME_t *pop_callstack() {
     // First, reset the value stack to its previous state.
     reset_stack_to(vm.stack,
                  vm.callstack->entry[vm.callstack->current].current_stack);
+    vm.stack->locals =
+                  vm.callstack->entry[vm.callstack->current].current_locals;
+    vm.stack->base =
+                  vm.callstack->entry[vm.callstack->current].current_base;
     // Then decrement the callstack.
     vm.callstack->current--;
     // Finally return the old top of the callstack.

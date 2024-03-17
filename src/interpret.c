@@ -47,7 +47,7 @@ uint8_t *op_pushint(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
 uint8_t *op_inclocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Interpret the next byte as an index into the locals.
   // If that local is an int, increment it.  Otherwise complain.
-  uint8_t index = *nextop;
+  uint8_t index = *nextop + stack->base;
   if (stack->stack[index].type == VALUE_int) {
     stack->stack[index].i++;
   } else {
@@ -60,7 +60,7 @@ uint8_t *op_inclocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
 uint8_t *op_declocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Interpret the next byte as an index into the locals.
   // If that local is an int, decrement it.  Otherwise complain.
-  uint8_t index = *nextop;
+  uint8_t index = *nextop + stack->base;
   if (stack->stack[index].type == VALUE_int) {
     stack->stack[index].i--;
   } else {
@@ -106,7 +106,7 @@ uint8_t *op_jumpfalse(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
 uint8_t *op_savelocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // This is the quickest way, without extra pushes and pops.
   // Interpret the next byte as an index into the stack.
-  uint8_t index = *nextop;
+  uint8_t index = *nextop + stack->base;
   // First check if the current value is a string.  If so, free it.
   if (stack->stack[index].type == VALUE_str) {
     free(stack->stack[index].s);
@@ -123,7 +123,7 @@ uint8_t *op_savelocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
 uint8_t *op_getlocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // This is the quickest way, without extra pushes and pops.
   // Interpret the next byte as an index into the stack.
-  uint8_t index = *nextop;
+  uint8_t index = *nextop + stack->base;
 
   // Then increase the size of the stack.
   stack->current++;
@@ -634,7 +634,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
         // Deref layer - either a V (localvar) or another I (item)
         switch (*nextop++) {
           case 'V': {
-            int idx = *nextop++; // Local variable index
+            int idx = *nextop++ + stack->base; // Local variable index
             switch (stack->stack[idx].type) {
               case VALUE_str: {
                 // This is easy, just concatenate the context of this local
@@ -836,13 +836,13 @@ VALUE_t interpret(ITEM_t *item) {
     op = opcode[*op](nextop, vm.stack, item);
   }
 
-  // There should be no more than one value on the stack
   int stacksize = size_stack(vm.stack);
+#ifdef DEBUG
   if (stacksize > 1) {
-    logerr("Error! Stack contains %d entries at end of intepretation.\n",
+    logerr("Stack contains %d entries at end of intepretation.\n",
                                                   size_stack(vm.stack));
   }
-
+#endif
   if (stacksize > 0) {
     return pop_stack(vm.stack);
   } else {

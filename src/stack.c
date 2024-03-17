@@ -14,6 +14,7 @@ STACK_t *make_stack() {
   stack = GROW_ARRAY(STACK_t, stack, 0, 1);
   stack->max = STACK_SIZE;
   stack->current = -1;
+  stack->base = 0;
   return stack;
 }
 
@@ -63,9 +64,13 @@ void push_stack(STACK_t *stack, VALUE_t obj) {
 VALUE_t pop_stack(STACK_t *stack) {
   // Given a stack, return the value on the top of the stack
   // and decrement the stack pointer.
+  // Set the type on the stack to nil, to prevent inadvertent
+  // freeing of strings which may be in use elsewhere.
   if (stack->current >= 0) {
+    VALUE_t val = stack->stack[stack->current];
+    stack->stack[stack->current].type = VALUE_nil;
     stack->current--;
-    return stack->stack[stack->current + 1];
+    return val;
   }
   logerr("Stack underflow.\n");
   return VALUE_NIL;

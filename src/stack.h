@@ -11,8 +11,9 @@
 
 typedef struct {
   int32_t max;
-  int32_t current;
-  uint8_t locals;
+  int32_t current;  // Current top of the stack
+  int32_t base;     // Base of the stack in this frame
+  uint8_t locals;   // Locals in this frame
   VALUE_t stack[STACK_SIZE];
 } STACK_t;
 
