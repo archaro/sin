@@ -506,6 +506,38 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // If the compilation is successful, assign its value to the item
   // on the top of the stack.  Otherwise, assign nil to the item.
 
+  LOCAL_t local;
+  local.count = 0;
+  local.param_count = 0;
+
+  if (*nextop == 'P') {
+    // Parameters definition follows.  Handle this first.
+    nextop++;
+    // Each parameter is a 2-byte length followed by a string
+    // After the last string, there is a 2-byte zero.
+    uint16_t param_len;
+    memcpy(&param_len, nextop, 2);
+    nextop += 2;
+    while (param_len > 0) {
+      // Fetch the parameter string, stick it in the local table
+      char *param = GROW_ARRAY(char, NULL, 0, param_len +1);
+      memcpy(param, nextop, param_len);
+      param[param_len] = '\0';
+      nextop += param_len;
+      // Note that we don't check for duplicates - if the user is daft
+      // enough to create multiple parameters with the same name, they 
+      // deserve everything they get.
+      local.id[local.count] = param;
+      local.count++;
+      local.param_count++;
+      // Get the next one...
+      memcpy(&param_len, nextop, 2);
+      nextop += 2;
+    }
+    // All parameters processed.
+  }
+
+  // Now we have the parameters (if any), get the source code for this item.
   VALUE_t itemname = pop_stack(stack);
   // First, how much code do we have?
   uint16_t len;
@@ -523,7 +555,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   out->maxsize = 1024;
   out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, out->maxsize);
   out->nextbyte = out->bytecode;
-  bool result =  parse_source(sourcecode, len, out);
+  bool result =  parse_source(sourcecode, len, out, &local);
 
   if (result) {
     // Compilation succeeded.  Assign it to the item.
@@ -547,6 +579,9 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   FREE_ARRAY(OUTPUT_t, out, sizeof(OUTPUT_t));
   FREE_ARRAY(char, sourcecode, len + 1);
   FREE_ARRAY(char, itemname.s, strlen(itemname.s));
+  for (int l = 0; l < local.count; l++) {
+    free(local.id[l]);
+  }
   return nextop;
 }
 

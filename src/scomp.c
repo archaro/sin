@@ -34,7 +34,11 @@ int main(int argc, char **argv) {
   out->maxsize = 1024;
   out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, out->maxsize);
   out->nextbyte = out->bytecode;
-  bool result =  parse_source(source, sourcelen, out);
+
+  LOCAL_t local;
+  local.count = 0;
+  local.param_count = 0;
+  bool result =  parse_source(source, sourcelen, out, &local);
 
   if (result) {
     FILE *output;
@@ -51,4 +55,7 @@ int main(int argc, char **argv) {
   FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
   FREE_ARRAY(OUTPUT_t, out, sizeof(OUTPUT_t));
   FREE_ARRAY(char, source, sourcelen);
+  for (int l = 0; l < local.count; l++) {
+    free(local.id[l]);
+  }
 }

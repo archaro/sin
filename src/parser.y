@@ -59,7 +59,8 @@
   } yy_extra_type;
 
   #define YY_EXTRA_TYPE yy_extra_type
-  bool parse_source(char *source, int sourcelen, OUTPUT_t *out);
+  bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
+                                                          LOCAL_t *local);
 }
 
 %{
@@ -102,7 +103,8 @@ void emit_byte(unsigned char c, OUTPUT_t *out) {
     *out->nextbyte++ = c;
 }
 
-bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
+bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
+                                                          LOCAL_t *local) {
   // source holds the source input string
   // sourcelen holds the length of the input
   // out is a pointer to a struct which holds the output buffer
@@ -110,17 +112,11 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
   yy_extra_type my_extra;
   my_extra.deref_depth = 0;
 
-  // Set up the locals table.  There are a maximum of 256 locals per
-  // item, so just define an array on the stack.
-  LOCAL_t local;
-  local.count = 0;
-  local.param_count = 0;
-
-  // Now wrap all these bits of state up into a nice package
+  // Wrap all these bits of state up into a nice package
   // for ease of transport
   SCANNER_STATE_t scanner_state;
   scanner_state.out = out;
-  scanner_state.local = &local;
+  scanner_state.local = local;
   scanner_state.control_count = -1; // We start in no loop.
 
   logmsg("Parsing...\n");
@@ -139,17 +135,14 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out) {
   bool failed = yyparse(sc, &scanner_state);
 
   // Clean up
-  for (int l = 0; l < local.count; l++) {
-    // This frees any locals which were put on the stack.
-    free(local.id[l]);
-  }
   fclose(in);
   yylex_destroy(sc);
 
   if (!failed) {
     // ...and now we know how many locals there are, update the first
-    // byte of the bytecode.
-    out->bytecode[0] = local.count;
+    // two bytes of the bytecode.
+    out->bytecode[0] = local->count;
+    out->bytecode[1] = local->param_count;
     logmsg("Compilation completed: %ld bytes.\n",
                                           out->nextbyte - out->bytecode);
     return true;
@@ -398,7 +391,7 @@ void emit_embedded_code(OUTPUT_t *out, char *code) {
 %right TDEREFSTART TCODE
 %left TDEREFEND
 %right UMINUS TNOT
-%nonassoc TLPAREN TRPAREN
+%nonassoc TLPAREN TRPAREN TLBRACE TRBRACE TCOMMA
 
 %%
 
@@ -477,15 +470,25 @@ elsif_else_opt : /* empty */
         | TELSE { fixup_last_else_jump(state); } stmtlist
         ;
 
+params:
+        | TLBRACE { emit_byte('P', state->out); }
+          param_list TRBRACE { emit_int16(0, state->out); }
+        ;
+
+param_list: tlocal
+        | tlocal TCOMMA param_list
+        ;
+
+tlocal: TLOCAL { emit_string($1, state->out); free($1); }
+        ;
+
 item:   first_layer
         | item TLAYERSEP layer
         ;
 
 item_assignment: expr { emit_byte('C', state->out); }
-        | TCODE TCODEBODY { emit_byte('B', state->out);
-                            emit_string($2, state->out);
-                            free($2);
-                          }
+        | TCODE { emit_byte('B', state->out); }
+          params TCODEBODY { emit_string($4, state->out); free($4); }
         ;
 
 first_layer: { emit_byte('I', state->out); } layer

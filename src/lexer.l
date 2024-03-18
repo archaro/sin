@@ -39,6 +39,7 @@
 %x STRINGLIT
 %x CODE
 %x CODEBODY
+%x CODEPARAMS
 %x CODESTREMBED
 
 local       @[a-z_][a-z0-9_]*
@@ -161,6 +162,13 @@ integer     [0-9]+
                   strbuf_size = 0;
                   BEGIN(CODEBODY);
                 }
+  "{"           { BEGIN(CODEPARAMS); return TLBRACE; }
+  [ \t\n]+      ; // Inline whitespace handling
+}
+<CODEPARAMS>{
+  {local}       { yylval->string = strdup(yytext); return TLOCAL; }
+  ","           { return TCOMMA; }
+  "}"           { BEGIN(CODE); return TRBRACE; }
   [ \t\n]+      ; // Inline whitespace handling
 }
 <CODEBODY>{
