@@ -21,14 +21,16 @@ void destroy_callstack(CALLSTACK_t *stack) {
   FREE_ARRAY(CALLSTACK_t, stack, sizeof(CALLSTACK_t));
 }
 
-void push_callstack(ITEM_t *item, uint8_t *nextop) {
+void push_callstack(ITEM_t *item, uint8_t *nextop, uint8_t args) {
   // Store the currently-executing item on the call stack.
+  // If arguments are being passed to the next item, adjust the
+  // stack for this item to take into account.
   if (vm.callstack->current < vm.callstack->max) {
     vm.callstack->current++;
     vm.callstack->entry[vm.callstack->current].item = item;
     vm.callstack->entry[vm.callstack->current].nextop = nextop;
     vm.callstack->entry[vm.callstack->current].current_stack =
-                                                          vm.stack->current;
+                                                   vm.stack->current - args;
     vm.callstack->entry[vm.callstack->current].current_base =
                                                           vm.stack->base;
     vm.callstack->entry[vm.callstack->current].current_locals =
@@ -37,7 +39,7 @@ void push_callstack(ITEM_t *item, uint8_t *nextop) {
                                                           vm.stack->params;
     // The base is used when indexing into the stack in the current
     // frame (eg for accessing local variables).
-    vm.stack->base = vm.stack->current + 1;
+    vm.stack->base = vm.stack->current + 1 - args;
   } else {
     logerr("Callstack overflow.\n");
   }

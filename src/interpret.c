@@ -199,58 +199,87 @@ uint8_t *op_add(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *op_subtractint(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
-  // Pop two int64s, subtract the last from the first, then push the result
-  // onto the stack. We assume that the parser and the programmer know what
-  // they are doing, so whatever the two values are on the stack, this will
-  // be an integer result.
+uint8_t *op_subtract(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // Pop two values, subtract the last from the first, then push the result
+  // onto the stack. If either of the values is not an int, the result
+  // is nil.
   VALUE_t v1, v2;
   v1 = pop_stack(stack);
   v2 = pop_stack(stack);
-  v2.i -= v1.i;
-  v2.type = VALUE_int;
+  if (v1.type == VALUE_int && v1.type == VALUE_int) {
+    v2.i -= v1.i;
+    v2.type = VALUE_int;
+    DEBUG_LOG("OP_SUB: values %d and %d\n", v1.type, v2.type);
+  } else {
+    DEBUG_LOG("OP_SUB: invalid types %d and %d\n", v1.type, v2.type);
+    if (v1.type == VALUE_str) {
+      FREE_ARRAY(char, v1.s, strlen(v1.s) + 1);
+    }
+    if (v2.type == VALUE_str) {
+      FREE_ARRAY(char, v2.s, strlen(v2.s) + 1);
+    }
+    v2 = VALUE_NIL;
+  }
   push_stack(stack, v2);
-  DEBUG_LOG("OP_SUB: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
-uint8_t *op_divideint(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
-  // Pop two int64s, divide the last by the first, then push the result
-  // onto the stack. We assume that the parser and the programmer know what
-  // they are doing, so whatever the two values are on the stack, this will
-  // be an integer result.
+uint8_t *op_divide(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // Pop two values, divide the last by the first, then push the result
+  // onto the stack. If either of the values is not an int, the result
+  // is nil.
   // Trap divide by zero and substitute a result of zero.
   VALUE_t v1, v2;
   v1 = pop_stack(stack);
   v2 = pop_stack(stack);
-  if (v1.i == 0) {
-    logerr("Attempt to divide by zero.  Substitute zero as result.\n");
-    v2.i = 0;
+  if (v1.type == VALUE_int && v1.type == VALUE_int) {
+    if (v1.i == 0) {
+      logerr("Attempt to divide by zero.  Substitute zero as result.\n");
+      v2.i = 0;
+    } else {
+      v2.i /= v1.i;
+    }
+    DEBUG_LOG("OP_DIV: values %d and %d\n", v1.type, v2.type);
   } else {
-    v2.i /= v1.i;
+    DEBUG_LOG("OP_DIV: invalid types %d and %d\n", v1.type, v2.type);
+    if (v1.type == VALUE_str) {
+      FREE_ARRAY(char, v1.s, strlen(v1.s) + 1);
+    }
+    if (v2.type == VALUE_str) {
+      FREE_ARRAY(char, v2.s, strlen(v2.s) + 1);
+    }
+    v2 = VALUE_NIL;
   }
   v2.type = VALUE_int;
   push_stack(stack, v2);
-  DEBUG_LOG("OP_DIV: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
-uint8_t *op_multiplyint(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
-  // Pop two int64s, multiply them together, then push the result onto the stack.
-  // We assume that the parser and the programmer know what they are doing,
-  // So whatever the two values are on the stack, this will be an integer
-  // addition, and the result will also be an integer.
+uint8_t *op_multiply(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // Pop two values, multiply them together, then push the result onto the
+  // stack.  If either of the values is not an int, the result is nil.
   VALUE_t v1, v2;
   v1 = pop_stack(stack);
   v2 = pop_stack(stack);
-  v2.i *= v1.i;
-  v2.type = VALUE_int;
+  if (v1.type == VALUE_int && v1.type == VALUE_int) {
+    v2.i *= v1.i;
+    v2.type = VALUE_int;
+    DEBUG_LOG("OP_MUL: values %d and %d\n", v1.type, v2.type);
+  } else {
+    DEBUG_LOG("OP_MUL: invalid types %d and %d\n", v1.type, v2.type);
+    if (v1.type == VALUE_str) {
+      FREE_ARRAY(char, v1.s, strlen(v1.s) + 1);
+    }
+    if (v2.type == VALUE_str) {
+      FREE_ARRAY(char, v2.s, strlen(v2.s) + 1);
+    }
+    v2 = VALUE_NIL;
+  }
   push_stack(stack, v2);
-  DEBUG_LOG("OP_MUL: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
-uint8_t *op_negateint(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_negate(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // If the top value on the stack is an int, negate it.
   //  Complain bitterly if not.
   if (stack->stack[stack->current].type == VALUE_int) {
@@ -509,6 +538,11 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   LOCAL_t local;
   local.count = 0;
   local.param_count = 0;
+  local.item_out = GROW_ARRAY(OUTPUT_t, NULL, 0, sizeof(OUTPUT_t));
+  local.item_out->maxsize = 1024;
+  local.item_out->bytecode = GROW_ARRAY(unsigned char, NULL, 0,
+                                                  local.item_out->maxsize);
+  local.item_out->nextbyte = local.item_out->bytecode;
 
   if (*nextop == 'P') {
     // Parameters definition follows.  Handle this first.
@@ -576,6 +610,9 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   }
 
   // Clean up.
+  FREE_ARRAY(unsigned char, local.item_out->bytecode,
+                                                  local.item_out->maxsize);
+  FREE_ARRAY(OUTPUT_t, local.item_out, sizeof(OUTPUT_t));
   FREE_ARRAY(OUTPUT_t, out, sizeof(OUTPUT_t));
   FREE_ARRAY(char, sourcecode, len + 1);
   FREE_ARRAY(char, itemname.s, strlen(itemname.s));
@@ -599,13 +636,27 @@ uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // If the item is a code item, it is executed and the result pushed
   // onto the stack.
   // If the item does not exist, nil is pushed onto the stack.
+
+  // First, let's get the number of arguments passed to this item
+  uint16_t arg_count;
+  memcpy(&arg_count, nextop, 2);
+  nextop += 2;
+
+  // Now the item name.
   VALUE_t itemname = pop_stack(stack);
+
+  for (int a = arg_count - 1; a >= 0; a--) {
+    // A bit of evil stack manipulation here
+    DEBUG_LOG("Argument %d has type %d and value %d.\n", stack->current - a,
+    stack->stack[stack->current - a].type, stack->stack[stack->current - a].i);
+  }
 
   // First check to see if there is a valid item to look up
   if (itemname.type == VALUE_str) {
     ITEM_t *i = find_item(itemroot, itemname.s);
     if (i) {
-      DEBUG_LOG("Fetched item %s\n", itemname.s);
+      DEBUG_LOG("Fetched item %s (called with %d arguments).\n", itemname.s,
+                                                                arg_count);
       // Just push the item value onto the stack.
       if (i->type == ITEM_value) {
         VALUE_t v;
@@ -617,10 +668,28 @@ uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
         }
         push_stack(stack, v);
       } else {
+        // Are there any arguments in excess of what this item takes?
+        // If so, lose 'em.
+        while (arg_count > i->bytecode[1]) {
+          DEBUG_LOG("Popping unneeded argument.\n");
+          pop_stack(stack);
+          arg_count--;
+        }
+        // Contrariwise, do we have fewer arguments than we should?
+        while (arg_count < i->bytecode[1]) {
+          DEBUG_LOG("Pushing additional nil-value argument.\n");
+          push_stack(stack, VALUE_NIL);
+          arg_count++;
+        }
         // Save our current state.
-        push_callstack(item, nextop);
+        // We pass the number of arguments, so that the stack is
+        // correctly adjusted to account for them at the top of the
+        // current stack (they will be at the bottom of the frame for
+        // the new item).
+        push_callstack(item, nextop, i->bytecode[1]);
         // Execute the item.
         DEBUG_LOG("Executing item %s\n", i->name);
+        DEBUG_LOG("Item %s takes %d parameters.\n", itemname.s, i->bytecode[1]); 
         VALUE_t value = interpret(i);
         // Now go back to the status quo ante.
         FRAME_t *prev_frame = pop_callstack();
@@ -823,20 +892,20 @@ void init_interpreter() {
   opcode[0] = op_nop;
   opcode['a'] = op_add;
   opcode['c'] = op_savelocal;
-  opcode['d'] = op_divideint;
+  opcode['d'] = op_divide;
   opcode['e'] = op_getlocal;
   opcode['f'] = op_inclocal;
   opcode['g'] = op_declocal;
   opcode['j'] = op_jump;
   opcode['k'] = op_jumpfalse;
   opcode['l'] = op_pushstr;
-  opcode['m'] = op_multiplyint;
-  opcode['n'] = op_negateint;
+  opcode['m'] = op_multiply;
+  opcode['n'] = op_negate;
   opcode['o'] = op_equal;
   opcode['p'] = op_pushint;
   opcode['q'] = op_notequal;
   opcode['r'] = op_lessthan;
-  opcode['s'] = op_subtractint;
+  opcode['s'] = op_subtract;
   opcode['t'] = op_greaterthan;
   opcode['u'] = op_lessthanorequal;
   opcode['v'] = op_greaterthanorequal;
@@ -859,11 +928,14 @@ VALUE_t interpret(ITEM_t *item) {
   uint8_t numparams = item->bytecode[1];
 
   // Set up the stack before executing it
-  vm.stack->current += numlocals;
+  // We have already adjusted the stack to account for the arguments
+  // so don't double-count them here.
+  vm.stack->current += numlocals - numparams;
   vm.stack->locals = numlocals;
   vm.stack->params = numparams;
   DEBUG_LOG("Making space for %d locals.\n", numlocals);
   DEBUG_LOG("Stack size before interpreting begins: %d\n", size_stack(vm.stack));
+  DEBUG_LOG("Current top of stack is: %d\n", vm.stack->current);
   // The actual bytecode starts at the third byte.
   uint8_t *op = item->bytecode + 2; 
   while (*op != 'h') {
@@ -876,7 +948,7 @@ VALUE_t interpret(ITEM_t *item) {
   int stacksize = size_stack(vm.stack);
 #ifdef DEBUG
   if (stacksize > 1) {
-    logerr("Stack contains %d entries at end of intepretation.\n",
+    logerr("Stack contains %d entries at end of interpretation.\n",
                                                   size_stack(vm.stack));
   }
 #endif

@@ -80,6 +80,9 @@ integer     [0-9]+
   "/"           { return TDIV; }
   "("           { return TLPAREN; }
   ")"           { return TRPAREN; }
+  ","           { return TCOMMA; }
+  "{"           { return TLBRACE; }
+  "}"           { return TRBRACE; }
   ";"           { return TSEMI; }
   "\""          { 
                   strbuf_capacity = 4;

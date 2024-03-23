@@ -31,7 +31,7 @@ typedef struct VM {
 
 CALLSTACK_t *make_callstack();
 void destroy_callstack(CALLSTACK_t *stack);
-void push_callstack(ITEM_t *item, uint8_t *nextop);
+void push_callstack(ITEM_t *item, uint8_t *nextop, uint8_t args);
 FRAME_t *pop_callstack();
 int size_callstack(CALLSTACK_t *stack);
 

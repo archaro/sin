@@ -27,6 +27,8 @@
     char *id[MAX_LOCAL_VARS];
     int count;
     int param_count;
+    int arg_count;
+    OUTPUT_t *item_out;
   } LOCAL_t;
 
   typedef struct {
@@ -366,6 +368,32 @@ void emit_embedded_code(OUTPUT_t *out, char *code) {
   emit_string(code, out); // Aaaand the code.
 }
 
+void merge_item_buffer(OUTPUT_t *out, OUTPUT_t *item_out) {
+  // Items are assembled in a separate buffer, to facilitate the passing
+  // of arguments.  This function merges the item buffer into the main
+  // output buffer.
+
+  // Check if there is enough space in the buffer
+  int mainbuf_size = out->nextbyte - out->bytecode;
+  int itembuf_size = item_out->nextbyte - item_out->bytecode;
+  if (mainbuf_size + itembuf_size >= out->maxsize) {
+    // Calculate the new buffer size
+    int oldsize = out->maxsize;
+    out->maxsize = GROW_CAPACITY((mainbuf_size + itembuf_size) * 1.25);
+    // Reallocate the buffer
+    unsigned char *new_buffer = GROW_ARRAY(unsigned char, out->bytecode, oldsize, out->maxsize);
+    // Update buffer pointers
+    out->nextbyte = new_buffer + (out->nextbyte - out->bytecode);
+    out->bytecode = new_buffer;
+  }
+  // Now we are sure the buffer is big enough, smush the item buffer
+  // into the main output buffer.
+  memcpy(out->nextbyte, item_out->bytecode, itembuf_size);
+  out->nextbyte += itembuf_size;
+  // Reset the item buffer for its next use
+  item_out->nextbyte = item_out->bytecode;
+}
+
 %}
 
 %union{
@@ -426,7 +454,8 @@ stmt:   TWHILE                  {
                                             "Too many local variables.");
                            YYERROR; }
                                                                                                      } expr { emit_local_assign($1, state->out, state->local); }
-        | item { emit_byte('E', state->out); } TASSIGN item_assignment
+        | item { merge_item_buffer(state->out, state->local->item_out);
+                 emit_byte('E', state->out); } TASSIGN item_assignment
         | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
         | TLOCAL TDEC           { emit_local_op($1, state->out, state->local, 'g'); }
         | expr                  { }
@@ -439,8 +468,10 @@ expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e
         |	TSTRINGLIT            { emit_byte('l', state->out);
                                   emit_string($1, state->out);
                                   free($1); }
-        |	item                  { emit_byte('E', state->out);
-                                  emit_byte('F', state->out); }
+        |	item args { merge_item_buffer(state->out, state->local->item_out);
+                      emit_byte('E', state->out);
+                      emit_byte('F', state->out);
+                      emit_int16(state->local->arg_count, state->out); }
         | expr TEQUAL expr      { emit_byte('o', state->out); }
         | expr TNOTEQUAL expr   { emit_byte('q', state->out); }
         | expr TOR expr         { emit_byte('z', state->out); }
@@ -475,15 +506,19 @@ params:
           param_list TRBRACE { emit_int16(0, state->out); }
         ;
 
-param_list: tlocal
-        | tlocal TCOMMA param_list
+param_list: param_local
+        | param_local TCOMMA param_list
         ;
 
-tlocal: TLOCAL { emit_string($1, state->out); free($1); }
+param_local: TLOCAL { emit_string($1, state->out); free($1); }
         ;
 
-item:   first_layer
-        | item TLAYERSEP layer
+args:
+        | TLBRACE { state->local->arg_count = 0; } arg_list TRBRACE
+        ;
+
+arg_list: expr { state->local->arg_count++; }
+        | expr { state->local->arg_count++; } TCOMMA arg_list
         ;
 
 item_assignment: expr { emit_byte('C', state->out); }
@@ -491,19 +526,25 @@ item_assignment: expr { emit_byte('C', state->out); }
           params TCODEBODY { emit_string($4, state->out); free($4); }
         ;
 
-first_layer: { emit_byte('I', state->out); } layer
+item:   first_layer
+        | item TLAYERSEP layer
         ;
 
-layer:  TLAYER { emit_byte('L', state->out);
-                 emit_layer($1, state->out); free($1); }
+first_layer: { emit_byte('I', state->local->item_out); } layer
+        ;
+
+layer:  TLAYER { emit_byte('L', state->local->item_out);
+                 emit_layer($1, state->local->item_out); free($1); }
         | dereference
         ;
 
-dereference:  TDEREFSTART       { emit_byte('D', state->out); } deref_content TDEREFEND
+dereference:  TDEREFSTART { emit_byte('D', state->local->item_out); }
+              deref_content TDEREFEND
         ;
 
-deref_content: TLOCAL           { emit_local_op($1, state->out, state->local , 'V'); }
-        | item                  { emit_byte('E', state->out); }
+deref_content: TLOCAL { emit_local_op($1, state->local->item_out,
+                                                      state->local , 'V'); }
+        | item        { emit_byte('E', state->local->item_out); }
         ;
 
 %%
