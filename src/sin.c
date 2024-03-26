@@ -128,6 +128,7 @@ int main(int argc, char **argv) {
 
   // Do some preparations
   DEBUG_LOG("DEBUG IS DEFINED\n");
+  DISASS_LOG("DISASS IS DEFINED\n");
   vm.stack = make_stack();
   vm.callstack = make_callstack();
 
@@ -168,6 +169,7 @@ int main(int argc, char **argv) {
   // Clean up before shutdown.
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");
+  DISASS_LOG("DISASS IS DEFINED\n");
   save_itemstore(itemstore, itemroot);
   destroy_stack(vm.stack);
   destroy_callstack(vm.callstack);

@@ -14,6 +14,12 @@
 #define DEBUG_LOG(...) ((void)0)
 #endif
 
+#ifdef DISASS
+#define DISASS_LOG(...) logmsg(__VA_ARGS__)
+#else
+#define DISASS_LOG(...) ((void)0)
+#endif
+
 bool log_to_file(const char *logfile);
 void close_log();
 void logmsg(const char *msg, ...);
