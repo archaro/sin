@@ -62,7 +62,7 @@ void push_stack(STACK_t *stack, VALUE_t obj) {
 }
 
 VALUE_t pop_stack(STACK_t *stack) {
-  // Given a stack, return the value on the top of the stack
+  // Given a stack, return the value on top.
   // and decrement the stack pointer.
   // Set the type on the stack to nil, to prevent inadvertent
   // freeing of strings which may be in use elsewhere.
@@ -74,6 +74,22 @@ VALUE_t pop_stack(STACK_t *stack) {
   }
   logerr("Stack underflow.\n");
   return VALUE_NIL;
+}
+
+void throwaway_stack(STACK_t *stack) {
+  // Given a stack, lose the value on top.
+  // and decrement the stack pointer.
+  // Set the type on the stack to nil, to prevent inadvertent
+  // freeing of strings which may be in use elsewhere.
+  if (stack->current >= 0) {
+    if (stack->stack[stack->current].type == VALUE_str) {
+      FREE_ARRAY(char, stack->stack[stack->current].s,
+                                   strlen(stack->stack[stack->current].s));
+    }
+    stack->stack[stack->current].type = VALUE_nil;
+    stack->current--;
+  }
+  logerr("Stack underflow.\n");
 }
 
 VALUE_t peek_stack(STACK_t *stack) {

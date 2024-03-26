@@ -645,12 +645,6 @@ uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Now the item name.
   VALUE_t itemname = pop_stack(stack);
 
-  for (int a = arg_count - 1; a >= 0; a--) {
-    // A bit of evil stack manipulation here
-    DEBUG_LOG("Argument %d has type %d and value %d.\n", stack->current - a,
-    stack->stack[stack->current - a].type, stack->stack[stack->current - a].i);
-  }
-
   // First check to see if there is a valid item to look up
   if (itemname.type == VALUE_str) {
     ITEM_t *i = find_item(itemroot, itemname.s);
@@ -672,7 +666,7 @@ uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
         // If so, lose 'em.
         while (arg_count > i->bytecode[1]) {
           DEBUG_LOG("Popping unneeded argument.\n");
-          pop_stack(stack);
+          throwaway_stack(stack);
           arg_count--;
         }
         // Contrariwise, do we have fewer arguments than we should?
@@ -701,6 +695,13 @@ uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
       }
     } else {
       // Item not found.
+      DEBUG_LOG("Item '%s' not found.\n", itemname.s);
+      // We need to lose any values on the stack which were passed as args.
+        while (arg_count > 0) {
+          DEBUG_LOG("Popping unneeded argument.\n");
+          throwaway_stack(stack);
+          arg_count--;
+        }
       push_stack(stack, VALUE_NIL);
     }
     FREE_ARRAY(char, itemname.s, strlen(itemname.s));
