@@ -538,11 +538,6 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   LOCAL_t local;
   local.count = 0;
   local.param_count = 0;
-  local.item_out = GROW_ARRAY(OUTPUT_t, NULL, 0, sizeof(OUTPUT_t));
-  local.item_out->maxsize = 1024;
-  local.item_out->bytecode = GROW_ARRAY(unsigned char, NULL, 0,
-                                                  local.item_out->maxsize);
-  local.item_out->nextbyte = local.item_out->bytecode;
 
   if (*nextop == 'P') {
     // Parameters definition follows.  Handle this first.
@@ -610,9 +605,6 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   }
 
   // Clean up.
-  FREE_ARRAY(unsigned char, local.item_out->bytecode,
-                                                  local.item_out->maxsize);
-  FREE_ARRAY(OUTPUT_t, local.item_out, sizeof(OUTPUT_t));
   FREE_ARRAY(OUTPUT_t, out, sizeof(OUTPUT_t));
   FREE_ARRAY(char, sourcecode, len + 1);
   FREE_ARRAY(char, itemname.s, strlen(itemname.s));
