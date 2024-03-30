@@ -50,8 +50,10 @@
     OUTPUT_t *out;
     LOCAL_t *local;
     int8_t control_count;
-    int arg_count;
-    OUTPUT_t *item_out;
+    int8_t item_count;
+    int arg_count[MAX_NESTED_CONTROLS];
+    OUTPUT_t *item_buf;
+    OUTPUT_t *item_out[MAX_NESTED_CONTROLS];
     LOOP_FIXUP_t loop[MAX_NESTED_CONTROLS];
     IF_FIXUP_t if_stmt[MAX_NESTED_CONTROLS];
   } SCANNER_STATE_t;
@@ -120,11 +122,8 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
   scanner_state.out = out;
   scanner_state.local = local;
   scanner_state.control_count = -1; // We start in no loop.
-  scanner_state.item_out = GROW_ARRAY(OUTPUT_t, NULL, 0, sizeof(OUTPUT_t));
-  scanner_state.item_out->maxsize = 1024;
-  scanner_state.item_out->bytecode = GROW_ARRAY(unsigned char, NULL, 0,
-                                          scanner_state.item_out->maxsize);
-  scanner_state.item_out->nextbyte = scanner_state.item_out->bytecode;
+  scanner_state.item_count = -1; // We start processing no item.
+  scanner_state.item_buf = NULL;
 
   logmsg("Parsing...\n");
   yylex_init_extra(my_extra, &sc);
@@ -152,15 +151,9 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
     out->bytecode[1] = local->param_count;
     logmsg("Compilation completed: %ld bytes.\n",
                                           out->nextbyte - out->bytecode);
-    FREE_ARRAY(unsigned char, scanner_state.item_out->bytecode,
-                                          scanner_state.item_out->maxsize);
-    FREE_ARRAY(OUTPUT_t, scanner_state.item_out, sizeof(OUTPUT_t));
     return true;
   } else {
     logerr("Compilation failed.\n");
-    FREE_ARRAY(unsigned char, scanner_state.item_out->bytecode,
-                                          scanner_state.item_out->maxsize);
-    FREE_ARRAY(OUTPUT_t, scanner_state.item_out, sizeof(OUTPUT_t));
     return false;
   }
 }
@@ -405,6 +398,40 @@ void merge_item_buffer(OUTPUT_t *out, OUTPUT_t *item_out) {
   item_out->nextbyte = item_out->bytecode;
 }
 
+bool prepare_item(SCANNER_STATE_t *state) {
+  // We have encountered the start of an item, so begin shoving it into
+  // a temporary buffer until we've processed the arguments (if any).
+  if (state->item_count >= MAX_NESTED_CONTROLS) {
+    return false;
+  }
+  state->item_count++;
+  int8_t c = state->item_count;
+  state->arg_count[c] = 0;
+  state->item_out[c] = GROW_ARRAY(OUTPUT_t, NULL, 0, sizeof(OUTPUT_t));
+  state->item_out[c]->maxsize = 1024;
+  state->item_out[c]->bytecode = GROW_ARRAY(unsigned char, NULL, 0,
+                                              state->item_out[c]->maxsize);
+  state->item_out[c]->nextbyte = state->item_out[c]->bytecode;
+  state->item_buf = state->item_out[c];
+  return true;
+}
+
+void finalise_item(SCANNER_STATE_t *state) {
+  // Having processed the item, merge its buffer into the bytestream
+  // and clean up after ourselves.
+  int8_t c = state->item_count;
+  merge_item_buffer(state->out, state->item_out[c]);
+  FREE_ARRAY(unsigned char, state->item_out[c]->bytecode,
+                                               state->item_out[c]->maxsize);
+  FREE_ARRAY(OUTPUT_t, state->item_out[c], sizeof(OUTPUT_t));
+  state->item_count--;
+  if (state->item_count > -1) {
+    state->item_buf = state->item_out[state->item_count];
+  } else {
+    state->item_buf = NULL;
+  }
+}
+
 %}
 
 %union{
@@ -465,7 +492,7 @@ stmt:   TWHILE                  {
                                             "Too many local variables.");
                            YYERROR; }
                                                                                                      } expr { emit_local_assign($1, state->out, state->local); }
-        | item { merge_item_buffer(state->out, state->item_out);
+        | item { finalise_item(state);
                  emit_byte('E', state->out); } TASSIGN item_assignment
         | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
         | TLOCAL TDEC           { emit_local_op($1, state->out, state->local, 'g'); }
@@ -479,10 +506,13 @@ expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e
         |	TSTRINGLIT            { emit_byte('l', state->out);
                                   emit_string($1, state->out);
                                   free($1); }
-        |	item args { merge_item_buffer(state->out, state->item_out);
+        |	item args { finalise_item(state);
                       emit_byte('E', state->out);
                       emit_byte('F', state->out);
-                      emit_int16(state->arg_count, state->out); }
+                      /* Use item_count + 1 below because finalise_item()
+                         decremented it. */
+                      emit_int16(state->arg_count[state->item_count + 1],
+                                                              state->out); }
         | expr TEQUAL expr      { emit_byte('o', state->out); }
         | expr TNOTEQUAL expr   { emit_byte('q', state->out); }
         | expr TOR expr         { emit_byte('z', state->out); }
@@ -525,11 +555,11 @@ param_local: TLOCAL { emit_string($1, state->out); free($1); }
         ;
 
 args:
-        | TLBRACE { state->arg_count = 0; } arg_list TRBRACE
+        | TLBRACE arg_list TRBRACE
         ;
 
-arg_list: expr { state->arg_count++; }
-        | expr { state->arg_count++; } TCOMMA arg_list
+arg_list: expr { state->arg_count[state->item_count]++; }
+        | expr { state->arg_count[state->item_count]++; } TCOMMA arg_list
         ;
 
 item_assignment: expr { emit_byte('C', state->out); }
@@ -541,21 +571,21 @@ item:   first_layer
         | item TLAYERSEP layer
         ;
 
-first_layer: { emit_byte('I', state->item_out); } layer
+first_layer: { prepare_item(state); emit_byte('I', state->item_buf); } layer
         ;
 
-layer:  TLAYER { emit_byte('L', state->item_out);
-                 emit_layer($1, state->item_out); free($1); }
+layer:  TLAYER { emit_byte('L', state->item_buf);
+                 emit_layer($1, state->item_buf); free($1); }
         | dereference
         ;
 
-dereference:  TDEREFSTART { emit_byte('D', state->item_out); }
+dereference:  TDEREFSTART { emit_byte('D', state->item_buf); }
               deref_content TDEREFEND
         ;
 
-deref_content: TLOCAL { emit_local_op($1, state->item_out,
+deref_content: TLOCAL { emit_local_op($1, state->item_buf,
                                                       state->local , 'V'); }
-        | item        { emit_byte('E', state->item_out); }
+        | item        { emit_byte('E', state->item_buf); }
         ;
 
 %%
