@@ -507,7 +507,6 @@ void write_item(FILE *file, ITEM_t *item) {
   char name[33]; // 32 characters + 1 for null-terminator
   strncpy(name, item->name, 32);
   name[32] = '\0'; // Ensure null-termination
-  DEBUG_LOG("Writing item '%s'\n", name);
   fwrite(name, sizeof(char), 33, file); // Write the fixed size name
   // Write the type of the item - there are several types but on disk they
   // degrade to either an int or a string.  When reading the item back
@@ -562,7 +561,6 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent) {
   char name[33];
   fread(name, sizeof(char), 33, file);
   name[32] = '\0'; // Ensure null-termination
-  DEBUG_LOG("Reading item '%s'\n", name);
   ITEM_e type;
   fread(&type, sizeof(ITEM_e), 1, file);
   int64_t value;

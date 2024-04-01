@@ -675,7 +675,6 @@ uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
         push_callstack(item, nextop, i->bytecode[1]);
         // Execute the item.
         DEBUG_LOG("Executing item %s\n", i->name);
-        DEBUG_LOG("Item %s takes %d parameters.\n", itemname.s, i->bytecode[1]); 
         VALUE_t value = interpret(i);
         // Now go back to the status quo ante.
         FRAME_t *prev_frame = pop_callstack();
@@ -926,7 +925,8 @@ VALUE_t interpret(ITEM_t *item) {
   vm.stack->current += numlocals - numparams;
   vm.stack->locals = numlocals;
   vm.stack->params = numparams;
-  DEBUG_LOG("Making space for %d locals.\n", numlocals);
+  DEBUG_LOG("Making space for %d locals (including %d parameters).\n",
+                                                      numlocals, numparams);
   DEBUG_LOG("Current top of stack is: %d\n", vm.stack->current);
   // The actual bytecode starts at the third byte.
   uint8_t *op = item->bytecode + 2; 
