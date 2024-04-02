@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "error.h"
 #include "itoa.h"
 #include "interpret.h"
 #include "log.h"
@@ -593,14 +594,18 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
     insert_code_item(itemroot, itemname.s, len, out->bytecode);
     // Set the error item to a nil value.
     set_item(itemroot, "sys.error", VALUE_NIL);
+    set_item(itemroot, "sys.error.msg", VALUE_NIL);
   } else {
-    // Compilation failed.
-    // Assign nil to the item.
-    assignitem(&itemname, VALUE_NIL);
+    // Compilation failed.  Don't assign anything.
+    logerr("Compilation failed.\n");
     // Set the error item to the compiler error.
-    // FIXME: This will need correcting when the compiler
-    // returns proper error codes!
-    set_item(itemroot, "sys.error", VALUE_NIL);
+    VALUE_t e, emsg;
+    e.type = VALUE_int;
+    e.i = local.errnum;
+    set_item(itemroot, "sys.error", e);
+    emsg.type = VALUE_str;
+    emsg.s = strdup(errmsg[local.errnum]);
+    set_item(itemroot, "sys.error.msg", emsg);
     FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
   }
 

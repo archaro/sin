@@ -27,6 +27,7 @@
     char *id[MAX_LOCAL_VARS];
     int count;
     int param_count;
+    int8_t errnum;
   } LOCAL_t;
 
   typedef struct {
@@ -64,7 +65,7 @@
 
   #define YY_EXTRA_TYPE yy_extra_type
   bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
-                                                          LOCAL_t *local);
+                                                           LOCAL_t *local);
 }
 
 %{
@@ -72,9 +73,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "error.h"
 #include "parser.h"
 #include "memory.h"
-#include "log.h"
 
 typedef void *yyscan_t;
 int yylex (YYSTYPE *yylval_param, yyscan_t yyscanner);
@@ -85,7 +86,10 @@ int yylex_destroy(yyscan_t yyscanner);
 int yyparse();
 
 void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
-  logerr("Parse error: %s\n",s);
+  // We don't actually do anything in yyerror, we just need to define it.
+  // yyerror() is called whenever there is a syntax error, so we need to
+  // set the error number in the state appropriately.
+  state->local->errnum = ERR_COMP_SYNTAX;
 }
 
 void emit_byte(unsigned char c, OUTPUT_t *out) {
@@ -105,57 +109,6 @@ void emit_byte(unsigned char c, OUTPUT_t *out) {
     
     // Add the byte directly
     *out->nextbyte++ = c;
-}
-
-bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
-                                                          LOCAL_t *local) {
-  // source holds the source input string
-  // sourcelen holds the length of the input
-  // out is a pointer to a struct which holds the output buffer
-  yyscan_t sc;
-  yy_extra_type my_extra;
-  my_extra.deref_depth = 0;
-
-  // Wrap all these bits of state up into a nice package
-  // for ease of transport
-  SCANNER_STATE_t scanner_state;
-  scanner_state.out = out;
-  scanner_state.local = local;
-  scanner_state.control_count = -1; // We start in no loop.
-  scanner_state.item_count = -1; // We start processing no item.
-  scanner_state.item_buf = NULL;
-
-  logmsg("Parsing...\n");
-  yylex_init_extra(my_extra, &sc);
-  FILE *in = fmemopen(source, sourcelen, "r");
-  yyset_in(in, sc);
-
-  // Before we start parsing, make space in the output for the number
-  // of locals - we will backfill the actual number later.
-  emit_byte(0, out);
-  // And the number of parameters this item can receive.
-  // NOTE! Parameters are treated internally as local variables, so the
-  // number of local variables will INCLUDE the number of parameters.
-  emit_byte(0, out);
-
-  bool failed = yyparse(sc, &scanner_state);
-
-  // Clean up
-  fclose(in);
-  yylex_destroy(sc);
-
-  if (!failed) {
-    // ...and now we know how many locals there are, update the first
-    // two bytes of the bytecode.
-    out->bytecode[0] = local->count;
-    out->bytecode[1] = local->param_count;
-    logmsg("Compilation completed: %ld bytes.\n",
-                                          out->nextbyte - out->bytecode);
-    return true;
-  } else {
-    logerr("Compilation failed.\n");
-    return false;
-  }
 }
 
 void emit_int64(uint64_t i, OUTPUT_t *out) {
@@ -199,7 +152,6 @@ bool emit_local_index(char *id, OUTPUT_t *out, LOCAL_t *local) {
   }
   
   // No local found, this is a syntax error.
-  logerr("Local variable used before assignment: %s\n", id);
   return false;
 }
 
@@ -218,7 +170,6 @@ bool prepare_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
   // This is the first time we have seen this local, so add it.
   // Check if the maximum number of locals has been reached.
   if (local->count >= MAX_LOCAL_VARS) {
-    logerr("Error: Maximum number of local variables (256) reached.\n");
     free(id);
     return false;
   }
@@ -240,12 +191,17 @@ void emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
   }
 }
 
-void emit_local_op(char *id, OUTPUT_t *out, LOCAL_t *local, char op) {
-  // Emit the specified local operation ('f' for increment, 'g' for decrement),
-  // followed by the local to increment or decrement.
-  emit_byte(op, out);
-  emit_local_index(id, out, local);
-  free(id);
+bool emit_local_op(char *id, yyscan_t locp, SCANNER_STATE_t *state,
+                                                                  char op) {
+  // Emit the specified local operation ('f' for increment, 'g'
+  // for decrement), followed by the local to increment or decrement.
+  emit_byte(op, state->out);
+  if (emit_local_index(id, state->out, state->local)) {
+    return true;
+  } else {
+    state->local->errnum = ERR_COMP_LOCALBEFOREDEF;
+    return false;
+  }
 }
 
 bool prepare_loop(SCANNER_STATE_t *state) {
@@ -432,6 +388,67 @@ void finalise_item(SCANNER_STATE_t *state) {
   }
 }
 
+void cleanup_item(SCANNER_STATE_t *state) {
+  // Called when there is a failed parse to clean up any item buffers
+  // which may have been allocated.
+  int8_t c = state->item_count;
+  while (c >= 0) {
+    FREE_ARRAY(unsigned char, state->item_out[c]->bytecode,
+                                               state->item_out[c]->maxsize);
+    FREE_ARRAY(OUTPUT_t, state->item_out[c], sizeof(OUTPUT_t));
+    c--;
+  }
+}
+
+bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
+                                                          LOCAL_t *local) {
+  // source holds the source input string
+  // sourcelen holds the length of the input
+  // out is a pointer to a struct which holds the output buffer
+  yyscan_t sc;
+  yy_extra_type my_extra;
+  my_extra.deref_depth = 0;
+
+  // Wrap all these bits of state up into a nice package
+  // for ease of transport
+  SCANNER_STATE_t scanner_state;
+  scanner_state.out = out;
+  scanner_state.local = local;
+  scanner_state.local->errnum = ERR_NOERROR;
+  scanner_state.control_count = -1; // We start in no loop.
+  scanner_state.item_count = -1; // We start processing no item.
+  scanner_state.item_buf = NULL;
+
+  yylex_init_extra(my_extra, &sc);
+  FILE *in = fmemopen(source, sourcelen, "r");
+  yyset_in(in, sc);
+
+  // Before we start parsing, make space in the output for the number
+  // of locals - we will backfill the actual number later.
+  emit_byte(0, out);
+  // And the number of parameters this item can receive.
+  // NOTE! Parameters are treated internally as local variables, so the
+  // number of local variables will INCLUDE the number of parameters.
+  emit_byte(0, out);
+
+  bool failed = yyparse(sc, &scanner_state);
+
+  // Clean up
+  fclose(in);
+  yylex_destroy(sc);
+
+  if (!failed) {
+    // ...and now we know how many locals there are, update the first
+    // two bytes of the bytecode.
+    out->bytecode[0] = local->count;
+    out->bytecode[1] = local->param_count;
+    return true;
+  } else {
+    cleanup_item(&scanner_state);
+    return false;
+  }
+}
+
 %}
 
 %union{
@@ -459,6 +476,8 @@ void finalise_item(SCANNER_STATE_t *state) {
 %right UMINUS TNOT
 %nonassoc TLPAREN TRPAREN TLBRACE TRBRACE TCOMMA
 
+%destructor { free ($$); } <*>
+
 %%
 
 input:  stmtlist { emit_byte('h', state->out); }
@@ -473,7 +492,7 @@ stmtsemi: stmt TSEMI
 
 stmt:   TWHILE                  {
                 if (!prepare_loop(state)) {
-                  yyerror(scanner, state, "Maximum control structure depth exceeded.\n");
+                  state->local->errnum = ERR_COMP_MAXDEPTH;
                   YYERROR;
                 }
                                 } expr {
@@ -488,24 +507,29 @@ stmt:   TWHILE                  {
         | TRETURN { emit_byte('h', state->out); }
         | TLOCAL TASSIGN { if (!prepare_local_assign($1, state->out,
                                                       state->local)) {
-                           yyerror(scanner, state, 
-                                            "Too many local variables.");
+                           state->local->errnum = ERR_COMP_TOOMANYLOCALS;
                            YYERROR; }
                                                                                                      } expr { emit_local_assign($1, state->out, state->local); }
         | item { finalise_item(state);
                  emit_byte('E', state->out); } TASSIGN item_assignment
-        | TLOCAL TINC           { emit_local_op($1, state->out, state->local, 'f'); }
-        | TLOCAL TDEC           { emit_local_op($1, state->out, state->local, 'g'); }
+        | TLOCAL TINC   { bool tf = emit_local_op($1, scanner, state, 'f');
+                          free($1);
+                          if (!tf) YYERROR; }
+        | TLOCAL TDEC   { bool tf = emit_local_op($1, scanner, state, 'g');
+                          free($1);
+                          if (!tf) YYERROR; }
         | expr                  { }
         ;
 
-expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e'); }
-        |	TINTEGER              { emit_byte('p', state->out);
-                                  emit_int64(atoi($1), state->out);
-                                  free($1); }
-        |	TSTRINGLIT            { emit_byte('l', state->out);
-                                  emit_string($1, state->out);
-                                  free($1); }
+expr:     TLOCAL        { bool tf = emit_local_op($1, scanner, state, 'e');
+                          free($1); 
+                          if (!tf) YYERROR; }
+        |	TINTEGER      { emit_byte('p', state->out);
+                          emit_int64(atoi($1), state->out);
+                          free($1); }
+        |	TSTRINGLIT    { emit_byte('l', state->out);
+                          emit_string($1, state->out);
+                          free($1); }
         |	item args { finalise_item(state);
                       emit_byte('E', state->out);
                       emit_byte('F', state->out);
@@ -529,7 +553,8 @@ expr:     TLOCAL                { emit_local_op($1, state->out, state->local, 'e
         | TNOT expr             { emit_byte('x', state->out); }
         | TMINUS expr %prec UMINUS { emit_byte('n', state->out); }
         | TUNKNOWNCHAR          {
-                                  yyerror(scanner, state, $1);
+                                  state->local->errnum =
+                                                      ERR_COMP_UNKNOWNCHAR;
                                   free($1);
                                   YYERROR;
                                 }
@@ -583,8 +608,9 @@ dereference:  TDEREFSTART { emit_byte('D', state->item_buf); }
               deref_content TDEREFEND
         ;
 
-deref_content: TLOCAL { emit_local_op($1, state->item_buf,
-                                                      state->local , 'V'); }
+deref_content: TLOCAL { bool tf = emit_local_op($1, scanner, state, 'V');
+                        free($1);
+                        if (!tf) YYERROR; }
         | item        { emit_byte('E', state->item_buf); }
         ;
 

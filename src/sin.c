@@ -5,6 +5,7 @@
 #include <getopt.h>
 #include <sys/stat.h>
 
+#include "error.h"
 #include "memory.h"
 #include "log.h"
 #include "value.h"
@@ -52,6 +53,7 @@ int main(int argc, char **argv) {
   // Do the very early preparations, for things which are needed
   // before even the options are processed.
   init_allocator(&allocator);
+  init_errmsg();
 
   // Are there any interesting options?
   int opt;

@@ -16,7 +16,8 @@ DEPS := $(OBJECTS:.o=.d)
 # Library of shared functions
 LIB := $(LIB_DIR)/libsinshared.a
 LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/slab.o \
-               $(OBJ_DIR)/itoa.o $(OBJ_DIR)/parser.o $(OBJ_DIR)/lexer.o
+               $(OBJ_DIR)/itoa.o $(OBJ_DIR)/parser.o $(OBJ_DIR)/lexer.o \
+               $(OBJ_DIR)/error.o
 
 # Parser files for library
 PARSER_SOURCES := $(SRC_DIR)/parser.y

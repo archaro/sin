@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "error.h"
 #include "parser.h"
 #include "memory.h"
 #include "log.h"
@@ -38,9 +39,13 @@ int main(int argc, char **argv) {
   LOCAL_t local;
   local.count = 0;
   local.param_count = 0;
+  logmsg("Parsing...\n");
+  init_errmsg();
   bool result =  parse_source(source, sourcelen, out, &local);
 
   if (result) {
+    logmsg("Compilation completed: %ld bytes.\n",
+                                          out->nextbyte - out->bytecode);
     FILE *output;
     output = fopen(argv[2], "w");
     if (!output) {
@@ -50,6 +55,9 @@ int main(int argc, char **argv) {
       fwrite(out->bytecode, out->nextbyte - out->bytecode, 1, output);
       fclose(output);
     }
+  } else {
+    logerr("Error: (#%d) %s\n", local.errnum, errmsg[local.errnum]);
+    logerr("Compilation failed.\n");
   }
 
   FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
