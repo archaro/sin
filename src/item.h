@@ -87,6 +87,8 @@ ITEM_t *find_item(ITEM_t *root, const char *item_name);
 void delete_item(ITEM_t *root, const char *item_name);
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value);
 void get_itemname(ITEM_t *item, char *itemname);
+char *get_itemfilename(ITEM_t *item);
+bool save_itemsource(ITEM_t *item, char *source);
 void save_itemstore(const char *filename, ITEM_t *root); 
 ITEM_t *load_itemstore(const char *filename); 
 void dump_item(ITEM_t *item, char *item_name, bool isroot);

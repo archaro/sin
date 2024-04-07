@@ -539,6 +539,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   LOCAL_t local;
   local.count = 0;
   local.param_count = 0;
+  int plen = 0; // For the source reconstruction
 
   if (*nextop == 'P') {
     // Parameters definition follows.  Handle this first.
@@ -554,6 +555,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
       memcpy(param, nextop, param_len);
       param[param_len] = '\0';
       nextop += param_len;
+      plen += param_len;
       // Note that we don't check for duplicates - if the user is daft
       // enough to create multiple parameters with the same name, they 
       // deserve everything they get.
@@ -570,14 +572,14 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // Now we have the parameters (if any), get the source code for this item.
   VALUE_t itemname = pop_stack(stack);
   // First, how much code do we have?
-  uint16_t len;
-  memcpy(&len, nextop, 2);
+  uint16_t sclen;
+  memcpy(&sclen, nextop, 2);
   nextop += 2;
   // Now create a temporary buffer to hold the source code.
-  char *sourcecode = GROW_ARRAY(char, NULL, 0, len + 1);
-  memcpy(sourcecode, nextop, len);
-  sourcecode[len] = '\0';
-  nextop += len;
+  char *sourcecode = GROW_ARRAY(char, NULL, 0, sclen + 1);
+  memcpy(sourcecode, nextop, sclen);
+  sourcecode[sclen] = '\0';
+  nextop += sclen;
 
   // We have the source.  Compile it.
   DEBUG_LOG("Source to compile: %s\n", sourcecode);
@@ -585,13 +587,44 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   out->maxsize = 1024;
   out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, out->maxsize);
   out->nextbyte = out->bytecode;
-  bool result =  parse_source(sourcecode, len, out, &local);
+  bool result =  parse_source(sourcecode, sclen, out, &local);
 
   if (result) {
     // Compilation succeeded.  Assign it to the item.
     // The item type is ITEM_code.
     uint32_t len = out->nextbyte - out->bytecode;
-    insert_code_item(itemroot, itemname.s, len, out->bytecode);
+    ITEM_t *item = insert_code_item(itemroot, itemname.s, len,
+                                                            out->bytecode);
+    // Now reconstruct the source code and save it to srcroot.
+    plen += 2 * (local.param_count - 1);
+    len = plen + sclen + 13; // Big enough for everything!
+    char *src = GROW_ARRAY(char, NULL, 0, len);
+    src[0] = '\0';
+    strcat(src, "code ");
+    if (local.param_count > 0) {
+      strcat(src, "{");
+      for (int pc = 0; pc < local.param_count; pc++) {
+        strcat(src, local.id[pc]);
+        if (pc < (local.param_count -1)) {
+          strcat(src, ", ");
+        }
+      }
+      strcat(src, "} (");
+      strcat(src, sourcecode);
+      strcat(src, ");\n");
+    } else {
+      src[0] = '\0';
+      strcat(src, "code (");
+      strcat(src, sourcecode);
+      strcat(src, ");\n");
+    }
+    if (!save_itemsource(item, src)) {
+      char fullname[MAX_ITEM_NAME];
+      get_itemname(item, fullname);
+      logerr("Source was not saved.\nItem: %s\n", fullname);
+      logerr("Source:\n%s\n", src);
+    }
+    FREE_ARRAY(char, src, len);
     // Set the error item to a nil value.
     set_item(itemroot, "sys.error", VALUE_NIL);
     set_item(itemroot, "sys.error.msg", VALUE_NIL);
@@ -611,7 +644,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
 
   // Clean up.
   FREE_ARRAY(OUTPUT_t, out, sizeof(OUTPUT_t));
-  FREE_ARRAY(char, sourcecode, len + 1);
+  FREE_ARRAY(char, sourcecode, sclen + 1);
   FREE_ARRAY(char, itemname.s, strlen(itemname.s));
   for (int l = 0; l < local.count; l++) {
     free(local.id[l]);

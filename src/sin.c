@@ -4,6 +4,7 @@
 #include <string.h>
 #include <getopt.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "error.h"
 #include "memory.h"
@@ -23,8 +24,11 @@ Allocator allocator;
 // The Itemstore
 ITEM_t *itemroot = NULL;
 
+// The root of the source tree
+char *srcroot = NULL;
+
 void usage() {
-  logmsg("Sin interpreter.\nSyntax: sin <options> <input file>\n");
+  logmsg("Sin interpreter.\nSyntax: sin <options>\n");
   logmsg("Options:\n");
   logmsg(" -h, --help\t\tThis message.\n");
   logmsg(" -i, --itemstore <file>\tItemstore file to load.\n");
@@ -36,6 +40,11 @@ void usage() {
   logmsg("\t\t\tused.  The filename is suffixed with .log for stdout,\n");
   logmsg("\t\t\tand .err for stderr.\n");
   logmsg(" -o, --object <file>\tObject code to interpret.\n");
+  logmsg(" -s, --srcroot <dir>\tRoot of source tree.\n");
+  logmsg("\t\t\tIf this option is not supplied, the default directory\n");
+  logmsg("\t\t\t'./srcroot' is used, which will be created if it does\n");
+  logmsg("\t\t\tnot exist.  If this option is supplied the directory\n");
+  logmsg("\t\t\tgiven must exist or the interpreter will not run.\n");
 }
 
 int main(int argc, char **argv) {
@@ -63,9 +72,10 @@ int main(int argc, char **argv) {
     {"itemstore", required_argument, 0, 'i'},
     {"log", optional_argument, 0, 'l'},
     {"object", required_argument, 0, 'o'},
+    {"srcroot", required_argument, 0, 's'},
     {NULL, 0, 0, '\0'}
   };
-  while ((opt = getopt_long(argc, argv, "hi:l::o:", options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "hi:l::o:s:", options, NULL)) != -1) {
     switch(opt) {
       case 'h':
         usage();
@@ -102,7 +112,6 @@ int main(int argc, char **argv) {
       case 'o':
         // Mandatory: Name of the object code file.
         // Load a file to interpret, otherwise what's the point?
-        // The file is always the last argument.
         in = fopen(optarg, "r");
         if (!in) {
           logerr("Unable to open input file: %s\n", optarg);
@@ -116,11 +125,58 @@ int main(int argc, char **argv) {
         fclose(in);
         logmsg("Bytecode loaded: %d bytes.\n", filesize);
         break;
+      case 's':
+        // Optional: root directory of the source tree.
+        srcroot = strdup(optarg);
+        break;
       default:
         usage();
         return EXIT_FAILURE;
     }
   }
+
+  // Before we continue, has the source root been defined?
+  // If not, use the default.
+  if (!srcroot) {
+    srcroot = strdup("srcroot");
+    struct stat s;
+    int err = stat(srcroot, &s);
+    if (err == -1) {
+      // Doesn't exist, so create it.
+      mkdir(srcroot, 0777);
+      logmsg("Creating new source root in current directory.\n");
+    } else {
+      if(!S_ISDIR(s.st_mode)) {
+        // Exists, but not a directory.  Panic.
+        logerr("./%s exists but it is not a directory.\n", srcroot);
+        free(srcroot);
+        exit(EXIT_FAILURE);
+      }
+    }
+  } else {
+    // We have been given a source root, so does it exist?
+    struct stat s;
+    int err = stat(srcroot, &s);
+    if (err == -1) {
+      logerr("Directory %s does not exist.\n", srcroot);
+      free(srcroot);
+      exit(EXIT_FAILURE);
+    } else {
+      if(!S_ISDIR(s.st_mode)) {
+        // Exists, but not a directory
+        logerr("./%s exists but it is not a directory.\n", srcroot);
+        free(srcroot);
+        exit(EXIT_FAILURE);
+      } else {
+        if (access(srcroot, W_OK) != 0) {
+          logerr("./%s exists, but it is not writable.\n", srcroot);
+          free(srcroot);
+          exit(EXIT_FAILURE);
+        }
+      }
+    }
+  }
+  logmsg("Using '%s' as the source root.\n", srcroot);
 
   // Just check to see if we have been given some bytecode.
   if (!bytecode) {
@@ -177,6 +233,7 @@ int main(int argc, char **argv) {
   destroy_stack(vm.stack);
   destroy_callstack(vm.callstack);
   free(itemstore);
+  free(srcroot);
   destroy_item(itemroot);
   destroy_item(boot);
   destroy_allocator(&allocator);

@@ -1,8 +1,12 @@
 // The Item.  The nub and the gist of the whole brouhaha in a nutshell.
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <libgen.h>
+#include <errno.h>
 
+#include "util.h"
 #include "memory.h"
 #include "log.h"
 #include "item.h"
@@ -11,6 +15,10 @@
 // This is used to handle memory allocation for all uniform objects.
 // It is defined in sin.c
 extern Allocator allocator;
+
+// The root of the item source tree
+// Defined in sin.c
+extern char *srcroot;
 
 HASHTABLE_t *create_hashtable(int size) {
   // Create a hashtable with the given number of buckets
@@ -513,6 +521,59 @@ void get_itemname(ITEM_t *item, char *itemname) {
   } else {
     strcpy(itemname, item->name);
   }
+}
+
+char *get_itemfilename(ITEM_t *item) {
+  // Returns the filename of the item (only relevant if it is a source
+  // item).  The return value will need to be freed by the caller.
+  char *filename, *p;
+  char itemname[MAX_ITEM_NAME];
+  int l;
+
+  itemname[0] = '\0';
+  get_itemname(item, itemname);
+  l = strlen(itemname) + strlen(srcroot) + 13;
+  filename = GROW_ARRAY(char, NULL, 0, l);
+  p = itemname;
+  while (*p) {
+    if(*p == '.') *p = '/';
+    p++;
+  }
+  snprintf(filename, l, "%s/%s/source.sin", srcroot, itemname);
+  return filename;
+}
+
+bool save_itemsource(ITEM_t *item, char *source) {
+  // Saves the item source into srcroot.
+  // If the source cannot be saved for whatever reason, this is
+  // reported in the error log.  The function returns true if the
+  // source was saved, otherwise false.
+
+  char *filename = get_itemfilename(item);
+  // There is a much better way to do this, but I don't care right now.
+  char *dircopy = strdup(filename);
+  char *dir = dirname(dircopy);
+  bool res = make_path(dir);
+  free(dircopy);
+  if (!res) {
+    free(filename);
+    return false;
+  }
+  // When we arrive here, we know that the path exists.
+  FILE *out = fopen(filename, "w");
+  if (!out) {
+    logerr("Failed to open file %s: %s\n", filename, strerror(errno));
+    free(filename);
+    return false;
+  }
+  if (fputs(source, out) == EOF) {
+    logerr("Failed to write text to file %s\n", filename);
+  }
+  if (fclose(out) != 0) {
+    logerr("Failed to close file %s\n", filename);
+  }
+  free(filename);
+  return true;
 }
 
 void write_item(FILE *file, ITEM_t *item) {
