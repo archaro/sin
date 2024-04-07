@@ -502,6 +502,19 @@ void set_item(ITEM_t *root, const char *item_name, VALUE_t value) {
   }
 }
 
+void get_itemname(ITEM_t *item, char *itemname) {
+  // Returns the full name of an item.  The itemname buffer must be
+  // at least MAX_ITEM_NAME in length.
+  if (item->parent->parent) {
+    // We stop at the item before the root item.
+    get_itemname(item->parent, itemname);
+    strcat(itemname, ".");
+    strcat(itemname, item->name);
+  } else {
+    strcpy(itemname, item->name);
+  }
+}
+
 void write_item(FILE *file, ITEM_t *item) {
   // Write the item name as a fixed size of 32 bytes
   char name[33]; // 32 characters + 1 for null-terminator

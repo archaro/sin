@@ -14,6 +14,11 @@
 #include "slab.h"
 #include "value.h"
 
+// Items are up to 8 layers deep, and each layer name is a maximum of
+// 32 characters.  There is a dot separating each layer name (7 in total)
+// and a terminating null.  So the maximum size is (32 * 8) + 7 + 1.
+#define MAX_ITEM_NAME 264
+
 typedef struct Item ITEM_t;
 typedef struct Entry ENTRY_t;
 typedef struct HashTable HASHTABLE_t;
@@ -81,6 +86,7 @@ ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
 ITEM_t *find_item(ITEM_t *root, const char *item_name);
 void delete_item(ITEM_t *root, const char *item_name);
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value);
+void get_itemname(ITEM_t *item, char *itemname);
 void save_itemstore(const char *filename, ITEM_t *root); 
 ITEM_t *load_itemstore(const char *filename); 
 void dump_item(ITEM_t *item, char *item_name, bool isroot);
