@@ -54,6 +54,7 @@ integer     [0-9]+
 <INITIAL>{
   "and"         { return TAND; }
   "code"        { BEGIN(CODE); return TCODE; }
+  "delete"      { return TDELETE; }
   "do"          { return TDO; }
   "else"        { return TELSE; }
   "elsif"       { return TELSIF; }

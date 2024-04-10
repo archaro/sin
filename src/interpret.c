@@ -914,10 +914,23 @@ uint8_t *op_assembleitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *op_delete(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // When this opcode is encountered, an item will previously have been
+  // assembled and pushed onto the stack (or nil if the assembly failed).
+  // Pop it, delete it, and return nothing.
+  VALUE_t val = pop_stack(stack);
+  if (val.type == VALUE_str) {
+    delete_item(itemroot, val.s);
+    FREE_ARRAY(char, val.s, strlen(val.s)+1);
+  }
+  DISASS_LOG("OP_DELETE\n");
+  return nextop;
+}
+
 uint8_t *op_exists(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   // When this opcode is encountered, an item will previously have been
-  // assembled and pushed onto the stack (or nil if the item does not
-  // exist).  Pop whatever is on the stack and evaluate it.  Push
+  // assembled and pushed onto the stack (or nil if the assembly failed).
+  // Pop whatever is on the stack and evaluate it.  Push
   // true or false, depending on the result.
   VALUE_t val = pop_stack(stack);
   if (val.type == VALUE_str) {
@@ -966,6 +979,7 @@ void init_interpreter() {
   opcode['C'] = op_assignitem;
   opcode['F'] = op_fetchitem;
   opcode['I'] = op_assembleitem;
+  opcode['W'] = op_delete;
   opcode['X'] = op_exists;
 }
 

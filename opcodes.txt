@@ -67,6 +67,8 @@ P - start of parameters definition.  There follows a series of strings,
     parser is called.
 V - Interpret the next byte as a local variable index, turn the contents
     of that variable into a string, and use that as the layer name.
-X - exists. Pop the top of the stack.  If it is an item, return true,
-    otherwise return false.
+W - delete. Pop the top of the stack.  If it is a valid item, delete it.
+    Push nothing.
+X - exists. Pop the top of the stack.  If it is an item, push true,
+    otherwise push false.
 
