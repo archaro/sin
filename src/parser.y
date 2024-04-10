@@ -473,6 +473,7 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
 %left TLAYERSEP
 %right TDEREFSTART TCODE
 %left TDEREFEND
+%nonassoc TEXISTS
 %right UMINUS TNOT
 %nonassoc TLPAREN TRPAREN TLBRACE TRBRACE TCOMMA
 
@@ -510,8 +511,7 @@ stmt:   TWHILE                  {
                            state->local->errnum = ERR_COMP_TOOMANYLOCALS;
                            YYERROR; }
                                                                                                      } expr { emit_local_assign($1, state->out, state->local); }
-        | item { finalise_item(state);
-                 emit_byte('E', state->out); } TASSIGN item_assignment
+        | complete_item TASSIGN item_assignment
         | TLOCAL TINC   { bool tf = emit_local_op($1, scanner, state, 'f');
                           free($1);
                           if (!tf) YYERROR; }
@@ -552,6 +552,7 @@ expr:     TLOCAL        { bool tf = emit_local_op($1, scanner, state, 'e');
         | TLPAREN expr TRPAREN  { }
         | TNOT expr             { emit_byte('x', state->out); }
         | TMINUS expr %prec UMINUS { emit_byte('n', state->out); }
+        | funcop
         | TUNKNOWNCHAR          {
                                   state->local->errnum =
                                                       ERR_COMP_UNKNOWNCHAR;
@@ -560,7 +561,11 @@ expr:     TLOCAL        { bool tf = emit_local_op($1, scanner, state, 'e');
                                 }
         ;
 
-elsif_else_opt : /* empty */
+funcop:   TEXISTS TLBRACE complete_item TRBRACE { emit_byte('X',
+                                                             state->out); }
+        ;
+
+elsif_else_opt: /* empty */
         | TELSIF { fixup_last_else_jump(state); }
           expr { emit_jump_to_next_else(state); }
           TTHEN stmtlist { emit_jump_to_endif(state); } elsif_else_opt
@@ -590,6 +595,9 @@ arg_list: expr { state->arg_count[state->item_count]++; }
 item_assignment: expr { emit_byte('C', state->out); }
         | TCODE { emit_byte('B', state->out); }
           params TCODEBODY { emit_string($4, state->out); free($4); }
+        ;
+
+complete_item: item { finalise_item(state); emit_byte('E', state->out); }
         ;
 
 item:   first_layer

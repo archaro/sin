@@ -59,6 +59,7 @@ integer     [0-9]+
   "elsif"       { return TELSIF; }
   "endif"       { return TENDIF; }
   "endwhile"    { return TENDWHILE; }
+  "exists"      { return TEXISTS; }
   "if"          { return TIF; }
   "or"          { return TOR; }
   "return"      { return TRETURN; }

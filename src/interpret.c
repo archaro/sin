@@ -914,6 +914,26 @@ uint8_t *op_assembleitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *op_exists(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // When this opcode is encountered, an item will previously have been
+  // assembled and pushed onto the stack (or nil if the item does not
+  // exist).  Pop whatever is on the stack and evaluate it.  Push
+  // true or false, depending on the result.
+  VALUE_t val = pop_stack(stack);
+  if (val.type == VALUE_str) {
+    ITEM_t *i = find_item(itemroot, val.s);
+    FREE_ARRAY(char, val.s, strlen(val.s)+1);
+    val.type = VALUE_bool;
+    val.i = i ? 1 : 0;
+  } else {
+    val.type = VALUE_bool;
+    val.i = 0;
+  }
+  push_stack(stack, val);
+  DISASS_LOG("OP_EXISTS\n");
+  return nextop;
+}
+
 void init_interpreter() {
   // This function simply sets up the opcode dispatch table.
   for (int o=0; o<256; o++) {
@@ -946,6 +966,7 @@ void init_interpreter() {
   opcode['C'] = op_assignitem;
   opcode['F'] = op_fetchitem;
   opcode['I'] = op_assembleitem;
+  opcode['X'] = op_exists;
 }
 
 VALUE_t interpret(ITEM_t *item) {
