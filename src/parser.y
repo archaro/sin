@@ -191,15 +191,14 @@ void emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
   }
 }
 
-bool emit_local_op(char *id, yyscan_t locp, SCANNER_STATE_t *state,
-                                                                  char op) {
+bool emit_local_op(char *id, LOCAL_t *local, OUTPUT_t *out, char op) {
   // Emit the specified local operation ('f' for increment, 'g'
   // for decrement), followed by the local to increment or decrement.
-  emit_byte(op, state->out);
-  if (emit_local_index(id, state->out, state->local)) {
+  emit_byte(op, out);
+  if (emit_local_index(id, out, local)) {
     return true;
   } else {
-    state->local->errnum = ERR_COMP_LOCALBEFOREDEF;
+    local->errnum = ERR_COMP_LOCALBEFOREDEF;
     return false;
   }
 }
@@ -512,16 +511,19 @@ stmt:   TWHILE                  {
                            YYERROR; }
                                                                                                      } expr { emit_local_assign($1, state->out, state->local); }
         | complete_item TASSIGN item_assignment
-        | TLOCAL TINC   { bool tf = emit_local_op($1, scanner, state, 'f');
+        | TLOCAL TINC   { bool tf = emit_local_op($1, state->local,
+                                                          state->out, 'f');
                           free($1);
                           if (!tf) YYERROR; }
-        | TLOCAL TDEC   { bool tf = emit_local_op($1, scanner, state, 'g');
+        | TLOCAL TDEC   { bool tf = emit_local_op($1, state->local,
+                                                          state->out, 'g');
                           free($1);
                           if (!tf) YYERROR; }
         | expr                  { }
         ;
 
-expr:     TLOCAL        { bool tf = emit_local_op($1, scanner, state, 'e');
+expr:     TLOCAL        { bool tf = emit_local_op($1, state->local,
+                                                          state->out, 'e');
                           free($1); 
                           if (!tf) YYERROR; }
         |	TINTEGER      { emit_byte('p', state->out);
@@ -616,7 +618,8 @@ dereference:  TDEREFSTART { emit_byte('D', state->item_buf); }
               deref_content TDEREFEND
         ;
 
-deref_content: TLOCAL { bool tf = emit_local_op($1, scanner, state, 'V');
+deref_content: TLOCAL { bool tf = emit_local_op($1, state->local,
+                                                    state->item_buf, 'V');
                         free($1);
                         if (!tf) YYERROR; }
         | item        { emit_byte('E', state->item_buf); }
