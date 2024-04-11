@@ -1,5 +1,7 @@
 // The Sinistra VM object
 
+#include "signal.h"
+
 #include "memory.h"
 #include "log.h"
 #include "vm.h"
@@ -11,7 +13,7 @@ CALLSTACK_t *make_callstack() {
   // Allocate space for a new stack, and return it.
   CALLSTACK_t *stack = NULL;
   stack = GROW_ARRAY(CALLSTACK_t, stack, 0, 1);
-  stack->max = CALLSTACK_SIZE;
+  stack->max = CALLSTACK_SIZE - 1;
   stack->current = -1;
   return stack;
 }
@@ -42,6 +44,7 @@ void push_callstack(ITEM_t *item, uint8_t *nextop, uint8_t args) {
     vm.stack->base = vm.stack->current + 1 - args;
   } else {
     logerr("Callstack overflow.\n");
+    raise(SIGUSR1);
   }
 }
 
@@ -66,6 +69,7 @@ FRAME_t *pop_callstack() {
     return &vm.callstack->entry[vm.callstack->current + 1];
   }
   logerr("Callstack underflow.\n");
+  raise(SIGUSR1);
   return NULL;
 }
 

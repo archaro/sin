@@ -5,6 +5,8 @@
 #include <getopt.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <signal.h>
+#include <setjmp.h>
 
 #include "error.h"
 #include "memory.h"
@@ -14,6 +16,9 @@
 #include "stack.h"
 #include "vm.h"
 #include "interpret.h"
+
+// Error handling
+jmp_buf recovery;
 
 // The Virtual Machine
 VM_t vm;
@@ -26,6 +31,13 @@ ITEM_t *itemroot = NULL;
 
 // The root of the source tree
 char *srcroot = NULL;
+
+void handle_sigusr1(int sig) {
+  // SIGUSR1 is raised in various places, and should cause the interpret()
+  // function to terminate.
+  logerr(errmsg[ERR_RUNTIME_SIGUSR1]);
+  longjmp(recovery, ERR_RUNTIME_SIGUSR1);
+}
 
 void usage() {
   logmsg("Sin interpreter.\nSyntax: sin <options>\n");
@@ -63,6 +75,14 @@ int main(int argc, char **argv) {
   // before even the options are processed.
   init_allocator(&allocator);
   init_errmsg();
+  struct sigaction act;
+  act.sa_handler = handle_sigusr1;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = 0;
+  if (sigaction(SIGUSR1, &act, NULL) < 0) {
+    logerr("Unable to install signal handler.\n");
+    exit(EXIT_FAILURE);
+  }
 
   // Are there any interesting options?
   int opt;
@@ -210,7 +230,18 @@ int main(int argc, char **argv) {
   boot->bytecode = bytecode;
   boot->bytecode_len = filesize;
 
-  // Now we have some bytecode, let's see what it does.
+  // This is a relatively safe restart point if things turn ugly.
+  if (setjmp(recovery) == 0) {
+    logmsg("Setting up error handler.\n");
+  } else {
+    logerr("SIGUSR1 received.  Restarting boot item.\n");
+    logerr("Destroying and recreating all stacks.\n");
+    destroy_stack(vm.stack);
+    destroy_callstack(vm.callstack);
+    vm.stack = make_stack();
+    vm.callstack = make_callstack();
+  }
+  // Execute the boot item.  This is the main game loop.
   VALUE_t ret = interpret(boot);
   if (ret.type == VALUE_int) {
     logmsg("Bytecode interpreter returned: %ld\n", ret.i);

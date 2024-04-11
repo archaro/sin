@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 
 #include "stack.h"
 #include "memory.h"
@@ -12,7 +13,7 @@ STACK_t *make_stack() {
   // Allocate space for a new stack, and return it.
   STACK_t *stack = NULL;
   stack = GROW_ARRAY(STACK_t, stack, 0, 1);
-  stack->max = STACK_SIZE;
+  stack->max = STACK_SIZE - 1;
   stack->current = -1;
   stack->base = 0;
   return stack;
@@ -53,6 +54,7 @@ void push_stack(STACK_t *stack, VALUE_t obj) {
     stack->stack[stack->current] = obj;
   } else {
     logerr("Stack overflow.\n");
+    raise(SIGUSR1);
   }
 }
 
@@ -68,6 +70,7 @@ VALUE_t pop_stack(STACK_t *stack) {
     return val;
   }
   logerr("Stack underflow.\n");
+  raise(SIGUSR1);
   return VALUE_NIL;
 }
 
@@ -84,7 +87,7 @@ void throwaway_stack(STACK_t *stack) {
     stack->stack[stack->current].type = VALUE_nil;
     stack->current--;
   }
-  logerr("Stack underflow.\n");
+  logerr("Stack cleared.\n");
 }
 
 VALUE_t peek_stack(STACK_t *stack) {

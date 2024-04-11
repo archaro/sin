@@ -999,7 +999,7 @@ VALUE_t interpret(ITEM_t *item) {
   vm.stack->locals = numlocals;
   vm.stack->params = numparams;
   DEBUG_LOG("Making space for %d locals (including %d parameters).\n",
-                                                      numlocals, numparams);
+                                                    numlocals, numparams);
   DEBUG_LOG("Current top of stack is: %d\n", vm.stack->current);
   // The actual bytecode starts at the third byte.
   uint8_t *op = item->bytecode + 2; 
