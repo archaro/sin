@@ -64,6 +64,7 @@ integer     [0-9]+
   "if"          { return TIF; }
   "or"          { return TOR; }
   "return"      { return TRETURN; }
+  "sys"         { yylval->string = strdup(yytext); return TLIBNAME; }
   "then"        { return TTHEN; }
   "while"       { return TWHILE; }
   "="           { return TASSIGN; }

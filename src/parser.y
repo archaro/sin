@@ -76,6 +76,7 @@
 #include "error.h"
 #include "parser.h"
 #include "memory.h"
+#include "libcalls.h"
 
 typedef void *yyscan_t;
 int yylex (YYSTYPE *yylval_param, yyscan_t yyscanner);
@@ -460,6 +461,7 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
 %token <string> TSTRINGLIT
 %token <string> TLOCAL
 %token <string> TLAYER
+%token <string> TLIBNAME
 %token <string> TCODEBODY
 %token <string> TUNKNOWNCHAR
 %nonassoc TSEMI TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF TRETURN
@@ -555,6 +557,7 @@ expr:     TLOCAL        { bool tf = emit_local_op($1, state->local,
         | TNOT expr             { emit_byte('x', state->out); }
         | TMINUS expr %prec UMINUS { emit_byte('n', state->out); }
         | funcop
+        | libcall
         | TUNKNOWNCHAR          {
                                   state->local->errnum =
                                                       ERR_COMP_UNKNOWNCHAR;
@@ -567,6 +570,29 @@ funcop:   TEXISTS TLBRACE complete_item TRBRACE { emit_byte('X',
                                                              state->out); }
 funcop:   TDELETE TLBRACE complete_item TRBRACE { emit_byte('W',
                                                              state->out); }
+        ;
+
+libcall:  TLIBNAME TLAYERSEP TLAYER { prepare_item(state); }
+                       args { uint8_t lib, call, args;
+                         uint8_t arg_count =
+                                       state->arg_count[state->item_count];
+                         if (libcall_lookup($1, $3, &lib, &call, &args)) {
+                           free($1); free($3);
+                           if (arg_count != args) {
+                             state->local->errnum = ERR_COMP_WRONGARGS;
+                             YYERROR;
+                           }
+                           finalise_item(state);
+                           emit_byte('A', state->out);
+                           emit_byte(lib, state->out);
+                           emit_byte(call, state->out);
+                           emit_byte(arg_count, state->out);
+                         } else {
+                           state->local->errnum =
+                                           ERR_COMP_UNKNOWNLIB;
+                           free($1); free($3); YYERROR;
+                         }
+                       }
         ;
 
 elsif_else_opt: /* empty */

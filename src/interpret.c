@@ -504,6 +504,19 @@ uint8_t *op_logicalor(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *op_libcall(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+  // The next three bytes are the library name, function within it, and
+  // number of arguments on the stack.  Handle them, find the function
+  // for this libcall, and hand over to it.
+  uint8_t lib, func, args;
+  lib = *nextop++;
+  func = *nextop++;
+  args = *nextop++;
+  DEBUG_LOG("Calling library %d, function %d with %d arguments.\n", lib,
+                                                              func, args);
+  return nextop;
+}
+
 void assignitem(VALUE_t *itemname, VALUE_t val) {
   // Given two values, use the first as the name of an item, and
   // the second as the value to assign to it.  The item name must be
@@ -975,6 +988,7 @@ void init_interpreter() {
   opcode['x'] = op_logicalnot;
   opcode['y'] = op_logicaland;
   opcode['z'] = op_logicalor;
+  opcode['A'] = op_libcall;
   opcode['B'] = op_assigncodeitem;
   opcode['C'] = op_assignitem;
   opcode['F'] = op_fetchitem;
