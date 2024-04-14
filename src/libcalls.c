@@ -14,7 +14,7 @@ extern VM_t vm;
 // It must be initialised before any function in this file is called.
 extern ITEM_t *itemroot;
 
-typedef uint8_t *(*OP_t)(uint8_t *nextop, STACK_t *stack, ITEM_t *item);
+typedef uint8_t *(*OP_t)(uint8_t *nextop, ITEM_t *item);
 
 const LIBCALL_t libcalls[] = {
   {"sys", "backup", 1, 0, 0},

@@ -22,35 +22,35 @@ extern VM_t vm;
 // It must be initialised before any function in this file is called.
 extern ITEM_t *itemroot;
 
-typedef uint8_t *(*OP_t)(uint8_t *nextop, STACK_t *stack, ITEM_t *item);
+typedef uint8_t *(*OP_t)(uint8_t *nextop, ITEM_t *item);
 static OP_t opcode[256];
 
-uint8_t *op_nop(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_nop(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *op_undefined(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_undefined(uint8_t *nextop, ITEM_t *item) {
   logerr("Undefined opcode: %c\n", *(nextop-1));
   return nextop;
 }
 
-uint8_t *op_pushint(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_pushint(uint8_t *nextop, ITEM_t *item) {
   // Push an int64 onto the stack.
   // Read the next 8 bytes and make an VALUE_t
   VALUE_t v;
   v.type = VALUE_int;
   v.i = *(int64_t*)nextop;
-  push_stack(stack, v);
+  push_stack(vm.stack, v);
   DISASS_LOG("OP_PUSHINT: %ld\n", v.i);
   return nextop+8;
 }
 
-uint8_t *op_inclocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_inclocal(uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the locals.
   // If that local is an int, increment it.  Otherwise complain.
-  uint8_t index = *nextop + stack->base;
-  if (stack->stack[index].type == VALUE_int) {
-    stack->stack[index].i++;
+  uint8_t index = *nextop + vm.stack->base;
+  if (vm.stack->stack[index].type == VALUE_int) {
+    vm.stack->stack[index].i++;
   } else {
     logerr("Trying to increment non integer local variable.\n");
   }
@@ -58,12 +58,12 @@ uint8_t *op_inclocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop+1;
 }
 
-uint8_t *op_declocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_declocal(uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the locals.
   // If that local is an int, decrement it.  Otherwise complain.
-  uint8_t index = *nextop + stack->base;
-  if (stack->stack[index].type == VALUE_int) {
-    stack->stack[index].i--;
+  uint8_t index = *nextop + vm.stack->base;
+  if (vm.stack->stack[index].type == VALUE_int) {
+    vm.stack->stack[index].i--;
   } else {
     logerr("Trying to decrement non integer local variable.\n");
   }
@@ -71,7 +71,7 @@ uint8_t *op_declocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop+1;
 }
 
-uint8_t *op_jump(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_jump(uint8_t *nextop, ITEM_t *item) {
   // Unconditional jump.  Interpret the next two bytes as a
   // SIGNED int, and then modify the bytecode pointer by that amount.
   int16_t offset;
@@ -80,14 +80,14 @@ uint8_t *op_jump(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop + offset;
 }
 
-uint8_t *op_jumpfalse(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
   // Evaluate the top of the stack.  If false, interpret next
   // two bytes as a SIGNED int, and modify the bytecode pointer
   // by that amount.  Alternatively, if true, simply skip the next
   // two bytes and go on to the next instruction.
 
   VALUE_t v1;
-  v1 = pop_stack(stack);
+  v1 = pop_stack(vm.stack);
   // "true" is a true bool value, or an int value != 0.
   // Everything else is false.
   if ((v1.type == VALUE_bool || v1.type == VALUE_int) && v1.i != 0) {
@@ -104,36 +104,36 @@ uint8_t *op_jumpfalse(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   }
 }
 
-uint8_t *op_savelocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_savelocal(uint8_t *nextop, ITEM_t *item) {
   // This is the quickest way, without extra pushes and pops.
   // Interpret the next byte as an index into the stack.
-  uint8_t index = *nextop + stack->base;
+  uint8_t index = *nextop + vm.stack->base;
   // First check if the current value is a string.  If so, free it.
-  if (stack->stack[index].type == VALUE_str) {
-    free(stack->stack[index].s);
+  if (vm.stack->stack[index].type == VALUE_str) {
+    free(vm.stack->stack[index].s);
   }
   // Then copy the top of the stack into that location.
-  memcpy(&(stack->stack[index]), &(stack->stack[stack->current]),
+  memcpy(&(vm.stack->stack[index]), &(vm.stack->stack[vm.stack->current]),
                                                     sizeof(VALUE_t));
   // Then reduce the size of the stack.
-  stack->current--;
+  vm.stack->current--;
   DISASS_LOG("OP_SAVELOCAL: index %d\n", index);
   return nextop+1;
 }
 
-uint8_t *op_getlocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_getlocal(uint8_t *nextop, ITEM_t *item) {
   // This is the quickest way, without extra pushes and pops.
   // Interpret the next byte as an index into the stack.
-  uint8_t index = *nextop + stack->base;
+  uint8_t index = *nextop + vm.stack->base;
 
   // Then increase the size of the stack.
-  stack->current++;
+  vm.stack->current++;
   // Then copy that location to the top of the stack.
-  memcpy(&(stack->stack[stack->current]), &(stack->stack[index]),
+  memcpy(&(vm.stack->stack[vm.stack->current]), &(vm.stack->stack[index]),
                                                     sizeof(VALUE_t));
 #ifdef DISASS
   VALUE_t v;
-  v = peek_stack(stack);
+  v = peek_stack(vm.stack);
   switch (v.type) {
     case VALUE_int:
       DISASS_LOG("OP_GETLOCAL: index %d value %d.\n", index, v.i);
@@ -148,7 +148,7 @@ uint8_t *op_getlocal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop+1;
 }
 
-uint8_t *op_pushstr(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_pushstr(uint8_t *nextop, ITEM_t *item) {
   // Push a string literal onto the stack.
   VALUE_t v;
   v.type = VALUE_str;
@@ -159,24 +159,24 @@ uint8_t *op_pushstr(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   v.s = GROW_ARRAY(char, NULL, 0, len+1);
   memcpy(v.s, nextop, len);
   v.s[len] = 0;
-  push_stack(stack, v);
+  push_stack(vm.stack, v);
   DISASS_LOG("OP_PUSHSTR: %s\n", v.s);
   return nextop + len;
 }
 
-uint8_t *op_add(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_add(uint8_t *nextop, ITEM_t *item) {
   // Pop two values from the stack.  If both ints, add them and push the
   // result onto the stack.  If both strings, concatenate them and do same.
   // If disparate types, push NIL onto the stack.
   VALUE_t v1, v2;
-  v1 = pop_stack(stack);
-  v2 = pop_stack(stack);
+  v1 = pop_stack(vm.stack);
+  v2 = pop_stack(vm.stack);
   // It makes sense to treat nil as 0 in this context.
   if ((v1.type == VALUE_nil || v1.type == VALUE_int) &&
                             (v2.type==VALUE_nil || v2.type == VALUE_int)) {
     v2.i += v1.i;
     v2.type = VALUE_int;
-    push_stack(stack, v2);
+    push_stack(vm.stack, v2);
   } else if (v1.type == VALUE_str && v2.type == VALUE_str) {
     char *newstring;
     newstring = GROW_ARRAY(char, NULL, 0, strlen(v1.s) + strlen(v2.s) + 1);
@@ -185,7 +185,7 @@ uint8_t *op_add(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
     FREE_ARRAY(char, v1.s, strlen(v1.s) + 1);
     FREE_ARRAY(char, v2.s, strlen(v2.s) + 1);
     v2.s = newstring;
-    push_stack(stack, v2);
+    push_stack(vm.stack, v2);
   } else {
     if (v1.type == VALUE_str) {
       free(v1.s);
@@ -194,19 +194,19 @@ uint8_t *op_add(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
       free(v2.s);
     }
     logerr("Trying to add mismatched types '%c' and '%c'.  Result is NIL.\n", v1.type, v2.type);
-    push_stack(stack, VALUE_NIL);
+    push_stack(vm.stack, VALUE_NIL);
   }
   DISASS_LOG("OP_ADD: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
-uint8_t *op_subtract(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_subtract(uint8_t *nextop, ITEM_t *item) {
   // Pop two values, subtract the last from the first, then push the result
   // onto the stack. If either of the values is not an int, the result
   // is nil.
   VALUE_t v1, v2;
-  v1 = pop_stack(stack);
-  v2 = pop_stack(stack);
+  v1 = pop_stack(vm.stack);
+  v2 = pop_stack(vm.stack);
   if (v1.type == VALUE_int && v1.type == VALUE_int) {
     v2.i -= v1.i;
     v2.type = VALUE_int;
@@ -221,18 +221,18 @@ uint8_t *op_subtract(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
     }
     v2 = VALUE_NIL;
   }
-  push_stack(stack, v2);
+  push_stack(vm.stack, v2);
   return nextop;
 }
 
-uint8_t *op_divide(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_divide(uint8_t *nextop, ITEM_t *item) {
   // Pop two values, divide the last by the first, then push the result
   // onto the stack. If either of the values is not an int, the result
   // is nil.
   // Trap divide by zero and substitute a result of zero.
   VALUE_t v1, v2;
-  v1 = pop_stack(stack);
-  v2 = pop_stack(stack);
+  v1 = pop_stack(vm.stack);
+  v2 = pop_stack(vm.stack);
   if (v1.type == VALUE_int && v1.type == VALUE_int) {
     if (v1.i == 0) {
       logerr("Attempt to divide by zero.  Substitute zero as result.\n");
@@ -252,16 +252,16 @@ uint8_t *op_divide(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
     v2 = VALUE_NIL;
   }
   v2.type = VALUE_int;
-  push_stack(stack, v2);
+  push_stack(vm.stack, v2);
   return nextop;
 }
 
-uint8_t *op_multiply(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_multiply(uint8_t *nextop, ITEM_t *item) {
   // Pop two values, multiply them together, then push the result onto the
   // stack.  If either of the values is not an int, the result is nil.
   VALUE_t v1, v2;
-  v1 = pop_stack(stack);
-  v2 = pop_stack(stack);
+  v1 = pop_stack(vm.stack);
+  v2 = pop_stack(vm.stack);
   if (v1.type == VALUE_int && v1.type == VALUE_int) {
     v2.i *= v1.i;
     v2.type = VALUE_int;
@@ -276,235 +276,236 @@ uint8_t *op_multiply(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
     }
     v2 = VALUE_NIL;
   }
-  push_stack(stack, v2);
+  push_stack(vm.stack, v2);
   return nextop;
 }
 
-uint8_t *op_negate(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_negate(uint8_t *nextop, ITEM_t *item) {
   // If the top value on the stack is an int, negate it.
   //  Complain bitterly if not.
-  if (stack->stack[stack->current].type == VALUE_int) {
-    stack->stack[stack->current].i = -stack->stack[stack->current].i;
+  if (vm.stack->stack[vm.stack->current].type == VALUE_int) {
+    vm.stack->stack[vm.stack->current].i = -vm.stack->stack[vm.stack->current].i;
   } else {
     logerr("Attempt to negate a value of type '%d'.\n",
-                                    stack->stack[stack->current].type);
+                                 vm.stack->stack[vm.stack->current].type);
   }
-  DISASS_LOG("OP_NEGATE: type %d\n", stack->stack[stack->current].type);
+  DISASS_LOG("OP_NEGATE: type %d\n", vm.stack->stack[vm.stack->current].type);
   return nextop;
 }
 
-uint8_t *op_equal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_equal(uint8_t *nextop, ITEM_t *item) {
   // Compare the top two items on the stack and push back a VALUE_bool
   // that is either true or false.  Be sensible about what is equal.
   // At the moment pairs of bools, ints, or strings are considered.
   VALUE_t v1, v2, result;
-  v1 = pop_stack(stack);
-  v2 = pop_stack(stack);
+  v1 = pop_stack(vm.stack);
+  v2 = pop_stack(vm.stack);
   result.type = VALUE_bool;
   result.i = 1; // default to true
   if (v1.type == VALUE_int && v2.type == VALUE_int && v1.i == v2.i) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } else if (v1.type == VALUE_str && v2.type == VALUE_str &&
                                                 strcmp(v1.s, v2.s) == 0) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
                                                    && v1.i == v2.i) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } 
   // If we get here, there is no equality
   result.i = 0;
-  push_stack(stack, result);
+  push_stack(vm.stack, result);
   DISASS_LOG("OP_EQUAL: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
-uint8_t *op_notequal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_notequal(uint8_t *nextop, ITEM_t *item) {
   // The logical reverse of op_equal.
   // Note that mismatched types are always not equal.
   VALUE_t v1, v2, result;
-  v1 = pop_stack(stack);
-  v2 = pop_stack(stack);
+  v1 = pop_stack(vm.stack);
+  v2 = pop_stack(vm.stack);
   result.type = VALUE_bool;
   result.i = 1; // default to false
   if (v1.type == VALUE_int && v2.type == VALUE_int && v1.i != v2.i) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } else if (v1.type == VALUE_str && v2.type == VALUE_str &&
                                                 strcmp(v1.s, v2.s) != 0) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
                                                    && v1.i != v2.i) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } else if (v1.type != v2.type) {
     // If the types do not match, there is no equality
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   }
   // If we get here there is equality, so return false.
   result.i = 0;
-  push_stack(stack, result);
+  push_stack(vm.stack, result);
   DISASS_LOG("OP_NOTEQUAL: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
-uint8_t *op_lessthan(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_lessthan(uint8_t *nextop, ITEM_t *item) {
   // Compare the top two items on the stack and push back a VALUE_bool
   // that is either true or false.
   // At the moment pairs of bools or ints are considered.
   VALUE_t v1, v2, result;
-  v1 = pop_stack(stack);
-  v2 = pop_stack(stack);
+  v1 = pop_stack(vm.stack);
+  v2 = pop_stack(vm.stack);
   result.type = VALUE_bool;
   result.i = 1; // default to true
   if (v1.type == VALUE_int && v2.type == VALUE_int && v2.i < v1.i) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
                                                    && v2.i < v1.i) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } 
   // If we get here the comparison is false
   result.i = 0;
-  push_stack(stack, result);
+  push_stack(vm.stack, result);
   DISASS_LOG("OP_LESSTHAN: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
-uint8_t *op_lessthanorequal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_lessthanorequal(uint8_t *nextop, ITEM_t *item) {
   // Compare the top two items on the stack and push back a VALUE_bool
   // that is either true or false.
   // At the moment pairs of bools or ints are considered.
   VALUE_t v1, v2, result;
-  v1 = pop_stack(stack);
-  v2 = pop_stack(stack);
+  v1 = pop_stack(vm.stack);
+  v2 = pop_stack(vm.stack);
   result.type = VALUE_bool;
   result.i = 1; // default to true
   if (v1.type == VALUE_int && v2.type == VALUE_int && v2.i <= v1.i) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
                                                    && v2.i <= v1.i) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } 
   // If we get here the comparison is false
   result.i = 0;
-  push_stack(stack, result);
+  push_stack(vm.stack, result);
   DISASS_LOG("OP_LTEQ: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
-uint8_t *op_greaterthan(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_greaterthan(uint8_t *nextop, ITEM_t *item) {
   // Compare the top two items on the stack and push back a VALUE_bool
   // that is either true or false.
   // At the moment pairs of bools or ints are considered.
   VALUE_t v1, v2, result;
-  v1 = pop_stack(stack);
-  v2 = pop_stack(stack);
+  v1 = pop_stack(vm.stack);
+  v2 = pop_stack(vm.stack);
   result.type = VALUE_bool;
   result.i = 1; // default to true
   if (v1.type == VALUE_int && v2.type == VALUE_int && v2.i > v1.i) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
                                                    && v2.i > v1.i) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } 
   // If we get here the comparison is false
   result.i = 0;
-  push_stack(stack, result);
+  push_stack(vm.stack, result);
   DISASS_LOG("OP_GREATERTHAN: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
-uint8_t *op_greaterthanorequal(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_greaterthanorequal(uint8_t *nextop, ITEM_t *item) {
   // Compare the top two items on the stack and push back a VALUE_bool
   // that is either true or false.
   // At the moment pairs of bools or ints are considered.
   VALUE_t v1, v2, result;
-  v1 = pop_stack(stack);
-  v2 = pop_stack(stack);
+  v1 = pop_stack(vm.stack);
+  v2 = pop_stack(vm.stack);
   result.type = VALUE_bool;
   result.i = 1; // default to true
   if (v1.type == VALUE_int && v2.type == VALUE_int && v2.i >= v1.i) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
                                                    && v2.i >= v1.i) {
-    push_stack(stack, result);
+    push_stack(vm.stack, result);
     return nextop;
   } 
   // If we get here the comparison is false
   result.i = 0;
-  push_stack(stack, result);
+  push_stack(vm.stack, result);
   DISASS_LOG("OP_GTEQ: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
-uint8_t *op_logicalnot(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_logicalnot(uint8_t *nextop, ITEM_t *item) {
   // Logically negate the value on top of the stack.
   // Note that this operation CONVERTS the value on top of the stack to a
   // VALUE_bool if it is not already.
-  switch (stack->stack[stack->current].type) {
+  switch (vm.stack->stack[vm.stack->current].type) {
     case VALUE_bool:
-      stack->stack[stack->current].i = !(stack->stack[stack->current].i);
+      vm.stack->stack[vm.stack->current].i =
+                                  !(vm.stack->stack[vm.stack->current].i);
       break;
     case VALUE_int:
       // If the int value is nonzero, then false, else true.
-      stack->stack[stack->current].type = VALUE_bool;
-      if (stack->stack[stack->current].i) {
-        stack->stack[stack->current].i = 0;
+      vm.stack->stack[vm.stack->current].type = VALUE_bool;
+      if (vm.stack->stack[vm.stack->current].i) {
+        vm.stack->stack[vm.stack->current].i = 0;
       } else {
-        stack->stack[stack->current].i = 1;
+        vm.stack->stack[vm.stack->current].i = 1;
       }
       break;
     case VALUE_nil:
       // A logically-negated nil value is always true
-      stack->stack[stack->current].type = VALUE_bool;
-      stack->stack[stack->current].i = 1;
+      vm.stack->stack[vm.stack->current].type = VALUE_bool;
+      vm.stack->stack[vm.stack->current].i = 1;
       break;
     case VALUE_str:
       // A logically-negated string value is always false
       // Tidy up the old string value
-      FREE_ARRAY(char, stack->stack[stack->current].s,
-                              strlen(stack->stack[stack->current].s) + 1);
-      stack->stack[stack->current].type = VALUE_bool;
-      stack->stack[stack->current].i = 0;
+      FREE_ARRAY(char, vm.stack->stack[vm.stack->current].s,
+                        strlen(vm.stack->stack[vm.stack->current].s) + 1);
+      vm.stack->stack[vm.stack->current].type = VALUE_bool;
+      vm.stack->stack[vm.stack->current].i = 0;
       break;
   }
   return nextop;
 }
 
-uint8_t *op_logicaland(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_logicaland(uint8_t *nextop, ITEM_t *item) {
   // Pop two values from the stack, convert to bools
   // AND the result and push it.
-  VALUE_t v1 = convert_to_bool(pop_stack(stack));
-  VALUE_t v2 = convert_to_bool(pop_stack(stack));
+  VALUE_t v1 = convert_to_bool(pop_stack(vm.stack));
+  VALUE_t v2 = convert_to_bool(pop_stack(vm.stack));
   // v2 is guaranteed to be boolean now, whatever it was.
   v2.i = v1.i && v2.i; // Logical AND
-  push_stack(stack, v2);
+  push_stack(vm.stack, v2);
   return nextop;
 }
 
-uint8_t *op_logicalor(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_logicalor(uint8_t *nextop, ITEM_t *item) {
   // Pop two values from the stack, convert to bools
   // OR the result and push it.
-  VALUE_t v1 = convert_to_bool(pop_stack(stack));
-  VALUE_t v2 = convert_to_bool(pop_stack(stack));
+  VALUE_t v1 = convert_to_bool(pop_stack(vm.stack));
+  VALUE_t v2 = convert_to_bool(pop_stack(vm.stack));
   // v2 is guaranteed to be boolean now, whatever it was.
   v2.i = v1.i || v2.i; // Logical OR
-  push_stack(stack, v2);
+  push_stack(vm.stack, v2);
   return nextop;
 }
 
-uint8_t *op_libcall(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_libcall(uint8_t *nextop, ITEM_t *item) {
   // The next three bytes are the library name, function within it, and
   // number of arguments on the stack.  Handle them, find the function
   // for this libcall, and hand over to it.
@@ -544,7 +545,7 @@ void assignitem(VALUE_t *itemname, VALUE_t val) {
   FREE_ARRAY(char, itemname->s, strlen(itemname->s));
 }
 
-uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   // Extract the embedded code from the bytestream, and compile it.
   // If the compilation is successful, assign its value to the item
   // on the top of the stack.  Otherwise, assign nil to the item.
@@ -583,7 +584,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   }
 
   // Now we have the parameters (if any), get the source code for this item.
-  VALUE_t itemname = pop_stack(stack);
+  VALUE_t itemname = pop_stack(vm.stack);
   // First, how much code do we have?
   uint16_t sclen;
   memcpy(&sclen, nextop, 2);
@@ -665,15 +666,15 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *op_assignitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_assignitem(uint8_t *nextop, ITEM_t *item) {
   // Save a value into an item.
-  VALUE_t val = pop_stack(stack); // value to be saved
-  VALUE_t itemname = pop_stack(stack); // Name of item to save into
+  VALUE_t val = pop_stack(vm.stack); // value to be saved
+  VALUE_t itemname = pop_stack(vm.stack); // Name of item to save into
   assignitem(&itemname, val);
   return nextop;
 }
 
-uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
   // Fetch a value from an item, and push it onto the stack.
   // The item name is a string at the top of the stack.
   // If the item is a code item, it is executed and the result pushed
@@ -686,7 +687,7 @@ uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   nextop += 2;
 
   // Now the item name.
-  VALUE_t itemname = pop_stack(stack);
+  VALUE_t itemname = pop_stack(vm.stack);
 
   // First check to see if there is a valid item to look up
   if (itemname.type == VALUE_str) {
@@ -703,19 +704,19 @@ uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
         } else {
           v.i = i->value.i;
         }
-        push_stack(stack, v);
+        push_stack(vm.stack, v);
       } else {
         // Are there any arguments in excess of what this item takes?
         // If so, lose 'em.
         while (arg_count > i->bytecode[1]) {
           DEBUG_LOG("Popping unneeded argument.\n");
-          throwaway_stack(stack);
+          throwaway_stack(vm.stack);
           arg_count--;
         }
         // Contrariwise, do we have fewer arguments than we should?
         while (arg_count < i->bytecode[1]) {
           DEBUG_LOG("Pushing additional nil-value argument.\n");
-          push_stack(stack, VALUE_NIL);
+          push_stack(vm.stack, VALUE_NIL);
           arg_count++;
         }
         // Save our current state.
@@ -733,7 +734,7 @@ uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
         nextop = prev_frame->nextop;
         // Having restored the old state, push the result
         // of the executed item.
-        push_stack(stack, value);
+        push_stack(vm.stack, value);
       }
     } else {
       // Item not found.
@@ -741,20 +742,20 @@ uint8_t *op_fetchitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
       // We need to lose any values on the stack which were passed as args.
         while (arg_count > 0) {
           DEBUG_LOG("Popping unneeded argument.\n");
-          throwaway_stack(stack);
+          throwaway_stack(vm.stack);
           arg_count--;
         }
-      push_stack(stack, VALUE_NIL);
+      push_stack(vm.stack, VALUE_NIL);
     }
     FREE_ARRAY(char, itemname.s, strlen(itemname.s));
   } else {
     logerr("Unable to fetch item: invalid item type for name: %d.\n", itemname.type);
-    push_stack(stack, VALUE_NIL);
+    push_stack(vm.stack, VALUE_NIL);
   }
   return nextop;
 }
 
-uint8_t *assembleitem_helper(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
   // Interpret the following bytecode as an item.  If an item can be
   // assembled, push the full item name onto the stack as a string.
   // Return a pointer to the bytecode after the item assembly.
@@ -781,20 +782,20 @@ uint8_t *assembleitem_helper(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
         // Deref layer - either a V (localvar) or another I (item)
         switch (*nextop++) {
           case 'V': {
-            int idx = *nextop++ + stack->base; // Local variable index
-            switch (stack->stack[idx].type) {
+            int idx = *nextop++ + vm.stack->base; // Local variable index
+            switch (vm.stack->stack[idx].type) {
               case VALUE_str: {
                 // This is easy, just concatenate the context of this local
                 // Assuming it is a valid layer name, anyway.
-                if (is_valid_layer(stack->stack[idx].s)) {
-                  int sl = strlen(stack->stack[idx].s);
+                if (is_valid_layer(vm.stack->stack[idx].s)) {
+                  int sl = strlen(vm.stack->stack[idx].s);
                   if (strlen(itemname) + sl + 2 >= size) {
                     itemname = GROW_ARRAY(char, itemname, size, (size*2)+2);
                     size = (size * 2) + 2;
                   }
-                  strncat(itemname, stack->stack[idx].s, sl);
+                  strncat(itemname, vm.stack->stack[idx].s, sl);
                 } else {
-                  logerr("Invalid layer name '%s'.\n", stack->stack[idx].s);
+                  logerr("Invalid layer name '%s'.\n", vm.stack->stack[idx].s);
                   invalid = true;
                 }
                 break;
@@ -802,7 +803,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
               case VALUE_int: {
                 // Slightly more complicated.  Turn the int into a string.
                 char str[22]; // Big enough for MAXINT.
-                itoa(stack->stack[idx].i, str, 10);
+                itoa(vm.stack->stack[idx].i, str, 10);
                 int sl = strlen(str);
                 if (strlen(itemname) + sl + 2 >= size) {
                   itemname = GROW_ARRAY(char, itemname, size, (size*2)+2);
@@ -822,8 +823,8 @@ uint8_t *assembleitem_helper(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
           case 'I': {
             // This is a bit more complicated.  We need to dereference an
             // item, then evaluate it, and use the result as the layer name.
-            nextop = assembleitem_helper(nextop, stack, item);
-            VALUE_t layername = pop_stack(stack);
+            nextop = assembleitem_helper(nextop, item);
+            VALUE_t layername = pop_stack(vm.stack);
             if (layername.type == VALUE_str) {
               //  This is basically the same as op_fetchitem
               ITEM_t *i = find_item(itemroot, layername.s);
@@ -897,19 +898,19 @@ uint8_t *assembleitem_helper(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   if (invalid) {
     // Not a valid item name, so push nil.
     FREE_ARRAY(char, itemname, size);
-    push_stack(stack, VALUE_NIL);
+    push_stack(vm.stack, VALUE_NIL);
   } else {
     VALUE_t name;
     name.type = VALUE_str;
     name.s = itemname; // Don't free itemname - it's on the stack!
-    push_stack(stack, name);
+    push_stack(vm.stack, name);
     DEBUG_LOG("Item assembled: %s\n", itemname);
   }
 
   return nextop + 1;
 }
 
-uint8_t *op_assembleitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_assembleitem(uint8_t *nextop, ITEM_t *item) {
   // Here beginneth an item definition.  Items are made up of layers, and
   // each layer may be either a simple layer name (a string matching the
   // regexp [_a-z0-9]), or it may be a dereference.  Dereferences are
@@ -923,15 +924,15 @@ uint8_t *op_assembleitem(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
 
   // To facilitate ease of recusive dereferences, this is just a wrapper
   // to the help function which does all the work.
-  nextop = assembleitem_helper(nextop, stack, item);
+  nextop = assembleitem_helper(nextop, item);
   return nextop;
 }
 
-uint8_t *op_delete(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_delete(uint8_t *nextop, ITEM_t *item) {
   // When this opcode is encountered, an item will previously have been
   // assembled and pushed onto the stack (or nil if the assembly failed).
   // Pop it, delete it, and return nothing.
-  VALUE_t val = pop_stack(stack);
+  VALUE_t val = pop_stack(vm.stack);
   if (val.type == VALUE_str) {
     delete_item(itemroot, val.s);
     FREE_ARRAY(char, val.s, strlen(val.s)+1);
@@ -940,12 +941,12 @@ uint8_t *op_delete(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *op_exists(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
+uint8_t *op_exists(uint8_t *nextop, ITEM_t *item) {
   // When this opcode is encountered, an item will previously have been
   // assembled and pushed onto the stack (or nil if the assembly failed).
   // Pop whatever is on the stack and evaluate it.  Push
   // true or false, depending on the result.
-  VALUE_t val = pop_stack(stack);
+  VALUE_t val = pop_stack(vm.stack);
   if (val.type == VALUE_str) {
     ITEM_t *i = find_item(itemroot, val.s);
     FREE_ARRAY(char, val.s, strlen(val.s)+1);
@@ -955,7 +956,7 @@ uint8_t *op_exists(uint8_t *nextop, STACK_t *stack, ITEM_t *item) {
     val.type = VALUE_bool;
     val.i = 0;
   }
-  push_stack(stack, val);
+  push_stack(vm.stack, val);
   DISASS_LOG("OP_EXISTS\n");
   return nextop;
 }
@@ -1021,7 +1022,7 @@ VALUE_t interpret(ITEM_t *item) {
     // We do it this way to avoid undefined behaviour between
     // two sequence points:
     uint8_t *nextop = op + 1;
-    op = opcode[*op](nextop, vm.stack, item);
+    op = opcode[*op](nextop, item);
   }
 
   int stacksize = size_stack(vm.stack);
