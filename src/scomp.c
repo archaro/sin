@@ -7,6 +7,9 @@
 #include "parser.h"
 #include "memory.h"
 #include "log.h"
+#include "vm.h"
+
+VM_t vm; // Not needed by standalone compiler, but needed for linking
 
 int main(int argc, char **argv) {
   char *source;

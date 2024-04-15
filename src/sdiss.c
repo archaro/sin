@@ -9,6 +9,9 @@
 #include "value.h"
 #include "item.h"
 #include "stack.h"
+#include "vm.h"
+
+VM_t vm; // Not needed for disassembler, but needed for linking.
 
 uint8_t *process_item(uint8_t *opcodeptr);
 uint8_t *process_dereference(uint8_t *opcodeptr);

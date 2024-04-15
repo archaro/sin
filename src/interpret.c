@@ -7,6 +7,7 @@
 #include "error.h"
 #include "itoa.h"
 #include "interpret.h"
+#include "libcalls.h"
 #include "log.h"
 #include "memory.h"
 #include "parser.h"
@@ -22,7 +23,6 @@ extern VM_t vm;
 // It must be initialised before any function in this file is called.
 extern ITEM_t *itemroot;
 
-typedef uint8_t *(*OP_t)(uint8_t *nextop, ITEM_t *item);
 static OP_t opcode[256];
 
 uint8_t *op_nop(uint8_t *nextop, ITEM_t *item) {
@@ -515,6 +515,12 @@ uint8_t *op_libcall(uint8_t *nextop, ITEM_t *item) {
   args = *nextop++;
   DEBUG_LOG("Calling library %d, function %d with %d arguments.\n", lib,
                                                               func, args);
+  OP_t libcall = libcall_func(lib, func);
+  if (!libcall) {
+    logerr("Library call not found.\n");
+  } else {
+    nextop = libcall(nextop, item);
+  }
   return nextop;
 }
 

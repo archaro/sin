@@ -4,7 +4,6 @@
 #include "log.h"
 #include "vm.h"
 #include "stack.h"
-#include "interpret.h"
 #include "item.h"
 
 // This is the virtual machine object, defined in sin.c
@@ -14,11 +13,16 @@ extern VM_t vm;
 // It must be initialised before any function in this file is called.
 extern ITEM_t *itemroot;
 
-typedef uint8_t *(*OP_t)(uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_backup(uint8_t *nextop, ITEM_t *item) {
+  // Create a backup of the itemstore.
+  DEBUG_LOG("Called sys.backup\n");
+  push_stack(vm.stack, VALUE_NIL);
+  return nextop;
+}
 
 const LIBCALL_t libcalls[] = {
-  {"sys", "backup", 1, 0, 0},
-  {NULL, NULL, -1, -1, 0}  // End marker
+  {"sys", "backup", 1, 0, 0, lc_sys_backup},
+  {NULL, NULL, -1, -1, 0, NULL}  // End marker
 };
 
 bool libcall_lookup(const char *libname, const char *callname,
@@ -35,5 +39,18 @@ bool libcall_lookup(const char *libname, const char *callname,
     }
   }
   return false;  // Not found
+}
+
+void *libcall_func(uint8_t lib, uint8_t call) {
+  // Given a library and call index, try to find it in the
+  // libcall table.  Return a pointer to its function if
+  // found, otherwise return NULL.
+  for (int i = 0; libcalls[i].libname != NULL; i++) {
+    if (libcalls[i].lib_index == lib &&
+        libcalls[i].call_index == call) {
+      return libcalls[i].func;
+    }
+  }
+  return NULL;
 }
 
