@@ -57,7 +57,6 @@ int main(int argc, char **argv) {
   FILE *in;
   int filesize = 0;
   struct stat buffer;
-  char *itemstore;
   uint8_t *bytecode = NULL;
 
   if (argc < 2) {
@@ -99,16 +98,16 @@ int main(int argc, char **argv) {
         break;
       case 'i':
         // Optional: if given use this filename for the itemstore.
-        itemstore = strdup(optarg);
-        if (stat(itemstore, &buffer) == 0) {
+        config.itemstore = strdup(optarg);
+        if (stat(config.itemstore, &buffer) == 0) {
           // The file exists, so load it.
-          logmsg("Loading itemstore from %s.\n", itemstore);
-          config.itemroot = load_itemstore(itemstore);
+          logmsg("Loading itemstore from %s.\n", config.itemstore);
+          config.itemroot = load_itemstore(config.itemstore);
         } else {
           // The file does not exist, so create a blank itemstore
           // and save it to the file at the end.
           logmsg("Creating a new itemstore, which will be saved as %s.\n",
-                                                                 itemstore);
+                                                         config.itemstore);
           config.itemroot = make_root_item("root");
         }
         break;
@@ -209,13 +208,13 @@ int main(int argc, char **argv) {
   init_interpreter();
   // If the itemstore hasn't been loaded, do so now.
   if (!config.itemroot) {
-    itemstore = strdup("items.dat");
-    if (stat(itemstore, &buffer) == 0) {
-      logmsg("Loading itemstore from %s\n", itemstore);
-      config.itemroot = load_itemstore(itemstore);
+    config.itemstore = strdup("items.dat");
+    if (stat(config.itemstore, &buffer) == 0) {
+      logmsg("Loading itemstore from %s\n", config.itemstore);
+      config.itemroot = load_itemstore(config.itemstore);
     } else {
       logmsg("Creating a new itemstore, which will be saved as %s.\n",
-                                                                 itemstore);
+                                                         config.itemstore);
       config.itemroot = make_root_item("root");
     }
   }
@@ -256,10 +255,10 @@ int main(int argc, char **argv) {
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
-  save_itemstore(itemstore, config.itemroot);
+  save_itemstore(config.itemstore, config.itemroot);
   destroy_stack(config.vm.stack);
   destroy_callstack(config.vm.callstack);
-  free(itemstore);
+  free(config.itemstore);
   free(srcroot);
   destroy_item(config.itemroot);
   destroy_item(boot);

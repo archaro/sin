@@ -1,3 +1,4 @@
+#include <time.h>
 #include <string.h>
 
 #include "config.h"
@@ -15,6 +16,16 @@ extern CONFIG_t config;
 uint8_t *lc_sys_backup(uint8_t *nextop, ITEM_t *item) {
   // Create a backup of the itemstore.
   DEBUG_LOG("Called sys.backup\n");
+  // All of the following is a long-winded way to get a backup filename.
+  char timestamp[64];
+  time_t now = time(NULL);
+  struct tm *tm_now = localtime(&now);
+  strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S", tm_now);
+  char backupfile[strlen(config.itemstore)+strlen(timestamp)+2];
+  snprintf(backupfile, sizeof(backupfile), "%s_%s", config.itemstore,
+                                                                timestamp);
+  save_itemstore(backupfile, config.itemroot);
+  // libcalls always return a value.
   push_stack(VM.stack, VALUE_NIL);
   return nextop;
 }
