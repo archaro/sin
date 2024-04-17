@@ -6,23 +6,18 @@
 #include <libgen.h>
 #include <errno.h>
 
+#include "config.h"
 #include "util.h"
 #include "memory.h"
 #include "log.h"
 #include "item.h"
 
-// The slab allocator
-// This is used to handle memory allocation for all uniform objects.
-// It is defined in sin.c
-extern Allocator allocator;
-
-// The root of the item source tree
-// Defined in sin.c
-extern char *srcroot;
+// The configuration object, defined in sin.c
+extern CONFIG_t config;
 
 HASHTABLE_t *create_hashtable(int size) {
   // Create a hashtable with the given number of buckets
-  HASHTABLE_t *hashtable = allocate_hashtable(&allocator);
+  HASHTABLE_t *hashtable = allocate_hashtable(&config.allocator);
   hashtable->size = size;
   hashtable->table = (ENTRY_t**)malloc(sizeof(ENTRY_t*) * size);
   for (int i = 0; i < size; i++) {
@@ -78,7 +73,7 @@ HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize) {
   // - but not the entries themselves as we reused them
   free((oldhashtable)->table);
   // Free the old hash table struct
-  deallocate_hashtable(&allocator, oldhashtable);
+  deallocate_hashtable(&config.allocator, oldhashtable);
   return newhashtable;
 }
 
@@ -119,7 +114,7 @@ void insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child) {
   }
   hashindex %= hashtable->size;
   // Create a new entry
-  ENTRY_t *newEntry = allocate_entry(&allocator);
+  ENTRY_t *newEntry = allocate_entry(&config.allocator);
   newEntry->key = strdup(key);
   newEntry->child = child;
   newEntry->next = NULL;
@@ -186,7 +181,7 @@ void delete_hashtable(HASHTABLE_t *hashtable, const char *key) {
         previous->next = current->next;
       }
       free(current->key);
-      deallocate_entry(&allocator, current);
+      deallocate_entry(&config.allocator, current);
       return;
     }
     previous = current;
@@ -202,11 +197,11 @@ void free_hashtable(HASHTABLE_t* hashtable) {
       current = current->next;
       destroy_item(temp->child);
       free(temp->key);
-      deallocate_entry(&allocator, temp);
+      deallocate_entry(&config.allocator, temp);
     }
   }
   free(hashtable->table);
-  deallocate_hashtable(&allocator, hashtable);
+  deallocate_hashtable(&config.allocator, hashtable);
 }
 
 uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
@@ -311,7 +306,7 @@ ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
   // Note that for performance reasons this function does not check
   // to see if the item already exists at this layer.  You MUST
   // check that before you call this function!
-  ITEM_t *item = allocate_item(&allocator);
+  ITEM_t *item = allocate_item(&config.allocator);
   item->parent = parent;
   item->type = type;
   // There are two types of items.  Those which don't contain a value
@@ -338,7 +333,7 @@ ITEM_t *make_root_item(const char* name) {
   // function for performance reasons - it is only ever used ONCE, so there
   // is no point having an additional if statement that always evaluates
   // one way.
-  ITEM_t *item = allocate_item(&allocator);
+  ITEM_t *item = allocate_item(&config.allocator);
   item->parent = NULL;
   item->type = ITEM_value;
   item->value.type = VALUE_int;
@@ -357,7 +352,7 @@ void destroy_item(ITEM_t *item) {
   // Free the item's hashtable
   free_hashtable(item->children);
   // Then free the item
-  deallocate_item(&allocator, item);
+  deallocate_item(&config.allocator, item);
 }
 
 ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
@@ -532,14 +527,14 @@ char *get_itemfilename(ITEM_t *item) {
 
   itemname[0] = '\0';
   get_itemname(item, itemname);
-  l = strlen(itemname) + strlen(srcroot) + 13;
+  l = strlen(itemname) + strlen(config.srcroot) + 13;
   filename = GROW_ARRAY(char, NULL, 0, l);
   p = itemname;
   while (*p) {
     if(*p == '.') *p = '/';
     p++;
   }
-  snprintf(filename, l, "%s/%s/source.sin", srcroot, itemname);
+  snprintf(filename, l, "%s/%s/source.sin", config.srcroot, itemname);
   return filename;
 }
 

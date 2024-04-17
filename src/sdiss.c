@@ -4,14 +4,15 @@
 #include <string.h>
 #include <getopt.h>
 
+#include "config.h"
 #include "memory.h"
 #include "log.h"
 #include "value.h"
 #include "item.h"
 #include "stack.h"
-#include "vm.h"
 
-VM_t vm; // Not needed for disassembler, but needed for linking.
+// Things which need to be known
+CONFIG_t config;
 
 uint8_t *process_item(uint8_t *opcodeptr);
 uint8_t *process_dereference(uint8_t *opcodeptr);

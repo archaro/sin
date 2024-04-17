@@ -1,22 +1,21 @@
 #include <string.h>
 
+#include "config.h"
 #include "libcalls.h"
 #include "log.h"
-#include "vm.h"
 #include "stack.h"
 #include "item.h"
 
-// This is the virtual machine object, defined in sin.c
-extern VM_t vm;
+// Configuration object.  Defined in sin.c
+extern CONFIG_t config;
 
-// This is defined in sin.c, and it is the root of the itemstore.
-// It must be initialised before any function in this file is called.
-extern ITEM_t *itemroot;
+// Some shorthand
+#define VM config.vm
 
 uint8_t *lc_sys_backup(uint8_t *nextop, ITEM_t *item) {
   // Create a backup of the itemstore.
   DEBUG_LOG("Called sys.backup\n");
-  push_stack(vm.stack, VALUE_NIL);
+  push_stack(VM.stack, VALUE_NIL);
   return nextop;
 }
 

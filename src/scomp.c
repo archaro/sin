@@ -3,13 +3,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "config.h"
 #include "error.h"
 #include "parser.h"
 #include "memory.h"
 #include "log.h"
-#include "vm.h"
 
-VM_t vm; // Not needed by standalone compiler, but needed for linking
+// Things which need to be known
+CONFIG_t config;
 
 int main(int argc, char **argv) {
   char *source;

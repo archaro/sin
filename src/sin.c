@@ -8,26 +8,20 @@
 #include <signal.h>
 #include <setjmp.h>
 
+#include "config.h"
 #include "error.h"
 #include "memory.h"
 #include "log.h"
 #include "value.h"
 #include "item.h"
 #include "stack.h"
-#include "vm.h"
 #include "interpret.h"
 
 // Error handling
 jmp_buf recovery;
 
-// The Virtual Machine
-VM_t vm;
-
-// The slab allocator
-Allocator allocator;
-
-// The Itemstore
-ITEM_t *itemroot = NULL;
+// The configuration object - for passing interesting data around globally.
+CONFIG_t config;
 
 // The root of the source tree
 char *srcroot = NULL;
@@ -71,9 +65,11 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
+  config.itemroot = NULL;
+
   // Do the very early preparations, for things which are needed
   // before even the options are processed.
-  init_allocator(&allocator);
+  init_allocator(&config.allocator);
   init_errmsg();
   struct sigaction act;
   act.sa_handler = handle_sigusr1;
@@ -107,13 +103,13 @@ int main(int argc, char **argv) {
         if (stat(itemstore, &buffer) == 0) {
           // The file exists, so load it.
           logmsg("Loading itemstore from %s.\n", itemstore);
-          itemroot = load_itemstore(itemstore);
+          config.itemroot = load_itemstore(itemstore);
         } else {
           // The file does not exist, so create a blank itemstore
           // and save it to the file at the end.
           logmsg("Creating a new itemstore, which will be saved as %s.\n",
                                                                  itemstore);
-          itemroot = make_root_item("root");
+          config.itemroot = make_root_item("root");
         }
         break;
       case 'l':
@@ -207,20 +203,20 @@ int main(int argc, char **argv) {
   // Do some preparations
   DEBUG_LOG("DEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
-  vm.stack = make_stack();
-  vm.callstack = make_callstack();
+  config.vm.stack = make_stack();
+  config.vm.callstack = make_callstack();
 
   init_interpreter();
   // If the itemstore hasn't been loaded, do so now.
-  if (!itemroot) {
+  if (!config.itemroot) {
     itemstore = strdup("items.dat");
     if (stat(itemstore, &buffer) == 0) {
       logmsg("Loading itemstore from %s\n", itemstore);
-      itemroot = load_itemstore(itemstore);
+      config.itemroot = load_itemstore(itemstore);
     } else {
       logmsg("Creating a new itemstore, which will be saved as %s.\n",
                                                                  itemstore);
-      itemroot = make_root_item("root");
+      config.itemroot = make_root_item("root");
     }
   }
   // Boot is a special item, which sits outside of the itemstore.
@@ -236,10 +232,10 @@ int main(int argc, char **argv) {
   } else {
     logerr("SIGUSR1 received.  Restarting boot item.\n");
     logerr("Destroying and recreating all stacks.\n");
-    destroy_stack(vm.stack);
-    destroy_callstack(vm.callstack);
-    vm.stack = make_stack();
-    vm.callstack = make_callstack();
+    destroy_stack(config.vm.stack);
+    destroy_callstack(config.vm.callstack);
+    config.vm.stack = make_stack();
+    config.vm.callstack = make_callstack();
   }
   // Execute the boot item.  This is the main game loop.
   VALUE_t ret = interpret(boot);
@@ -260,14 +256,14 @@ int main(int argc, char **argv) {
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
-  save_itemstore(itemstore, itemroot);
-  destroy_stack(vm.stack);
-  destroy_callstack(vm.callstack);
+  save_itemstore(itemstore, config.itemroot);
+  destroy_stack(config.vm.stack);
+  destroy_callstack(config.vm.callstack);
   free(itemstore);
   free(srcroot);
-  destroy_item(itemroot);
+  destroy_item(config.itemroot);
   destroy_item(boot);
-  destroy_allocator(&allocator);
+  destroy_allocator(&config.allocator);
   close_log();
   exit(EXIT_SUCCESS);
 }
