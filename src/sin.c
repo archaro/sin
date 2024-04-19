@@ -68,7 +68,6 @@ int main(int argc, char **argv) {
 
   // Do the very early preparations, for things which are needed
   // before even the options are processed.
-  init_allocator(&config.allocator);
   init_errmsg();
   struct sigaction act;
   act.sa_handler = handle_sigusr1;
@@ -262,7 +261,6 @@ int main(int argc, char **argv) {
   free(srcroot);
   destroy_item(config.itemroot);
   destroy_item(boot);
-  destroy_allocator(&config.allocator);
   close_log();
   exit(EXIT_SUCCESS);
 }
