@@ -5,5 +5,6 @@
 
 #include <stdbool.h>
 
+char* itoa(int value, char* buffer, int base);
 bool make_path(char *path);
 

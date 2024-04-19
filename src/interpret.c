@@ -6,7 +6,7 @@
 
 #include "config.h"
 #include "error.h"
-#include "itoa.h"
+#include "util.h"
 #include "interpret.h"
 #include "libcalls.h"
 #include "log.h"
