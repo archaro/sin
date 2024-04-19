@@ -17,7 +17,7 @@ extern CONFIG_t config;
 
 HASHTABLE_t *create_hashtable(int size) {
   // Create a hashtable with the given number of buckets
-  HASHTABLE_t *hashtable = allocate_hashtable(&config.allocator);
+  HASHTABLE_t *hashtable = allocate_hashtable();
   hashtable->size = size;
   hashtable->table = (ENTRY_t**)malloc(sizeof(ENTRY_t*) * size);
   for (int i = 0; i < size; i++) {
@@ -114,7 +114,7 @@ void insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child) {
   }
   hashindex %= hashtable->size;
   // Create a new entry
-  ENTRY_t *newEntry = allocate_entry(&config.allocator);
+  ENTRY_t *newEntry = allocate_entry();
   newEntry->key = strdup(key);
   newEntry->child = child;
   newEntry->next = NULL;
@@ -297,7 +297,7 @@ ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
   // Note that for performance reasons this function does not check
   // to see if the item already exists at this layer.  You MUST
   // check that before you call this function!
-  ITEM_t *item = allocate_item(&config.allocator);
+  ITEM_t *item = allocate_item();
   item->parent = parent;
   item->type = type;
   // There are two types of items.  Those which don't contain a value
@@ -324,7 +324,7 @@ ITEM_t *make_root_item(const char* name) {
   // function for performance reasons - it is only ever used ONCE, so there
   // is no point having an additional if statement that always evaluates
   // one way.
-  ITEM_t *item = allocate_item(&config.allocator);
+  ITEM_t *item = allocate_item();
   item->parent = NULL;
   item->type = ITEM_value;
   item->value.type = VALUE_int;
