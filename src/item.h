@@ -11,7 +11,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "slab.h"
 #include "value.h"
 
 // Items are up to 8 layers deep, and each layer name is a maximum of
@@ -66,14 +65,12 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent);
 // Allocator API
 // Defined in the itemstore as it defines allocators for specific
 // object types.  Probably needs to be defined elsewhere, though.
-void init_allocator(Allocator *allocator);
-void destroy_allocator(Allocator *allocator);
-ENTRY_t *allocate_entry(Allocator *allocator);
-HASHTABLE_t *allocate_hashtable(Allocator *allocator);
-ITEM_t *allocate_item(Allocator *allocator);
-void deallocate_entry(Allocator *allocator, ENTRY_t *entry);
-void deallocate_hashtable(Allocator *allocator, HASHTABLE_t *hashtable);
-void deallocate_item(Allocator *allocator, ITEM_t *item);
+ENTRY_t *allocate_entry();
+HASHTABLE_t *allocate_hashtable();
+ITEM_t *allocate_item();
+void deallocate_entry(ENTRY_t *entry);
+void deallocate_hashtable(HASHTABLE_t *hashtable);
+void deallocate_item(ITEM_t *item);
 
 // Itemstore API
 ITEM_t *make_root_item(const char *name);

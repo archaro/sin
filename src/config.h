@@ -8,7 +8,6 @@
 
 typedef struct {
   VM_t vm;              // Virtual Machine
-  Allocator allocator;  // Slab allocator
   ITEM_t *itemroot;     // Root of in-memory itemstore
   char *srcroot;        // Root of source tree
   char *itemstore;      // Filename of on-disk itemstore

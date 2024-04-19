@@ -17,7 +17,7 @@ extern CONFIG_t config;
 
 HASHTABLE_t *create_hashtable(int size) {
   // Create a hashtable with the given number of buckets
-  HASHTABLE_t *hashtable = allocate_hashtable(&config.allocator);
+  HASHTABLE_t *hashtable = allocate_hashtable();
   hashtable->size = size;
   hashtable->table = (ENTRY_t**)malloc(sizeof(ENTRY_t*) * size);
   for (int i = 0; i < size; i++) {
@@ -73,7 +73,7 @@ HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize) {
   // - but not the entries themselves as we reused them
   free((oldhashtable)->table);
   // Free the old hash table struct
-  deallocate_hashtable(&config.allocator, oldhashtable);
+  deallocate_hashtable(oldhashtable);
   return newhashtable;
 }
 
@@ -114,7 +114,7 @@ void insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child) {
   }
   hashindex %= hashtable->size;
   // Create a new entry
-  ENTRY_t *newEntry = allocate_entry(&config.allocator);
+  ENTRY_t *newEntry = allocate_entry();
   newEntry->key = strdup(key);
   newEntry->child = child;
   newEntry->next = NULL;
@@ -181,7 +181,7 @@ void delete_hashtable(HASHTABLE_t *hashtable, const char *key) {
         previous->next = current->next;
       }
       free(current->key);
-      deallocate_entry(&config.allocator, current);
+      deallocate_entry(current);
       return;
     }
     previous = current;
@@ -197,11 +197,11 @@ void free_hashtable(HASHTABLE_t* hashtable) {
       current = current->next;
       destroy_item(temp->child);
       free(temp->key);
-      deallocate_entry(&config.allocator, temp);
+      deallocate_entry(temp);
     }
   }
   free(hashtable->table);
-  deallocate_hashtable(&config.allocator, hashtable);
+  deallocate_hashtable(hashtable);
 }
 
 uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
@@ -256,49 +256,40 @@ char *substr(const char *str, size_t begin, size_t len) {
   }
 }
 
-void init_allocator(Allocator *allocator) {
-  // Allocator API: Create the slab allocator with a separate pool for each
-  // block size: ITEM_t, HASHTABLE_t and ENTRY_t
-  init_slab(&allocator->entry_slab, sizeof(ENTRY_t));
-  init_slab(&allocator->hashtable_slab, sizeof(HASHTABLE_t));
-  init_slab(&allocator->item_slab, sizeof(ITEM_t));
-}
-
-void destroy_allocator(Allocator *allocator) {
-  // Allocator API: Finalise the slab allocator, releasing all memory.
-  destroy_slab(&allocator->entry_slab);
-  destroy_slab(&allocator->hashtable_slab);
-  destroy_slab(&allocator->item_slab);
-}
-
-ENTRY_t *allocate_entry(Allocator *allocator) {
+ENTRY_t *allocate_entry() {
   // Allocator API: Gimme a new ENTRY_t
-  return (ENTRY_t*)allocate_from_slab(&allocator->entry_slab);
+  ENTRY_t *newentry = NULL;
+  newentry = GROW_ARRAY(ENTRY_t, newentry, 0, sizeof(ENTRY_t));
+  return newentry;
 }
 
-HASHTABLE_t *allocate_hashtable(Allocator *allocator) {
+HASHTABLE_t *allocate_hashtable() {
   // Allocator API: Gimme a new HASHTABLE_t
-  return (HASHTABLE_t*)allocate_from_slab(&allocator->hashtable_slab);
+  HASHTABLE_t *newhash = NULL;
+  newhash = GROW_ARRAY(HASHTABLE_t, newhash, 0, sizeof(HASHTABLE_t));
+  return newhash;
 }
 
-ITEM_t *allocate_item(Allocator *allocator) {
+ITEM_t *allocate_item() {
+  ITEM_t *newitem = NULL;
+  newitem = GROW_ARRAY(ITEM_t, newitem, 0, sizeof(ITEM_t));
   // Allocator API: Gimme a new Item
-  return (ITEM_t*)allocate_from_slab(&allocator->item_slab);
+  return newitem;
 }
 
-void deallocate_entry(Allocator *allocator, ENTRY_t *entry) {
+void deallocate_entry(ENTRY_t *entry) {
   // Allocator API: Take this ENTRY_t back.
-  deallocate_to_slab(&allocator->entry_slab, entry);
+  FREE_ARRAY(ENTRY_t, entry, sizeof(ENTRY_t));
 }
 
-void deallocate_hashtable(Allocator *allocator, HASHTABLE_t *hashtable) {
+void deallocate_hashtable(HASHTABLE_t *hashtable) {
   // Allocator API: Take this HashTable back.
-  deallocate_to_slab(&allocator->hashtable_slab, hashtable);
+  FREE_ARRAY(HASHTABLE_t, hashtable, sizeof(HASHTABLE_t));
 }
 
-void deallocate_item(Allocator *allocator, ITEM_t *item) {
+void deallocate_item(ITEM_t *item) {
   // Allocator API: Take this Item back.
-  deallocate_to_slab(&allocator->item_slab, item);
+  FREE_ARRAY(ITEM_t, item, sizeof(ITEM_t));
 }
 
 ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
@@ -306,7 +297,7 @@ ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
   // Note that for performance reasons this function does not check
   // to see if the item already exists at this layer.  You MUST
   // check that before you call this function!
-  ITEM_t *item = allocate_item(&config.allocator);
+  ITEM_t *item = allocate_item();
   item->parent = parent;
   item->type = type;
   // There are two types of items.  Those which don't contain a value
@@ -333,7 +324,7 @@ ITEM_t *make_root_item(const char* name) {
   // function for performance reasons - it is only ever used ONCE, so there
   // is no point having an additional if statement that always evaluates
   // one way.
-  ITEM_t *item = allocate_item(&config.allocator);
+  ITEM_t *item = allocate_item();
   item->parent = NULL;
   item->type = ITEM_value;
   item->value.type = VALUE_int;
@@ -352,7 +343,7 @@ void destroy_item(ITEM_t *item) {
   // Free the item's hashtable
   free_hashtable(item->children);
   // Then free the item
-  deallocate_item(&config.allocator, item);
+  deallocate_item(item);
 }
 
 ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
