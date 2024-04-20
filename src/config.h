@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <uev/uev.h>
+#include <uv.h>
 
 #include "vm.h"
 #include "item.h"
@@ -12,7 +12,7 @@
 #define LISTENER_PORT   4001
 
 typedef struct {
-  uev_ctx_t ctx;        // Run loop context
+  uv_loop_t *loop;      // Run loop context
   int fd;               // Listener file descriptor
   VM_t vm;              // Virtual Machine
   ITEM_t *itemroot;     // Root of in-memory itemstore

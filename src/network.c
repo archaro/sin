@@ -49,16 +49,15 @@ void shutdown_listener() {
   close(config.fd);
 }
 
-void test_callback(uev_t *w, void *arg, int events) {
+void test_callback(uv_timer_t *req) {
   static int count = 0;
-  if (events == UEV_ERROR) {
-    logerr("Problem with timer, attempting to restart.");
-    uev_timer_start(w);
-    return;
-  }
 
   logmsg("(%d) Callback meep!.\n", count);
   count++;
-  if (count>2) uev_exit(&config.ctx);
+  if (count>2) {
+    // We need to call uv_close to remove ourself from the event loop
+    uv_close((uv_handle_t*)req, NULL);
+    uv_stop(config.loop);
+  }
 }
 

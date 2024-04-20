@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <setjmp.h>
-#include <uev/uev.h>
+#include <uv.h>
 
 #include "config.h"
 #include "error.h"
@@ -81,7 +81,6 @@ int main(int argc, char **argv) {
     logerr("Unable to install signal handler.\n");
     exit(EXIT_FAILURE);
   }
-  uev_init(&config.ctx);
 
   // Are there any interesting options?
   int opt;
@@ -270,16 +269,20 @@ int main(int argc, char **argv) {
 
   // Here we go...
   logmsg("Running...\n");
-  uev_t *timer = malloc(sizeof(uev_t));
-  uev_timer_init(&config.ctx, timer, test_callback, NULL, 1000, 1000);
-  int runloop_retval = uev_run(&config.ctx, 0);
-  free(timer);
+  config.loop = GROW_ARRAY(uv_loop_t, config.loop, 0, sizeof(uv_loop_t));
+  uv_loop_init(config.loop);
+  uv_timer_t timer;
+  uv_timer_init(config.loop, &timer);
+  uv_timer_start(&timer, test_callback, 0, 1000);
+  int runloop_retval = uv_run(config.loop, UV_RUN_DEFAULT);
 
   // Clean up before shutdown.
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
-  shutdown_listener();
+
+  uv_loop_close(config.loop);
+  FREE_ARRAY(uv_loop_t, config.loop, sizeof(uv_loop_t));
   save_itemstore(config.itemstore, config.itemroot);
   destroy_stack(config.vm.stack);
   destroy_callstack(config.vm.callstack);
