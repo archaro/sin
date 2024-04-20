@@ -13,6 +13,7 @@
 
 typedef struct {
   uv_loop_t *loop;      // Run loop context
+  uv_tcp_t listener;    // Listener callback
   int fd;               // Listener file descriptor
   VM_t vm;              // Virtual Machine
   ITEM_t *itemroot;     // Root of in-memory itemstore

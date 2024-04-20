@@ -265,16 +265,11 @@ int main(int argc, char **argv) {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }
 
-  // We're almost ready for network connections.  Start listening.
-  if (!init_listener(listener_port)) {
-    logerr("Unable to start the listener.  Cannot continue!");
-    exit(EXIT_FAILURE);
-  }
-
   // Here we go...
   logmsg("Running...\n");
   config.loop = GROW_ARRAY(uv_loop_t, config.loop, 0, sizeof(uv_loop_t));
   uv_loop_init(config.loop);
+  init_listener(listener_port);
   uv_timer_t timer;
   uv_timer_init(config.loop, &timer);
   uv_timer_start(&timer, test_callback, 0, 1000);
@@ -284,9 +279,14 @@ int main(int argc, char **argv) {
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
-
+  shutdown_listener();
+  // Send a close request to every registered callback
+  uv_walk(config.loop, close_all_tasks, NULL);
+  // Process pending handles - should all be closed or closing
+  uv_run(config.loop, UV_RUN_ONCE);
   uv_loop_close(config.loop);
   FREE_ARRAY(uv_loop_t, config.loop, sizeof(uv_loop_t));
+  network_cleanup();
   save_itemstore(config.itemstore, config.itemroot);
   destroy_stack(config.vm.stack);
   destroy_callstack(config.vm.callstack);
