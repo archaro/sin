@@ -18,7 +18,7 @@ LIB := $(LIB_DIR)/libsinshared.a
 LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o \
                $(OBJ_DIR)/parser.o $(OBJ_DIR)/lexer.o \
                $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcalls.o \
-               $(OBJ_DIR)/stack.o $(OBJ_DIR)/value.o $(SRC_DIR)/item.o
+               $(OBJ_DIR)/stack.o $(OBJ_DIR)/value.o $(OBJ_DIR)/item.o
 
 # Parser files for library
 PARSER_SOURCES := $(SRC_DIR)/parser.y
