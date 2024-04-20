@@ -25,8 +25,11 @@ jmp_buf recovery;
 // The configuration object - for passing interesting data around globally.
 CONFIG_t config;
 
-// The root of the source tree
-char *srcroot = NULL;
+void close_all_tasks(uv_handle_t* handle, void* arg) {
+  if (!uv_is_closing(handle)) { //FALSE, handle is closing
+    uv_close(handle, NULL);
+  }
+}
 
 void handle_sigusr1(int sig) {
   // SIGUSR1 is raised in various places, and should cause the interpret()
@@ -69,6 +72,7 @@ int main(int argc, char **argv) {
 
   // Set up some defaults (may be overridden by config options)
   config.itemroot = NULL;
+  config.srcroot = NULL;
 
   // Do the very early preparations, for things which are needed
   // before even the options are processed.
@@ -150,7 +154,7 @@ int main(int argc, char **argv) {
         break;
       case 's':
         // Optional: root directory of the source tree.
-        srcroot = strdup(optarg);
+        config.srcroot = strdup(optarg);
         break;
       default:
         usage();
@@ -160,46 +164,46 @@ int main(int argc, char **argv) {
 
   // Before we continue, has the source root been defined?
   // If not, use the default.
-  if (!srcroot) {
-    srcroot = strdup("srcroot");
+  if (!config.srcroot) {
+    config.srcroot = strdup("srcroot");
     struct stat s;
-    int err = stat(srcroot, &s);
+    int err = stat(config.srcroot, &s);
     if (err == -1) {
       // Doesn't exist, so create it.
-      mkdir(srcroot, 0777);
+      mkdir(config.srcroot, 0777);
       logmsg("Creating new source root in current directory.\n");
     } else {
       if(!S_ISDIR(s.st_mode)) {
         // Exists, but not a directory.  Panic.
-        logerr("./%s exists but it is not a directory.\n", srcroot);
-        free(srcroot);
+        logerr("./%s exists but it is not a directory.\n", config.srcroot);
+        free(config.srcroot);
         exit(EXIT_FAILURE);
       }
     }
   } else {
     // We have been given a source root, so does it exist?
     struct stat s;
-    int err = stat(srcroot, &s);
+    int err = stat(config.srcroot, &s);
     if (err == -1) {
-      logerr("Directory %s does not exist.\n", srcroot);
-      free(srcroot);
+      logerr("Directory %s does not exist.\n", config.srcroot);
+      free(config.srcroot);
       exit(EXIT_FAILURE);
     } else {
       if(!S_ISDIR(s.st_mode)) {
         // Exists, but not a directory
-        logerr("./%s exists but it is not a directory.\n", srcroot);
-        free(srcroot);
+        logerr("./%s exists but it is not a directory.\n", config.srcroot);
+        free(config.srcroot);
         exit(EXIT_FAILURE);
       } else {
-        if (access(srcroot, W_OK) != 0) {
-          logerr("./%s exists, but it is not writable.\n", srcroot);
-          free(srcroot);
+        if (access(config.srcroot, W_OK) != 0) {
+          logerr("./%s exists, but it is not writable.\n", config.srcroot);
+          free(config.srcroot);
           exit(EXIT_FAILURE);
         }
       }
     }
   }
-  logmsg("Using '%s' as the source root.\n", srcroot);
+  logmsg("Using '%s' as the source root.\n", config.srcroot);
 
   // Just check to see if we have been given some bytecode.
   if (!bytecode) {
@@ -287,7 +291,7 @@ int main(int argc, char **argv) {
   destroy_stack(config.vm.stack);
   destroy_callstack(config.vm.callstack);
   free(config.itemstore);
-  free(srcroot);
+  free(config.srcroot);
   destroy_item(config.itemroot);
   destroy_item(boot);
   close_log();
