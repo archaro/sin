@@ -49,3 +49,16 @@ void shutdown_listener() {
   close(config.fd);
 }
 
+void test_callback(uev_t *w, void *arg, int events) {
+  static int count = 0;
+  if (events == UEV_ERROR) {
+    logerr("Problem with timer, attempting to restart.");
+    uev_timer_start(w);
+    return;
+  }
+
+  logmsg("(%d) Callback meep!.\n", count);
+  count++;
+  if (count>2) uev_exit(&config.ctx);
+}
+

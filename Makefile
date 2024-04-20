@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -g -Wall -MMD -MP
 LDFLAGS = -g
-LIBS =
+LIBS = -lev
 YACC = bison
 LEX = flex
 DEBUG = -DDEBUG=1

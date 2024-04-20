@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <setjmp.h>
+#include <uev/uev.h>
 
 #include "config.h"
 #include "error.h"
@@ -80,6 +81,7 @@ int main(int argc, char **argv) {
     logerr("Unable to install signal handler.\n");
     exit(EXIT_FAILURE);
   }
+  uev_init(&config.ctx);
 
   // Are there any interesting options?
   int opt;
@@ -266,6 +268,13 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
+  // Here we go...
+  logmsg("Running...\n");
+  uev_t *timer = malloc(sizeof(uev_t));
+  uev_timer_init(&config.ctx, timer, test_callback, NULL, 1000, 1000);
+  int runloop_retval = uev_run(&config.ctx, 0);
+  free(timer);
+
   // Clean up before shutdown.
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");
@@ -279,6 +288,6 @@ int main(int argc, char **argv) {
   destroy_item(config.itemroot);
   destroy_item(boot);
   close_log();
-  exit(EXIT_SUCCESS);
+  return runloop_retval;
 }
 
