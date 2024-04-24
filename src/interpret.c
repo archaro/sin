@@ -130,6 +130,10 @@ uint8_t *op_getlocal(uint8_t *nextop, ITEM_t *item) {
   // Then copy that location to the top of the stack.
   memcpy(&(VM.stack->stack[VM.stack->current]), &(VM.stack->stack[index]),
                                                     sizeof(VALUE_t));
+  // Remember to copy the string if necessary.
+  if (VM.stack->stack[VM.stack->current].type == VALUE_str) {
+    VM.stack->stack[VM.stack->current].s = strdup(VM.stack->stack[index].s);
+  }
 #ifdef DISASS
   VALUE_t v;
   v = peek_stack(VM.stack);
