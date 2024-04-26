@@ -14,6 +14,7 @@
 #define ERR_COMP_UNKNOWNCHAR      5
 #define ERR_COMP_UNKNOWNLIB       6
 #define ERR_COMP_WRONGARGS        7
+#define ERR_COMP_INUSE            8
 
 #define ERR_RUNTIME_SIGUSR1       20
 

@@ -299,6 +299,7 @@ ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
   // check that before you call this function!
   ITEM_t *item = allocate_item();
   item->parent = parent;
+  item->inuse = false;
   item->type = type;
   // There are two types of items.  Those which don't contain a value
   // MUST contain bytecode.
@@ -373,10 +374,23 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
     current_item = child_item;
     if (next_dot == NULL) {
       // If there's no next dot, we've reached the last layer
-      // Set the value
-      if (current_item->value.type == VALUE_str) {
-        FREE_ARRAY(char, current_item->value.s,
+      // Possibly free currently in-use memory
+      // (it might have been newly-created, or might already exist)
+      if (current_item->type == ITEM_value &&
+                                    current_item->value.type == VALUE_str) {
+          FREE_ARRAY(char, current_item->value.s,
                                            strlen(current_item->value.s+1));
+      } else if (current_item->type == ITEM_code) {
+        if (current_item->inuse) {
+          char name[MAX_ITEM_NAME];
+          get_itemname(current_item, name);
+          logerr("Cannot delete item %s: currently in use.\n", name);
+          return NULL;
+        }
+        if (current_item->bytecode_len > 0) {
+          FREE_ARRAY(uint8_t, current_item->bytecode,
+                                                current_item->bytecode_len);
+        }
       }
       current_item->value = value;
       break;
@@ -468,6 +482,12 @@ void delete_item(ITEM_t *root, const char *item_name) {
   // Find an item and then delete it and all of its children.
   ITEM_t *item = find_item(root, item_name);
   if (item) {
+    if (item->inuse) {
+      char name[MAX_ITEM_NAME];
+      get_itemname(item, name);
+      logerr("Cannot delete item %s: currently in use.\n", name);
+      return;
+    }
     // We don't care about items that don't exist, just silently ignore the
     // delete request.  It's not there anyway, so why the complaining?
     // First, remove the item from its parent's hashtable:

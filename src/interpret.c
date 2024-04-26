@@ -610,7 +610,19 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   out->maxsize = 1024;
   out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, out->maxsize);
   out->nextbyte = out->bytecode;
-  bool result =  parse_source(sourcecode, sclen, out, &local);
+
+  // Now we have processed the bytecode and tidied up the stack,
+  // check to see if the item is in use - if it is, we can't
+  // overwrite it.
+  bool result;
+  if (item->inuse) {
+    char name[MAX_ITEM_NAME];
+    get_itemname(item, name);
+    result = false;
+    local.errnum = ERR_COMP_INUSE;
+  } else {
+    result = parse_source(sourcecode, sclen, out, &local);
+  }
 
   if (result) {
     // Compilation succeeded.  Assign it to the item.
@@ -1016,6 +1028,9 @@ VALUE_t interpret(ITEM_t *item) {
   uint8_t numlocals = item->bytecode[0];
   uint8_t numparams = item->bytecode[1];
 
+  // Item is now in use
+  item->inuse = true;
+
   // Set up the stack before executing it
   // We have already adjusted the stack to account for the arguments
   // so don't double-count them here.
@@ -1033,6 +1048,9 @@ VALUE_t interpret(ITEM_t *item) {
     uint8_t *nextop = op + 1;
     op = opcode[*op](nextop, item);
   }
+
+  // Item is now free to be replaced or deleted
+  item->inuse = false;
 
   int stacksize = size_stack(VM.stack);
 #ifdef DEBUG

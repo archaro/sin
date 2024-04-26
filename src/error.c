@@ -11,5 +11,6 @@ void init_errmsg() {
   errmsg[ERR_COMP_UNKNOWNCHAR] = "Unknown character in input.";
   errmsg[ERR_COMP_UNKNOWNLIB] = "Unknown library call.";
   errmsg[ERR_COMP_WRONGARGS] = "Wrong number of arguments to library call.";
+  errmsg[ERR_COMP_INUSE] = "Item in use; cannot replace it.";
   errmsg[ERR_RUNTIME_SIGUSR1] = "Restarting due to SIGUSR1.";
 }
