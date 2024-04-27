@@ -40,7 +40,8 @@ struct Item {
   ITEM_e type;           // 4 bytes
   uint32_t bytecode_len; // 4 bytes
   char name[33];         // 33 bytes (32 characters + null terminator)
-  uint8_t pad[7];        // 7 bytes of padding for 8-byte alignment
+  bool inuse;            // Set when an item is being executed.
+  uint8_t pad[7];        // 6 bytes of padding for 8-byte alignment
   ITEM_t *parent;        // 8 bytes - Pointer to the parent item
   HASHTABLE_t *children; // 8 bytes - Hash table for immediate children
   uint8_t *bytecode;     // 8 bytes - Bytecode if a code item
