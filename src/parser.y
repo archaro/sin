@@ -363,7 +363,7 @@ bool prepare_item(SCANNER_STATE_t *state) {
   state->item_count++;
   int8_t c = state->item_count;
   state->arg_count[c] = 0;
-  state->item_out[c] = GROW_ARRAY(OUTPUT_t, NULL, 0, sizeof(OUTPUT_t));
+  state->item_out[c] = GROW_ARRAY(OUTPUT_t, NULL, 0, 1);
   state->item_out[c]->maxsize = 1024;
   state->item_out[c]->bytecode = GROW_ARRAY(unsigned char, NULL, 0,
                                               state->item_out[c]->maxsize);
@@ -379,7 +379,7 @@ void finalise_item(SCANNER_STATE_t *state) {
   merge_item_buffer(state->out, state->item_out[c]);
   FREE_ARRAY(unsigned char, state->item_out[c]->bytecode,
                                                state->item_out[c]->maxsize);
-  FREE_ARRAY(OUTPUT_t, state->item_out[c], sizeof(OUTPUT_t));
+  FREE_ARRAY(OUTPUT_t, state->item_out[c], 1);
   state->item_count--;
   if (state->item_count > -1) {
     state->item_buf = state->item_out[state->item_count];
@@ -395,7 +395,7 @@ void cleanup_item(SCANNER_STATE_t *state) {
   while (c >= 0) {
     FREE_ARRAY(unsigned char, state->item_out[c]->bytecode,
                                                state->item_out[c]->maxsize);
-    FREE_ARRAY(OUTPUT_t, state->item_out[c], sizeof(OUTPUT_t));
+    FREE_ARRAY(OUTPUT_t, state->item_out[c], 1);
     c--;
   }
 }

@@ -22,7 +22,7 @@ STACK_t *make_stack() {
 void destroy_stack(STACK_t *stack) {
   // Byebye stack
   reset_stack(stack);
-  FREE_ARRAY(STACK_t, stack, sizeof(STACK_t));
+  FREE_ARRAY(STACK_t, stack, 1);
 }
 
 void reset_stack(STACK_t *stack) {

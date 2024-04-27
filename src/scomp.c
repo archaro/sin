@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
   fclose(in);
   logmsg("Source loaded: %d bytes.\n", sourcelen);
 
-  out = GROW_ARRAY(OUTPUT_t, NULL, 0, sizeof(OUTPUT_t));
+  out = GROW_ARRAY(OUTPUT_t, NULL, 0, 1);
   out->maxsize = 1024;
   out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, out->maxsize);
   out->nextbyte = out->bytecode;
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
   }
 
   FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
-  FREE_ARRAY(OUTPUT_t, out, sizeof(OUTPUT_t));
+  FREE_ARRAY(OUTPUT_t, out, 1);
   FREE_ARRAY(char, source, sourcelen);
   for (int l = 0; l < local.count; l++) {
     free(local.id[l]);

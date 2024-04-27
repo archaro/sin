@@ -606,7 +606,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
 
   // We have the source.  Compile it.
   DEBUG_LOG("Source to compile: %s\n", sourcecode);
-  OUTPUT_t *out = GROW_ARRAY(OUTPUT_t, NULL, 0, sizeof(OUTPUT_t));
+  OUTPUT_t *out = GROW_ARRAY(OUTPUT_t, NULL, 0, 1);
   out->maxsize = 1024;
   out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, out->maxsize);
   out->nextbyte = out->bytecode;
@@ -678,7 +678,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   }
 
   // Clean up.
-  FREE_ARRAY(OUTPUT_t, out, sizeof(OUTPUT_t));
+  FREE_ARRAY(OUTPUT_t, out, 1);
   FREE_ARRAY(char, sourcecode, sclen + 1);
   FREE_ARRAY(char, itemname.s, strlen(itemname.s));
   for (int l = 0; l < local.count; l++) {

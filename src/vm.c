@@ -23,7 +23,7 @@ CALLSTACK_t *make_callstack() {
 
 void destroy_callstack(CALLSTACK_t *stack) {
   // Byebye stack
-  FREE_ARRAY(CALLSTACK_t, stack, sizeof(CALLSTACK_t));
+  FREE_ARRAY(CALLSTACK_t, stack, 1);
 }
 
 void push_callstack(ITEM_t *item, uint8_t *nextop, uint8_t args) {

@@ -259,37 +259,37 @@ char *substr(const char *str, size_t begin, size_t len) {
 ENTRY_t *allocate_entry() {
   // Allocator API: Gimme a new ENTRY_t
   ENTRY_t *newentry = NULL;
-  newentry = GROW_ARRAY(ENTRY_t, newentry, 0, sizeof(ENTRY_t));
+  newentry = GROW_ARRAY(ENTRY_t, newentry, 0, 1);
   return newentry;
 }
 
 HASHTABLE_t *allocate_hashtable() {
   // Allocator API: Gimme a new HASHTABLE_t
   HASHTABLE_t *newhash = NULL;
-  newhash = GROW_ARRAY(HASHTABLE_t, newhash, 0, sizeof(HASHTABLE_t));
+  newhash = GROW_ARRAY(HASHTABLE_t, newhash, 0, 1);
   return newhash;
 }
 
 ITEM_t *allocate_item() {
   ITEM_t *newitem = NULL;
-  newitem = GROW_ARRAY(ITEM_t, newitem, 0, sizeof(ITEM_t));
+  newitem = GROW_ARRAY(ITEM_t, newitem, 0, 1);
   // Allocator API: Gimme a new Item
   return newitem;
 }
 
 void deallocate_entry(ENTRY_t *entry) {
   // Allocator API: Take this ENTRY_t back.
-  FREE_ARRAY(ENTRY_t, entry, sizeof(ENTRY_t));
+  FREE_ARRAY(ENTRY_t, entry, 1);
 }
 
 void deallocate_hashtable(HASHTABLE_t *hashtable) {
   // Allocator API: Take this HashTable back.
-  FREE_ARRAY(HASHTABLE_t, hashtable, sizeof(HASHTABLE_t));
+  FREE_ARRAY(HASHTABLE_t, hashtable, 1);
 }
 
 void deallocate_item(ITEM_t *item) {
   // Allocator API: Take this Item back.
-  FREE_ARRAY(ITEM_t, item, sizeof(ITEM_t));
+  FREE_ARRAY(ITEM_t, item, 1);
 }
 
 ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
