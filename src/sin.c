@@ -214,8 +214,7 @@ int main(int argc, char **argv) {
   // Do some preparations
   DEBUG_LOG("DEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
-  config.vm.stack = make_stack();
-  config.vm.callstack = make_callstack();
+  config.vm = make_vm();
 
   init_interpreter();
   // If the itemstore hasn't been loaded, do so now.
@@ -244,10 +243,8 @@ int main(int argc, char **argv) {
   } else {
     logerr("SIGUSR1 received.  Restarting boot item.\n");
     logerr("Destroying and recreating all stacks.\n");
-    destroy_stack(config.vm.stack);
-    destroy_callstack(config.vm.callstack);
-    config.vm.stack = make_stack();
-    config.vm.callstack = make_callstack();
+    destroy_vm(config.vm);
+    config.vm = make_vm();
   }
   // Execute the boot item.  This should set up all the tasks for
   // the main game.  It must not be an infinite loop!
@@ -264,6 +261,9 @@ int main(int argc, char **argv) {
   } else {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }
+  // Finished with the boot item, and all its empty promises
+  destroy_vm(config.vm);
+  destroy_item(boot);
 
   // Here we go...
   logmsg("Running...\n");
@@ -288,12 +288,9 @@ int main(int argc, char **argv) {
   FREE_ARRAY(uv_loop_t, config.loop, sizeof(uv_loop_t));
   network_cleanup();
   save_itemstore(config.itemstore, config.itemroot);
-  destroy_stack(config.vm.stack);
-  destroy_callstack(config.vm.callstack);
   free(config.itemstore);
   free(config.srcroot);
   destroy_item(config.itemroot);
-  destroy_item(boot);
   close_log();
   return runloop_retval;
 }

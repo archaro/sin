@@ -27,14 +27,14 @@ uint8_t *lc_sys_backup(uint8_t *nextop, ITEM_t *item) {
                                                                 timestamp);
   save_itemstore(backupfile, config.itemroot);
   // libcalls always return a value.
-  push_stack(VM.stack, VALUE_NIL);
+  push_stack(VM->stack, VALUE_NIL);
   return nextop;
 }
 
 uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
   // Pop the top of the stack and write it to the syslog
   // Try to do something sensible if the type is not a string.
-  VALUE_t val = pop_stack(VM.stack);
+  VALUE_t val = pop_stack(VM->stack);
   switch (val.type) {
     case VALUE_str:
       logmsg(val.s);
@@ -54,7 +54,7 @@ uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
       logmsg("Sys.log called with unknown value type.\n");
   }
   // libcalls always return a value.
-  push_stack(VM.stack, VALUE_NIL);
+  push_stack(VM->stack, VALUE_NIL);
   return nextop;
 }
 
