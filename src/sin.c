@@ -14,6 +14,7 @@
 #include "memory.h"
 #include "log.h"
 #include "network.h"
+#include "task.h"
 #include "value.h"
 #include "item.h"
 #include "stack.h"
@@ -236,6 +237,11 @@ int main(int argc, char **argv) {
   boot->bytecode = bytecode;
   boot->bytecode_len = filesize;
 
+  // Prepare the loop - the boot item should be setting up tasks,
+  // so the loop needs to be read for 'em.
+  config.loop = GROW_ARRAY(uv_loop_t, config.loop, 0, sizeof(uv_loop_t));
+  uv_loop_init(config.loop);
+
   // This is a relatively safe restart point if things turn ugly.
   // This will need to be revisited once the eventloop is running.
   if (setjmp(recovery) == 0) {
@@ -267,8 +273,6 @@ int main(int argc, char **argv) {
 
   // Here we go...
   logmsg("Running...\n");
-  config.loop = GROW_ARRAY(uv_loop_t, config.loop, 0, sizeof(uv_loop_t));
-  uv_loop_init(config.loop);
   init_listener(listener_port);
   uv_timer_t timer;
   uv_timer_init(config.loop, &timer);
@@ -286,6 +290,7 @@ int main(int argc, char **argv) {
   uv_run(config.loop, UV_RUN_ONCE);
   uv_loop_close(config.loop);
   FREE_ARRAY(uv_loop_t, config.loop, sizeof(uv_loop_t));
+  finalise_tasks();
   network_cleanup();
   save_itemstore(config.itemstore, config.itemroot);
   free(config.itemstore);

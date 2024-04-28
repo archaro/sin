@@ -93,3 +93,4 @@ void dump_item(ITEM_t *item, char *item_name, bool isroot);
 
 // Other item-related API functions
 bool is_valid_layer(const char *str);
+void set_error_item(const int errnum);

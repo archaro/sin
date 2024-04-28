@@ -615,9 +615,10 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   // check to see if the item is in use - if it is, we can't
   // overwrite it.
   bool result;
-  if (item->inuse) {
+  ITEM_t *testitem = find_item(config.itemroot, itemname.s);
+  if (testitem && testitem->inuse) {
     char name[MAX_ITEM_NAME];
-    get_itemname(item, name);
+    get_itemname(testitem, name);
     result = false;
     local.errnum = ERR_COMP_INUSE;
   } else {
@@ -667,13 +668,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     // Compilation failed.  Don't assign anything.
     logerr("Compilation failed.\n");
     // Set the error item to the compiler error.
-    VALUE_t e, emsg;
-    e.type = VALUE_int;
-    e.i = local.errnum;
-    set_item(config.itemroot, "sys.error", e);
-    emsg.type = VALUE_str;
-    emsg.s = strdup(errmsg[local.errnum]);
-    set_item(config.itemroot, "sys.error.msg", emsg);
+    set_error_item(local.errnum);
     FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
   }
 

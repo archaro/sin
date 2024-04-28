@@ -22,4 +22,10 @@ extern VALUE_t VALUE_NIL;
 extern VALUE_t VALUE_ERROR;
 #endif
 
+#define FREE_STR(val) \
+  if ((val).type == VALUE_str) { \
+    logmsg("Freeing: %s\n", val.s); \
+    FREE_ARRAY(char, (val).s, strlen((val).s) + 1); \
+  }
+  
 VALUE_t convert_to_bool(VALUE_t from);

@@ -65,6 +65,7 @@ integer     [0-9]+
   "or"          { return TOR; }
   "return"      { return TRETURN; }
   "sys"         { yylval->string = strdup(yytext); return TLIBNAME; }
+  "task"        { yylval->string = strdup(yytext); return TLIBNAME; }
   "then"        { return TTHEN; }
   "while"       { return TWHILE; }
   "="           { return TASSIGN; }

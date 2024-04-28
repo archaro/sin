@@ -13,4 +13,6 @@ void init_errmsg() {
   errmsg[ERR_COMP_WRONGARGS] = "Wrong number of arguments to library call.";
   errmsg[ERR_COMP_INUSE] = "Item in use; cannot replace it.";
   errmsg[ERR_RUNTIME_SIGUSR1] = "Restarting due to SIGUSR1.";
+  errmsg[ERR_RUNTIME_INVALIDARGS] = "Invalid arguments to library call.";
+  errmsg[ERR_RUNTIME_NOSUCHITEM] = "Item does not exist.";
 }

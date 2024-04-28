@@ -7,6 +7,7 @@
 #include <errno.h>
 
 #include "config.h"
+#include "error.h"
 #include "util.h"
 #include "memory.h"
 #include "log.h"
@@ -767,5 +768,16 @@ bool is_valid_layer(const char *str) {
   }
 
   return true;
+}
+
+void set_error_item(const int errnum) {
+  // Helper function to set the error item.
+  VALUE_t e, emsg;
+  e.type = VALUE_int;
+  e.i = errnum;
+  set_item(config.itemroot, "sys.error", e);
+  emsg.type = VALUE_str;
+  emsg.s = strdup(errmsg[errnum]);
+  set_item(config.itemroot, "sys.error.msg", emsg);
 }
 
