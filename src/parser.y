@@ -76,7 +76,7 @@
 #include "error.h"
 #include "parser.h"
 #include "memory.h"
-#include "libcalls.h"
+#include "libcall.h"
 
 typedef void *yyscan_t;
 int yylex (YYSTYPE *yylval_param, yyscan_t yyscanner);

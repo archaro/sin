@@ -8,7 +8,7 @@
 #include "error.h"
 #include "util.h"
 #include "interpret.h"
-#include "libcalls.h"
+#include "libcall.h"
 #include "log.h"
 #include "memory.h"
 #include "parser.h"

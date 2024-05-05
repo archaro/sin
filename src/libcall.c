@@ -6,7 +6,7 @@
 #include "memory.h"
 #include "config.h"
 #include "task.h"
-#include "libcalls.h"
+#include "libcall.h"
 #include "log.h"
 #include "stack.h"
 #include "item.h"
