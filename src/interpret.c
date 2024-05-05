@@ -603,7 +603,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   nextop += sclen;
 
   // We have the source.  Compile it.
-  DEBUG_LOG("Source to compile: %s\n", sourcecode);
+  DISASS_LOG("Source to compile: %s\n", sourcecode);
   OUTPUT_t *out = GROW_ARRAY(OUTPUT_t, NULL, 0, 1);
   out->maxsize = 1024;
   out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, out->maxsize);
@@ -1030,9 +1030,6 @@ VALUE_t interpret(ITEM_t *item) {
   VM->stack->current += numlocals - numparams;
   VM->stack->locals = numlocals;
   VM->stack->params = numparams;
-  DEBUG_LOG("Making space for %d locals (including %d parameters).\n",
-                                                    numlocals, numparams);
-  DEBUG_LOG("Current top of stack is: %d\n", VM->stack->current);
   // The actual bytecode starts at the third byte.
   uint8_t *op = item->bytecode + 2; 
   while (*op != 'h') {
@@ -1045,14 +1042,7 @@ VALUE_t interpret(ITEM_t *item) {
   // Item is now free to be replaced or deleted
   item->inuse = false;
 
-  int stacksize = size_stack(VM->stack);
-#ifdef DEBUG
-  if (stacksize > 1) {
-    logerr("Stack contains %d entries at end of interpretation.\n",
-                                                  size_stack(VM->stack));
-  }
-#endif
-  if (stacksize > 0) {
+  if (size_stack(VM->stack) > 0) {
     return pop_stack(VM->stack);
   } else {
     // Otherwise return a nil.
