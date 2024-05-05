@@ -2,11 +2,15 @@
 #include <string.h>
 
 #include "util.h"
+#include "error.h"
+#include "memory.h"
 #include "config.h"
+#include "task.h"
 #include "libcalls.h"
 #include "log.h"
 #include "stack.h"
 #include "item.h"
+#include "interpret.h"
 
 // Configuration object.  Defined in sin.c
 extern CONFIG_t config;
@@ -27,14 +31,14 @@ uint8_t *lc_sys_backup(uint8_t *nextop, ITEM_t *item) {
                                                                 timestamp);
   save_itemstore(backupfile, config.itemroot);
   // libcalls always return a value.
-  push_stack(VM.stack, VALUE_NIL);
+  push_stack(VM->stack, VALUE_NIL);
   return nextop;
 }
 
 uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
   // Pop the top of the stack and write it to the syslog
   // Try to do something sensible if the type is not a string.
-  VALUE_t val = pop_stack(VM.stack);
+  VALUE_t val = pop_stack(VM->stack);
   switch (val.type) {
     case VALUE_str:
       logmsg(val.s);
@@ -54,13 +58,102 @@ uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
       logmsg("Sys.log called with unknown value type.\n");
   }
   // libcalls always return a value.
-  push_stack(VM.stack, VALUE_NIL);
+  push_stack(VM->stack, VALUE_NIL);
+  return nextop;
+}
+
+uint8_t *lc_sys_shutdown(uint8_t *nextop, ITEM_t *item) {
+  // End the game loop, thereby shutting down.
+  // This call takes no parameters.
+  logmsg("Sys.shutdown called.  Shutting down.\n");
+  uv_stop(config.loop);
+  // libcalls always return a value.
+  push_stack(VM->stack, VALUE_NIL);
+  return nextop;
+}
+
+void execute_task_cb(uv_timer_t *req) {
+  // This callback is for executing tasks when they are due.
+  TASK_t *task = req->data;
+  DEBUG_LOG("Executing task %s (id: %d)\n", task->itemname, task->id);
+  // Each task runs in its own VM (which may not be necessary, but
+  // we will keep it up for now).
+  config.vm = task->vm;
+  ITEM_t *item = find_item(config.itemroot, task->itemname);
+  if (item && item->type == ITEM_code) {
+    VALUE_t ret = interpret(item);
+    reset_stack(VM->stack);
+    if (ret.type == VALUE_int) {
+      logmsg("Bytecode interpreter returned: %ld\n", ret.i);
+    } else if (ret.type == VALUE_str) {
+      logmsg("Bytecode interpreter returned: %s\n", ret.s);
+      FREE_ARRAY(char, ret.s, strlen(ret.s));
+    } else if (ret.type == VALUE_bool) {
+      logmsg("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
+    } else if (ret.type == VALUE_nil) {
+      logmsg("Bytecode interpreter returned nil.\n");
+    } else {
+      logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
+    }
+  } else {
+    logerr("Cannot execute %s - not a code item.\n", task->itemname);
+  }
+}
+
+uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
+  // Create a new game task.  There are three values on the stack:
+  // name of the item to execute, time until first execution, and
+  // time between executions.  The intervals are in 10ths of a second.
+  // The item must exist, both time values must be >=0, and if both
+  // intervals are 0 then the item is executed once immediately, and
+  // not again.
+  // Validate the parameters before creating the task.
+  VALUE_t repeatin = pop_stack(VM->stack);
+  VALUE_t startin = pop_stack(VM->stack);
+  VALUE_t itemname = pop_stack(VM->stack);
+  if (repeatin.type != VALUE_int || startin.type != VALUE_int
+                               || itemname.type != VALUE_str) {
+    // Invalid parameters.  Clean them up, set the error item,
+    // and return.
+    FREE_STR(repeatin);
+    FREE_STR(startin);
+    FREE_STR(itemname);
+    set_error_item(ERR_RUNTIME_INVALIDARGS);
+    push_stack(VM->stack, VALUE_NIL);
+    return nextop;
+  }
+  ITEM_t *taskitem = find_item(config.itemroot, itemname.s);
+  if (!taskitem) {
+    // If the task item doesn't exist, it can't be run.
+    FREE_STR(itemname);
+    push_stack(VM->stack, VALUE_NIL);
+    set_error_item(ERR_RUNTIME_NOSUCHITEM);
+    return nextop;
+  }
+  // We have the task item, and the start and repeat intervals.
+  // Intervals are given in 10ths of a second, but we need milliseconds.
+  repeatin.i *= 100;
+  startin.i *= 100;
+  TASK_t *newtask = make_task(itemname.s, repeatin.i);
+  FREE_STR(itemname);
+  // Now add the task to the game loop starting at the correct interval
+  uv_timer_init(config.loop, newtask->timer);
+  // The handle needs to be able to access its task
+  newtask->timer->data = newtask;
+  // Off we go!
+  uv_timer_start(newtask->timer, execute_task_cb, startin.i, repeatin.i);
+
+  // libcalls always return a value. In this case, the id of the task.
+  VALUE_t ret = {VALUE_int, {newtask->id}};
+  push_stack(VM->stack, ret);
   return nextop;
 }
 
 const LIBCALL_t libcalls[] = {
   {"sys", "backup", 1, 0, 0, lc_sys_backup},
   {"sys", "log", 1, 1, 1, lc_sys_log},
+  {"sys", "shutdown", 1, 2, 0, lc_sys_shutdown},
+  {"task", "newgametask", 2, 0, 3, lc_task_newgametask},
   {NULL, NULL, -1, -1, 0, NULL}  // End marker
 };
 

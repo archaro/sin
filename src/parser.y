@@ -586,7 +586,6 @@ libcall:  TLIBNAME TLAYERSEP TLAYER { prepare_item(state); }
                            emit_byte('A', state->out);
                            emit_byte(lib, state->out);
                            emit_byte(call, state->out);
-                           emit_byte(arg_count, state->out);
                          } else {
                            state->local->errnum =
                                            ERR_COMP_UNKNOWNLIB;

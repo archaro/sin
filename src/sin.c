@@ -7,11 +7,14 @@
 #include <unistd.h>
 #include <signal.h>
 #include <setjmp.h>
+#include <uv.h>
 
 #include "config.h"
 #include "error.h"
 #include "memory.h"
 #include "log.h"
+#include "network.h"
+#include "task.h"
 #include "value.h"
 #include "item.h"
 #include "stack.h"
@@ -22,6 +25,12 @@ jmp_buf recovery;
 
 // The configuration object - for passing interesting data around globally.
 CONFIG_t config;
+
+void close_all_tasks(uv_handle_t* handle, void* arg) {
+  if (!uv_is_closing(handle)) { //FALSE, handle is closing
+    uv_close(handle, NULL);
+  }
+}
 
 void handle_sigusr1(int sig) {
   // SIGUSR1 is raised in various places, and should cause the interpret()
@@ -38,11 +47,12 @@ void usage() {
   logmsg("\t\t\tIf this option is not supplied, the default filename\n");
   logmsg("\t\t\t'items.dat' is used.  The file is created if it does not\n");
   logmsg("\t\t\texist.\n");
-  logmsg(" -l, --log [file]\tLog output to <filename>.\n");
+  logmsg(" -l, --log [file]\tLog output to <file>.\n");
   logmsg("\t\t\tIf no filename is given, the default filename, 'sin' is\n");
   logmsg("\t\t\tused.  The filename is suffixed with .log for stdout,\n");
   logmsg("\t\t\tand .err for stderr.\n");
   logmsg(" -o, --object <file>\tObject code to interpret.\n");
+  logmsg(" -p, --port <port>\t Port to listen on.\n");
   logmsg(" -s, --srcroot <dir>\tRoot of source tree.\n");
   logmsg("\t\t\tIf this option is not supplied, the default directory\n");
   logmsg("\t\t\t'./srcroot' is used, which will be created if it does\n");
@@ -52,7 +62,7 @@ void usage() {
 
 int main(int argc, char **argv) {
   FILE *in;
-  int filesize = 0;
+  int filesize = 0, listener_port = LISTENER_PORT;
   struct stat buffer;
   uint8_t *bytecode = NULL;
 
@@ -61,6 +71,7 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
+  // Set up some defaults (may be overridden by config options)
   config.itemroot = NULL;
   config.srcroot = NULL;
 
@@ -84,10 +95,11 @@ int main(int argc, char **argv) {
     {"itemstore", required_argument, 0, 'i'},
     {"log", optional_argument, 0, 'l'},
     {"object", required_argument, 0, 'o'},
+    {"port", optional_argument, 0, 'p'},
     {"srcroot", required_argument, 0, 's'},
     {NULL, 0, 0, '\0'}
   };
-  while ((opt = getopt_long(argc, argv, "hi:l::o:s:", options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "hi:l::o:p:s:", options, NULL)) != -1) {
     switch(opt) {
       case 'h':
         usage();
@@ -136,6 +148,10 @@ int main(int argc, char **argv) {
         fread(bytecode, filesize, sizeof(char), in);
         fclose(in);
         logmsg("Bytecode loaded: %d bytes.\n", filesize);
+        break;
+      case 'p':
+        // Optional: port to listen on.
+        listener_port = atoi(optarg);
         break;
       case 's':
         // Optional: root directory of the source tree.
@@ -199,8 +215,7 @@ int main(int argc, char **argv) {
   // Do some preparations
   DEBUG_LOG("DEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
-  config.vm.stack = make_stack();
-  config.vm.callstack = make_callstack();
+  config.vm = make_vm();
 
   init_interpreter();
   // If the itemstore hasn't been loaded, do so now.
@@ -222,18 +237,23 @@ int main(int argc, char **argv) {
   boot->bytecode = bytecode;
   boot->bytecode_len = filesize;
 
+  // Prepare the loop - the boot item should be setting up tasks,
+  // so the loop needs to be read for 'em.
+  config.loop = GROW_ARRAY(uv_loop_t, config.loop, 0, sizeof(uv_loop_t));
+  uv_loop_init(config.loop);
+
   // This is a relatively safe restart point if things turn ugly.
+  // This will need to be revisited once the eventloop is running.
   if (setjmp(recovery) == 0) {
     logmsg("Setting up error handler.\n");
   } else {
     logerr("SIGUSR1 received.  Restarting boot item.\n");
     logerr("Destroying and recreating all stacks.\n");
-    destroy_stack(config.vm.stack);
-    destroy_callstack(config.vm.callstack);
-    config.vm.stack = make_stack();
-    config.vm.callstack = make_callstack();
+    destroy_vm(config.vm);
+    config.vm = make_vm();
   }
-  // Execute the boot item.  This is the main game loop.
+  // Execute the boot item.  This should set up all the tasks for
+  // the main game.  It must not be an infinite loop!
   VALUE_t ret = interpret(boot);
   if (ret.type == VALUE_int) {
     logmsg("Bytecode interpreter returned: %ld\n", ret.i);
@@ -247,19 +267,33 @@ int main(int argc, char **argv) {
   } else {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }
+  // Finished with the boot item, and all its empty promises
+  destroy_vm(config.vm);
+  destroy_item(boot);
+
+  // Here we go...
+  logmsg("Running...\n");
+  init_listener(listener_port);
+  int runloop_retval = uv_run(config.loop, UV_RUN_DEFAULT);
 
   // Clean up before shutdown.
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
+  shutdown_listener();
+  // Send a close request to every registered callback
+  uv_walk(config.loop, close_all_tasks, NULL);
+  // Process pending handles - should all be closed or closing
+  uv_run(config.loop, UV_RUN_ONCE);
+  uv_loop_close(config.loop);
+  FREE_ARRAY(uv_loop_t, config.loop, sizeof(uv_loop_t));
+  finalise_tasks();
+  network_cleanup();
   save_itemstore(config.itemstore, config.itemroot);
-  destroy_stack(config.vm.stack);
-  destroy_callstack(config.vm.callstack);
   free(config.itemstore);
   free(config.srcroot);
   destroy_item(config.itemroot);
-  destroy_item(boot);
   close_log();
-  exit(EXIT_SUCCESS);
+  return runloop_retval;
 }
 

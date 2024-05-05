@@ -29,6 +29,8 @@ typedef struct VM {
   CALLSTACK_t *callstack;
 } VM_t;
 
+VM_t *make_vm();
+void destroy_vm(VM_t *vm);
 CALLSTACK_t *make_callstack();
 void destroy_callstack(CALLSTACK_t *stack);
 void push_callstack(ITEM_t *item, uint8_t *nextop, uint8_t args);
