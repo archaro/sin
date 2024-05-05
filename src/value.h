@@ -19,7 +19,8 @@ typedef struct {
 
 #ifndef VALUE_INTERNAL
 extern VALUE_t VALUE_NIL;
-extern VALUE_t VALUE_ERROR;
+extern VALUE_t VALUE_TRUE;
+extern VALUE_t VALUE_FALSE;
 #endif
 
 #define FREE_STR(val) \

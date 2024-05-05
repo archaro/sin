@@ -149,11 +149,37 @@ uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *lc_task_killtask(uint8_t *nextop, ITEM_t *item) {
+  // Given a task id, kill it.
+  // First validate the argument
+  VALUE_t taskid = pop_stack(VM->stack);
+  if (taskid.type != VALUE_int) {
+    FREE_STR(taskid);
+    set_error_item(ERR_RUNTIME_INVALIDARGS);
+    push_stack(VM->stack, VALUE_NIL);
+    return nextop;
+  }
+
+  // Does this task even exist?
+  TASK_t *task = find_task_by_id(taskid.i);
+  if (!task) {
+    // Nope!
+    push_stack(VM->stack, VALUE_FALSE);
+  } else {
+    // Yes, so kill this task.
+    uv_close((uv_handle_t *)task->timer, NULL);
+    push_stack(VM->stack, VALUE_TRUE);
+  }
+
+  return nextop;
+}
+
 const LIBCALL_t libcalls[] = {
   {"sys", "backup", 1, 0, 0, lc_sys_backup},
   {"sys", "log", 1, 1, 1, lc_sys_log},
   {"sys", "shutdown", 1, 2, 0, lc_sys_shutdown},
   {"task", "newgametask", 2, 0, 3, lc_task_newgametask},
+  {"task", "killtask", 2, 1, 1, lc_task_killtask},
   {NULL, NULL, -1, -1, 0, NULL}  // End marker
 };
 
