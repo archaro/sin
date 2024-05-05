@@ -515,9 +515,7 @@ uint8_t *op_libcall(uint8_t *nextop, ITEM_t *item) {
   uint8_t lib, func, args;
   lib = *nextop++;
   func = *nextop++;
-  args = *nextop++;
-  DEBUG_LOG("Calling library %d, function %d with %d arguments.\n", lib,
-                                                              func, args);
+  DISASS_LOG("Calling library %d, function %d.\n", lib, func, args);
   OP_t libcall = libcall_func(lib, func);
   if (!libcall) {
     logerr("Library call not found.\n");
