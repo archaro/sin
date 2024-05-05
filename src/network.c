@@ -214,15 +214,3 @@ void shutdown_listener() {
   uv_close((uv_handle_t *)&config.listener, NULL);
 }
 
-void test_callback(uv_timer_t *req) {
-  static int count = 0;
-
-  logmsg("(%d) Callback meep!.\n", count);
-  count++;
-  if (count>5) {
-    // We need to call uv_close to remove ourself from the event loop, too
-    uv_close((uv_handle_t *)req, NULL);
-    uv_stop(config.loop);
-  }
-}
-

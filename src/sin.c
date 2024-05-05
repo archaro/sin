@@ -274,9 +274,6 @@ int main(int argc, char **argv) {
   // Here we go...
   logmsg("Running...\n");
   init_listener(listener_port);
-  uv_timer_t timer;
-  uv_timer_init(config.loop, &timer);
-  uv_timer_start(&timer, test_callback, 0, 1000);
   int runloop_retval = uv_run(config.loop, UV_RUN_DEFAULT);
 
   // Clean up before shutdown.

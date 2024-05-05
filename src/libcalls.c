@@ -62,6 +62,16 @@ uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *lc_sys_shutdown(uint8_t *nextop, ITEM_t *item) {
+  // End the game loop, thereby shutting down.
+  // This call takes no parameters.
+  logmsg("Sys.shutdown called.  Shutting down.\n");
+  uv_stop(config.loop);
+  // libcalls always return a value.
+  push_stack(VM->stack, VALUE_NIL);
+  return nextop;
+}
+
 void execute_task_cb(uv_timer_t *req) {
   // This callback is for executing tasks when they are due.
   TASK_t *task = req->data;
@@ -142,6 +152,7 @@ uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
 const LIBCALL_t libcalls[] = {
   {"sys", "backup", 1, 0, 0, lc_sys_backup},
   {"sys", "log", 1, 1, 1, lc_sys_log},
+  {"sys", "shutdown", 1, 2, 0, lc_sys_shutdown},
   {"task", "newgametask", 2, 0, 3, lc_task_newgametask},
   {NULL, NULL, -1, -1, 0, NULL}  // End marker
 };

@@ -22,5 +22,4 @@ typedef struct {
 void network_cleanup();
 void init_listener(uint32_t port);
 void shutdown_listener();
-void test_callback(uv_timer_t *req);
 
