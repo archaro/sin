@@ -1,5 +1,7 @@
 // Utility functions
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>

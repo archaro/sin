@@ -1,6 +1,6 @@
 // The interpreter.  Receives an item, and runs the code.
-// TODO: Ultimately, this should return a value somehow.
-// How?
+
+// Licensed under the MIT License - see LICENSE file for details.
 
 #pragma once
 

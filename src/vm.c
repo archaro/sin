@@ -1,5 +1,7 @@
 // The Sinistra VM object
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include "signal.h"
 
 #include "config.h"

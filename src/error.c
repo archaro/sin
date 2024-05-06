@@ -1,3 +1,7 @@
+// Error codes
+
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include "error.h"
 
 const char *errmsg[MAXERRORS];

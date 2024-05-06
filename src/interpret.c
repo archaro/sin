@@ -1,5 +1,7 @@
 // The interpreter
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include <string.h>
 #include <stdint.h>
 #include <stdlib.h>

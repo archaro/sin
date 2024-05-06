@@ -1,5 +1,7 @@
 // Value things
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include <stddef.h>
 #include <malloc.h>
 

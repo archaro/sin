@@ -1,5 +1,7 @@
 // This is the wrapper for the standalone compiler (parser.y and lexer.l)
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include <stdio.h>
 #include <stdlib.h>
 

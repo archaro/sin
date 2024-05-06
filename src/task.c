@@ -1,5 +1,7 @@
 // Task management
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include <string.h>
 
 #include "config.h"

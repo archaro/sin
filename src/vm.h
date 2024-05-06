@@ -1,5 +1,6 @@
 // The virtual machine object
-// There can be only one of these.
+
+// Licensed under the MIT License - see LICENSE file for details.
 
 #pragma once
 

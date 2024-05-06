@@ -1,5 +1,7 @@
 // The memory manager
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include <stdlib.h>
 
 #include "memory.h"

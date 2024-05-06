@@ -5,6 +5,8 @@
 //
 // Each code item is an isolated unit, with its own stack, etc.
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #pragma once
 
 #include <stdio.h>

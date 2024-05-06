@@ -1,3 +1,7 @@
+// Library calls - pseudo-items which do interesting things.
+
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include <time.h>
 #include <string.h>
 

@@ -1,5 +1,7 @@
 // Error messages
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #pragma once
 
 // How big should the error message table be?

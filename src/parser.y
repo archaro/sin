@@ -1,6 +1,9 @@
 /* This is a basic parser which takes an input source string and produces an
    output bytecode string which can be processed by the sin interpreter.
+
+   Licensed under the MIT License - see LICENSE file for details.
 */
+
 
 %define api.pure full
 %lex-param {void *scanner}

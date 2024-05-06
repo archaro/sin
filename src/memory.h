@@ -1,6 +1,8 @@
 // A basic memory management module.
 // It will get cleverer.
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #pragma once
 
 #include <stddef.h>

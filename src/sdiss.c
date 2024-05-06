@@ -1,4 +1,7 @@
 // sdiss - Sinistra bytecode disassembler
+
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>

@@ -1,5 +1,7 @@
 //  A simple stack, stacking VALUE_t types by value
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #pragma once
 
 #include <stdint.h>

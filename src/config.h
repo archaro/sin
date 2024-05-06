@@ -1,6 +1,8 @@
 // Configuration object
 // Useful for access to various bits of global data.
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #pragma once
 
 #include <uv.h>

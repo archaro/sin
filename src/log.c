@@ -1,6 +1,8 @@
 // Simple log facility
 // Log to file if that is specified on the command line.
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -1,5 +1,7 @@
 // The Item.  The nub and the gist of the whole brouhaha in a nutshell.
 
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

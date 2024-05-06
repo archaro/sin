@@ -1,6 +1,8 @@
 // Basic logging function.
-// Sends stderr to stdout, or to a logfile, depending on the option which was
-// set on the command line.
+// Sends stderr to stdout, or to a logfile, depending on the option which
+// set os n the command line.
+
+// Licensed under the MIT License - see LICENSE file for details.
 
 #pragma once
 
