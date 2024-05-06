@@ -10,9 +10,6 @@ SRC_DIR := src
 OBJ_DIR := obj
 LIB_DIR := lib
 
-# Dependency files
-DEPS := $(OBJECTS:.o=.d)
-
 # Library of shared functions
 LIB := $(LIB_DIR)/libsinshared.a
 LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o \
@@ -40,6 +37,10 @@ SDISS_OBJECTS := $(SDISS_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 # Source files for sin
 SIN_SOURCES := $(SRC_DIR)/sin.c $(SRC_DIR)/network.c
 SIN_OBJECTS := $(SIN_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+
+# Dependency files
+OBJECTS := $(LIB_OBJECTS) $(SCOMP_OBJECTS) $(SDISS_OBJECTS) $(SIN_OBJECTS)
+DEPS := $(OBJECTS:.o=.d)
 
 $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
