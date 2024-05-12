@@ -12,8 +12,9 @@ When the runtime engine starts up, it first loads and executes the bootstrap cod
 - Input task: this is the most important task, and is run once per loop.  It processes connections, disconnections and data from the players and output back to them.
 
 ## Limitations ##
-- The structure of the language is broadly complete, but library functions are almost nonexistent.  In terms of I/O, for example, there is precisely one method of output (sys.log - outputs to the system log), and there is no way to process input from any connection.  This is the current development focus (because otherwise it's just a potato).
+- The structure of the language is broadly complete, but library functions are almost nonexistent.  In terms of I/O, for example, there is precisely one method of output (sys.log - outputs to the system log) and, while client connections and disconnections are handled, data received is not yet processed (it just sits there in the connection buffer).  This is the current development focus, because otherwise it's just a potato.
 - The code is written in the vernacular style without any formal design.  In other words, I'm making it up as I go along.  There are various code styles and design patterns in use, depending on the mood I was in when I wrote each particular bit of code.  Much of the code is quite naïve, and will require tightening up and optimisation.  I follow the mantra "first, make it work; then make it work well; finally make it work fast".
+- The parser is singularly unhelpful if it doesn't like what it is compiling.
 - Documentation?  What documentation?
 
 ## Building and Dependencies ##
