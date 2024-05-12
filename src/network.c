@@ -3,110 +3,80 @@
 // Licensed under the MIT License - see LICENSE file for details.
 
 #include <string.h>
+#include <unistd.h>
 
 #include "config.h"
+#include "memory.h"
 #include "network.h"
 #include "log.h"
 #include "util.h"
+#include "interpret.h"
+
+// Some shorthand
+#define VM config.vm
 
 extern CONFIG_t config;
 
 #define OUTBUF_LENGTH 16384
 #define INBUF_LENGTH 16384
 
-typedef struct LineNode {
-  LINE_t *data;
-  struct LineNode* next;
-} LINENODE_t;
+LINE_t *line;
 
-// This is the list of all currently-connected lines
-LINENODE_t *line_list = NULL;
+void init_networking() {
+  // Do that which needs to be done before starting the network interface
 
-LINENODE_t *new_node(LINE_t *line) {
-  LINENODE_t *newline = (LINENODE_t *)malloc(sizeof(LINENODE_t));
-  newline->data = line;
-  newline->next = NULL;
-  return newline;
+  line = GROW_ARRAY(LINE_t, line, 0, config.maxconns);
+  for (int l = 0; l < config.maxconns; l++) {
+    line[l].status = LINE_empty;
+    line[l].linenum = l;
+  }
 }
 
 LINE_t *add_line(uv_tcp_t *line_handle) {
-  LINE_t *line = (LINE_t *)malloc(sizeof(LINE_t));
-  line->line_handle = line_handle;
-  line->outbuf = (write_req_t *) malloc(sizeof(write_req_t));
-  line->outbuf->buf.len = OUTBUF_LENGTH;
-  line->outbuf->buf.base = (char *)calloc(OUTBUF_LENGTH, 1);
-  line->outbuf->buf.base[0] = '\0';
-  line->outbuf->length = 0;
-  line->inbuf = (write_req_t *) malloc(sizeof(write_req_t));
-  line->inbuf->buf.len = INBUF_LENGTH;
-  line->inbuf->buf.base = (char *)calloc(INBUF_LENGTH, 1);
-  line->inbuf->buf.base[0] = '\0';
-  line->inbuf->length = 0;
-  LINENODE_t *newnode = new_node(line);
-  newnode->next = line_list;
-  line_list = newnode;
-  return line;
+  uint8_t l = 0;
+  while (line[l].status != LINE_empty) {
+    l++;
+    if (l >= config.maxconns) {
+      return NULL;
+    }
+  }
+  line[l].line_handle = line_handle;
+  line[l].status = LINE_connecting;
+  line[l].outbuf = (write_req_t *) malloc(sizeof(write_req_t));
+  line[l].outbuf->buf.len = OUTBUF_LENGTH;
+  line[l].outbuf->buf.base = (char *)calloc(OUTBUF_LENGTH, 1);
+  line[l].outbuf->buf.base[0] = '\0';
+  line[l].outbuf->length = 0;
+  line[l].inbuf = (write_req_t *) malloc(sizeof(write_req_t));
+  line[l].inbuf->buf.len = INBUF_LENGTH;
+  line[l].inbuf->buf.base = (char *)calloc(INBUF_LENGTH, 1);
+  line[l].inbuf->buf.base[0] = '\0';
+  line[l].inbuf->length = 0;
+  return &line[l];
 }
 
 void destroy_line(LINE_t *line) {
   // Clean up the line object
-  logmsg("%s disconnected.\n", line->address);
   free(line->line_handle);
   free(line->outbuf->buf.base);
   free(line->outbuf);
   free(line->inbuf->buf.base);
   free(line->inbuf);
-  free(line);
-}
-
-void remove_line(uv_tcp_t *line_handle) {
-  // Given a line handle, remove it from the list and free it
-  // (the line MUST have been closed first!)
-  LINENODE_t *temp = line_list, *prev = NULL;
-  if (temp != NULL && temp->data->line_handle == line_handle) {
-    // Special case for the first line in the list
-    line_list = temp->next;
-    destroy_line(temp->data);
-    free(temp);
-    return;
-  }
-  while (temp != NULL && temp->data->line_handle != line_handle) {
-    prev = temp;
-    temp = temp->next;
-  }
-  if (temp == NULL) {
-    // Not found
-    return;
-  }
-  prev->next = temp->next;
-  destroy_line(temp->data);
-  free(temp);
+  line->status = LINE_empty;
 }
 
 LINE_t *find_line(uv_tcp_t *client) {
   // Given a TCP client connection, find its associated line.
   // Return the line, or NULL if not found.
-  LINENODE_t *temp = line_list;
-  while (temp) {
-    if (temp->data->line_handle == client) {
-      return temp->data;
-    } else {
-      temp = temp->next;
+  uint8_t l = 0;
+  while (l < config.maxconns) {
+    if (line[l].line_handle == client) {
+      return &line[l];
     }
+    l++;
   }
   // Not found!
   return NULL;
-}
-
-void network_cleanup() {
-  // Cleanup after shutdown
-  LINENODE_t *temp = line_list;
-  while (line_list != NULL) {
-    temp = line_list;
-    line_list = line_list->next;
-    destroy_line(temp->data);
-    free(temp);
-  }
 }
 
 void append_output(LINE_t *line, char *msg) {
@@ -152,7 +122,13 @@ void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
 }
 
 void client_on_close(uv_handle_t *handle) {
-  remove_line((uv_tcp_t *)handle);
+  LINE_t *line = find_line((uv_tcp_t *)handle);
+  logmsg("%s disconnected.\n", line->address);
+  line->status = LINE_disconnecting;
+  // Don't call destroy_line here or it will overwrite the status
+  // Needs to be called by the input processor after dealing with
+  // the disconnection.
+  //destroy_line(line);
 }
 
 void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
@@ -160,6 +136,7 @@ void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
     logmsg("Data received (%d bytes): %s\n", nread, buf->base);
     LINE_t *line = find_line((uv_tcp_t *)client);
     if (line) {
+      line->status = LINE_data;
       append_input(line, buf->base);
     }
     free(buf->base);
@@ -168,6 +145,7 @@ void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
   if (nread < 0) {
     if (nread != UV_EOF)
       logerr("Read error %s\n", uv_err_name(nread));
+    line->status = LINE_disconnecting;
     uv_close((uv_handle_t *) client, client_on_close);
   }
   free(buf->base);
@@ -183,6 +161,12 @@ void on_new_connection(uv_stream_t *server, int status) {
   if (uv_accept((uv_stream_t *)&config.listener,
                                               (uv_stream_t *)client) == 0) {
     LINE_t *newline = add_line(client);
+    if (!newline) {
+      append_output(newline, "Too many connections.\r\n");
+      flush_output(newline);
+      logmsg("Maximum connections (%d) exceeded.\n", config.maxconns);
+      uv_close((uv_handle_t *)client, client_on_close);
+    }
     append_output(newline, "Connected.\r\n");
     flush_output(newline);
     struct sockaddr_storage peername = {0};
@@ -191,6 +175,7 @@ void on_new_connection(uv_stream_t *server, int status) {
     uv_ip_name((struct sockaddr *)&peername, newline->address, 40);
     uv_read_start((uv_stream_t *)client, alloc_buffer, client_read);
     logmsg("New connection from %s\n", newline->address);
+    line->status = LINE_connecting;
   }
   else {
     uv_close((uv_handle_t *)client, client_on_close);
@@ -212,7 +197,23 @@ void init_listener(uint32_t port) {
   }
 }
 
+void input_processor(uv_idle_t* handle) {
+  // Called once per iteration of the game loop
+  config.vm = config.input_vm;
+  ITEM_t *input = find_item(config.itemroot, config.input);
+  interpret(input);
+  reset_stack(VM->stack);
+  // Don't hog the CPU.
+  usleep(100);
+}
+
 void shutdown_listener() {
   uv_close((uv_handle_t *)&config.listener, NULL);
+}
+
+void shutdown_networking() {
+  // Having been set-up, now shut it down.  Shut it down forever.
+  // All the lines will have been disconnected by this point.
+  FREE_ARRAY(LINE_t, line, config.maxconns);
 }
 

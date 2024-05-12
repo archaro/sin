@@ -66,6 +66,7 @@ integer     [0-9]+
   "endwhile"    { return TENDWHILE; }
   "exists"      { return TEXISTS; }
   "if"          { return TIF; }
+  "net"         { yylval->string = strdup(yytext); return TLIBNAME; }
   "or"          { return TOR; }
   "return"      { return TRETURN; }
   "sys"         { yylval->string = strdup(yytext); return TLIBNAME; }

@@ -54,6 +54,8 @@ void usage() {
   logmsg("\t\t\tIf no filename is given, the default filename, 'sin' is\n");
   logmsg("\t\t\tused.  The filename is suffixed with .log for stdout,\n");
   logmsg("\t\t\tand .err for stderr.\n");
+  logmsg(" -n, --input <item>\tName of input-handler item.\n");
+  logmsg("\t\t\tIf not supplied, this defaults to 'input'.\n");
   logmsg(" -o, --object <file>\tObject code to interpret.\n");
   logmsg(" -p, --port <port>\t Port to listen on.\n");
   logmsg(" -s, --srcroot <dir>\tRoot of source tree.\n");
@@ -77,6 +79,7 @@ int main(int argc, char **argv) {
   // Set up some defaults (may be overridden by config options)
   config.itemroot = NULL;
   config.srcroot = NULL;
+  config.input = strdup("input");
 
   // Do the very early preparations, for things which are needed
   // before even the options are processed.
@@ -97,12 +100,13 @@ int main(int argc, char **argv) {
     {"help", no_argument, 0, 'h'},
     {"itemstore", required_argument, 0, 'i'},
     {"log", optional_argument, 0, 'l'},
+    {"input", required_argument, 0, 'n'},
     {"object", required_argument, 0, 'o'},
     {"port", optional_argument, 0, 'p'},
     {"srcroot", required_argument, 0, 's'},
     {NULL, 0, 0, '\0'}
   };
-  while ((opt = getopt_long(argc, argv, "hi:l::o:p:s:", options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "hi:l::n:o:p:s:", options, NULL)) != -1) {
     switch(opt) {
       case 'h':
         usage();
@@ -134,6 +138,23 @@ int main(int argc, char **argv) {
         } else {
           // No filename, use default.
           log_to_file("sin");
+        }
+        break;
+      case 'n':
+        // Optional: name of item which handles input processing
+        // Defaults to 'input' if not given.
+        if (!config.itemroot) {
+          logerr("If -n option is given, -i option must be given first.\n");
+          exit(EXIT_FAILURE);
+        }
+        ITEM_t *input_item = find_item(config.itemroot, optarg);
+        if (!input_item || input_item->type != ITEM_code) {
+          logerr("Item `%s` does not exist, or is not a code item.\n",
+                                                                  optarg);
+          exit(EXIT_FAILURE);
+        } else {
+          free(config.input);
+          config.input = strdup(optarg);
         }
         break;
       case 'o':
@@ -274,8 +295,20 @@ int main(int argc, char **argv) {
   destroy_vm(config.vm);
   destroy_item(boot);
 
+  // Set up the item which handles input.
+  logmsg("Using `%s` as the input item.\n", config.input);
+  config.input_vm = make_vm();
+  uv_idle_t input_task;
+  uv_idle_init(config.loop, &input_task);
+  uv_idle_start(&input_task, input_processor);
+  //uv_timer_start(newtask->timer, execute_task_cb, startin.i, repeatin.i);
+
+
   // Here we go...
   logmsg("Running...\n");
+  config.maxconns = MAXCONNS;
+  config.lastconn = 255;
+  init_networking();
   init_listener(listener_port);
   int runloop_retval = uv_run(config.loop, UV_RUN_DEFAULT);
 
@@ -284,6 +317,7 @@ int main(int argc, char **argv) {
   DEBUG_LOG("DEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
   shutdown_listener();
+  uv_idle_stop(&input_task);
   // Send a close request to every registered callback
   uv_walk(config.loop, close_all_tasks, NULL);
   // Process pending handles - should all be closed or closing
@@ -291,10 +325,12 @@ int main(int argc, char **argv) {
   uv_loop_close(config.loop);
   FREE_ARRAY(uv_loop_t, config.loop, sizeof(uv_loop_t));
   finalise_tasks();
-  network_cleanup();
+  shutdown_networking();
   save_itemstore(config.itemstore, config.itemroot);
   free(config.itemstore);
   free(config.srcroot);
+  free(config.input);
+  destroy_vm(config.input_vm);
   destroy_item(config.itemroot);
   close_log();
   return runloop_retval;

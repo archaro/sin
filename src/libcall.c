@@ -5,10 +5,10 @@
 #include <time.h>
 #include <string.h>
 
-#include "util.h"
 #include "error.h"
 #include "memory.h"
 #include "config.h"
+#include "network.h"
 #include "task.h"
 #include "libcall.h"
 #include "log.h"
@@ -18,6 +18,9 @@
 
 // Configuration object.  Defined in sin.c
 extern CONFIG_t config;
+
+// Connected lines.  Defined in network.c
+extern LINE_t *line;
 
 // Some shorthand
 #define VM config.vm
@@ -49,8 +52,7 @@ uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
       free(val.s);
       break;
     case VALUE_int:
-      char valuebuf[21];
-      itoa(val.i, valuebuf, 10);
+      logmsg("%d", val.i);
       break;
     case VALUE_nil:
       // One cannot logically output nil.
@@ -174,7 +176,42 @@ uint8_t *lc_task_killtask(uint8_t *nextop, ITEM_t *item) {
     uv_close((uv_handle_t *)task->timer, NULL);
     push_stack(VM->stack, VALUE_TRUE);
   }
+  return nextop;
+}
 
+uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
+  // Called by the task which checks for player input.
+  // We operate a fair queuing process here.  Everyone
+  // gets a turn.  Find the next activity.
+  config.lastconn++;
+  if (config.lastconn >= config.maxconns) {
+    config.lastconn = 0;
+  }
+  while (config.lastconn < config.maxconns) {
+    VALUE_t val = {VALUE_int, {0}};
+    // Find some activity.
+    switch (line[config.lastconn].status) {
+      case LINE_connecting:
+        line[config.lastconn].status = LINE_idle;
+        val.i = 1;
+        push_stack(VM->stack, val);
+        return nextop;
+      case LINE_disconnecting:
+        line[config.lastconn].status = LINE_idle;
+        val.i = 2;
+        push_stack(VM->stack, val);
+        return nextop;
+      case LINE_data:
+        line[config.lastconn].status = LINE_idle;
+        val.i = 3;
+        push_stack(VM->stack, val);
+        return nextop;
+      default:
+        config.lastconn++;
+    }
+  }
+  // No activity found.
+  push_stack(VM->stack, VALUE_ZERO);
   return nextop;
 }
 
@@ -184,6 +221,7 @@ const LIBCALL_t libcalls[] = {
   {"sys", "shutdown", 1, 2, 0, lc_sys_shutdown},
   {"task", "newgametask", 2, 0, 3, lc_task_newgametask},
   {"task", "killtask", 2, 1, 1, lc_task_killtask},
+  {"net", "input", 3, 0, 0, lc_net_input},
   {NULL, NULL, -1, -1, 0, NULL}  // End marker
 };
 

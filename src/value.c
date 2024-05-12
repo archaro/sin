@@ -11,6 +11,7 @@
 const VALUE_t VALUE_NIL = {VALUE_nil, {0}};
 const VALUE_t VALUE_TRUE = {VALUE_bool, {1}};
 const VALUE_t VALUE_FALSE = {VALUE_bool, {0}};
+const VALUE_t VALUE_ZERO = {VALUE_int, {0}};
 
 VALUE_t convert_to_bool(VALUE_t from) {
   // This function takes a VALUE of any type and returns a VALUE_bool

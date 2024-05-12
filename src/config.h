@@ -21,5 +21,9 @@ typedef struct {
   ITEM_t *itemroot;     // Root of in-memory itemstore
   char *srcroot;        // Root of source tree
   char *itemstore;      // Filename of on-disk itemstore
+  char *input;          // Name of the input item
+  VM_t *input_vm;       // VM for the input task
+  uint8_t maxconns;     // Maximum number of connected players
+  uint8_t lastconn;     // Last connection processed by net.input
 } CONFIG_t;
 

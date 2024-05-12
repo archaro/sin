@@ -22,6 +22,7 @@ typedef struct {
 
 #ifndef VALUE_INTERNAL
 extern VALUE_t VALUE_NIL;
+extern VALUE_t VALUE_ZERO;
 extern VALUE_t VALUE_TRUE;
 extern VALUE_t VALUE_FALSE;
 #endif
