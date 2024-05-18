@@ -262,6 +262,7 @@ const LIBCALL_t libcalls[] = {
   {"task", "newgametask", 2, 0, 3, lc_task_newgametask},
   {"task", "killtask", 2, 1, 1, lc_task_killtask},
   {"net", "input", 3, 0, 0, lc_net_input},
+  {"net", "write", 3, 1, 2, lc_net_write},
   {NULL, NULL, -1, -1, 0, NULL}  // End marker
 };
 

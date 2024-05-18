@@ -16,7 +16,7 @@
 typedef struct {
     uv_write_t req;
     uv_buf_t buf;
-    int length;
+    int length; // Allocated size of buffer
 } write_req_t;
 
 typedef struct {
@@ -34,6 +34,7 @@ void init_networking();
 void init_listener(uint32_t port);
 void destroy_line(LINE_t *line);
 void input_processor(uv_idle_t* handle);
+void append_output(LINE_t *line, const char *msg, const ssize_t len);
 void shutdown_listener();
 void shutdown_networking();
 

@@ -48,15 +48,15 @@ LINE_t *add_line(uv_tcp_t *line_handle) {
   line[l].line_handle = line_handle;
   line[l].status = LINE_connecting;
   line[l].outbuf = (write_req_t *) malloc(sizeof(write_req_t));
-  line[l].outbuf->buf.len = OUTBUF_LENGTH;
+  line[l].outbuf->buf.len = 0;
   line[l].outbuf->buf.base = (char *)calloc(OUTBUF_LENGTH, 1);
   line[l].outbuf->buf.base[0] = '\0';
-  line[l].outbuf->length = 0;
+  line[l].outbuf->length = OUTBUF_LENGTH;
   line[l].inbuf = (write_req_t *) malloc(sizeof(write_req_t));
-  line[l].inbuf->buf.len = INBUF_LENGTH;
+  line[l].inbuf->buf.len = 0;
   line[l].inbuf->buf.base = (char *)calloc(INBUF_LENGTH, 1);
   line[l].inbuf->buf.base[0] = '\0';
-  line[l].inbuf->length = 0;
+  line[l].inbuf->length = INBUF_LENGTH;
   return &line[l];
 }
 
@@ -94,26 +94,32 @@ void client_on_close(uv_handle_t *handle) {
 void append_output(LINE_t *line, const char *msg, const ssize_t len) {
   // Append output to the buffer for this line, ready for sending later.
   // If the buffer is too small, embiggen it.
-  while (line->outbuf->length + len + 1 >= line->outbuf->buf.len) {
-    line->outbuf->buf.len += OUTBUF_LENGTH;
-    line->outbuf->buf.base = (char *)realloc(line->outbuf->buf.base,
-                                                    line->outbuf->buf.len);
+  if (line->status != LINE_empty && line->status != LINE_disconnecting) {
+  // No point in doing this if there is no connection.
+    while (line->outbuf->buf.len + len + 1 >= line->outbuf->length) {
+      line->outbuf->length += OUTBUF_LENGTH;
+      line->outbuf->buf.base = (char *)realloc(line->outbuf->buf.base,
+                                                      line->outbuf->length);
+    }
+    memcpy(line->outbuf->buf.base + line->outbuf->buf.len, msg, len);
+    line->outbuf->buf.len += len;
   }
-  memcpy(line->outbuf->buf.base + line->outbuf->length, msg, len);
-  line->outbuf->length += len;
 }
 
 void append_input(LINE_t *line, const char *msg, const ssize_t len) {
   // Append input to the input buffer, ready for processing later.
   // Embiggen the buffer if too small.
   // This is where telnet processing will happen.
-  while (line->inbuf->length + len + 1 >= line->inbuf->buf.len) {
-    line->inbuf->buf.len += INBUF_LENGTH;
-    line->inbuf->buf.base = (char *)realloc(line->inbuf->buf.base,
-                                                    line->inbuf->buf.len);
+  if (line->status != LINE_empty && line->status != LINE_disconnecting) {
+  // No point in doing this if there is no connection.
+    while (line->inbuf->buf.len + len + 1 >= line->inbuf->length) {
+      line->inbuf->length += INBUF_LENGTH;
+      line->inbuf->buf.base = (char *)realloc(line->inbuf->buf.base,
+                                                    line->inbuf->length);
+    }
+    memcpy(line->inbuf->buf.base + line->inbuf->buf.len, msg, len);
+    line->inbuf->buf.len += len;
   }
-  memcpy(line->inbuf->buf.base + line->inbuf->length, msg, len);
-  line->inbuf->length += len;
   logmsg("Input buffer now contains: >>>%s<<<\n", line->inbuf->buf.base);
 }
 
@@ -145,10 +151,10 @@ void telnet_event_handler(telnet_t *telnet, telnet_event_t *ev,
 
 void flush_output(LINE_t *line) {
   // Send the output to the line, and reset the buffer.
-  if (line->outbuf->length > 0) {
+  if (line->outbuf->buf.len > 0) {
     uv_write((uv_write_t*) &line->outbuf->req,
-              (uv_stream_t*)line->line_handle, &line->outbuf->buf, 1, NULL);
-    line->outbuf->length = 0;
+            (uv_stream_t*)line->line_handle, &line->outbuf->buf, 1, NULL);
+    line->outbuf->buf.len = 0;
     line->outbuf->buf.base[0] = '\0';
   }
 }
