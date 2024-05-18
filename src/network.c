@@ -20,6 +20,11 @@ extern CONFIG_t config;
 #define OUTBUF_LENGTH 16384
 #define INBUF_LENGTH 16384
 
+static const telnet_telopt_t telopts[] = {
+  { TELNET_TELOPT_ECHO, TELNET_WONT, TELNET_DO },
+	{ -1, 0, 0 }
+};
+
 LINE_t *line;
 
 void init_networking() {
@@ -57,6 +62,7 @@ LINE_t *add_line(uv_tcp_t *line_handle) {
 
 void destroy_line(LINE_t *line) {
   // Clean up the line object
+  telnet_free(line->telnet);
   free(line->line_handle);
   free(line->outbuf->buf.base);
   free(line->outbuf);
@@ -79,40 +85,72 @@ LINE_t *find_line(uv_tcp_t *client) {
   return NULL;
 }
 
-void append_output(LINE_t *line, char *msg) {
+void client_on_close(uv_handle_t *handle) {
+  LINE_t *line = find_line((uv_tcp_t *)handle);
+  logmsg("%s disconnected.\n", line->address);
+  line->status = LINE_disconnecting;
+}
+
+void append_output(LINE_t *line, const char *msg, const ssize_t len) {
   // Append output to the buffer for this line, ready for sending later.
   // If the buffer is too small, embiggen it.
-  int msglen = strlen(msg);
-  while (line->outbuf->length + msglen + 1 >= line->outbuf->buf.len) {
+  while (line->outbuf->length + len + 1 >= line->outbuf->buf.len) {
     line->outbuf->buf.len += OUTBUF_LENGTH;
     line->outbuf->buf.base = (char *)realloc(line->outbuf->buf.base,
                                                     line->outbuf->buf.len);
   }
-  strcat(line->outbuf->buf.base, msg);
-  line->outbuf->length += msglen;
+  memcpy(line->outbuf->buf.base + line->outbuf->length, msg, len);
+  line->outbuf->length += len;
 }
 
-void append_input(LINE_t *line, char *msg) {
+void append_input(LINE_t *line, const char *msg, const ssize_t len) {
   // Append input to the input buffer, ready for processing later.
   // Embiggen the buffer if too small.
   // This is where telnet processing will happen.
-  int msglen = strlen(msg);
-  while (line->inbuf->length + msglen + 1 >= line->inbuf->buf.len) {
+  while (line->inbuf->length + len + 1 >= line->inbuf->buf.len) {
     line->inbuf->buf.len += INBUF_LENGTH;
     line->inbuf->buf.base = (char *)realloc(line->inbuf->buf.base,
                                                     line->inbuf->buf.len);
   }
-  strcat(line->inbuf->buf.base, msg);
-  line->inbuf->length += msglen;
+  memcpy(line->inbuf->buf.base + line->inbuf->length, msg, len);
+  line->inbuf->length += len;
   logmsg("Input buffer now contains: >>>%s<<<\n", line->inbuf->buf.base);
+}
+
+void telnet_event_handler(telnet_t *telnet, telnet_event_t *ev,
+                                                    		void *user_data) {
+	LINE_t *line = (LINE_t *)user_data;
+	switch (ev->type) {
+	case TELNET_EV_DATA:
+	  // Data received from client - process it.
+    append_input(line, ev->data.buffer, ev->data.size);
+		break;
+	case TELNET_EV_SEND:
+	  // Data to be sent to client - process it, too.
+    append_output(line, ev->data.buffer, ev->data.size);
+		break;
+	case TELNET_EV_DO:
+    // Here is where we negotiate requests to do something
+		break;
+	case TELNET_EV_ERROR:
+    // If there is a telnet error, it is essentially impossible to recover.
+    logerr("Telnet negotiation error.\n");
+    uv_close((uv_handle_t *)line->line_handle, client_on_close);
+		break;
+	default:
+		// I don't know you
+		break;
+	}
 }
 
 void flush_output(LINE_t *line) {
   // Send the output to the line, and reset the buffer.
-  uv_write((uv_write_t*) &line->outbuf->req,
+  if (line->outbuf->length > 0) {
+    uv_write((uv_write_t*) &line->outbuf->req,
               (uv_stream_t*)line->line_handle, &line->outbuf->buf, 1, NULL);
-  line->outbuf->length = 0;
-  line->outbuf->buf.base[0] = '\0';
+    line->outbuf->length = 0;
+    line->outbuf->buf.base[0] = '\0';
+  }
 }
 
 void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
@@ -121,23 +159,13 @@ void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
   buf->len = suggested_size;
 }
 
-void client_on_close(uv_handle_t *handle) {
-  LINE_t *line = find_line((uv_tcp_t *)handle);
-  logmsg("%s disconnected.\n", line->address);
-  line->status = LINE_disconnecting;
-  // Don't call destroy_line here or it will overwrite the status
-  // Needs to be called by the input processor after dealing with
-  // the disconnection.
-  //destroy_line(line);
-}
-
 void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
   if (nread > 0) {
     logmsg("Data received (%d bytes): %s\n", nread, buf->base);
     LINE_t *line = find_line((uv_tcp_t *)client);
     if (line) {
       line->status = LINE_data;
-      append_input(line, buf->base);
+      telnet_recv(line->telnet, buf->base, nread);
     }
     free(buf->base);
     return;
@@ -145,7 +173,6 @@ void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
   if (nread < 0) {
     if (nread != UV_EOF)
       logerr("Read error %s\n", uv_err_name(nread));
-    line->status = LINE_disconnecting;
     uv_close((uv_handle_t *) client, client_on_close);
   }
   free(buf->base);
@@ -162,12 +189,15 @@ void on_new_connection(uv_stream_t *server, int status) {
                                               (uv_stream_t *)client) == 0) {
     LINE_t *newline = add_line(client);
     if (!newline) {
-      append_output(newline, "Too many connections.\r\n");
-      flush_output(newline);
+      // We have no line setup here, so this has to be done differently
+      uv_buf_t gamefull = {"Too many connections.\r\n", 23};
+      uv_try_write((uv_stream_t *)client, &gamefull, 1);
       logmsg("Maximum connections (%d) exceeded.\n", config.maxconns);
       uv_close((uv_handle_t *)client, client_on_close);
     }
-    append_output(newline, "Connected.\r\n");
+    newline->telnet = telnet_init(telopts, telnet_event_handler, 
+                                              TELNET_FLAG_NVT_EOL, newline);
+    telnet_printf(newline->telnet, "Connected.\n");
     flush_output(newline);
     struct sockaddr_storage peername = {0};
     int peernamelen = sizeof(peername);
@@ -203,6 +233,13 @@ void input_processor(uv_idle_t* handle) {
   ITEM_t *input = find_item(config.itemroot, config.input);
   interpret(input);
   reset_stack(VM->stack);
+  // Flush the output of every connected line
+  for (int l = 0; l < config.maxconns; l++) {
+    if (line[l].status != LINE_empty 
+                                  && line[l].status != LINE_disconnecting) {
+      flush_output(&line[l]);
+    }
+  }
   // Don't hog the CPU.
   usleep(100);
 }

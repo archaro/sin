@@ -8,6 +8,8 @@
 #include <sys/socket.h>
 #include <uv.h>
 
+#include "libtelnet.h"
+
 // Default maximum connections
 #define MAXCONNS  50
 
@@ -23,12 +25,14 @@ typedef struct {
          LINE_disconnecting, LINE_data, LINE_idle } status;
   uint8_t linenum;
   char address[40];
+  telnet_t *telnet;
   write_req_t *outbuf;
   write_req_t *inbuf;
 } LINE_t;
 
 void init_networking();
 void init_listener(uint32_t port);
+void destroy_line(LINE_t *line);
 void input_processor(uv_idle_t* handle);
 void shutdown_listener();
 void shutdown_networking();

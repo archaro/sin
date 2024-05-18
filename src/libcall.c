@@ -5,6 +5,7 @@
 #include <time.h>
 #include <string.h>
 
+#include "util.h"
 #include "error.h"
 #include "memory.h"
 #include "config.h"
@@ -197,7 +198,8 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
         push_stack(VM->stack, val);
         return nextop;
       case LINE_disconnecting:
-        line[config.lastconn].status = LINE_idle;
+        destroy_line(line);
+        line[config.lastconn].status = LINE_empty;
         val.i = 2;
         push_stack(VM->stack, val);
         return nextop;
@@ -212,6 +214,44 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
   }
   // No activity found.
   push_stack(VM->stack, VALUE_ZERO);
+  return nextop;
+}
+
+uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
+  // Write data out to a line
+  // Validate the parameters before creating the task.
+  VALUE_t out = pop_stack(VM->stack);
+  VALUE_t linenum = pop_stack(VM->stack);
+
+  if (linenum.type != VALUE_int || linenum.i < 0 
+                                        || linenum.i >= config.maxconns) {
+    FREE_STR(out);
+    set_error_item(ERR_RUNTIME_INVALIDARGS);
+    push_stack(VM->stack, VALUE_NIL);
+    return nextop;
+  } else {
+    switch(out.type) {
+      case VALUE_str:
+        telnet_send(line[linenum.i].telnet, out.s, strlen(out.s));
+        FREE_STR(out);
+        break;
+      case VALUE_int:
+        char buffer[22];
+        itoa(out.i, buffer, 10);
+        telnet_send(line[linenum.i].telnet, buffer, strlen(buffer));
+        break;
+      case VALUE_nil:
+        // Nothing to output
+        break;
+      case VALUE_bool:
+        char *t = "true";
+        char *f = "false";
+        telnet_send(line[linenum.i].telnet, out.i?t:f, strlen(out.i?t:f));
+        break;
+    }
+  }
+  // Libcalls always return a value
+  push_stack(VM->stack, VALUE_NIL);
   return nextop;
 }
 

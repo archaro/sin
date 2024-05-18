@@ -17,7 +17,7 @@ LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o \
                $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcall.o \
                $(OBJ_DIR)/stack.o $(OBJ_DIR)/value.o $(OBJ_DIR)/item.o \
                $(OBJ_DIR)/vm.o $(OBJ_DIR)/task.o $(OBJ_DIR)/interpret.o \
-               $(OBJ_DIR)/network.o
+               $(OBJ_DIR)/network.o $(OBJ_DIR)/libtelnet.o
 
 # Parser files for library
 PARSER_SOURCES := $(SRC_DIR)/parser.y
