@@ -80,6 +80,8 @@ int main(int argc, char **argv) {
   config.itemroot = NULL;
   config.srcroot = NULL;
   config.input = strdup("input");
+  config.inputline = malloc(strlen(config.input) + 6);
+  sprintf(config.inputline, "%s.line", config.input);
 
   // Do the very early preparations, for things which are needed
   // before even the options are processed.
@@ -330,6 +332,7 @@ int main(int argc, char **argv) {
   free(config.itemstore);
   free(config.srcroot);
   free(config.input);
+  free(config.inputline);
   destroy_vm(config.input_vm);
   destroy_item(config.itemroot);
   close_log();

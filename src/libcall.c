@@ -194,17 +194,27 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
     switch (line[config.lastconn].status) {
       case LINE_connecting:
         line[config.lastconn].status = LINE_idle;
+        // Set the input item to the current line
+        val.i = config.lastconn;
+        set_item(config.itemroot, config.inputline, val);
+        // And return a value from this libcall to say what happened.
         val.i = 1;
         push_stack(VM->stack, val);
         return nextop;
       case LINE_disconnecting:
         destroy_line(line);
         line[config.lastconn].status = LINE_empty;
+        // Set the input item to the current line
+        val.i = config.lastconn;
+        set_item(config.itemroot, config.inputline, val);
         val.i = 2;
         push_stack(VM->stack, val);
         return nextop;
       case LINE_data:
         line[config.lastconn].status = LINE_idle;
+        // Set the input item to the current line
+        val.i = config.lastconn;
+        set_item(config.itemroot, config.inputline, val);
         val.i = 3;
         push_stack(VM->stack, val);
         return nextop;
