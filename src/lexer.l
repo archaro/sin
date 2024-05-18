@@ -1,8 +1,6 @@
 %{
-  /* The Sinistra lexer - tokenise the input.
-
-     Licensed under the MIT License - see LICENSE file for details.
-  */
+  // The Sinistra lexer - tokenise the input.
+  // Licensed under the MIT License - see LICENSE file for details.
   #include <limits.h>
   #include "log.h"
   #include "parser.h"

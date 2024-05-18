@@ -633,7 +633,7 @@ complete_item: item { finalise_item(state); emit_byte('E', state->out); }
         ;
 
 item:   first_layer
-        | item TLAYERSEP layer
+        | item TLAYERSEP sublayer
         ;
 
 first_layer: { prepare_item(state); emit_byte('I', state->item_buf); } layer
@@ -641,6 +641,13 @@ first_layer: { prepare_item(state); emit_byte('I', state->item_buf); } layer
 
 layer:  TLAYER { emit_byte('L', state->item_buf);
                  emit_layer($1, state->item_buf); free($1); }
+        | dereference
+        ;
+
+sublayer: TLAYER { emit_byte('L', state->item_buf);
+                   emit_layer($1, state->item_buf); free($1); }
+        | TINTEGER { emit_byte('L', state->item_buf);
+                     emit_layer($1, state->item_buf); free($1); }
         | dereference
         ;
 

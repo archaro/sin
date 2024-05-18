@@ -237,6 +237,10 @@ void input_processor(uv_idle_t* handle) {
   // Called once per iteration of the game loop
   config.vm = config.input_vm;
   ITEM_t *input = find_item(config.itemroot, config.input);
+  if (!input) {
+    logerr("Input item does not exist!  Cannot continue.\n");
+    exit(EXIT_FAILURE);
+  }
   interpret(input);
   reset_stack(VM->stack);
   // Flush the output of every connected line
