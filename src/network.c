@@ -240,7 +240,6 @@ void on_new_connection(uv_stream_t *server, int status) {
     uv_ip_name((struct sockaddr *)&peername, newline->address, 40);
     uv_read_start((uv_stream_t *)client, alloc_buffer, client_read);
     logmsg("New connection from %s\n", newline->address);
-    line->status = LINE_connecting;
   }
   else {
     uv_close((uv_handle_t *)client, client_on_close);
