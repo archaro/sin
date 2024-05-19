@@ -211,10 +211,13 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
         push_stack(VM->stack, val);
         return nextop;
       case LINE_data:
-        line[config.lastconn].status = LINE_idle;
         // Set the input item to the current line
         val.i = config.lastconn;
         set_item(config.itemroot, config.inputline, val);
+        // And grab some data.
+        VALUE_t str = {VALUE_str, {0}};
+        str.s = get_input(&line[config.lastconn]);
+        set_item(config.itemroot, config.inputtext, str);
         val.i = 3;
         push_stack(VM->stack, val);
         return nextop;

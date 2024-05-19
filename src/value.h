@@ -29,7 +29,7 @@ extern VALUE_t VALUE_FALSE;
 
 #define FREE_STR(val) \
   if ((val).type == VALUE_str) { \
-    logmsg("Freeing: %s\n", val.s); \
+    DEBUG_LOG("Freeing: %s\n", val.s); \
     FREE_ARRAY(char, (val).s, strlen((val).s) + 1); \
   }
   

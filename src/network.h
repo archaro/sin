@@ -34,7 +34,7 @@ void init_networking();
 void init_listener(uint32_t port);
 void destroy_line(LINE_t *line);
 void input_processor(uv_idle_t* handle);
-void append_output(LINE_t *line, const char *msg, const ssize_t len);
+char *get_input(LINE_t *line);
 void shutdown_listener();
 void shutdown_networking();
 

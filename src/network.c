@@ -111,7 +111,12 @@ void append_input(LINE_t *line, const char *msg, const ssize_t len) {
   // Embiggen the buffer if too small.
   // This is where telnet processing will happen.
   if (line->status != LINE_empty && line->status != LINE_disconnecting) {
-  // No point in doing this if there is no connection.
+    // No point in doing this if there is no connection.
+    // If there is a newline in the input, we have received
+    // a complete line of input.
+    if (memchr(msg, '\n', len)) {
+      line->status = LINE_data;
+    }
     while (line->inbuf->buf.len + len + 1 >= line->inbuf->length) {
       line->inbuf->length += INBUF_LENGTH;
       line->inbuf->buf.base = (char *)realloc(line->inbuf->buf.base,
@@ -119,8 +124,33 @@ void append_input(LINE_t *line, const char *msg, const ssize_t len) {
     }
     memcpy(line->inbuf->buf.base + line->inbuf->buf.len, msg, len);
     line->inbuf->buf.len += len;
+    line->inbuf->buf.base[line->inbuf->buf.len] = '\0';
   }
   logmsg("Input buffer now contains: >>>%s<<<\n", line->inbuf->buf.base);
+}
+
+char *get_input(LINE_t *line) {
+  // Extract a line of input from the input buffer.  Should only be called
+  // when the line status is LINE_data.  If there is nothing left in the
+  // input buffer, set the status to LINE_idle, otherwise leave it
+  // unchanged.  The buffer allocated by this function will need to be
+  // freed by the calling function when it is no longer needed.
+  // If there isn't a newline in the input buffer, explode messily.
+  char *eol = strchr(line->inbuf->buf.base, '\n');
+  *eol = '\0';
+  char *data = strdup(line->inbuf->buf.base);
+  // Ok, we have the line of data, now take it out of the input buffer.
+  eol++;
+  char *newbuffer = malloc(INBUF_LENGTH);
+  strcpy(newbuffer, eol);
+  free(line->inbuf->buf.base);
+  line->inbuf->length = INBUF_LENGTH;
+  line->inbuf->buf.base = newbuffer;
+  line->inbuf->buf.len = strlen(newbuffer);
+  if (!strchr(line->inbuf->buf.base, '\n')) {
+    line->status = LINE_idle;
+  }
+  return data;
 }
 
 void telnet_event_handler(telnet_t *telnet, telnet_event_t *ev,
@@ -170,7 +200,6 @@ void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
     logmsg("Data received (%d bytes): %s\n", nread, buf->base);
     LINE_t *line = find_line((uv_tcp_t *)client);
     if (line) {
-      line->status = LINE_data;
       telnet_recv(line->telnet, buf->base, nread);
     }
     free(buf->base);

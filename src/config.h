@@ -23,6 +23,7 @@ typedef struct {
   char *itemstore;      // Filename of on-disk itemstore
   char *input;          // Name of the input item
   char *inputline;      // Item to receive the input line number
+  char *inputtext;      // Item to receive the input data
   VM_t *input_vm;       // VM for the input task
   uint8_t maxconns;     // Maximum number of connected players
   uint8_t lastconn;     // Last connection processed by net.input
