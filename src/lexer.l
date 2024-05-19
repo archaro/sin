@@ -209,6 +209,8 @@ integer     [0-9]+
                                             &strbuf_capacity, '"');
                   BEGIN(CODESTREMBED);
                 }
+  [\t\n]        { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
+                                                &strbuf_capacity, ' '); }
   .             { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
                                               &strbuf_capacity, yytext); }
 }
