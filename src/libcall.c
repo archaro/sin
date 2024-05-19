@@ -215,7 +215,7 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
         push_stack(VM->stack, val);
         return nextop;
       case LINE_disconnecting:
-        destroy_line(line);
+        destroy_line(&line[config.lastconn]);
         line[config.lastconn].status = LINE_empty;
         // Set the input item to the current line
         val.i = config.lastconn;
