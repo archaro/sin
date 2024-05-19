@@ -544,7 +544,7 @@ void assignitem(VALUE_t *itemname, VALUE_t val) {
         FREE_ARRAY(char, val.s, strlen(val.s));
       }
     }
-    DEBUG_LOG("Saved value of type %d in item %s\n", val.type, itemname->s);
+    ITEMDEBUG_LOG("Saved value of type %d in item %s\n", val.type, itemname->s);
   } else {
     logerr("Unable to create item: invalid name type %d\n", itemname->type);
     if (val.type == VALUE_str) {
@@ -709,8 +709,7 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
   if (itemname.type == VALUE_str) {
     ITEM_t *i = find_item(config.itemroot, itemname.s);
     if (i) {
-      DEBUG_LOG("Fetched item %s (called with %d arguments).\n", itemname.s,
-                                                                arg_count);
+      ITEMDEBUG_LOG("Fetched item %s (called with %d arguments).\n", itemname.s, arg_count);
       // Just push the item value onto the stack.
       if (i->type == ITEM_value) {
         VALUE_t v;
@@ -742,7 +741,7 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
         // the new item).
         push_callstack(item, nextop, i->bytecode[1]);
         // Execute the item.
-        DEBUG_LOG("Executing item %s\n", i->name);
+        ITEMDEBUG_LOG("Executing item %s\n", i->name);
         VALUE_t value = interpret(i);
         // Now go back to the status quo ante.
         FRAME_t *prev_frame = pop_callstack();
@@ -754,7 +753,7 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
       }
     } else {
       // Item not found.
-      DEBUG_LOG("Item '%s' not found.\n", itemname.s);
+      ITEMDEBUG_LOG("Item '%s' not found.\n", itemname.s);
       // We need to lose any values on the stack which were passed as args.
         while (arg_count > 0) {
           DEBUG_LOG("Popping unneeded argument.\n");
@@ -920,7 +919,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
     name.type = VALUE_str;
     name.s = itemname; // Don't free itemname - it's on the stack!
     push_stack(VM->stack, name);
-    DEBUG_LOG("Item assembled: %s\n", itemname);
+    ITEMDEBUG_LOG("Item assembled: %s\n", itemname);
   }
 
   return nextop + 1;

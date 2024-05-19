@@ -242,6 +242,7 @@ int main(int argc, char **argv) {
 
   // Do some preparations
   DEBUG_LOG("DEBUG IS DEFINED\n");
+  ITEMDEBUG_LOG("ITEMDEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
   config.vm = make_vm();
 

@@ -358,7 +358,7 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
   const char *current_pos = item_name;
   // Buffer to hold each layer of the item, with space for null terminator
   char layer[33];
-  DEBUG_LOG("Creating new item %s\n", item_name);
+  ITEMDEBUG_LOG("Creating new item %s\n", item_name);
   while (current_item != NULL && *current_pos != '\0') {
     const char *next_dot = strchr(current_pos, '.');
     size_t layer_len = (next_dot != NULL) ?
@@ -413,7 +413,7 @@ ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
   const char *current_pos = item_name;
   // Buffer to hold each layer of the item, with space for null terminator
   char layer[33];
-  DEBUG_LOG("Creating new item %s\n", item_name);
+  ITEMDEBUG_LOG("Creating new item %s\n", item_name);
   while (current_item != NULL && *current_pos != '\0') {
     const char *next_dot = strchr(current_pos, '.');
     size_t layer_len = (next_dot != NULL) ?
@@ -497,7 +497,7 @@ void delete_item(ITEM_t *root, const char *item_name) {
     delete_hashtable(item->parent->children, item->name);
     // Now we have isolated this item, delete it and all its children.
     destroy_item(item);
-    DEBUG_LOG("Item %s has been deleted, along with all of its children.\n",
+    ITEMDEBUG_LOG("Item %s has been deleted, along with all of its children.\n",
                                                                  item_name);
   }
 }
@@ -505,7 +505,7 @@ void delete_item(ITEM_t *root, const char *item_name) {
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value) {
   // Find an item, and set its value.
   // If the item does not exist, it will be created, and then set.
-  DEBUG_LOG("Trying to set item '%s'\n", item_name);
+  ITEMDEBUG_LOG("Trying to set item '%s'\n", item_name);
   ITEM_t *item = find_item(root, item_name);
   if (item) {
     // Item exists, so just update its value.

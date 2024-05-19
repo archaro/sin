@@ -28,7 +28,6 @@ extern LINE_t *line;
 
 uint8_t *lc_sys_backup(uint8_t *nextop, ITEM_t *item) {
   // Create a backup of the itemstore.
-  DEBUG_LOG("Called sys.backup\n");
   // All of the following is a long-winded way to get a backup filename.
   char timestamp[64];
   time_t now = time(NULL);

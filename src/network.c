@@ -87,7 +87,7 @@ LINE_t *find_line(uv_tcp_t *client) {
 
 void client_on_close(uv_handle_t *handle) {
   LINE_t *line = find_line((uv_tcp_t *)handle);
-  logmsg("%s disconnected.\n", line->address);
+  logmsg("Line %d: %s disconnected.\n", line->linenum, line->address);
   line->status = LINE_disconnecting;
 }
 
@@ -126,7 +126,6 @@ void append_input(LINE_t *line, const char *msg, const ssize_t len) {
     line->inbuf->buf.len += len;
     line->inbuf->buf.base[line->inbuf->buf.len] = '\0';
   }
-  logmsg("Input buffer now contains: >>>%s<<<\n", line->inbuf->buf.base);
 }
 
 char *get_input(LINE_t *line) {
@@ -197,7 +196,6 @@ void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
 
 void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
   if (nread > 0) {
-    logmsg("Data received (%d bytes): %s\n", nread, buf->base);
     LINE_t *line = find_line((uv_tcp_t *)client);
     if (line) {
       telnet_recv(line->telnet, buf->base, nread);
@@ -239,7 +237,8 @@ void on_new_connection(uv_stream_t *server, int status) {
     uv_tcp_getpeername(client, (struct sockaddr *)&peername, &peernamelen);
     uv_ip_name((struct sockaddr *)&peername, newline->address, 40);
     uv_read_start((uv_stream_t *)client, alloc_buffer, client_read);
-    logmsg("New connection from %s\n", newline->address);
+    logmsg("Line %d: %s connected.\n", newline->linenum,
+                                                          newline->address);
   }
   else {
     uv_close((uv_handle_t *)client, client_on_close);

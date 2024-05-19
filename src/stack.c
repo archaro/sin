@@ -33,7 +33,7 @@ void reset_stack(STACK_t *stack) {
   // Really simple!
   for (int v = 0; v < (stack->current + stack->locals); v++) {
     if (stack->stack[v].type == VALUE_str) {
-      DEBUG_LOG("Freeing string: %s\n", stack->stack[v].s);
+      STRINGDEBUG_LOG("Freeing string: %s\n", stack->stack[v].s);
       FREE_ARRAY(char, stack->stack[v].s,
                                     strlen(stack->stack[v].s) + 1);
     }

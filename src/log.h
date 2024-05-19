@@ -16,6 +16,18 @@
 #define DEBUG_LOG(...) ((void)0)
 #endif
 
+#ifdef ITEMDEBUG
+#define ITEMDEBUG_LOG(...) logmsg(__VA_ARGS__)
+#else
+#define ITEMDEBUG_LOG(...) ((void)0)
+#endif
+
+#ifdef STRINGDEBUG
+#define STRINGDEBUG_LOG(...) logmsg(__VA_ARGS__)
+#else
+#define STRINGDEBUG_LOG(...) ((void)0)
+#endif
+
 #ifdef DISASS
 #define DISASS_LOG(...) logmsg(__VA_ARGS__)
 #else
