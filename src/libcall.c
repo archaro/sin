@@ -245,13 +245,13 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
   } else {
     switch(out.type) {
       case VALUE_str:
-        telnet_send(line[linenum.i].telnet, out.s, strlen(out.s));
+        telnet_send_text(line[linenum.i].telnet, out.s, strlen(out.s));
         FREE_STR(out);
         break;
       case VALUE_int:
         char buffer[22];
         itoa(out.i, buffer, 10);
-        telnet_send(line[linenum.i].telnet, buffer, strlen(buffer));
+        telnet_send_text(line[linenum.i].telnet, buffer, strlen(buffer));
         break;
       case VALUE_nil:
         // Nothing to output
@@ -259,7 +259,8 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
       case VALUE_bool:
         char *t = "true";
         char *f = "false";
-        telnet_send(line[linenum.i].telnet, out.i?t:f, strlen(out.i?t:f));
+        telnet_send_text(line[linenum.i].telnet, out.i?t:f,
+                                                        strlen(out.i?t:f));
         break;
     }
   }
