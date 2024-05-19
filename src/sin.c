@@ -331,7 +331,9 @@ int main(int argc, char **argv) {
   FREE_ARRAY(uv_loop_t, config.loop, sizeof(uv_loop_t));
   finalise_tasks();
   shutdown_networking();
-  save_itemstore(config.itemstore, config.itemroot);
+  if (config.safe_shutdown) {
+    save_itemstore(config.itemstore, config.itemroot);
+  }
   free(config.itemstore);
   free(config.srcroot);
   free(config.input);

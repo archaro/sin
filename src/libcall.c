@@ -69,9 +69,23 @@ uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
 }
 
 uint8_t *lc_sys_shutdown(uint8_t *nextop, ITEM_t *item) {
-  // End the game loop, thereby shutting down.
+  // End the game loop, thereby shutting down neatly, and
+  // saving the itemstore.
   // This call takes no parameters.
   logmsg("Sys.shutdown called.  Shutting down.\n");
+  config.safe_shutdown = true;
+  uv_stop(config.loop);
+  // libcalls always return a value.
+  push_stack(VM->stack, VALUE_NIL);
+  return nextop;
+}
+
+uint8_t *lc_sys_abort(uint8_t *nextop, ITEM_t *item) {
+  // End the game loop, thereby aborting, and not
+  // saving the itemstore.
+  // This call takes no parameters.
+  logmsg("Sys.abort called.  Immediate (and messy) shutdown.\n");
+  config.safe_shutdown = false;
   uv_stop(config.loop);
   // libcalls always return a value.
   push_stack(VM->stack, VALUE_NIL);
@@ -272,6 +286,7 @@ const LIBCALL_t libcalls[] = {
   {"sys", "backup", 1, 0, 0, lc_sys_backup},
   {"sys", "log", 1, 1, 1, lc_sys_log},
   {"sys", "shutdown", 1, 2, 0, lc_sys_shutdown},
+  {"sys", "abort", 1, 3, 0, lc_sys_abort},
   {"task", "newgametask", 2, 0, 3, lc_task_newgametask},
   {"task", "killtask", 2, 1, 1, lc_task_killtask},
   {"net", "input", 3, 0, 0, lc_net_input},

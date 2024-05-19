@@ -27,5 +27,6 @@ typedef struct {
   VM_t *input_vm;       // VM for the input task
   uint8_t maxconns;     // Maximum number of connected players
   uint8_t lastconn;     // Last connection processed by net.input
+  bool safe_shutdown;   // Determins how to shut down.
 } CONFIG_t;
 
