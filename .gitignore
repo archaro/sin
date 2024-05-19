@@ -9,6 +9,7 @@ sin
 sdiss
 .vscode/
 sin.code-workspace
+srcroot
 
 # Prerequisites
 *.d

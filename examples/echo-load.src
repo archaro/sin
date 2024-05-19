@@ -1,0 +1,6 @@
+input = code (@a = net.input; if @a == 1 then
+  net.write{input.line, "Hello!\n"};
+elsif @a == 3 then
+  net.write{input.line, input.text};
+  net.write{input.line, "\n"};
+endif; );
