@@ -45,24 +45,27 @@ void handle_sigusr1(int sig) {
 void usage() {
   logmsg("Sin interpreter.\nSyntax: sin <options>\n");
   logmsg("Options:\n");
+  logmsg(" -b, --bootonly\t\tOnly execute the bootstrap code.\n");
+  logmsg("\t\t\t  This option is used to compile items without running\n");
+  logmsg("\t\t\t  the game.  Useful for initialisation.\n");
   logmsg(" -h, --help\t\tThis message.\n");
   logmsg(" -i, --itemstore <file>\tItemstore file to load.\n");
-  logmsg("\t\t\tIf this option is not supplied, the default filename\n");
-  logmsg("\t\t\t'items.dat' is used.  The file is created if it does not\n");
-  logmsg("\t\t\texist.\n");
+  logmsg("\t\t\t  If this option is not supplied, the default filename\n");
+  logmsg("\t\t\t  'items.dat' is used.  The file is created if it does\n");
+  logmsg("\t\t\t  not exist.\n");
   logmsg(" -l, --log [file]\tLog output to <file>.\n");
-  logmsg("\t\t\tIf no filename is given, the default filename, 'sin' is\n");
-  logmsg("\t\t\tused.  The filename is suffixed with .log for stdout,\n");
-  logmsg("\t\t\tand .err for stderr.\n");
+  logmsg("\t\t\t  If no filename is given, the default filename, 'sin'\n");
+  logmsg("\t\t\t  is used.  The filename is suffixed with .log for\n");
+  logmsg("\t\t\t  stdout and .err for stderr.\n");
   logmsg(" -n, --input <item>\tName of input-handler item.\n");
-  logmsg("\t\t\tIf not supplied, this defaults to 'input'.\n");
+  logmsg("\t\t\t  If not supplied, this defaults to 'input'.\n");
   logmsg(" -o, --object <file>\tObject code to interpret.\n");
-  logmsg(" -p, --port <port>\t Port to listen on.\n");
+  logmsg(" -p, --port <port>\tPort to listen on.\n");
   logmsg(" -s, --srcroot <dir>\tRoot of source tree.\n");
-  logmsg("\t\t\tIf this option is not supplied, the default directory\n");
-  logmsg("\t\t\t'./srcroot' is used, which will be created if it does\n");
-  logmsg("\t\t\tnot exist.  If this option is supplied the directory\n");
-  logmsg("\t\t\tgiven must exist or the interpreter will not run.\n");
+  logmsg("\t\t\t  If this option is not supplied, the default directory\n");
+  logmsg("\t\t\t  './srcroot' is used, which will be created if it does\n");
+  logmsg("\t\t\t  not exist.  If this option is supplied the directory\n");
+  logmsg("\t\t\t  given must exist or the interpreter will not run.\n");
 }
 
 int main(int argc, char **argv) {
@@ -70,6 +73,7 @@ int main(int argc, char **argv) {
   int filesize = 0, listener_port = LISTENER_PORT;
   struct stat buffer;
   uint8_t *bytecode = NULL;
+  bool bootonly = false;
 
   if (argc < 2) {
     usage();
@@ -84,6 +88,7 @@ int main(int argc, char **argv) {
   config.inputtext = malloc(strlen(config.input) + 6);
   sprintf(config.inputline, "%s.line", config.input);
   sprintf(config.inputtext, "%s.text", config.input);
+  config.safe_shutdown = true;
 
   // Do the very early preparations, for things which are needed
   // before even the options are processed.
@@ -101,6 +106,7 @@ int main(int argc, char **argv) {
   int opt;
   const struct option options[] =
   {
+    {"bootonly", no_argument, 0, 'b'},
     {"help", no_argument, 0, 'h'},
     {"itemstore", required_argument, 0, 'i'},
     {"log", optional_argument, 0, 'l'},
@@ -110,8 +116,11 @@ int main(int argc, char **argv) {
     {"srcroot", required_argument, 0, 's'},
     {NULL, 0, 0, '\0'}
   };
-  while ((opt = getopt_long(argc, argv, "hi:l::n:o:p:s:", options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "bhi:l::n:o:p:s:", options, NULL)) != -1) {
     switch(opt) {
+      case 'b':
+        bootonly = true;
+        break;
       case 'h':
         usage();
         exit(EXIT_SUCCESS);
@@ -265,7 +274,6 @@ int main(int argc, char **argv) {
   boot->type = ITEM_code;
   boot->bytecode = bytecode;
   boot->bytecode_len = filesize;
-
   // Prepare the loop - the boot item should be setting up tasks,
   // so the loop needs to be read for 'em.
   config.loop = GROW_ARRAY(uv_loop_t, config.loop, 0, sizeof(uv_loop_t));
@@ -300,46 +308,48 @@ int main(int argc, char **argv) {
   destroy_vm(config.vm);
   destroy_item(boot);
 
-  // Set up the item which handles input.
-  logmsg("Using `%s` as the input item.\n", config.input);
-  config.input_vm = make_vm();
+  int runloop_retval = 0;
   uv_idle_t input_task;
-  uv_idle_init(config.loop, &input_task);
-  uv_idle_start(&input_task, input_processor);
-  //uv_timer_start(newtask->timer, execute_task_cb, startin.i, repeatin.i);
-
-
-  // Here we go...
-  logmsg("Running...\n");
-  config.maxconns = MAXCONNS;
-  config.lastconn = 255;
-  init_networking();
-  init_listener(listener_port);
-  int runloop_retval = uv_run(config.loop, UV_RUN_DEFAULT);
+  if (!bootonly) {
+    // Set up the item which handles input.
+    logmsg("Using `%s` as the input item.\n", config.input);
+    config.input_vm = make_vm();
+    uv_idle_init(config.loop, &input_task);
+    uv_idle_start(&input_task, input_processor);
+    // Here we go...
+    logmsg("Running...\n");
+    config.maxconns = MAXCONNS;
+    config.lastconn = 255;
+    init_networking();
+    init_listener(listener_port);
+    runloop_retval = uv_run(config.loop, UV_RUN_DEFAULT);
+  }
 
   // Clean up before shutdown.
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
-  shutdown_listener();
-  uv_idle_stop(&input_task);
-  // Send a close request to every registered callback
-  uv_walk(config.loop, close_all_tasks, NULL);
-  // Process pending handles - should all be closed or closing
-  uv_run(config.loop, UV_RUN_ONCE);
-  uv_loop_close(config.loop);
-  FREE_ARRAY(uv_loop_t, config.loop, sizeof(uv_loop_t));
-  finalise_tasks();
-  shutdown_networking();
+  if (!bootonly) {
+    shutdown_listener();
+    uv_idle_stop(&input_task);
+    // Send a close request to every registered callback
+    uv_walk(config.loop, close_all_tasks, NULL);
+    // Process pending handles - should all be closed or closing
+    uv_run(config.loop, UV_RUN_ONCE);
+    uv_loop_close(config.loop);
+    finalise_tasks();
+    shutdown_networking();
+    destroy_vm(config.input_vm);
+  }
   if (config.safe_shutdown) {
     save_itemstore(config.itemstore, config.itemroot);
   }
+  FREE_ARRAY(uv_loop_t, config.loop, sizeof(uv_loop_t));
   free(config.itemstore);
   free(config.srcroot);
   free(config.input);
   free(config.inputline);
   free(config.inputtext);
-  destroy_vm(config.input_vm);
   destroy_item(config.itemroot);
   close_log();
   return runloop_retval;
