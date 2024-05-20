@@ -1,0 +1,107 @@
+# How to be Sinister #
+
+## The Item ##
+
+The fundamental unit in Sinistra is the *item*.  An item can contain many things: integers, strings, Boolean values or `nil`, or it can contain code.  A value item simply returns its value, whereas a code item executes its code and returns the result.  All items return a value (even if the value is `nil`).  Items can also call other items.
+
+Items are nominally hierarchical, although this is only an organisational strategy – there is no inheritance.  Thus the following are items:
+
+`foo`
+
+`foo.bar`
+
+`foo.bar.baz`
+
+…although there is nothing can be inferred from `foo.bar` by its relationship with `foo`.
+
+To assign an item, use the assignment operator, `=`.  If the item does not exist, it will be created (as will all of its parents, if it is a multi-layered item).  If the item exists, its value will be overwritten with the new value.
+
+An item which does not exist has the default value of `nil`.  Thus:
+
+`foo = 10;`
+
+`bar = 10 * foo;`
+
+(bar is now equal to 100)
+
+`bar = 10 * wibble`
+
+(wibble does not exist, and has the default value of `nil`.  `10 * nil` is `nil`, so the value of bar is also `nil`)
+
+The examples above are examples of immediate execution.  Once executed, the result is given and the steps to create it are forgotten.  However, let’s instead make bar a code item.  Code items are evaluated each time they are called.
+
+`bar = code ( 10 * wibble; );`
+
+Now, bar is equal to `nil`, but if we define
+
+`wibble = 7;`
+
+then bar will be equal to 70.  If we redefine
+
+`wibble = 3;`
+
+then bar will now return 30.
+
+Code items can contain local variables.  There is only one scope: the item.  Thus, a local variable is visible from the moment it is defined to the end of the item.  Local variables are defined by assignment.
+
+`dingdong = code ( @a = bar; @b = 100; @a + @b; );`
+
+When `dingdong` is executed, it assigns the value of `bar` to local variable `@a`, the value of `100` to local variable `@b`, adds `@a` and `@b` together, and returns the result.  Note that there is no `return` statement required.  The value of the last statement in the code is the value of the item (in this case `@a + @b`).
+
+You can pass parameters to items, too.  If you pass arguments to an item which does not accept them, they are silently forgotten.  If you pass too many arguments, the extra ones are ignored.  If you pass too few, the missing ones have the value of `nil`.  Here is an item which takes two arguments:
+
+`add = code {@a, @b} ( @a + @b; );`
+
+If you call `add` with no arguments, you are effectively calling `add{nil, nil};`, and so the result is `nil`.  Calling `add` with only one parameter also returns `nil` because if you add `nil` to anything, the result is always nil.  Calling `add{1, 2, 3};` returns 3, because the third argument is silently dropped.
+
+## Control structures ##
+
+`IF condition THEN statements; ENDIF;`
+
+`IF condition THEN statements; ELSE statements; ENDIF;`
+
+`IF condition THEN statements; ELSIF condition THEN statements; ENDIF;`
+
+`IF condition THEN statements; ELSIF condition THEN statements; ELSE statements; ENDIF;`
+
+`WHILE condition DO statements; ENDWHILE;`
+
+`RETURN` can be used at any point to halt execution of the item.  It takes no parameter; when execution ends, the value of the item is whatever is on the top of its stack.
+
+## Operators ##
+
+Arithmetic: `+`, `-`, `*`, `/` (all integer arithmetic).  The unary postfix operators `++` and `--` operate on local variables but not items, but note that these are statements, not expressions.  Thus the following is invalid:
+
+`WHILE @a++ < 100 DO ...; ENDWHILE;`
+
+The usual boolean operators are present, and work in the same way as C.  The `||` and `&&` operators are not present: instead, use `or` and `and`.
+
+Strings may be concatenated with `+` but do not respond to other attempts to arithmetise them.
+
+The usual operator precedence applies, and (parentheses) can be used to change this.
+
+There are some unary operators which look like items, but are not:
+
+`exists{<item>}` returns true if an item exists
+
+`delete{<item>` deletes an item if it exists and always returns `nil`
+
+## Libraries ##
+
+Libraries look like items, but they aren't, and they are read-only.  Don't try to assign something to a library function: it will not end well.
+
+The `sys` library does the sort of system-wide things that you might expect:
+`sys.backup` creates a backup of the itemstore as it is currently held in memory.
+
+`sys.log` writes something to the system log: it takes and expression and will try to evaluate the expression and write something sensible in the log.  Do not abuse it.
+
+`sys.shutdown` will perform an orderly shutdown of the engine, saving the itemstore.
+
+`sys.abort` will abort the engine without saving the itemstore.
+
+
+The `task` library creates and manages tasks:
+
+
+The `net` library is for anything relating to network activity:
+
