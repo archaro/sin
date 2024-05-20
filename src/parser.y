@@ -569,9 +569,9 @@ expr:     TLOCAL        { bool tf = emit_local_op($1, state->local,
                                 }
         ;
 
-funcop:   TEXISTS TLBRACE complete_item TRBRACE { emit_byte('X',
+funcop:   TEXISTS TLBRACE expr TRBRACE { emit_byte('X',
                                                              state->out); }
-funcop:   TDELETE TLBRACE complete_item TRBRACE { emit_byte('W',
+funcop:   TDELETE TLBRACE expr TRBRACE { emit_byte('W',
                                                              state->out); }
         ;
 
