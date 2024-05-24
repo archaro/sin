@@ -82,26 +82,38 @@ The usual operator precedence applies, and (parentheses) can be used to change t
 
 There are some unary operators which look like items, but are not:
 
-`exists{<item>}` returns true if an item exists
+`exists{<expr>}` evaluates the expression and checks it if is an item, and if it exists.
 
-`delete{<item>` deletes an item if it exists and always returns `nil`
+`delete{<expr>` evaluates the expression and checks if it an item, then deletes it, always returning `nil`
+
+## Tasks ##
+
+An important concept to remember when writing Sinistra code is *no perpetual loops, ever*.  The engine is built around a run-loop, which responds to certain events.  The most important events are network events - connections, disconnections, and data - and there is limited control of these in-game.  Another important event is the *input* event, which is called approximately every 100ms by the run-loop, and which checks to see if there is any outstanding network activity to process.  The *input* event executes the `input` item, which is, technically, the only code item which *needs* to be created in order to have a functional system.  This item will need to call the net.input` library call (also known as a libcall) and should then react appropriately to the network input received.  The last sort of event is the *task*: tasks are Sinistra code items which are executed according to a timer schedule - either once at a predetermined point, or repeted at a set interval.  Task management is entirely controlled within Sinistra, and (within reason) can do anything that the developer desires.  Tasks are either central or per-line, which means that they can be allocated to individual players.  A typical example of this would be to create a task that times-out the player after a period of idleness.  Because the creation and management of such a task is entirely within the management of Sinistra code, each individual time-out timer can be configured according to who is connected to the line: 15 seconds for a new login before the player character is loaded, 1 minute for a newbie, 30 minutes for a wizard, etc.
 
 ## Libraries ##
 
-Libraries look like items, but they aren't, and they are read-only.  Don't try to assign something to a library function: it will not end well.
+Libraries look like items, but they aren't, and they are read-only.  Don't try to assign something to a library function: it will not end well.  Library calls always return a value - this can be assumed to be `nil` unless otherwise stated.
 
 The `sys` library does the sort of system-wide things that you might expect:
+
 `sys.backup` creates a backup of the itemstore as it is currently held in memory.
 
-`sys.log` writes something to the system log: it takes and expression and will try to evaluate the expression and write something sensible in the log.  Do not abuse it.
+`sys.log{<expression>}` writes something to the system log: it takes and expression and will try to evaluate the expression and write something sensible in the log.  Do not abuse it.
 
-`sys.shutdown` will perform an orderly shutdown of the engine, saving the itemstore.
+`sys.shutdown` will perform an orderly shutdown of the engine, saving the itemstore.  It takes no arguments.
 
-`sys.abort` will abort the engine without saving the itemstore.
-
-
-The `task` library creates and manages tasks:
+`sys.abort` will abort the engine without saving the itemstore.  It takes no arguments.
 
 
-The `net` library is for anything relating to network activity:
+The `net` library creates and manages tasks:
 
+`sys.input` checks to see if there is any interesting network activity.  It takes no arguments but returns a value and *may* set an item, depending on what activity it is reporting.  A new connection returns `1`, a disconnection returns `2`, and data returns `3`.  If there is no activity, `0` is returned.  If there is data, subitems of the `input` item will be set: `input.line` will be set to the line number that sent the data, and `input.text` will be set to the data that has been received.  Data is only signalled after receiving a `/n` character from a connection, so the developer can be assured that if a line signals that data has been received, they will be processing a whole line of input.
+
+`sys.write{<integer>, <expr>}` writes text to a line.  It takes two arguments: if the first argument does not evaluate to a currently-connected line, this libcall fails silently - the developer does not need to worry about writing to a connection which is no longer there.  Otherwise, the second expression is evaluated and sent to the connection.  As with `sys.log` the engine will try to convert this to a string if it is a value of another type, and will do its best to do the right thing.
+
+
+The `task` library is for anything relating to network activity:
+
+`task.newgametask{<expr>, <integer>, <integer>}` evaluates the first argument and, if it comes out as an existing code item, evaluate the second and third arguments.  The second argument, if it evaluates to an integer greater than 0, is the number of centiseconds after which the item in the first argument will be executed.  The third argument, if it evaluates to an integer greater than 0, is the interval (expressed in centiseconds) between executions of the item.  If both the second and third arguments evaluate to 0, the item will not be executed, and no task will be created.  If the interval is greater than 0, the task will repeat endlessly until killed.  Returns an integer, which is the task id.
+
+`task.killtask{<integer>}` takes one argument, which evaluates to the id of the task to be killed.  If the task does not exist, the libcall fails silently.  Otherwise, the task is removed from the list of scheduled tasks.
