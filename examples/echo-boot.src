@@ -1,1 +1,5 @@
+/* This would be used to set up tasks and starting states of
+ * whatever in-game subsystems you create.  In this case there is
+ * nothing to do, so just record that the echo server is starting.
+ */
 sys.log{"Starting the echo server...\n"};

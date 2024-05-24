@@ -20,6 +20,16 @@ When the runtime engine starts up, it first loads and executes the bootstrap cod
 ## Building and Dependencies ##
 The development environment is Ubuntu 22.04, but any modern Linux distro should be fine, as long as libuv1 is available (version 1.43 definitely works, but any recent version should be good).  The code is written for x86_64 - other architectures are not supported.  Just run make in the top-level directory, and the binaries will be built (`sin`, the runtime engine; `scomp`, the standalone compiler; `sdiss`, the standalone disassembler).  You can install the binaries wherever you want.  The runtime engine assumes everything happens in the current working directory, but you can use command-line options to change various defaults.
 
+## Running ##
+The only thing you can do at the moment (just about, anyway) is to execute the echoserver.  After building, copy the `sin` and `scomp` binaries into the `examples` subdirectory.  Then, from that directory, compile the two source files:  
+`./scomp echo-boot.src echo-boot.obj`  
+`./scomp echo-load.src echo-load.obj`  
+Then initialse the engine:  
+`./sin -b -oecho-load.obj`  
+This will create `items.dat` and `srcroot/` in the current directory.  Finally in the current directory:  
+`./sin -oecho-boot.obj`  
+The echoserver is now running.  Telnet to port 4001 and watch it reflect your input back at you.  When you are bored, switch back to the shell running the engine, and kill it with ctrl-C.
+
 ## Contributions ##
 Are welcomed.  In fact, they are positively encouraged.  Send me a pull request.  *This project uses the MIT License*.
 

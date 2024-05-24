@@ -1,6 +1,18 @@
-input = code (@a = net.input; if @a == 1 then
-  net.write{input.line, "Hello!\n"};
-elsif @a == 3 then
-  net.write{input.line, input.text};
-  net.write{input.line, "\n"};
-endif; );
+  /* The input item - executed by the run-loop */
+  input = code (
+  /* Is there anyone out there?
+   * A return value of 0 means no network activity
+   * A return value of 2 is a disconnection, which isn't relevant here
+   */
+  @a = net.input;
+  if @a == 1 then
+    /* Send a cheery greeting to the new connection */
+    net.write{input.line, "Hello!\n"};
+  elsif @a == 3 then
+    /* Data received.  Send it right back. */
+    net.write{input.line, input.text};
+    /* Newlines are stripped from input, so add one at the end */
+    net.write{input.line, "\n"};
+  endif;
+  /* That's it.  No loops, because the run-loop sorts that out. */
+  );
