@@ -43,6 +43,7 @@
 %x CODEBODY
 %x CODEPARAMS
 %x CODESTREMBED
+%x COMMENT
 
 local       @[a-z_][a-z0-9_]*
 layer       [a-z0-9_]+
@@ -84,6 +85,7 @@ integer     [0-9]+
   "--"          { return TDEC; }
   "-"           { return TMINUS; }
   "*"           { return TMULT; }
+  "/*"          { BEGIN(COMMENT); }
   "/"           { return TDIV; }
   "("           { return TLPAREN; }
   ")"           { return TRPAREN; }
@@ -230,6 +232,10 @@ integer     [0-9]+
                 }
   [^\"]+        { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
                                               &strbuf_capacity, yytext); }
+}
+<COMMENT>{
+  "*/"        { BEGIN(INITIAL); }
+  .|\n        { /* Eat everything else */ }
 }
 <INITIAL,DEREF,CODE>{
   .             { yylval->string = strdup(yytext); return TUNKNOWNCHAR; }
