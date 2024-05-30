@@ -69,6 +69,7 @@ integer     [0-9]+
   "nthname"     { return TNTHNAME; }
   "or"          { return TOR; }
   "return"      { return TRETURN; }
+  "rootname"    { return TROOTNAME; }
   "sys"         { yylval->string = strdup(yytext); return TLIBNAME; }
   "task"        { yylval->string = strdup(yytext); return TLIBNAME; }
   "then"        { return TTHEN; }

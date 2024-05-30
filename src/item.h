@@ -39,9 +39,6 @@ struct Entry {
 struct HashTable {
   uint32_t size;
   ENTRY_t **table; // An array of pointers to ENTRY_t
-  uint8_t ordered_size;
-  uint8_t ordered_capacity;
-  ENTRY_t **ordered_array;
 };
 
 typedef enum {ITEM_value, ITEM_code} ITEM_e;
@@ -55,6 +52,9 @@ struct Item {
   HASHTABLE_t *children; // 8 bytes - Hash table for immediate children
   uint8_t *bytecode;     // 8 bytes - Bytecode if a code item
   VALUE_t value;         // 16 bytes - (at present)
+  uint8_t ordered_size;  // Number of children in the ordered array
+  uint8_t ordered_capacity; // Max size of ordered array
+  ITEM_t **ordered_array; // Ordered array of all children
 };
 
 // These functions are not intended to be called externally.

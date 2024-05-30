@@ -78,4 +78,7 @@ X - exists. Pop the top of the stack.  If it is an item, push true,
 Y - nthname.  The top of the stack contains an index, and immediately below
     is an item.  Return the name of the child of the item at the given index
     or nil of there is none.
+Z - rootname.  The top of the stack contains an index.  Return the name of
+    the child item of the root item at the given index or nil if there is
+    none.  Similar to nthname.
 

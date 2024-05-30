@@ -29,14 +29,14 @@ HASHTABLE_t *create_hashtable(int size) {
   return hashtable;
 }
 
-void create_ordered_array(HASHTABLE_t *hashtable) {
+void create_ordered_array(ITEM_t *item) {
   // This must be called after a new hashtable has been created,
   // but must not be called when a hashtable is resized, or memory
   // will leak like a very leaky thing.
-  hashtable->ordered_size = 0;
-  hashtable->ordered_capacity = ITEM_ARRAY_INIT_CAPACITY;
-  hashtable->ordered_array = (ENTRY_t **)malloc(sizeof(ENTRY_t *) *
-                                              hashtable->ordered_capacity);
+  item->ordered_size = 0;
+  item->ordered_capacity = ITEM_ARRAY_INIT_CAPACITY;
+  item->ordered_array = (ITEM_t **)malloc(sizeof(ITEM_t *) *
+                                              item->ordered_capacity);
 }
 
 uint32_t simple_hash(const char *key, size_t len) {
@@ -82,8 +82,6 @@ HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize) {
       current_entry = nextEntry;
     }
   }
-  // Move the ordered array
-  newhashtable->ordered_array = oldhashtable->ordered_array;
   // Free the old table's array of pointers
   // - but not the entries themselves as we reused them
   free((oldhashtable)->table);
@@ -92,12 +90,12 @@ HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize) {
   return newhashtable;
 }
 
-void resize_ordered_array(HASHTABLE_t *hashtable) {
+void resize_ordered_array(ITEM_t *item) {
   // If the ordered array is full, embiggen it
-  if (hashtable->ordered_size >= hashtable->ordered_capacity) {
-    hashtable->ordered_capacity += ITEM_ARRAY_INIT_CAPACITY;
-    hashtable->ordered_array = (ENTRY_t **)realloc(hashtable->ordered_array,
-                          hashtable->ordered_capacity * sizeof(ENTRY_t *));
+  if (item->ordered_size >= item->ordered_capacity) {
+    item->ordered_capacity += ITEM_ARRAY_INIT_CAPACITY;
+    item->ordered_array = (ITEM_t **)realloc(item->ordered_array,
+                                item->ordered_capacity * sizeof(ITEM_t *));
   }
 }
 
@@ -155,10 +153,6 @@ void insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child) {
     }
     current->next = newEntry;
   }
-
-  // And insert into the ordered array
-  resize_ordered_array(hashtable);
-  hashtable->ordered_array[hashtable->ordered_size++] = newEntry;
 }
 
 ITEM_t *search_hashtable(HASHTABLE_t *hashtable, const char *key) {
@@ -215,17 +209,6 @@ void delete_hashtable(HASHTABLE_t *hashtable, const char *key) {
     previous = current;
     current = current->next;
   }
-  // Remove from order array
-  for (size_t i = 0; i < hashtable->ordered_size; i++) {
-    if (hashtable->ordered_array[i] == current) {
-      // Shift elements left
-      for (size_t j = i; j < hashtable->ordered_size - 1; j++) {
-        hashtable->ordered_array[j] = hashtable->ordered_array[j + 1];
-      }
-      hashtable->ordered_size--;
-      break;
-    }
-  }
 }
 
 void free_hashtable(HASHTABLE_t* hashtable) {
@@ -240,7 +223,6 @@ void free_hashtable(HASHTABLE_t* hashtable) {
     }
   }
   free(hashtable->table);
-  free(hashtable->ordered_array);
   deallocate_hashtable(hashtable);
 }
 
@@ -352,11 +334,15 @@ ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
   }
   strncpy(item->name, name, strlen(name)+1);
   item->children = create_hashtable(16); // Size is chosen arbitrarily
-  create_ordered_array(item->children);
+  create_ordered_array(item);
   // Now add the newly-created item to its parent's hashtable
   insert_hashtable(parent->children, name, item);
   // Maybe resize the hashtable?
   parent->children = maybe_resize_hashtable(parent->children);
+
+  // And insert into the ordered array
+  resize_ordered_array(parent);
+  parent->ordered_array[parent->ordered_size++] = item;
   return item;
 }
 
@@ -373,7 +359,7 @@ ITEM_t *make_root_item(const char* name) {
   item->value.i = 0; // Root item is never reference, so this doesn't matter
   strncpy(item->name, name, strlen(name)+1);
   item->children = create_hashtable(16); // Size is chosen arbitrarily
-  create_ordered_array(item->children);
+  create_ordered_array(item);
   return item;
 }
 
@@ -383,8 +369,9 @@ void destroy_item(ITEM_t *item) {
   } else if (item->type == ITEM_value && item->value.type == VALUE_str) {
     free(item->value.s);
   }
-  // Free the item's hashtable
+  // Free the item's innards
   free_hashtable(item->children);
+  free(item->ordered_array);
   // Then free the item
   deallocate_item(item);
 }
@@ -522,11 +509,11 @@ ITEM_t *find_item(ITEM_t *root, const char *item_name) {
 
 ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index) {
   // Given the parent item, return the indexed child.
-  if (index > parent->children->ordered_size) {
+  if (index > parent->ordered_size) {
     // No item at that index.
     return NULL;
   }
-  return parent->children->ordered_array[index - 1]->child;
+  return parent->ordered_array[index];
 }
 
 void delete_item(ITEM_t *root, const char *item_name) {
@@ -543,6 +530,17 @@ void delete_item(ITEM_t *root, const char *item_name) {
     // delete request.  It's not there anyway, so why the complaining?
     // First, remove the item from its parent's hashtable:
     delete_hashtable(item->parent->children, item->name);
+    // Remove from order array
+    for (size_t i = 0; i < item->parent->ordered_size; i++) {
+      if (item->parent->ordered_array[i] == item) {
+        // Shift elements left
+        for (size_t j = i; j < item->parent->ordered_size - 1; j++) {
+          item->parent->ordered_array[j] = item->parent->ordered_array[j + 1];
+        }
+        item->parent->ordered_size--;
+        break;
+      }
+    }
     // Now we have isolated this item, delete it and all its children.
     destroy_item(item);
     ITEMDEBUG_LOG("Item %s has been deleted, along with all of its children.\n",

@@ -987,11 +987,11 @@ uint8_t *op_nthname(uint8_t *nextop, ITEM_t *item) {
   if (index.type == VALUE_int && index.i >= 0) {
     ITEM_t *i = find_item(config.itemroot, itemname.s);
     if (i) {
-      ITEM_t *parent = find_item_by_index(i, index.i);
-      if (parent) {
+      ITEM_t *child = find_item_by_index(i, index.i);
+      if (child) {
         found = true;
         VALUE_t result = {VALUE_str, {0}};
-        result.s = strdup(parent->name);
+        result.s = strdup(child->name);
         push_stack(VM->stack, result);
       }
     }
@@ -1001,6 +1001,27 @@ uint8_t *op_nthname(uint8_t *nextop, ITEM_t *item) {
   }
   FREE_STR(index);
   FREE_STR(itemname);
+  return nextop;
+}
+
+uint8_t *op_rootname(uint8_t *nextop, ITEM_t *item) {
+  // Identical to op_nthname, except it only pops an index from the stack
+  // and then uses it to index the itemroot.
+  VALUE_t index = pop_stack(VM->stack);
+  bool found = false;
+  if (index.type == VALUE_int && index.i >= 0) {
+    ITEM_t *child = find_item_by_index(config.itemroot, index.i);
+    if (child) {
+      found = true;
+      VALUE_t result = {VALUE_str, {0}};
+      result.s = strdup(child->name);
+      push_stack(VM->stack, result);
+    }
+  }
+  if (!found) {
+    push_stack(VM->stack, VALUE_NIL);
+  }
+  FREE_STR(index);
   return nextop;
 }
 
@@ -1040,6 +1061,7 @@ void init_interpreter() {
   opcode['W'] = op_delete;
   opcode['X'] = op_exists;
   opcode['Y'] = op_nthname;
+  opcode['Z'] = op_rootname;
 }
 
 VALUE_t interpret(ITEM_t *item) {
