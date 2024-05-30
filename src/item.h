@@ -20,6 +20,10 @@
 // and a terminating null.  So the maximum size is (32 * 8) + 7 + 1.
 #define MAX_ITEM_NAME 264
 
+// Item children are also stored in an indexable array for iteration
+// performance.  This value controls the size of that array.
+#define ITEM_ARRAY_INIT_CAPACITY  10
+
 typedef struct Item ITEM_t;
 typedef struct Entry ENTRY_t;
 typedef struct HashTable HASHTABLE_t;
@@ -35,6 +39,9 @@ struct Entry {
 struct HashTable {
   uint32_t size;
   ENTRY_t **table; // An array of pointers to ENTRY_t
+  uint8_t ordered_size;
+  uint8_t ordered_capacity;
+  ENTRY_t **ordered_array;
 };
 
 typedef enum {ITEM_value, ITEM_code} ITEM_e;
@@ -84,6 +91,7 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value);
 ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
                                                         uint8_t *bytecode);
 ITEM_t *find_item(ITEM_t *root, const char *item_name);
+ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index);
 void delete_item(ITEM_t *root, const char *item_name);
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value);
 void get_itemname(ITEM_t *item, char *itemname);

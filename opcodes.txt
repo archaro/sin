@@ -75,4 +75,7 @@ W - delete. Pop the top of the stack.  If it is a valid item, delete it.
     Push nothing.
 X - exists. Pop the top of the stack.  If it is an item, push true,
     otherwise push false.
+Y - nthname.  The top of the stack contains an index, and immediately below
+    is an item.  Return the name of the child of the item at the given index
+    or nil of there is none.
 

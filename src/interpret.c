@@ -976,6 +976,34 @@ uint8_t *op_exists(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *op_nthname(uint8_t *nextop, ITEM_t *item) {
+  // This is a very inefficient way to iterate over all the children
+  // of an item.  Pop the index, then pop the item.  Find the indexed
+  // child of the item and return its name as a string.  If the child
+  // is not found, return nil.  There has to be a better way.
+  VALUE_t index = pop_stack(VM->stack);
+  VALUE_t itemname = pop_stack(VM->stack);
+  bool found = false;
+  if (index.type == VALUE_int && index.i >= 0) {
+    ITEM_t *i = find_item(config.itemroot, itemname.s);
+    if (i) {
+      ITEM_t *parent = find_item_by_index(i, index.i);
+      if (parent) {
+        found = true;
+        VALUE_t result = {VALUE_str, {0}};
+        result.s = strdup(parent->name);
+        push_stack(VM->stack, result);
+      }
+    }
+  }
+  if (!found) {
+    push_stack(VM->stack, VALUE_NIL);
+  }
+  FREE_STR(index);
+  FREE_STR(itemname);
+  return nextop;
+}
+
 void init_interpreter() {
   // This function simply sets up the opcode dispatch table.
   for (int o=0; o<256; o++) {
@@ -1011,6 +1039,7 @@ void init_interpreter() {
   opcode['I'] = op_assembleitem;
   opcode['W'] = op_delete;
   opcode['X'] = op_exists;
+  opcode['Y'] = op_nthname;
 }
 
 VALUE_t interpret(ITEM_t *item) {

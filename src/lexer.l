@@ -66,6 +66,7 @@ integer     [0-9]+
   "exists"      { return TEXISTS; }
   "if"          { return TIF; }
   "net"         { yylval->string = strdup(yytext); return TLIBNAME; }
+  "nthname"     { return TNTHNAME; }
   "or"          { return TOR; }
   "return"      { return TRETURN; }
   "sys"         { yylval->string = strdup(yytext); return TLIBNAME; }

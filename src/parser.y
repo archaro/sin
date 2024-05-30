@@ -477,7 +477,7 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
 %left TLAYERSEP
 %right TDEREFSTART TCODE
 %left TDEREFEND
-%nonassoc TEXISTS TDELETE
+%nonassoc TEXISTS TDELETE TNTHNAME
 %right UMINUS TNOT
 %nonassoc TLPAREN TRPAREN TLBRACE TRBRACE TCOMMA
 
@@ -569,11 +569,12 @@ expr:     TLOCAL        { bool tf = emit_local_op($1, state->local,
                                 }
         ;
 
-funcop:   TEXISTS TLBRACE expr TRBRACE { emit_byte('X',
-                                                             state->out); }
-funcop:   TDELETE TLBRACE expr TRBRACE { emit_byte('W',
-                                                             state->out); }
+funcop:   TEXISTS TLBRACE expr TRBRACE { emit_byte('X', state->out); }
+        | TDELETE TLBRACE expr TRBRACE { emit_byte('W', state->out); }
+        | TNTHNAME TLBRACE complete_item TCOMMA expr TRBRACE
+                                       { emit_byte('Y', state->out); }
         ;
+
 
 libcall:  TLIBNAME TLAYERSEP TLAYER { prepare_item(state); }
                        args { uint8_t lib, call, args;
