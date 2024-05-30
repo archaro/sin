@@ -336,11 +336,11 @@ int main(int argc, char **argv) {
     uv_walk(config.loop, close_all_tasks, NULL);
     // Process pending handles - should all be closed or closing
     uv_run(config.loop, UV_RUN_ONCE);
-    uv_loop_close(config.loop);
     finalise_tasks();
     shutdown_networking();
     destroy_vm(config.input_vm);
   }
+  uv_loop_close(config.loop);
   if (config.safe_shutdown) {
     save_itemstore(config.itemstore, config.itemroot);
   }
