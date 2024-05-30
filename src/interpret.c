@@ -89,9 +89,10 @@ uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
 
   VALUE_t v1;
   v1 = pop_stack(VM->stack);
-  // "true" is a true bool value, or an int value != 0.
-  // Everything else is false.
-  if ((v1.type == VALUE_bool || v1.type == VALUE_int) && v1.i != 0) {
+  // "true" is a true bool value, or an int value != 0, or a string
+  // which is not empty.  Everything else is false.
+  if (((v1.type == VALUE_bool || v1.type == VALUE_int) && v1.i != 0)
+      || (v1.type == VALUE_str && v1.s[0] != '\0')) {
     // A true value means that we don't branch.  Skip over
     // the next two bytes.
     DISASS_LOG("OP_JUMPFALSE: evaluates to true (no jump).\n");
@@ -517,7 +518,7 @@ uint8_t *op_libcall(uint8_t *nextop, ITEM_t *item) {
   uint8_t lib, func;
   lib = *nextop++;
   func = *nextop++;
-  DISASS_LOG("Calling library %d, function %d.\n", lib, func, args);
+  DISASS_LOG("Calling library %d, function %d.\n", lib, func);
   OP_t libcall = libcall_func(lib, func);
   if (!libcall) {
     logerr("Library call not found.\n");
