@@ -509,7 +509,7 @@ ITEM_t *find_item(ITEM_t *root, const char *item_name) {
 
 ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index) {
   // Given the parent item, return the indexed child.
-  if (index > parent->ordered_size) {
+  if (index >= parent->ordered_size) {
     // No item at that index.
     return NULL;
   }
