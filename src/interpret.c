@@ -96,6 +96,7 @@ uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
     // A true value means that we don't branch.  Skip over
     // the next two bytes.
     DISASS_LOG("OP_JUMPFALSE: evaluates to true (no jump).\n");
+    FREE_STR(v1);
     return nextop + 2;
   } else {
     // If not true then it must be false.  That's logic.

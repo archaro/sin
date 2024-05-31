@@ -252,6 +252,7 @@ int main(int argc, char **argv) {
   // Do some preparations
   DEBUG_LOG("DEBUG IS DEFINED\n");
   ITEMDEBUG_LOG("ITEMDEBUG IS DEFINED\n");
+  STRINGDEBUG_LOG("STRINGDEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
   config.vm = make_vm();
 
@@ -328,6 +329,8 @@ int main(int argc, char **argv) {
   // Clean up before shutdown.
   logmsg("Shutting down.\n");
   DEBUG_LOG("DEBUG IS DEFINED\n");
+  ITEMDEBUG_LOG("ITEMDEBUG IS DEFINED\n");
+  STRINGDEBUG_LOG("STRINGDEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
   if (!bootonly) {
     shutdown_listener();
