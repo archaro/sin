@@ -664,8 +664,8 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     }
     FREE_ARRAY(char, src, len);
     // Set the error item to a nil value.
-    set_item(config.itemroot, "sys.error", VALUE_NIL);
-    set_item(config.itemroot, "sys.error.msg", VALUE_NIL);
+    set_item(config.itemroot, "error", VALUE_NIL);
+    set_item(config.itemroot, "error.msg", VALUE_NIL);
   } else {
     // Compilation failed.  Don't assign anything.
     logerr("Compilation failed.\n");

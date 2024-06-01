@@ -32,8 +32,17 @@ Code items can contain local variables.  There is only one scope: the item.  Thu
 
 When `dingdong` is executed, it assigns the value of `bar` to local variable `@a`, the value of `100` to local variable `@b`, adds `@a` and `@b` together, and returns the result.  Note that there is no `return` statement required.  The value of the last statement in the code is the value of the item (in this case `@a + @b`).
 
+When compiling code, if the parser doesn't like the source which it is chewing on, it will bail out and set `error` to an error number, and `error.msg` to the appropriate error message.  Thus an easy way to check if the code has compiled is to test these items.  A successful compilation will set these items to `nil`.
+
 You can pass parameters to items, too.  If you pass arguments to an item which does not accept them, they are silently forgotten.  If you pass too many arguments, the extra ones are ignored.  If you pass too few, the missing ones have the value of `nil`.  Here is an item which takes two arguments:  
-`add = code {@a, @b} ( @a + @b; );`
+```
+add = code {@a, @b} ( @a + @b; );
+if error then
+  sys.log{"Compilation failed:\n"};
+  sys.log{error.msg};
+  sys.log{"\n"};
+endif;
+```
 
 If you call `add` with no arguments, you are effectively calling `add{nil, nil};`, and so the result is `nil`.  Calling `add` with only one parameter also returns `nil` because if you add `nil` to anything, the result is always nil.  Calling `add{1, 2, 3};` returns 3, because the third argument is silently dropped.
 

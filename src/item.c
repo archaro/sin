@@ -823,9 +823,9 @@ void set_error_item(const int errnum) {
   VALUE_t e, emsg;
   e.type = VALUE_int;
   e.i = errnum;
-  set_item(config.itemroot, "sys.error", e);
+  set_item(config.itemroot, "error", e);
   emsg.type = VALUE_str;
   emsg.s = strdup(errmsg[errnum]);
-  set_item(config.itemroot, "sys.error.msg", emsg);
+  set_item(config.itemroot, "error.msg", emsg);
 }
 
