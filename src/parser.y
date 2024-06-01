@@ -178,7 +178,7 @@ bool prepare_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
     return false;
   }
   // Add the new local variable.
-  local->id[local->count] = id;
+  local->id[local->count] = strdup(id);
   local->count++;
   return true;
 }
@@ -514,7 +514,10 @@ stmt:   TWHILE                  {
                                                       state->local)) {
                            state->local->errnum = ERR_COMP_TOOMANYLOCALS;
                            YYERROR; }
-                                                                                                     } expr { emit_local_assign($1, state->out, state->local); }
+                                                                                                     } expr {
+                           emit_local_assign($1, state->out, state->local);
+                           free($1);
+                         }
         | complete_item TASSIGN item_assignment
         | TLOCAL TINC   { bool tf = emit_local_op($1, state->local,
                                                           state->out, 'f');
