@@ -75,9 +75,8 @@ Strings may be concatenated with `+` but do not respond to other attempts to ari
 
 The usual operator precedence applies, and (parentheses) can be used to change this.
 
-There are some unary operators which look like items, but are not:  
-`exists{<expr>}` evaluates the expression and checks it if is an item, and if it exists.  
-`delete{<expr>` evaluates the expression and checks if it an item, then deletes it, always returning `nil`.  
+There are some unary operators which look like items, but are not:  `exists{<expr>}` evaluates the expression and checks it if is an item, and if it exists. Returns a boolean value. 
+`delete{<expr>` evaluates the expression and checks if it an item, then deletes it. No value is returned.
 `nthname{<expr>, <expr>}` evaluates the first expression as an item and, if it exists, evaluates the second item as zero-based index, and returns the name of the child at that index.  If the item does not exist or the index is out of range, `nil` is returned.  This makes it possible to loop over all the children of a given item.  **Note:** item order is not guaranteed.  Just because `foo` is the sixth child of `wibble` this time, do not presume that it will be the sixth child the next time you start the runtime engine.  
 `rootname{<expr>}` is exactly the same as `nthname` with the exception that it operates at the root of the item tree, and takes only an index.
 

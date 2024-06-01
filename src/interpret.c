@@ -950,10 +950,8 @@ uint8_t *op_delete(uint8_t *nextop, ITEM_t *item) {
   // assembled and pushed onto the stack (or nil if the assembly failed).
   // Pop it, delete it, and return nothing.
   VALUE_t val = pop_stack(VM->stack);
-  if (val.type == VALUE_str) {
-    delete_item(config.itemroot, val.s);
-    FREE_ARRAY(char, val.s, strlen(val.s)+1);
-  }
+  delete_item(config.itemroot, val.s);
+  FREE_ARRAY(char, val.s, strlen(val.s)+1);
   DISASS_LOG("OP_DELETE\n");
   return nextop;
 }
@@ -964,16 +962,9 @@ uint8_t *op_exists(uint8_t *nextop, ITEM_t *item) {
   // Pop whatever is on the stack and evaluate it.  Push
   // true or false, depending on the result.
   VALUE_t val = pop_stack(VM->stack);
-  if (val.type == VALUE_str) {
-    ITEM_t *i = find_item(config.itemroot, val.s);
-    FREE_ARRAY(char, val.s, strlen(val.s)+1);
-    val.type = VALUE_bool;
-    val.i = i ? 1 : 0;
-  } else {
-    val.type = VALUE_bool;
-    val.i = 0;
-  }
-  push_stack(VM->stack, val);
+  ITEM_t *i = find_item(config.itemroot, val.s);
+  FREE_ARRAY(char, val.s, strlen(val.s)+1);
+  push_stack(VM->stack, i ? VALUE_TRUE : VALUE_FALSE);
   DISASS_LOG("OP_EXISTS\n");
   return nextop;
 }
