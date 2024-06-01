@@ -94,3 +94,8 @@ The `task` library is for anything relating to network activity:
 `task.newgametask{<expr>, <integer>, <integer>}` evaluates the first argument and, if it comes out as an existing code item, evaluate the second and third arguments.  The second argument, if it evaluates to an integer greater than 0, is the number of centiseconds after which the item in the first argument will be executed.  The third argument, if it evaluates to an integer greater than 0, is the interval (expressed in centiseconds) between executions of the item.  If both the second and third arguments evaluate to 0, the item will not be executed, and no task will be created.  If the interval is greater than 0, the task will repeat endlessly until killed.  Returns an integer, which is the task id.  
 `task.killtask{<integer>}` takes one argument, which evaluates to the id of the task to be killed.  If the task does not exist, the libcall fails silently.  Otherwise, the task is removed from the list of scheduled tasks.
 
+The `str` library contains libcalls which operate on string values.  They have no effect on non-string values:  
+`str.capitalise{<expr>}` capitalises the first letter of the given string.  
+`str.lower{<expr>}` converts the whole string to lowercase.  
+`str.upper{<expr>}` converts the whole string to uppercase.  
+

@@ -4,6 +4,7 @@
 
 #include <time.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "util.h"
 #include "error.h"
@@ -282,6 +283,54 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *lc_str_capitalise(uint8_t *nextop, ITEM_t *item) {
+  // If the value on the top of the stack is a string, capitalise the
+  // first letter.  Otherwise pop the top of the stack and push nil.
+
+  if (VM->stack->stack[VM->stack->current].type == VALUE_str) {
+    VM->stack->stack[VM->stack->current].s[0] =
+                        toupper(VM->stack->stack[VM->stack->current].s[0]);
+  } else {
+    pop_stack(VM->stack);
+    push_stack(VM->stack, VALUE_NIL);
+  }
+  return nextop;
+}
+
+uint8_t *lc_str_upper(uint8_t *nextop, ITEM_t *item) {
+  // If the value on the top of the stack is a string, make it
+  // uppercase.  Otherwise pop the top of the stack and push nil.
+
+  if (VM->stack->stack[VM->stack->current].type == VALUE_str) {
+    char *c = VM->stack->stack[VM->stack->current].s;
+    while (*c) {
+      *c = toupper(*c);
+      c++;
+    }
+  } else {
+    pop_stack(VM->stack);
+    push_stack(VM->stack, VALUE_NIL);
+  }
+  return nextop;
+}
+
+uint8_t *lc_str_lower(uint8_t *nextop, ITEM_t *item) {
+  // If the value on the top of the stack is a string, make it
+  // lowercase.  Otherwise pop the top of the stack and push nil.
+
+  if (VM->stack->stack[VM->stack->current].type == VALUE_str) {
+    char *c = VM->stack->stack[VM->stack->current].s;
+    while (*c) {
+      *c = tolower(*c);
+      c++;
+    }
+  } else {
+    pop_stack(VM->stack);
+    push_stack(VM->stack, VALUE_NIL);
+  }
+  return nextop;
+}
+
 const LIBCALL_t libcalls[] = {
   {"sys", "backup", 1, 0, 0, lc_sys_backup},
   {"sys", "log", 1, 1, 1, lc_sys_log},
@@ -291,6 +340,9 @@ const LIBCALL_t libcalls[] = {
   {"task", "killtask", 2, 1, 1, lc_task_killtask},
   {"net", "input", 3, 0, 0, lc_net_input},
   {"net", "write", 3, 1, 2, lc_net_write},
+  {"str", "capitalise", 4, 0, 1, lc_str_capitalise},
+  {"str", "upper", 4, 1, 1, lc_str_upper},
+  {"str", "lower", 4, 2, 1, lc_str_lower},
   {NULL, NULL, -1, -1, 0, NULL}  // End marker
 };
 
