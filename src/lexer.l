@@ -37,7 +37,6 @@
 %}
 
 %option noinput nounput noyywrap reentrant bison-bridge case-insensitive
-%x DEREF
 %x STRINGLIT
 %x CODE
 %x CODEBODY
@@ -108,10 +107,8 @@ integer     [0-9]+
   {local}       { yylval->string = strdup(yytext); return TLOCAL; }
   {layer}       { yylval->string = strdup(yytext); return TLAYER; }
   "\."          { return TLAYERSEP; }
-  "\["          { BEGIN(DEREF);
-                  yyextra.deref_depth++;
-                  return TDEREFSTART;
-                }
+  "\["          { return TDEREFSTART; }
+  "\]"          { return TDEREFEND; }
 }
 <STRINGLIT>{
   \"            { /* saw closing quote - all done */
@@ -154,20 +151,6 @@ integer     [0-9]+
                                            &strbuf_capacity, yytext[1]); }
   [^\\\n\"]+    { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
                                               &strbuf_capacity, yytext); }
-}
-<DEREF>{
-  {local}       { yylval->string = strdup(yytext); return TLOCAL; }
-  {layer}       { yylval->string = strdup(yytext); return TLAYER; }
-  "\."          { return TLAYERSEP; }
-  "\["          { // Handle nested dereferences
-                  yyextra.deref_depth++;
-                  return TDEREFSTART;
-                }
-  "\]"          { if (--yyextra.deref_depth == 0) {
-                    BEGIN(INITIAL);
-                  }
-                  return TDEREFEND;
-                }
 }
 <CODE>{
   "("           { code_paren = 0;
@@ -240,7 +223,7 @@ integer     [0-9]+
   "*/"        { BEGIN(INITIAL); }
   .|\n        { /* Eat everything else */ }
 }
-<INITIAL,DEREF,CODE>{
+<INITIAL,CODE>{
   .             { yylval->string = strdup(yytext); return TUNKNOWNCHAR; }
 }
 %%

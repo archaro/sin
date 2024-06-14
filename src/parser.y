@@ -54,10 +54,6 @@
     OUTPUT_t *out;
     LOCAL_t *local;
     int8_t control_count;
-    int8_t item_count;
-    int arg_count[MAX_NESTED_CONTROLS];
-    OUTPUT_t *item_buf;
-    OUTPUT_t *item_out[MAX_NESTED_CONTROLS];
     LOOP_FIXUP_t loop[MAX_NESTED_CONTROLS];
     IF_FIXUP_t if_stmt[MAX_NESTED_CONTROLS];
   } SCANNER_STATE_t;
@@ -331,78 +327,6 @@ void emit_embedded_code(OUTPUT_t *out, char *code) {
   emit_string(code, out); // Aaaand the code.
 }
 
-void merge_item_buffer(OUTPUT_t *out, OUTPUT_t *item_out) {
-  // Items are assembled in a separate buffer, to facilitate the passing
-  // of arguments.  This function merges the item buffer into the main
-  // output buffer.
-
-  // Check if there is enough space in the buffer
-  int mainbuf_size = out->nextbyte - out->bytecode;
-  int itembuf_size = item_out->nextbyte - item_out->bytecode;
-  if (mainbuf_size + itembuf_size >= out->maxsize) {
-    // Calculate the new buffer size
-    int oldsize = out->maxsize;
-    out->maxsize = GROW_CAPACITY((mainbuf_size + itembuf_size) * 1.25);
-    // Reallocate the buffer
-    unsigned char *new_buffer = GROW_ARRAY(unsigned char, out->bytecode, oldsize, out->maxsize);
-    // Update buffer pointers
-    out->nextbyte = new_buffer + (out->nextbyte - out->bytecode);
-    out->bytecode = new_buffer;
-  }
-  // Now we are sure the buffer is big enough, smush the item buffer
-  // into the main output buffer.
-  memcpy(out->nextbyte, item_out->bytecode, itembuf_size);
-  out->nextbyte += itembuf_size;
-  // Reset the item buffer for its next use
-  item_out->nextbyte = item_out->bytecode;
-}
-
-bool prepare_item(SCANNER_STATE_t *state) {
-  // We have encountered the start of an item, so begin shoving it into
-  // a temporary buffer until we've processed the arguments (if any).
-  if (state->item_count >= MAX_NESTED_CONTROLS) {
-    return false;
-  }
-  state->item_count++;
-  int8_t c = state->item_count;
-  state->arg_count[c] = 0;
-  state->item_out[c] = GROW_ARRAY(OUTPUT_t, NULL, 0, 1);
-  state->item_out[c]->maxsize = 1024;
-  state->item_out[c]->bytecode = GROW_ARRAY(unsigned char, NULL, 0,
-                                              state->item_out[c]->maxsize);
-  state->item_out[c]->nextbyte = state->item_out[c]->bytecode;
-  state->item_buf = state->item_out[c];
-  return true;
-}
-
-void finalise_item(SCANNER_STATE_t *state) {
-  // Having processed the item, merge its buffer into the bytestream
-  // and clean up after ourselves.
-  int8_t c = state->item_count;
-  merge_item_buffer(state->out, state->item_out[c]);
-  FREE_ARRAY(unsigned char, state->item_out[c]->bytecode,
-                                               state->item_out[c]->maxsize);
-  FREE_ARRAY(OUTPUT_t, state->item_out[c], 1);
-  state->item_count--;
-  if (state->item_count > -1) {
-    state->item_buf = state->item_out[state->item_count];
-  } else {
-    state->item_buf = NULL;
-  }
-}
-
-void cleanup_item(SCANNER_STATE_t *state) {
-  // Called when there is a failed parse to clean up any item buffers
-  // which may have been allocated.
-  int8_t c = state->item_count;
-  while (c >= 0) {
-    FREE_ARRAY(unsigned char, state->item_out[c]->bytecode,
-                                               state->item_out[c]->maxsize);
-    FREE_ARRAY(OUTPUT_t, state->item_out[c], 1);
-    c--;
-  }
-}
-
 bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
                                                           LOCAL_t *local) {
   // source holds the source input string
@@ -419,9 +343,6 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
   scanner_state.local = local;
   scanner_state.local->errnum = ERR_NOERROR;
   scanner_state.control_count = -1; // We start in no loop.
-  scanner_state.item_count = -1; // We start processing no item.
-  scanner_state.item_buf = NULL;
-
   yylex_init_extra(my_extra, &sc);
   FILE *in = fmemopen(source, sourcelen, "r");
   yyset_in(in, sc);
@@ -447,7 +368,6 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
     out->bytecode[1] = local->param_count;
     return true;
   } else {
-    cleanup_item(&scanner_state);
     return false;
   }
 }
@@ -518,7 +438,7 @@ stmt:   TWHILE                  {
                            emit_local_assign($1, state->out, state->local);
                            free($1);
                          }
-        | complete_item TASSIGN item_assignment
+        | item TASSIGN item_assignment
         | TLOCAL TINC   { bool tf = emit_local_op($1, state->local,
                                                           state->out, 'f');
                           free($1);
@@ -540,12 +460,8 @@ expr:     TLOCAL        { bool tf = emit_local_op($1, state->local,
         |	TSTRINGLIT    { emit_byte('l', state->out);
                           emit_string($1, state->out);
                           free($1); }
-        |	item args { finalise_item(state);
-                      emit_byte('E', state->out);
-                      emit_byte('F', state->out);
-                      /* Use item_count + 1 below because finalise_item()
-                         decremented it. */
-                      emit_int16(state->arg_count[state->item_count + 1],
+        |	item args { emit_byte('F', state->out);
+                      emit_int16(0 /* how many args??? */,
                                                               state->out); }
         | expr TEQUAL expr      { emit_byte('o', state->out); }
         | expr TNOTEQUAL expr   { emit_byte('q', state->out); }
@@ -572,27 +488,22 @@ expr:     TLOCAL        { bool tf = emit_local_op($1, state->local,
                                 }
         ;
 
-funcop:   TEXISTS TLBRACE complete_item TRBRACE
-                                       { emit_byte('X', state->out); }
-        | TDELETE TLBRACE complete_item TRBRACE
-                                       { emit_byte('W', state->out); }
-        | TNTHNAME TLBRACE complete_item TCOMMA expr TRBRACE
+funcop:   TEXISTS TLBRACE item TRBRACE { emit_byte('X', state->out); }
+        | TDELETE TLBRACE item TRBRACE { emit_byte('W', state->out); }
+        | TNTHNAME TLBRACE item TCOMMA expr TRBRACE
                                        { emit_byte('Y', state->out); }
         | TROOTNAME TLBRACE expr TRBRACE { emit_byte('Z', state->out); }
         ;
 
-
-libcall:  TLIBNAME TLAYERSEP TLAYER { prepare_item(state); }
+libcall:  TLIBNAME TLAYERSEP TLAYER { }
                        args { uint8_t lib, call, args;
-                         uint8_t arg_count =
-                                       state->arg_count[state->item_count];
+                         uint8_t arg_count = 0; /* how many args? */
                          if (libcall_lookup($1, $3, &lib, &call, &args)) {
                            free($1); free($3);
                            if (arg_count != args) {
                              state->local->errnum = ERR_COMP_WRONGARGS;
                              YYERROR;
                            }
-                           finalise_item(state);
                            emit_byte('A', state->out);
                            emit_byte(lib, state->out);
                            emit_byte(call, state->out);
@@ -627,8 +538,8 @@ args:
         | TLBRACE arg_list TRBRACE
         ;
 
-arg_list: expr { state->arg_count[state->item_count]++; }
-        | expr { state->arg_count[state->item_count]++; } TCOMMA arg_list
+arg_list: expr { /* how many args? */ }
+        | expr { /* how many args? */ } TCOMMA arg_list
         ;
 
 item_assignment: expr { emit_byte('C', state->out); }
@@ -636,38 +547,46 @@ item_assignment: expr { emit_byte('C', state->out); }
           params TCODEBODY { emit_string($4, state->out); free($4); }
         ;
 
-complete_item: item { finalise_item(state); emit_byte('E', state->out); }
+item:     first_layer subsequent_layers { emit_byte('E', state->out); }
         ;
 
-item:   first_layer
-        | item TLAYERSEP sublayer
+first_layer: TLAYER { emit_byte('I', state->out);
+                      emit_byte('L', state->out);
+                      emit_layer($1, state->out);
+                      free($1);
+                    }
+        | first_layer_deref
         ;
 
-first_layer: { prepare_item(state); emit_byte('I', state->item_buf); } layer
+subsequent_layers: /* empty */
+        | TLAYERSEP layer subsequent_layers
         ;
 
-layer:  TLAYER { emit_byte('L', state->item_buf);
-                 emit_layer($1, state->item_buf); free($1); }
+layer:    TLAYER { emit_byte('L', state->out);
+                   emit_layer($1, state->out);
+                   free($1);
+                 }
+        | TINTEGER { emit_byte('L', state->out);
+                   emit_layer($1, state->out);
+                   free($1);
+                 }
         | dereference
         ;
 
-sublayer: TLAYER { emit_byte('L', state->item_buf);
-                   emit_layer($1, state->item_buf); free($1); }
-        | TINTEGER { emit_byte('L', state->item_buf);
-                     emit_layer($1, state->item_buf); free($1); }
-        | dereference
+dereference: TDEREFSTART { emit_byte('D', state->out); }
+             deref_content TDEREFEND
         ;
 
-dereference:  TDEREFSTART { emit_byte('D', state->item_buf); }
-              deref_content TDEREFEND
+first_layer_deref: TDEREFSTART { emit_byte('I', state->out);
+                                 emit_byte('D', state->out);
+                               } deref_content TDEREFEND
         ;
 
-deref_content: TLOCAL { bool tf = emit_local_op($1, state->local,
-                                                    state->item_buf, 'V');
-                        free($1);
-                        if (!tf) YYERROR; }
-        | item        { emit_byte('E', state->item_buf); }
-        ;
-
+deref_content: item
+        | TLOCAL {  bool tf = emit_local_op($1, state->local,
+                                                          state->out, 'V');
+                    free($1);
+                    if (!tf) YYERROR;
+                 }
 %%
 
