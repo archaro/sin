@@ -20,4 +20,5 @@ void init_errmsg() {
   errmsg[ERR_RUNTIME_INVALIDARGS] = "Invalid arguments to library call.";
   errmsg[ERR_RUNTIME_NOSUCHITEM] = "Item does not exist.";
   errmsg[ERR_COMP_TOOMANYPARAMS] = "Too many parameters in item definition.";
+  errmsg[ERR_COMP_TOOMANYARGS] = "Too many arguments passed to item.";
 }

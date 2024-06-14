@@ -55,6 +55,8 @@
     LOCAL_t *local;
     int8_t errnum;
     int8_t control_count;
+    uint8_t args_level;
+    uint8_t arg_count[MAX_PARAMS + 1];
     uint8_t parser_param_count;
     LOOP_FIXUP_t loop[MAX_NESTED_CONTROLS];
     IF_FIXUP_t if_stmt[MAX_NESTED_CONTROLS];
@@ -346,6 +348,7 @@ int8_t parse_source(char *source, int sourcelen, OUTPUT_t *out,
   scanner_state.out = out;
   scanner_state.local = local;
   scanner_state.errnum = ERR_NOERROR;
+  scanner_state.args_level = 0;
   scanner_state.control_count = -1; // We start in no loop.
   yylex_init_extra(my_extra, &sc);
   FILE *in = fmemopen(source, sourcelen, "r");
@@ -461,9 +464,13 @@ expr:     TLOCAL        { bool tf = emit_local_op($1, state, 'e');
         |	TSTRINGLIT    { emit_byte('l', state->out);
                           emit_string($1, state->out);
                           free($1); }
-        |	item args { emit_byte('F', state->out);
-                      emit_int16(0 /* FIXME how many args??? */,
-                                                              state->out); }
+        |	item { emit_byte('F', state->out); }
+            args {
+                   // state->args_level has already been decremented
+                   // so add 1 to get the correct level
+                   emit_int16(state->arg_count[state->args_level + 1],
+                                                                state->out);
+                 }
         | expr TEQUAL expr      { emit_byte('o', state->out); }
         | expr TNOTEQUAL expr   { emit_byte('q', state->out); }
         | expr TOR expr         { emit_byte('z', state->out); }
@@ -497,7 +504,10 @@ funcop:   TEXISTS TLBRACE item TRBRACE { emit_byte('X', state->out); }
 
 libcall:  TLIBNAME TLAYERSEP TLAYER { }
                        args { uint8_t lib, call, args;
-                         uint8_t arg_count = 0; /* FIXME how many args? */
+                         // state->args_level has already been decremented
+                         // so add 1 to get the correct level
+                         uint8_t arg_count = state->arg_count[state->
+                                                            args_level + 1];
                          if (libcall_lookup($1, $3, &lib, &call, &args)) {
                            free($1); free($3);
                            if (arg_count != args) {
@@ -532,8 +542,7 @@ param_list: param_local
         | param_local TCOMMA param_list
         ;
 
-param_local: TLOCAL {
-                      state->parser_param_count++;
+param_local: TLOCAL { state->parser_param_count++;
                       if (state->parser_param_count > MAX_PARAMS) {
                         state->errnum = ERR_COMP_TOOMANYPARAMS;
                         free($1);
@@ -545,11 +554,25 @@ param_local: TLOCAL {
         ;
 
 args:
-        | TLBRACE arg_list TRBRACE
+        | TLBRACE { state->args_level++;
+                    state->arg_count[state->args_level] = 0;
+                  } arg_list TRBRACE {
+                    state->args_level--;
+                  }
         ;
 
-arg_list: expr { /* FIXME how many args? */ }
-        | expr { /* FIXME how many args? */ } TCOMMA arg_list
+arg_list: expr { if (state->arg_count[state->args_level] >= MAX_PARAMS) {
+                   state->errnum = ERR_COMP_TOOMANYARGS;
+                   YYERROR;
+                 }
+                 state->arg_count[state->args_level]++;
+               }
+        | expr { if (state->arg_count[state->args_level] >= MAX_PARAMS) {
+                   state->errnum = ERR_COMP_TOOMANYARGS;
+                   YYERROR;
+                 }
+                 state->arg_count[state->args_level]++;
+               } TCOMMA arg_list
         ;
 
 item_assignment: expr { emit_byte('C', state->out); }
