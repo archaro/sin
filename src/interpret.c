@@ -621,13 +621,12 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   if (testitem && testitem->inuse) {
     char name[MAX_ITEM_NAME];
     get_itemname(testitem, name);
-    result = false;
-    local.errnum = ERR_COMP_INUSE;
+    result = ERR_COMP_INUSE;
   } else {
     result = parse_source(sourcecode, sclen, out, &local);
   }
 
-  if (result) {
+  if (result == 0) {
     // Compilation succeeded.  Assign it to the item.
     // The item type is ITEM_code.
     uint32_t len = out->nextbyte - out->bytecode;
@@ -670,7 +669,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     // Compilation failed.  Don't assign anything.
     logerr("Compilation failed.\n");
     // Set the error item to the compiler error.
-    set_error_item(local.errnum);
+    set_error_item(result);
     FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
   }
 

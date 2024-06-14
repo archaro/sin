@@ -31,7 +31,6 @@
     char *id[MAX_LOCAL_VARS];
     int count;
     int param_count;
-    int8_t errnum;
   } LOCAL_t;
 
   typedef struct {
@@ -54,6 +53,7 @@
   typedef struct {
     OUTPUT_t *out;
     LOCAL_t *local;
+    int8_t errnum;
     int8_t control_count;
     uint8_t parser_param_count;
     LOOP_FIXUP_t loop[MAX_NESTED_CONTROLS];
@@ -65,7 +65,7 @@
   } yy_extra_type;
 
   #define YY_EXTRA_TYPE yy_extra_type
-  bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
+  int8_t parse_source(char *source, int sourcelen, OUTPUT_t *out,
                                                            LOCAL_t *local);
 }
 
@@ -91,7 +91,7 @@ void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
   // We don't actually do anything in yyerror, we just need to define it.
   // yyerror() is called whenever there is a syntax error, so we need to
   // set the error number in the state appropriately.
-  state->local->errnum = ERR_COMP_SYNTAX;
+  state->errnum = ERR_COMP_SYNTAX;
 }
 
 void emit_byte(unsigned char c, OUTPUT_t *out) {
@@ -193,14 +193,14 @@ void emit_local_assign(char *id, OUTPUT_t *out, LOCAL_t *local) {
   }
 }
 
-bool emit_local_op(char *id, LOCAL_t *local, OUTPUT_t *out, char op) {
+bool emit_local_op(char *id, SCANNER_STATE_t *state, char op) {
   // Emit the specified local operation ('f' for increment, 'g'
   // for decrement), followed by the local to increment or decrement.
-  emit_byte(op, out);
-  if (emit_local_index(id, out, local)) {
+  emit_byte(op, state->out);
+  if (emit_local_index(id, state->out, state->local)) {
     return true;
   } else {
-    local->errnum = ERR_COMP_LOCALBEFOREDEF;
+    state->errnum = ERR_COMP_LOCALBEFOREDEF;
     return false;
   }
 }
@@ -329,8 +329,10 @@ void emit_embedded_code(OUTPUT_t *out, char *code) {
   emit_string(code, out); // Aaaand the code.
 }
 
-bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
+int8_t parse_source(char *source, int sourcelen, OUTPUT_t *out,
                                                           LOCAL_t *local) {
+  // Compile the given string.
+  // Returns 0 if successful or > 0 (error number) if not.
   // source holds the source input string
   // sourcelen holds the length of the input
   // out is a pointer to a struct which holds the output buffer
@@ -343,7 +345,7 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
   SCANNER_STATE_t scanner_state;
   scanner_state.out = out;
   scanner_state.local = local;
-  scanner_state.local->errnum = ERR_NOERROR;
+  scanner_state.errnum = ERR_NOERROR;
   scanner_state.control_count = -1; // We start in no loop.
   yylex_init_extra(my_extra, &sc);
   FILE *in = fmemopen(source, sourcelen, "r");
@@ -368,9 +370,9 @@ bool parse_source(char *source, int sourcelen, OUTPUT_t *out,
     // two bytes of the bytecode.
     out->bytecode[0] = local->count;
     out->bytecode[1] = local->param_count;
-    return true;
+    return 0;
   } else {
-    return false;
+    return scanner_state.errnum;
   }
 }
 
@@ -419,7 +421,7 @@ stmtsemi: stmt TSEMI
 
 stmt:   TWHILE                  {
                 if (!prepare_loop(state)) {
-                  state->local->errnum = ERR_COMP_MAXDEPTH;
+                  state->errnum = ERR_COMP_MAXDEPTH;
                   YYERROR;
                 }
                                 } expr {
@@ -434,26 +436,23 @@ stmt:   TWHILE                  {
         | TRETURN { emit_byte('h', state->out); }
         | TLOCAL TASSIGN { if (!prepare_local_assign($1, state->out,
                                                       state->local)) {
-                           state->local->errnum = ERR_COMP_TOOMANYLOCALS;
+                           state->errnum = ERR_COMP_TOOMANYLOCALS;
                            YYERROR; }
                                                                                                      } expr {
                            emit_local_assign($1, state->out, state->local);
                            free($1);
                          }
         | item TASSIGN item_assignment
-        | TLOCAL TINC   { bool tf = emit_local_op($1, state->local,
-                                                          state->out, 'f');
+        | TLOCAL TINC   { bool tf = emit_local_op($1, state, 'f');
                           free($1);
                           if (!tf) YYERROR; }
-        | TLOCAL TDEC   { bool tf = emit_local_op($1, state->local,
-                                                          state->out, 'g');
+        | TLOCAL TDEC   { bool tf = emit_local_op($1, state, 'g');
                           free($1);
                           if (!tf) YYERROR; }
         | expr                  { }
         ;
 
-expr:     TLOCAL        { bool tf = emit_local_op($1, state->local,
-                                                          state->out, 'e');
+expr:     TLOCAL        { bool tf = emit_local_op($1, state, 'e');
                           free($1); 
                           if (!tf) YYERROR; }
         |	TINTEGER      { emit_byte('p', state->out);
@@ -483,8 +482,7 @@ expr:     TLOCAL        { bool tf = emit_local_op($1, state->local,
         | funcop
         | libcall
         | TUNKNOWNCHAR          {
-                                  state->local->errnum =
-                                                      ERR_COMP_UNKNOWNCHAR;
+                                  state->errnum = ERR_COMP_UNKNOWNCHAR;
                                   free($1);
                                   YYERROR;
                                 }
@@ -503,15 +501,14 @@ libcall:  TLIBNAME TLAYERSEP TLAYER { }
                          if (libcall_lookup($1, $3, &lib, &call, &args)) {
                            free($1); free($3);
                            if (arg_count != args) {
-                             state->local->errnum = ERR_COMP_WRONGARGS;
+                             state->errnum = ERR_COMP_WRONGARGS;
                              YYERROR;
                            }
                            emit_byte('A', state->out);
                            emit_byte(lib, state->out);
                            emit_byte(call, state->out);
                          } else {
-                           state->local->errnum =
-                                           ERR_COMP_UNKNOWNLIB;
+                           state->errnum = ERR_COMP_UNKNOWNLIB;
                            free($1); free($3); YYERROR;
                          }
                        }
@@ -538,7 +535,7 @@ param_list: param_local
 param_local: TLOCAL {
                       state->parser_param_count++;
                       if (state->parser_param_count > MAX_PARAMS) {
-                        state->local->errnum = ERR_COMP_TOOMANYPARAMS;
+                        state->errnum = ERR_COMP_TOOMANYPARAMS;
                         free($1);
                         YYERROR;
                       }
@@ -596,8 +593,7 @@ first_layer_deref: TDEREFSTART { emit_byte('I', state->out);
         ;
 
 deref_content: item
-        | TLOCAL {  bool tf = emit_local_op($1, state->local,
-                                                          state->out, 'V');
+        | TLOCAL {  bool tf = emit_local_op($1, state, 'V');
                     free($1);
                     if (!tf) YYERROR;
                  }

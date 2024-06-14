@@ -47,9 +47,9 @@ int main(int argc, char **argv) {
   local.param_count = 0;
   logmsg("Parsing...\n");
   init_errmsg();
-  bool result =  parse_source(source, sourcelen, out, &local);
+  uint8_t result = parse_source(source, sourcelen, out, &local);
 
-  if (result) {
+  if (result == 0) {
     logmsg("Compilation completed: %ld bytes.\n",
                                           out->nextbyte - out->bytecode);
     FILE *output;
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
       fclose(output);
     }
   } else {
-    logerr("Error: (#%d) %s\n", local.errnum, errmsg[local.errnum]);
+    logerr("Error: (#%d) %s\n", result, errmsg[result]);
     logerr("Compilation failed.\n");
   }
 
