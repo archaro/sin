@@ -19,6 +19,7 @@
   */
   #define MAX_NESTED_CONTROLS 32
   #define MAX_LOCAL_VARS 256
+  #define MAX_PARAMS 16
 
   typedef struct {
     unsigned char *bytecode;
@@ -54,6 +55,7 @@
     OUTPUT_t *out;
     LOCAL_t *local;
     int8_t control_count;
+    uint8_t parser_param_count;
     LOOP_FIXUP_t loop[MAX_NESTED_CONTROLS];
     IF_FIXUP_t if_stmt[MAX_NESTED_CONTROLS];
   } SCANNER_STATE_t;
@@ -461,7 +463,7 @@ expr:     TLOCAL        { bool tf = emit_local_op($1, state->local,
                           emit_string($1, state->out);
                           free($1); }
         |	item args { emit_byte('F', state->out);
-                      emit_int16(0 /* how many args??? */,
+                      emit_int16(0 /* FIXME how many args??? */,
                                                               state->out); }
         | expr TEQUAL expr      { emit_byte('o', state->out); }
         | expr TNOTEQUAL expr   { emit_byte('q', state->out); }
@@ -497,7 +499,7 @@ funcop:   TEXISTS TLBRACE item TRBRACE { emit_byte('X', state->out); }
 
 libcall:  TLIBNAME TLAYERSEP TLAYER { }
                        args { uint8_t lib, call, args;
-                         uint8_t arg_count = 0; /* how many args? */
+                         uint8_t arg_count = 0; /* FIXME how many args? */
                          if (libcall_lookup($1, $3, &lib, &call, &args)) {
                            free($1); free($3);
                            if (arg_count != args) {
@@ -523,7 +525,9 @@ elsif_else_opt: /* empty */
         ;
 
 params:
-        | TLBRACE { emit_byte('P', state->out); }
+        | TLBRACE { emit_byte('P', state->out);
+                    state->parser_param_count = 0;
+                  }
           param_list TRBRACE { emit_int16(0, state->out); }
         ;
 
@@ -531,15 +535,24 @@ param_list: param_local
         | param_local TCOMMA param_list
         ;
 
-param_local: TLOCAL { emit_string($1, state->out); free($1); }
+param_local: TLOCAL {
+                      state->parser_param_count++;
+                      if (state->parser_param_count > MAX_PARAMS) {
+                        state->local->errnum = ERR_COMP_TOOMANYPARAMS;
+                        free($1);
+                        YYERROR;
+                      }
+                      emit_string($1, state->out);
+                      free($1);
+                    }
         ;
 
 args:
         | TLBRACE arg_list TRBRACE
         ;
 
-arg_list: expr { /* how many args? */ }
-        | expr { /* how many args? */ } TCOMMA arg_list
+arg_list: expr { /* FIXME how many args? */ }
+        | expr { /* FIXME how many args? */ } TCOMMA arg_list
         ;
 
 item_assignment: expr { emit_byte('C', state->out); }
