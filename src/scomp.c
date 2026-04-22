@@ -42,13 +42,10 @@ int main(int argc, char **argv) {
   out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, out->maxsize);
   out->nextbyte = out->bytecode;
 
-  LOCAL_t local;
-  local.count = 0;
-  local.param_count = 0;
   logmsg("Parsing...\n");
   init_errmsg();
-  uint8_t result = parse_source(source, sourcelen, out, &local);
-
+  uint8_t result = parse_source(source, sourcelen);
+  // FIXME: WE HAVEN'T COMPILED THE BYTECODE YET! ONLY THE ABSTRACT SYNTAX!
   if (result == 0) {
     logmsg("Compilation completed: %ld bytes.\n",
                                           out->nextbyte - out->bytecode);
@@ -69,7 +66,8 @@ int main(int argc, char **argv) {
   FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
   FREE_ARRAY(OUTPUT_t, out, 1);
   FREE_ARRAY(char, source, sourcelen);
-  for (int l = 0; l < local.count; l++) {
-    free(local.id[l]);
-  }
+  // FIXME: No longer relevant.  Rework for abstract syntax
+  //for (int l = 0; l < local.count; l++) {
+  //  free(local.id[l]);
+  //}
 }

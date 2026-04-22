@@ -561,13 +561,12 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   // If the compilation is successful, assign its value to the item
   // on the top of the stack.  Otherwise, assign nil to the item.
 
-  LOCAL_t local;
-  local.count = 0;
-  local.param_count = 0;
   int plen = 0; // For the source reconstruction
+  int param_count = 0;
 
   if (*nextop == 'P') {
     // Parameters definition follows.  Handle this first.
+    // FIXME: This is probably broken.  Examine carefully.
     nextop++;
     // Each parameter is a 2-byte length followed by a string
     // After the last string, there is a 2-byte zero.
@@ -581,17 +580,14 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
       param[param_len] = '\0';
       nextop += param_len;
       plen += param_len;
-      // Note that we don't check for duplicates - if the user is daft
-      // enough to create multiple parameters with the same name, they 
-      // deserve everything they get.
-      local.id[local.count] = param;
-      local.count++;
-      local.param_count++;
+      param_count++;
       // Get the next one...
       memcpy(&param_len, nextop, 2);
       nextop += 2;
     }
     // All parameters processed.
+    // FIXME: Now we have the parameters, do something with them...
+    // FIXME: They will be relevant once the abstract syntax tree is created.
   }
 
   // Now we have the parameters (if any), get the source code for this item.
@@ -608,6 +604,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
 
   // We have the source.  Compile it.
   DISASS_LOG("Source to compile: %s\n", sourcecode);
+  // FIXME: WE HAVEN'T YET COMPILED THE BYTECODE! ONLY THE ABSTRACT SYNTAX!
   OUTPUT_t *out = GROW_ARRAY(OUTPUT_t, NULL, 0, 1);
   out->maxsize = 1024;
   out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, out->maxsize);
@@ -623,7 +620,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     get_itemname(testitem, name);
     result = ERR_COMP_INUSE;
   } else {
-    result = parse_source(sourcecode, sclen, out, &local);
+    result = parse_source(sourcecode, sclen);
   }
 
   if (result == 0) {
@@ -633,16 +630,18 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     ITEM_t *item = insert_code_item(config.itemroot, itemname.s, len,
                                                             out->bytecode);
     // Now reconstruct the source code and save it to srcroot.
-    plen += 2 * (local.param_count - 1);
+    plen += 2 * (param_count - 1);
     len = plen + sclen + 13; // Big enough for everything!
     char *src = GROW_ARRAY(char, NULL, 0, len);
     src[0] = '\0';
     strcat(src, "code ");
-    if (local.param_count > 0) {
+    if (param_count > 0) {
       strcat(src, "{");
-      for (int pc = 0; pc < local.param_count; pc++) {
-        strcat(src, local.id[pc]);
-        if (pc < (local.param_count -1)) {
+      for (int pc = 0; pc < param_count; pc++) {
+        // FIXME: In abstract syntax world, how do we reconstruct
+        // the parameter list?
+        //strcat(src, local.id[pc]);
+        if (pc < (param_count -1)) {
           strcat(src, ", ");
         }
       }
@@ -677,9 +676,10 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   FREE_ARRAY(OUTPUT_t, out, 1);
   FREE_ARRAY(char, sourcecode, sclen + 1);
   FREE_ARRAY(char, itemname.s, strlen(itemname.s));
-  for (int l = 0; l < local.count; l++) {
-    free(local.id[l]);
-  }
+  // FIXME: No longer relevant - rework for abstract syntax
+  //for (int l = 0; l < local.count; l++) {
+  //  free(local.id[l]);
+  //}
   return nextop;
 }
 
