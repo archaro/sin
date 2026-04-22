@@ -118,14 +118,16 @@ int main(int argc, char **argv) {
   };
   while ((opt = getopt_long(argc, argv, "bhi:l::n:o:p:s:", options, NULL)) != -1) {
     switch(opt) {
-      case 'b':
+      case 'b': {
         bootonly = true;
         break;
-      case 'h':
+      }
+      case 'h': {
         usage();
         exit(EXIT_SUCCESS);
         break;
-      case 'i':
+      }
+      case 'i': {
         // Optional: if given use this filename for the itemstore.
         config.itemstore = strdup(optarg);
         if (stat(config.itemstore, &buffer) == 0) {
@@ -140,7 +142,8 @@ int main(int argc, char **argv) {
           config.itemroot = make_root_item("root");
         }
         break;
-      case 'l':
+      }
+      case 'l': {
         // Optional: if given, log all output to file.
         if (optarg == NULL && optind < argc && argv[optind][0] != '-') {
           optarg = argv[optind++];
@@ -153,7 +156,8 @@ int main(int argc, char **argv) {
           log_to_file("sin");
         }
         break;
-      case 'n':
+      }
+      case 'n': {
         // Optional: name of item which handles input processing
         // Defaults to 'input' if not given.
         if (!config.itemroot) {
@@ -170,7 +174,8 @@ int main(int argc, char **argv) {
           config.input = strdup(optarg);
         }
         break;
-      case 'o':
+      }
+      case 'o': {
         // Mandatory: Name of the object code file.
         // Load a file to interpret, otherwise what's the point?
         in = fopen(optarg, "r");
@@ -186,17 +191,21 @@ int main(int argc, char **argv) {
         fclose(in);
         logmsg("Bytecode loaded: %d bytes.\n", filesize);
         break;
-      case 'p':
+      }
+      case 'p': {
         // Optional: port to listen on.
         listener_port = atoi(optarg);
         break;
-      case 's':
+      }
+      case 's': {
         // Optional: root directory of the source tree.
         config.srcroot = strdup(optarg);
         break;
-      default:
+      }
+      default: {
         usage();
         return EXIT_FAILURE;
+      }
     }
   }
 
