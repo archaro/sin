@@ -64,23 +64,23 @@ integer     [0-9]+
   "endwhile"    { return TENDWHILE; }
   "exists"      { return TEXISTS; }
   "if"          { return TIF; }
-  "net"         { yylval->string = strdup(yytext); return TLIBNAME; }
+  "net"         { yylval->TSTRINGLIT = strdup(yytext); return TLIBNAME; }
   "nthname"     { return TNTHNAME; }
   "or"          { return TOR; }
   "return"      { return TRETURN; }
   "rootname"    { return TROOTNAME; }
-  "str"         { yylval->string = strdup(yytext); return TLIBNAME; }
-  "sys"         { yylval->string = strdup(yytext); return TLIBNAME; }
-  "task"        { yylval->string = strdup(yytext); return TLIBNAME; }
+  "str"         { yylval->TSTRINGLIT = strdup(yytext); return TLIBNAME; }
+  "sys"         { yylval->TSTRINGLIT = strdup(yytext); return TLIBNAME; }
+  "task"        { yylval->TSTRINGLIT = strdup(yytext); return TLIBNAME; }
   "then"        { return TTHEN; }
   "while"       { return TWHILE; }
   "="           { return TASSIGN; }
   "=="          { return TEQUAL; }
   "!"           { return TNOT; }
   "!="          { return TNOTEQUAL; }
-  "<"           { return TLESSTHAN; }
+  "<"           { return TLT; }
   "<="          { return TLTEQ; }
-  ">"           { return TGREATERTHAN; }
+  ">"           { return TGT; }
   ">="          { return TGTEQ; }
   "++"          { return TINC; }
   "+"           { return TPLUS; }
@@ -103,9 +103,9 @@ integer     [0-9]+
                   BEGIN(STRINGLIT);
                 }
   [ \t\n]+      ; // Inline whitespace handling
-  {integer}     { yylval->string = strdup(yytext); return TINTEGER; }
-  {local}       { yylval->string = strdup(yytext); return TLOCAL; }
-  {layer}       { yylval->string = strdup(yytext); return TLAYER; }
+  {integer}     { yylval->TSTRINGLIT = strdup(yytext); return TINTEGER; }
+  {local}       { yylval->TSTRINGLIT = strdup(yytext); return TLOCAL; }
+  {layer}       { yylval->TSTRINGLIT = strdup(yytext); return TLAYER; }
   "\."          { return TLAYERSEP; }
   "\["          { return TDEREFSTART; }
   "\]"          { return TDEREFEND; }
@@ -114,13 +114,13 @@ integer     [0-9]+
   \"            { /* saw closing quote - all done */
                   BEGIN(INITIAL);
                   *strbuf_ptr = '\0';
-                  yylval->string = strdup(strbuf);
+                  yylval->TSTRINGLIT = strdup(strbuf);
                   free(strbuf);
                   return TSTRINGLIT;
                 }
   \n            {
                   BEGIN(INITIAL);
-                  yylval->string = strdup("Newline in string.");
+                  yylval->TSTRINGLIT = strdup("Newline in string.");
                   free(strbuf);
                   return TUNKNOWNCHAR;
                 }
@@ -130,7 +130,7 @@ integer     [0-9]+
                   (void) sscanf( yytext + 1, "%o", &result );
                   if ( result > 0xff ) {
                     BEGIN(INITIAL);
-                    yylval->string = strdup("Escape sequence too big.");
+                    yylval->TSTRINGLIT = strdup("Escape sequence too big.");
                     free(strbuf);
                     return TUNKNOWNCHAR;
                   }
@@ -164,7 +164,7 @@ integer     [0-9]+
   [ \t\n]+      ; // Inline whitespace handling
 }
 <CODEPARAMS>{
-  {local}       { yylval->string = strdup(yytext); return TLOCAL; }
+  {local}       { yylval->TSTRINGLIT = strdup(yytext); return TLOCAL; }
   ","           { return TCOMMA; }
   "}"           { BEGIN(CODE); return TRBRACE; }
   [ \t\n]+      ; // Inline whitespace handling
@@ -185,7 +185,7 @@ integer     [0-9]+
                     // This ends the code segment.  Return the buffer.
                     BEGIN(INITIAL);
                     *strbuf_ptr = '\0';
-                    yylval->string = strdup(strbuf);
+                    yylval->TSTRINGLIT = strdup(strbuf);
                     free(strbuf);
                     return TCODEBODY;
                   }
@@ -224,7 +224,7 @@ integer     [0-9]+
   .|\n        { /* Eat everything else */ }
 }
 <INITIAL,CODE>{
-  .             { yylval->string = strdup(yytext); return TUNKNOWNCHAR; }
+  .             { yylval->TSTRINGLIT = strdup(yytext); return TUNKNOWNCHAR; }
 }
 %%
 

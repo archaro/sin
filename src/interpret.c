@@ -14,6 +14,7 @@
 #include "log.h"
 #include "memory.h"
 #include "parser.h"
+#include "absyn.h"
 #include "value.h"
 #include "stack.h"
 #include "item.h"
@@ -614,13 +615,15 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   // check to see if the item is in use - if it is, we can't
   // overwrite it.
   bool result;
+  AS_NODE *absyn;
   ITEM_t *testitem = find_item(config.itemroot, itemname.s);
   if (testitem && testitem->inuse) {
     char name[MAX_ITEM_NAME];
     get_itemname(testitem, name);
     result = ERR_COMP_INUSE;
   } else {
-    result = parse_source(sourcecode, sclen);
+    result = parse_source(sourcecode, sclen, &absyn);
+    // absyn now points to the root of the abstract syntax tree
   }
 
   if (result == 0) {

@@ -8,6 +8,7 @@
 #include "config.h"
 #include "error.h"
 #include "parser.h"
+#include "absyn.h"
 #include "memory.h"
 #include "log.h"
 
@@ -17,6 +18,7 @@ CONFIG_t config;
 int main(int argc, char **argv) {
   char *source;
   int sourcelen;
+  AS_NODE *absyn;
   OUTPUT_t *out;
 
   if (argc != 3) {
@@ -44,7 +46,7 @@ int main(int argc, char **argv) {
 
   logmsg("Parsing...\n");
   init_errmsg();
-  uint8_t result = parse_source(source, sourcelen);
+  uint8_t result = parse_source(source, sourcelen, &absyn);
   // FIXME: WE HAVEN'T COMPILED THE BYTECODE YET! ONLY THE ABSTRACT SYNTAX!
   if (result == 0) {
     logmsg("Compilation completed: %ld bytes.\n",
