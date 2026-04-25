@@ -8,6 +8,7 @@ scomp
 sin
 sdiss
 .vscode/
+.*.swp
 sin.code-workspace
 srcroot
 

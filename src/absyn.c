@@ -3,6 +3,7 @@
 // Licensed under the MIT License - see LICENSE file for details.
 #include <stdlib.h>
 
+#include "log.h"
 #include "memory.h"
 #include "absyn.h"
 
@@ -70,5 +71,90 @@ AS_IF *as_new_if(AS_NODE *condition, AS_NODE *then, AS_IF *elsif) {
   newif->then = then;
   newif->elsif = elsif;
   return newif;
+}
+
+void as_delete_if(AS_IF *asif) {
+  // Internal helper for deleting an AS_IF node
+  // asif: the node to delete
+  if (asif->condition) {
+    as_delete(asif->condition);
+    FREE_ARRAY(AS_NODE, asif->condition, 1);
+  }
+  if (asif->then) {
+    as_delete(asif->then);
+    FREE_ARRAY(AS_NODE, asif->then, 1);
+  }
+  if (asif->elsif) {
+    as_delete_if(asif->elsif);
+    FREE_ARRAY(AS_IF, asif->elsif, 1);
+  }
+}
+
+void as_delete(AS_NODE *root) {
+  // Deletes the abstract syntax tree.  Recursive.
+  // root: The root of the tree
+
+  if (!root) return; // Nothing to do!
+
+  switch (root->nodetype) {
+    case N_VALUE: {
+      AS_VALUE *val = (AS_VALUE*)root->lhs;
+      if (val->valtype != V_INT) free(val->value.s);
+      FREE_ARRAY(AS_VALUE, root->lhs, 1);
+      // rhs is always null for this nodetype
+      break;
+    }
+    case N_IFSTMT: {
+      as_delete_if((AS_IF*)root->lhs);
+      FREE_ARRAY(AS_NODE, root->lhs, 1);
+      // rhs is always null for this nodetype
+      break;
+    }
+    case N_ADD:
+    case N_SUB:
+    case N_MUL:
+    case N_DIV:
+    case N_INC:
+    case N_DEC:
+    case N_EQUAL:
+    case N_NOTEQ:
+    case N_OR:
+    case N_AND:
+    case N_LT:
+    case N_LTEQ:
+    case N_GT:
+    case N_GTEQ:
+    case N_DEREF:
+    case N_EXISTS:
+    case N_DELETE:
+    case N_NTHNAME:
+    case N_ROOTNAME:
+    case N_ITEM:
+    case N_NOT:
+    case N_LIBCALL:
+    case N_ARGLIST:
+    case N_CODE:
+    case N_CALL:
+    case N_ASSITEM:
+    case N_ASSLOCAL:
+    case N_EXPRSTMT:
+    case N_RETURN:
+    case N_STMT:
+    case N_WHILESTMT:
+    {
+      if (root->lhs) {
+        as_delete((AS_NODE*)root->lhs);
+        FREE_ARRAY(AS_NODE, root->lhs, 1);
+      }
+      if (root->rhs) {
+        as_delete((AS_NODE*)root->rhs);
+        FREE_ARRAY(AS_NODE, root->rhs, 1);
+      }
+      break;
+    }
+    default: {
+      logerr("Calling as_delete() with invalid node type %d\n", root->nodetype);
+    }
+  }
 }
 

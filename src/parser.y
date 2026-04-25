@@ -128,10 +128,10 @@ stmtsemi: stmt TSEMI { $$ = as_new_node(N_STMT, $1, NULL); }
 stmt:   TWHILE expr TDO stmtlist TENDWHILE { $$ = as_new_node(N_WHILESTMT, $4, $2); }
         | TIF expr TTHEN stmtlist elsif_else_opt TENDIF { $$ = as_new_node(N_IFSTMT, as_new_if($2, $4, $5), NULL); }
         | TRETURN { $$ = as_new_node(N_RETURN, NULL, NULL); }
-        | TLOCAL TASSIGN expr { $$ = as_new_node(N_ASSLOCAL, $1, $3); }
+        | TLOCAL TASSIGN expr { $$ = as_new_node(N_ASSLOCAL, as_new_valnode(V_LOCAL, $1), $3); }
         | item TASSIGN item_assignment { $$ = as_new_node(N_ASSITEM, $1, $3); }
-        | TLOCAL TINC { $$ = as_new_node(N_INC, $1, NULL); }
-        | TLOCAL TDEC { $$ = as_new_node(N_DEC, $1, NULL); }
+        | TLOCAL TINC { $$ = as_new_node(N_INC, as_new_valnode(V_LOCAL, $1), NULL); }
+        | TLOCAL TDEC { $$ = as_new_node(N_DEC, as_new_valnode(V_LOCAL, $1), NULL); }
         | expr { $$ = as_new_node(N_EXPRSTMT, $1, NULL); }
         ;
 
@@ -169,7 +169,7 @@ funcop:   TEXISTS TLBRACE item TRBRACE { $$ = as_new_node(N_EXISTS, $3, NULL); }
         | TROOTNAME TLBRACE expr TRBRACE { $$ = as_new_node(N_ROOTNAME, $3, NULL); }
         ;
 
-libcall:  TLIBNAME TLAYERSEP TLAYER args { $$ = as_new_node(N_LIBCALL, as_new_node(N_ITEM, $1, as_new_node(N_ITEM, $3, NULL)), $4); };
+libcall:  TLIBNAME TLAYERSEP TLAYER args { $$ = as_new_node(N_LIBCALL, as_new_node(N_ITEM, as_new_valnode(V_LAYER, $1), as_new_node(N_ITEM, as_new_valnode(V_LAYER, $3), NULL)), $4); };
         ;
 
 elsif_else_opt: /* empty */ { $$ = NULL; }

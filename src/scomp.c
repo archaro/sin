@@ -47,29 +47,35 @@ int main(int argc, char **argv) {
   logmsg("Parsing...\n");
   init_errmsg();
   uint8_t result = parse_source(source, sourcelen, &absyn);
-  // FIXME: WE HAVEN'T COMPILED THE BYTECODE YET! ONLY THE ABSTRACT SYNTAX!
+// DEBUG: Just delete the tree at this point.
+//        Eventually we should do something with it first.
   if (result == 0) {
-    logmsg("Compilation completed: %ld bytes.\n",
-                                          out->nextbyte - out->bytecode);
-    FILE *output;
-    output = fopen(argv[2], "w");
-    if (!output) {
-      printf("Unable to open output file.");
-      exit(1);
-    } else {
-      fwrite(out->bytecode, out->nextbyte - out->bytecode, 1, output);
-      fclose(output);
-    }
-  } else {
-    logerr("Error: (#%d) %s\n", result, errmsg[result]);
-    logerr("Compilation failed.\n");
+    as_delete(absyn);
+    FREE_ARRAY(AS_NODE, absyn, 1);
   }
+// FIXME: WE HAVEN'T COMPILED THE BYTECODE YET! ONLY THE ABSTRACT SYNTAX!
+//  if (result == 0) {
+//    logmsg("Compilation completed: %ld bytes.\n",
+//                                          out->nextbyte - out->bytecode);
+//    FILE *output;
+//    output = fopen(argv[2], "w");
+//    if (!output) {
+//      printf("Unable to open output file.");
+//      exit(1);
+//    } else {
+//      fwrite(out->bytecode, out->nextbyte - out->bytecode, 1, output);
+//      fclose(output);
+//    }
+//  } else {
+//    logerr("Error: (#%d) %s\n", result, errmsg[result]);
+//    logerr("Compilation failed.\n");
+//  }
 
   FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
   FREE_ARRAY(OUTPUT_t, out, 1);
   FREE_ARRAY(char, source, sourcelen);
-  // FIXME: No longer relevant.  Rework for abstract syntax
-  //for (int l = 0; l < local.count; l++) {
-  //  free(local.id[l]);
-  //}
+// FIXME: No longer relevant.  Rework for abstract syntax
+//  for (int l = 0; l < local.count; l++) {
+//    free(local.id[l]);
+//  }
 }
