@@ -16,7 +16,7 @@
 CONFIG_t config;
 
 int main(int argc, char **argv) {
-  char *source;
+  char *source, *errdetail;
   int sourcelen;
   AS_NODE *absyn;
   OUTPUT_t *out;
@@ -46,15 +46,14 @@ int main(int argc, char **argv) {
 
   logmsg("Parsing...\n");
   init_errmsg();
-  uint8_t result = parse_source(source, sourcelen, &absyn);
+  uint8_t result = parse_source(source, sourcelen, &absyn, &errdetail);
 // DEBUG: Just delete the tree at this point.
 //        Eventually we should do something with it first.
   if (result == 0) {
+    logmsg("Walking the abstract syntax tree...\n");
+    as_walk(absyn);
     as_delete(absyn);
-    FREE_ARRAY(AS_NODE, absyn, 1);
-  }
 // FIXME: WE HAVEN'T COMPILED THE BYTECODE YET! ONLY THE ABSTRACT SYNTAX!
-//  if (result == 0) {
 //    logmsg("Compilation completed: %ld bytes.\n",
 //                                          out->nextbyte - out->bytecode);
 //    FILE *output;
@@ -66,10 +65,12 @@ int main(int argc, char **argv) {
 //      fwrite(out->bytecode, out->nextbyte - out->bytecode, 1, output);
 //      fclose(output);
 //    }
-//  } else {
-//    logerr("Error: (#%d) %s\n", result, errmsg[result]);
-//    logerr("Compilation failed.\n");
-//  }
+  } else {
+    logerr("Error: (#%d) %s\n", result, errmsg[result]);
+    logerr("Detail: %s\n", errdetail);
+    logerr("Compilation failed.\n");
+    FREE_ARRAY(char, errdetail, 1);
+  }
 
   FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
   FREE_ARRAY(OUTPUT_t, out, 1);

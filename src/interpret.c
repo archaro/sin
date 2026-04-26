@@ -615,6 +615,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   // check to see if the item is in use - if it is, we can't
   // overwrite it.
   bool result;
+  char *errdetail;
   AS_NODE *absyn;
   ITEM_t *testitem = find_item(config.itemroot, itemname.s);
   if (testitem && testitem->inuse) {
@@ -622,7 +623,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     get_itemname(testitem, name);
     result = ERR_COMP_INUSE;
   } else {
-    result = parse_source(sourcecode, sclen, &absyn);
+    result = parse_source(sourcecode, sclen, &absyn, &errdetail);
     // absyn now points to the root of the abstract syntax tree
   }
 
@@ -671,7 +672,8 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     // Compilation failed.  Don't assign anything.
     logerr("Compilation failed.\n");
     // Set the error item to the compiler error.
-    set_error_item(result);
+    set_error_item(result, errdetail);
+    FREE_ARRAY(char, errdetail, 1);
     FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
   }
 

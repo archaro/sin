@@ -42,4 +42,5 @@ AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval);
 AS_NODE *as_new_node(ENUM_NODE nodetype, void *lhs, void *rhs);
 AS_IF *as_new_if(AS_NODE *condition, AS_NODE *then, AS_IF *elsif);
 void as_delete(AS_NODE *root);
+void as_walk(AS_NODE *root);
 

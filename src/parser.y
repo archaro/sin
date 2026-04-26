@@ -23,10 +23,11 @@
 
   typedef struct {
     int8_t errnum;
+    char *errdetail;
     AS_NODE *absyn;
   } SCANNER_STATE_t;
 
-  int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn);
+  int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn, char **errdetail);
 }
 
 %{
@@ -49,10 +50,16 @@ int yyparse();
 void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
   // yyerror() is called whenever there is a syntax error, so we need to
   // set the error number in the state appropriately.
-  state->errnum = ERR_COMP_SYNTAX;
+  if (state->errnum == ERR_NOERROR) {
+    // This might have been set already so don't clobber it if it has
+    state->errnum = ERR_COMP_SYNTAX;
+  }
+  if (state->errdetail == NULL) {
+    state->errdetail = strdup(s);
+  }
 }
 
-int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn) {
+int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn, char **errdetail) {
   // Compile the given string.
   // Returns 0 if successful or > 0 (error number) if not.
   // source holds the source input string
@@ -63,6 +70,7 @@ int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn) {
   // for ease of transport
   SCANNER_STATE_t scanner_state;
   scanner_state.errnum = ERR_NOERROR;
+  scanner_state.errdetail = NULL;
   FILE *in = fmemopen(source, sourcelen, "r");
   yyset_in(in, sc);
 
@@ -74,10 +82,12 @@ int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn) {
 
   if (failed) {
     scanner_state.absyn = NULL;
+    *errdetail = scanner_state.errdetail;
     return scanner_state.errnum;
   } else {
     // scanner_state.absyn now points to the root of the abstract syntax tree
     *absyn = scanner_state.absyn;
+    *errdetail = NULL;
     return 0;
   }
 }
@@ -119,7 +129,7 @@ input:  stmtlist { state->absyn = $1; }
         ;
 
 stmtlist: /* Nothing */ { $$ = NULL; }
-        | stmtlist stmtsemi { $$ = as_new_node(N_STMT, $2, $1); }
+        | stmtlist stmtsemi { $$ = as_new_node(N_STMT, $1, $2); }
         ;
 
 stmtsemi: stmt TSEMI { $$ = as_new_node(N_STMT, $1, NULL); }
@@ -158,7 +168,7 @@ expr:     TLOCAL { $$ = as_new_valnode(V_LOCAL, $1); }
         | libcall { $$ = $1; }
         | TUNKNOWNCHAR { $$ = NULL;
                          state->errnum = ERR_COMP_UNKNOWNCHAR;
-                         free($1);
+                         state->errdetail = $1;
                          YYERROR;
                        }
         ;
@@ -197,7 +207,7 @@ arg_list: expr TCOMMA arg_list { $$ = as_new_node(N_ARGLIST, $1, $3); }
         ;
 
 item_assignment: expr { $$ = $1; }
-        | TCODE params TCODEBODY { $$ = as_new_node(N_CODE, $2, $3); }
+        | TCODE params TCODEBODY { $$ = as_new_node(N_CODE, $2, as_new_valnode(V_STR, $3)); }
         ;
 
 item:     first_layer subsequent_layers { $$ = as_new_node(N_ITEM, $1, $2); }

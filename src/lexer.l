@@ -153,7 +153,7 @@ integer     [0-9]+
                                               &strbuf_capacity, yytext); }
 }
 <CODE>{
-  "("           { code_paren = 0;
+  "("           { code_paren = 1;
                   strbuf_capacity = 512;
                   strbuf = (char *)malloc(strbuf_capacity + 1);
                   strbuf_ptr = strbuf;
@@ -225,6 +225,29 @@ integer     [0-9]+
 }
 <INITIAL,CODE>{
   .             { yylval->TSTRINGLIT = strdup(yytext); return TUNKNOWNCHAR; }
+}
+<STRINGLIT><<EOF>> {
+  BEGIN(INITIAL);
+  yylval->TSTRINGLIT = strdup("Unterminated string literal.");
+  free(strbuf);
+  return TUNKNOWNCHAR;
+}
+<CODEBODY><<EOF>> {
+  BEGIN(INITIAL);
+  yylval->TSTRINGLIT = strdup("Unterminated code(...) body.");
+  free(strbuf);
+  return TUNKNOWNCHAR;
+}
+<CODESTREMBED><<EOF>> {
+  BEGIN(INITIAL);
+  yylval->TSTRINGLIT = strdup("Unterminated quoted string inside code(...) body.");
+  free(strbuf);
+  return TUNKNOWNCHAR;
+}
+<COMMENT><<EOF>> {
+  BEGIN(INITIAL);
+  yylval->TSTRINGLIT = strdup("Unterminated comment.");
+  return TUNKNOWNCHAR;
 }
 %%
 

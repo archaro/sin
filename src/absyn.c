@@ -29,7 +29,7 @@ AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval) {
   // Like as_new_value(), but puts the value into a node and returns that.
   AS_VALUE *newval;
   if (valtype == V_INT) {
-    newval = as_new_value(V_INT, atoi(sval), NULL);
+    newval = as_new_value(V_INT, atoll(sval), NULL);
   } else {
     newval = as_new_value(valtype, 0, sval);
   }
@@ -50,6 +50,7 @@ AS_NODE *as_new_node(ENUM_NODE nodetype, void *lhs, void *rhs) {
     case N_DEC: {
       newnode->lhs = lhs;
       newnode->rhs = NULL;
+      break;
     }
     default: {
       // The default is a binary node (ie both lhs and rhs point to something)
@@ -76,23 +77,23 @@ AS_IF *as_new_if(AS_NODE *condition, AS_NODE *then, AS_IF *elsif) {
 void as_delete_if(AS_IF *asif) {
   // Internal helper for deleting an AS_IF node
   // asif: the node to delete
+  // WARNING: the pointer passed to this function is freed!
   if (asif->condition) {
     as_delete(asif->condition);
-    FREE_ARRAY(AS_NODE, asif->condition, 1);
   }
   if (asif->then) {
     as_delete(asif->then);
-    FREE_ARRAY(AS_NODE, asif->then, 1);
   }
   if (asif->elsif) {
     as_delete_if(asif->elsif);
-    FREE_ARRAY(AS_IF, asif->elsif, 1);
   }
+  FREE_ARRAY(AS_IF, asif, 1);
 }
 
 void as_delete(AS_NODE *root) {
   // Deletes the abstract syntax tree.  Recursive.
   // root: The root of the tree
+  // WARNING: the pointer passed to this function is freed!
 
   if (!root) return; // Nothing to do!
 
@@ -106,7 +107,6 @@ void as_delete(AS_NODE *root) {
     }
     case N_IFSTMT: {
       as_delete_if((AS_IF*)root->lhs);
-      FREE_ARRAY(AS_NODE, root->lhs, 1);
       // rhs is always null for this nodetype
       break;
     }
@@ -144,11 +144,9 @@ void as_delete(AS_NODE *root) {
     {
       if (root->lhs) {
         as_delete((AS_NODE*)root->lhs);
-        FREE_ARRAY(AS_NODE, root->lhs, 1);
       }
       if (root->rhs) {
         as_delete((AS_NODE*)root->rhs);
-        FREE_ARRAY(AS_NODE, root->rhs, 1);
       }
       break;
     }
@@ -156,5 +154,210 @@ void as_delete(AS_NODE *root) {
       logerr("Calling as_delete() with invalid node type %d\n", root->nodetype);
     }
   }
+  FREE_ARRAY(AS_NODE, root, 1);
+}
+
+// Keep this in sync with ENUM_VALUE!
+const char *valname[] = { "V_INT", "V_STR", "V_LOCAL", "V_LAYER" };
+// And keep this in sync with ENUM_NODE!
+const char *nodename[] = { "N_VALUE", "N_ADD", "N_SUB", "N_MUL", "N_DIV", "N_INC", "N_DEC", "N_EQUAL", "N_NOTEQ", "N_OR", "N_AND", "N_LT", "N_LTEQ", "N_GT", "N_GTEQ", "N_DEREF", "N_EXISTS", "N_DELETE", "N_NTHNAME", "N_ROOTNAME", "N_ITEM", "N_NOT", "N_LIBCALL", "N_ARGLIST", "N_CODE", "N_CALL", "N_ASSITEM", "N_ASSLOCAL", "N_EXPRSTMT", "N_RETURN", "N_STMT", "N_WHILESTMT", "N_IFSTMT" };
+
+int tree_depth = -1;
+void as_pretty_print() {
+  // Indent to make everything look all neat and professional
+  for (int s = tree_depth * 2; s > 0; s--)
+    logmsg(" ");
+}
+
+void as_reconstruct_value(AS_NODE *node) {
+  // Given a N_VALUE node, output the type and the contents
+  AS_VALUE *val = (AS_VALUE*)node->lhs;
+  logmsg("%s: ", valname[val->valtype]);
+  if (val->valtype == V_INT) {
+    logmsg("%lld", val->value.i);
+  } else {
+    logmsg("%s", val->value.s);
+  }
+}
+
+void as_reconstruct_item(AS_NODE *root) {
+  // Given an N_ITEM node, follow it to its end
+  AS_NODE *node = root->lhs;
+  // An item node can only have children of type N_VALUE or N_DEREF
+  if (node->nodetype == N_VALUE) {
+    AS_VALUE *val = (AS_VALUE*)node->lhs;
+    if (val->valtype == V_INT) {
+      logmsg("%lld", val->value.i);
+    } else {
+      logmsg("%s", val->value.s);
+    }
+  } else {
+    // Must be N_DEREF
+    logmsg("[");
+    AS_NODE *inner = (AS_NODE*)node->lhs;
+    // If it's a deref, the lhs node must be either an N_ITEM or a N_VALUE
+    // If the latter, it must be a value of type V_LOCAL
+    if (inner->nodetype == N_ITEM) {
+      as_reconstruct_item(inner);
+    } else {
+      AS_VALUE *val = inner->lhs;
+      logmsg("%s", val->value.s);
+    }
+    logmsg("]");
+  }
+  if (root->rhs) {
+    logmsg(".");
+    as_reconstruct_item(root->rhs);
+  }
+}
+
+void as_parse_if(AS_IF *ifstmt) {
+  as_pretty_print();
+  if (ifstmt->condition) {
+    logmsg("Condition:\n");
+    as_walk(ifstmt->condition);
+    tree_depth--;
+    as_pretty_print();
+    logmsg("Then:\n");
+  } else {
+    logmsg("Else:\n");
+  }
+  as_walk(ifstmt->then);
+  tree_depth--;
+  if (ifstmt->elsif) {
+    as_pretty_print();
+    logmsg("Tail:\n");
+    as_parse_if(ifstmt->elsif);
+  }
+}
+
+void as_walk(AS_NODE *root) {
+  // Debug function to walk the abstract syntax tree.
+  // Designed to be called recursively.
+
+  // Don't try to walk an empty tree.
+  if (!root) return;
+
+  // Indent
+  tree_depth++;
+  as_pretty_print();
+
+  switch (root->nodetype) {
+    case N_ADD:
+    case N_SUB:
+    case N_MUL:
+    case N_DIV:
+    case N_INC:
+    case N_DEC:
+    case N_EQUAL:
+    case N_NOTEQ:
+    case N_OR:
+    case N_AND:
+    case N_LT:
+    case N_LTEQ:
+    case N_GT:
+    case N_GTEQ: {
+      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      as_pretty_print();
+      logmsg("LHS:\n");
+      as_walk((AS_NODE*)root->lhs);
+      tree_depth--;
+      as_pretty_print();
+      logmsg("RHS:\n");
+      as_walk((AS_NODE*)root->rhs);
+      tree_depth--;
+      return;
+    }
+    case N_CODE: {
+      if (root->lhs) {
+        logmsg("Parameters:\n");
+        as_pretty_print();
+        as_walk((AS_NODE*)root->lhs);
+      }
+      logmsg("Code block:\n");
+      as_pretty_print();
+      as_reconstruct_value((AS_NODE*)root->rhs);
+      logmsg("\n");
+      return;
+    }
+    case N_VALUE: {
+      logmsg("Value type ");
+      as_reconstruct_value(root);
+      logmsg("\n");
+      return;
+    }
+    case N_EXISTS:
+    case N_DELETE:
+    case N_NTHNAME:
+    case N_ROOTNAME:
+    case N_NOT:
+    case N_RETURN:
+    case N_CALL:
+    case N_LIBCALL:
+    case N_STMT:
+    case N_WHILESTMT:
+    case N_EXPRSTMT: {
+      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      break;
+    }
+    case N_ITEM: {
+      logmsg("Item node: ");
+      as_reconstruct_item(root);
+      logmsg("\n");
+      return;
+    }
+    case N_ARGLIST: {
+      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      as_pretty_print();
+      logmsg("Parameter: \n");
+      tree_depth--;
+      as_walk((AS_NODE*)root->lhs);
+      if (root->rhs) {
+        tree_depth--;
+        as_walk((AS_NODE*)root->rhs);
+      }
+      return;
+    }
+    case N_ASSITEM: {
+      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      as_pretty_print();
+      logmsg("Item: ");
+      as_reconstruct_item((AS_NODE*)root->lhs);
+      logmsg("\n");
+      as_pretty_print();
+      logmsg("Assigned:\n");
+      as_walk((AS_NODE*)root->rhs);
+      tree_depth--;
+      return;
+    }
+    case N_ASSLOCAL: {
+      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      as_pretty_print();
+      logmsg("Local: ");
+      as_reconstruct_value((AS_NODE*)root->lhs);
+      logmsg("\n");
+      as_pretty_print();
+      logmsg("Assigned:\n");
+      as_walk((AS_NODE*)root->rhs);
+      tree_depth--;
+      return;
+    }
+    case N_IFSTMT: {
+      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      as_parse_if((AS_IF *)root->lhs);
+      return;
+    }
+    default: {
+      logerr("Calling as_walk() with invalid node type %d\n", root->nodetype);
+    }
+  }
+  if (root->lhs) {
+    as_walk((AS_NODE*)root->lhs);
+  }
+  if (root->rhs) {
+    as_walk((AS_NODE*)root->rhs);
+  }
+
+  tree_depth--;
 }
 
