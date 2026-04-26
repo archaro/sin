@@ -110,7 +110,12 @@ int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn, char **errdeta
 %type <AS_IF*> elsif_else_opt
 
 %right TASSIGN
-%left TEQUAL TNOTEQUAL TLT TGT TLTEQ TGTEQ TAND TOR
+// Precedence is ordered from low to high.  Keep OR below AND and keep
+// equality/relational operators above both boolean operators.
+// This intentionally changes mixed `and`/`or` grouping to conventional logic.
+%left TOR
+%left TAND
+%left TEQUAL TNOTEQUAL TLT TGT TLTEQ TGTEQ
 %left TPLUS TMINUS
 %left TMULT TDIV
 %left TINC TDEC
@@ -121,21 +126,23 @@ int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn, char **errdeta
 %right UMINUS TNOT
 %nonassoc TLPAREN TRPAREN TLBRACE TRBRACE TCOMMA
 
-%destructor { free ($$); } <*>
+%destructor { free ($$); } <char *>
+%destructor { as_delete($$); } <AS_NODE*>
+%destructor { as_delete_if($$); } <AS_IF*>
 
 %%
 
 input:  stmtlist { state->absyn = $1; }
         ;
 
-stmtlist: /* Nothing */ { $$ = NULL; }
-        | stmtlist stmtsemi { $$ = as_new_node(N_STMT, $1, $2); }
+stmtlist: /* Nothing */ { $$ = as_new_stmtlist_node(); }
+        | stmtlist stmtsemi { $$ = as_stmtlist_append($1, $2); }
         ;
 
-stmtsemi: stmt TSEMI { $$ = as_new_node(N_STMT, $1, NULL); }
+stmtsemi: stmt TSEMI { $$ = $1; }
 ;
 
-stmt:   TWHILE expr TDO stmtlist TENDWHILE { $$ = as_new_node(N_WHILESTMT, $4, $2); }
+stmt:   TWHILE expr TDO stmtlist TENDWHILE { $$ = as_new_node(N_WHILESTMT, $2, $4); }
         | TIF expr TTHEN stmtlist elsif_else_opt TENDIF { $$ = as_new_node(N_IFSTMT, as_new_if($2, $4, $5), NULL); }
         | TRETURN { $$ = as_new_node(N_RETURN, NULL, NULL); }
         | TLOCAL TASSIGN expr { $$ = as_new_node(N_ASSLOCAL, as_new_valnode(V_LOCAL, $1), $3); }
