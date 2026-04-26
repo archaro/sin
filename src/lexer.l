@@ -34,6 +34,22 @@
     *bufptr += 1;
     *len += 1;
   }
+
+  char *strdup_lc(const char *s) {
+    size_t n = strlen(s);
+    char *d = malloc(n + 1);
+    if (!d) return NULL;
+    const unsigned char *src = (const unsigned char *)s;
+    unsigned char *dst = (unsigned char *)d;
+    for (size_t i = 0; i < n; ++i) {
+      unsigned char c = src[i];
+      // Branchless ASCII lowercase:
+      // if ('A' <= c <= 'Z') -> c + 32
+      dst[i] = c + ((c >= 'A' && c <= 'Z') << 5);
+    }
+    dst[n] = '\0';
+    return d;
+  }
 %}
 
 %option noinput nounput noyywrap reentrant bison-bridge case-insensitive
@@ -64,14 +80,14 @@ integer     [0-9]+
   "endwhile"    { return TENDWHILE; }
   "exists"      { return TEXISTS; }
   "if"          { return TIF; }
-  "net"         { yylval->TSTRINGLIT = strdup(yytext); return TLIBNAME; }
+  "net"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "nthname"     { return TNTHNAME; }
   "or"          { return TOR; }
   "return"      { return TRETURN; }
   "rootname"    { return TROOTNAME; }
-  "str"         { yylval->TSTRINGLIT = strdup(yytext); return TLIBNAME; }
-  "sys"         { yylval->TSTRINGLIT = strdup(yytext); return TLIBNAME; }
-  "task"        { yylval->TSTRINGLIT = strdup(yytext); return TLIBNAME; }
+  "str"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
+  "sys"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
+  "task"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "then"        { return TTHEN; }
   "while"       { return TWHILE; }
   "="           { return TASSIGN; }
@@ -104,8 +120,8 @@ integer     [0-9]+
                 }
   [ \t\n]+      ; // Inline whitespace handling
   {integer}     { yylval->TSTRINGLIT = strdup(yytext); return TINTEGER; }
-  {local}       { yylval->TSTRINGLIT = strdup(yytext); return TLOCAL; }
-  {layer}       { yylval->TSTRINGLIT = strdup(yytext); return TLAYER; }
+  {local}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLOCAL; }
+  {layer}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLAYER; }
   "\."          { return TLAYERSEP; }
   "\["          { return TDEREFSTART; }
   "\]"          { return TDEREFEND; }
@@ -164,7 +180,7 @@ integer     [0-9]+
   [ \t\n]+      ; // Inline whitespace handling
 }
 <CODEPARAMS>{
-  {local}       { yylval->TSTRINGLIT = strdup(yytext); return TLOCAL; }
+  {local}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLOCAL; }
   ","           { return TCOMMA; }
   "}"           { BEGIN(CODE); return TRBRACE; }
   [ \t\n]+      ; // Inline whitespace handling
