@@ -199,8 +199,7 @@ const char *valname[] = { "V_INT", "V_STR", "V_LOCAL", "V_LAYER" };
 // And keep this in sync with ENUM_NODE!
 const char *nodename[] = { "N_VALUE", "N_ADD", "N_SUB", "N_MUL", "N_DIV", "N_INC", "N_DEC", "N_EQUAL", "N_NOTEQ", "N_OR", "N_AND", "N_LT", "N_LTEQ", "N_GT", "N_GTEQ", "N_DEREF", "N_EXISTS", "N_DELETE", "N_NTHNAME", "N_ROOTNAME", "N_ITEM", "N_NOT", "N_LIBCALL", "N_ARGLIST", "N_CODE", "N_CALL", "N_ASSITEM", "N_ASSLOCAL", "N_EXPRSTMT", "N_RETURN", "N_STMTLIST", "N_STMT", "N_WHILESTMT", "N_IFSTMT" };
 
-int tree_depth = -1;
-void as_pretty_print() {
+void as_pretty_print(int tree_depth) {
   // Indent to make everything look all neat and professional
   for (int s = tree_depth * 2; s > 0; s--)
     logmsg(" ");
@@ -248,36 +247,34 @@ void as_reconstruct_item(AS_NODE *root) {
   }
 }
 
-void as_parse_if(AS_IF *ifstmt) {
-  as_pretty_print();
+static void as_walk_internal(AS_NODE *root, int tree_depth);
+
+void as_parse_if(AS_IF *ifstmt, int tree_depth) {
+  as_pretty_print(tree_depth);
   if (ifstmt->condition) {
     logmsg("Condition:\n");
-    as_walk(ifstmt->condition);
-    tree_depth--;
-    as_pretty_print();
+    as_walk_internal(ifstmt->condition, tree_depth + 1);
+    as_pretty_print(tree_depth);
     logmsg("Then:\n");
   } else {
     logmsg("Else:\n");
   }
-  as_walk(ifstmt->then);
-  tree_depth--;
+  as_walk_internal(ifstmt->then, tree_depth + 1);
   if (ifstmt->elsif) {
-    as_pretty_print();
+    as_pretty_print(tree_depth);
     logmsg("Tail:\n");
-    as_parse_if(ifstmt->elsif);
+    as_parse_if(ifstmt->elsif, tree_depth + 1);
   }
 }
 
-void as_walk(AS_NODE *root) {
+static void as_walk_internal(AS_NODE *root, int tree_depth) {
   // Debug function to walk the abstract syntax tree.
   // Designed to be called recursively.
 
   // Don't try to walk an empty tree.
   if (!root) return;
 
-  // Indent
-  tree_depth++;
-  as_pretty_print();
+  as_pretty_print(tree_depth);
 
   switch (root->nodetype) {
     case N_ADD:
@@ -295,24 +292,22 @@ void as_walk(AS_NODE *root) {
     case N_GT:
     case N_GTEQ: {
       logmsg("Node type: %s\n", nodename[root->nodetype]);
-      as_pretty_print();
+      as_pretty_print(tree_depth);
       logmsg("LHS:\n");
-      as_walk((AS_NODE*)root->lhs);
-      tree_depth--;
-      as_pretty_print();
+      as_walk_internal((AS_NODE*)root->lhs, tree_depth + 1);
+      as_pretty_print(tree_depth);
       logmsg("RHS:\n");
-      as_walk((AS_NODE*)root->rhs);
-      tree_depth--;
+      as_walk_internal((AS_NODE*)root->rhs, tree_depth + 1);
       return;
     }
     case N_CODE: {
       if (root->lhs) {
         logmsg("Parameters:\n");
-        as_pretty_print();
-        as_walk((AS_NODE*)root->lhs);
+        as_pretty_print(tree_depth);
+        as_walk_internal((AS_NODE*)root->lhs, tree_depth + 1);
       }
       logmsg("Code block:\n");
-      as_pretty_print();
+      as_pretty_print(tree_depth);
       as_reconstruct_value((AS_NODE*)root->rhs);
       logmsg("\n");
       return;
@@ -325,14 +320,12 @@ void as_walk(AS_NODE *root) {
     }
     case N_WHILESTMT: {
       logmsg("Node type: %s\n", nodename[root->nodetype]);
-      tree_depth++;
-      as_pretty_print();
+      as_pretty_print(tree_depth + 1);
       logmsg("Condition:\n");
-      as_walk((AS_NODE*)root->lhs);
-      tree_depth--;
-      as_pretty_print();
+      as_walk_internal((AS_NODE*)root->lhs, tree_depth + 2);
+      as_pretty_print(tree_depth + 1);
       logmsg("Execute while true:\n");
-      as_walk((AS_NODE*)root->rhs);
+      as_walk_internal((AS_NODE*)root->rhs, tree_depth + 2);
       return;
     }
     case N_EXISTS:
@@ -352,10 +345,9 @@ void as_walk(AS_NODE *root) {
       logmsg("Node type: %s (%u statements)\n",
              nodename[root->nodetype], stmtlist->count);
       for (int i = 0; i < stmtlist->count; i++) {
-        as_pretty_print();
+        as_pretty_print(tree_depth);
         logmsg("Statement %u:\n", i + 1);
-        tree_depth--;
-        as_walk(stmtlist->stmts[i]);
+        as_walk_internal(stmtlist->stmts[i], tree_depth + 1);
       }
       return;
     }
@@ -371,43 +363,39 @@ void as_walk(AS_NODE *root) {
     }
     case N_ARGLIST: {
       logmsg("Node type: %s\n", nodename[root->nodetype]);
-      as_pretty_print();
+      as_pretty_print(tree_depth);
       logmsg("Parameter: \n");
-      tree_depth--;
-      as_walk((AS_NODE*)root->lhs);
+      as_walk_internal((AS_NODE*)root->lhs, tree_depth + 1);
       if (root->rhs) {
-        tree_depth--;
-        as_walk((AS_NODE*)root->rhs);
+        as_walk_internal((AS_NODE*)root->rhs, tree_depth + 1);
       }
       return;
     }
     case N_ASSITEM: {
       logmsg("Node type: %s\n", nodename[root->nodetype]);
-      as_pretty_print();
+      as_pretty_print(tree_depth);
       logmsg("Item: ");
       as_reconstruct_item((AS_NODE*)root->lhs);
       logmsg("\n");
-      as_pretty_print();
+      as_pretty_print(tree_depth);
       logmsg("Assigned:\n");
-      as_walk((AS_NODE*)root->rhs);
-      tree_depth--;
+      as_walk_internal((AS_NODE*)root->rhs, tree_depth + 1);
       return;
     }
     case N_ASSLOCAL: {
       logmsg("Node type: %s\n", nodename[root->nodetype]);
-      as_pretty_print();
+      as_pretty_print(tree_depth);
       logmsg("Local: ");
       as_reconstruct_value((AS_NODE*)root->lhs);
       logmsg("\n");
-      as_pretty_print();
+      as_pretty_print(tree_depth);
       logmsg("Assigned:\n");
-      as_walk((AS_NODE*)root->rhs);
-      tree_depth--;
+      as_walk_internal((AS_NODE*)root->rhs, tree_depth + 1);
       return;
     }
     case N_IFSTMT: {
       logmsg("Node type: %s\n", nodename[root->nodetype]);
-      as_parse_if((AS_IF *)root->lhs);
+      as_parse_if((AS_IF *)root->lhs, tree_depth + 1);
       return;
     }
     default: {
@@ -415,12 +403,13 @@ void as_walk(AS_NODE *root) {
     }
   }
   if (root->lhs) {
-    as_walk((AS_NODE*)root->lhs);
+    as_walk_internal((AS_NODE*)root->lhs, tree_depth + 1);
   }
   if (root->rhs) {
-    as_walk((AS_NODE*)root->rhs);
+    as_walk_internal((AS_NODE*)root->rhs, tree_depth + 1);
   }
-
-  tree_depth--;
 }
 
+void as_walk(AS_NODE *root) {
+  as_walk_internal(root, 0);
+}
