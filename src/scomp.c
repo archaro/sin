@@ -9,6 +9,7 @@
 #include "error.h"
 #include "parser.h"
 #include "absyn.h"
+#include "semant.h"
 #include "memory.h"
 #include "log.h"
 
@@ -49,9 +50,14 @@ int main(int argc, char **argv) {
   uint8_t result = parse_source(source, sourcelen, &absyn, &errdetail);
 // DEBUG: Just delete the tree at this point.
 //        Eventually we should do something with it first.
-  if (result == 0) {
+  if (result == ERR_NOERROR) {
     logmsg("Walking the abstract syntax tree...\n");
-    as_walk(absyn);
+    result = sem_check_locals(absyn, &errdetail);
+    if (result != ERR_NOERROR) {
+      logerr("Error: (#%d) %s\n", result, errmsg[result]);
+      logerr("Detail: %s\n", errdetail);
+      logerr("Compilation failed.\n");
+    }
     as_delete(absyn);
 // FIXME: WE HAVEN'T COMPILED THE BYTECODE YET! ONLY THE ABSTRACT SYNTAX!
 //    logmsg("Compilation completed: %ld bytes.\n",
@@ -69,9 +75,11 @@ int main(int argc, char **argv) {
     logerr("Error: (#%d) %s\n", result, errmsg[result]);
     logerr("Detail: %s\n", errdetail);
     logerr("Compilation failed.\n");
-    FREE_ARRAY(char, errdetail, 1);
   }
 
+  if (errdetail) {
+    FREE_ARRAY(char, errdetail, 1);
+  }
   FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
   FREE_ARRAY(OUTPUT_t, out, 1);
   FREE_ARRAY(char, source, sourcelen);
