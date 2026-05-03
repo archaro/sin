@@ -66,7 +66,7 @@ static void sem_free_ctx(SEM_CTX *ctx) {
   for (uint32_t i = 0; i < ctx->count; i++) {
     free(ctx->locals[i].name);
   }
-  FREE_ARRAY(SEM_LOCAL *, ctx->locals, ctx->capacity);
+  FREE_ARRAY(SEM_LOCAL, ctx->locals, ctx->capacity);
 }
 
 static void sem_walk(SEM_CTX *ctx, AS_NODE *node);
