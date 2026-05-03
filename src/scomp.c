@@ -56,6 +56,11 @@ int main(int argc, char **argv) {
     logmsg("Walking the abstract syntax tree...\n");
     as_walk(absyn);
     result = sem_check_locals(absyn, &errdetail, ctx);
+    // Output the local table
+    logmsg("Local table:\n");
+    for (int i = 0; i < ctx->count; i++) {
+      logmsg("Index %d: %s%s\n", ctx->locals[i].index, ctx->locals[i].name, ctx->locals[i].param?" (param)":"");
+    }
     if (result != ERR_NOERROR) {
       logerr("Error: (#%d) %s\n", result, errmsg[result]);
       logerr("Detail: %s\n", errdetail);

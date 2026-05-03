@@ -144,11 +144,21 @@ int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx) {
     free(ctx->errdetail);
   }
 
-  // Local table!
-  logmsg("Local table:\n");
-  for (int i = 0; i < ctx->count; i++) {
-    logmsg("Index %d: %s%s\n", ctx->locals[i].index, ctx->locals[i].name, ctx->locals[i].param?" (param)":"");
-  }
   return ctx->errnum;
 }
 
+bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out) {
+  // Find a local in the locals lookup table.
+  // Return true or false depending on whether the local is found.
+  // If the local is found, return its index in *index_out.
+  if (!ctx || !name || !index_out) {
+    return false;
+  }
+  for (int i = 0; i < ctx->count; i++) {
+    if (strcmp(ctx->locals[i].name, name) == 0) {
+      *index_out = ctx->locals[i].index;
+      return true;
+    }
+  }
+  return false;
+}
