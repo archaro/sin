@@ -10,7 +10,7 @@
 
 typedef struct {
   char *name;
-  int8_t index;
+  uint8_t index;
   bool param;
 } SEM_LOCAL;
 
