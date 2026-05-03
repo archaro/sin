@@ -110,6 +110,12 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       sem_walk_if(ctx, (AS_IF *)node->lhs);
       return;
     }
+    case N_VALUE: {
+      // This could be any sort of value, but right now we are only
+      // interested if it is of type V_LOCAL
+      sem_visit_value(ctx, node);
+      return;
+    }
     default: {
       sem_walk(ctx, (AS_NODE *)node->lhs);
       sem_walk(ctx, (AS_NODE *)node->rhs);

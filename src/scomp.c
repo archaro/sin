@@ -52,6 +52,7 @@ int main(int argc, char **argv) {
 //        Eventually we should do something with it first.
   if (result == ERR_NOERROR) {
     logmsg("Walking the abstract syntax tree...\n");
+    as_walk(absyn);
     result = sem_check_locals(absyn, &errdetail);
     if (result != ERR_NOERROR) {
       logerr("Error: (#%d) %s\n", result, errmsg[result]);
