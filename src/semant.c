@@ -13,20 +13,6 @@
 #include "memory.h"
 #include "semant.h"
  
-typedef struct {
-  char *name;
-  int8_t index;
-  bool param;
-} SEM_LOCAL;
-
-typedef struct {
-  SEM_LOCAL *locals;
-  uint32_t count;
-  uint32_t capacity;
-  int8_t errnum;
-  char *errdetail;
-} SEM_CTX;
-
 static bool sem_has_local(SEM_CTX *ctx, const char *name) {
   for (uint32_t i = 0; i < ctx->count; i++) {
     if (strcmp(ctx->locals[i].name, name) == 0) {
@@ -62,11 +48,24 @@ static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name) {
   }
 }
 
-static void sem_free_ctx(SEM_CTX *ctx) {
+SEM_CTX *sem_create_ctx() {
+  SEM_CTX *ctx = NULL;
+  ctx = GROW_ARRAY(SEM_CTX, ctx, 0, 1);
+  (*ctx).locals = NULL;
+  (*ctx).count = 0;
+  (*ctx).capacity = 0;
+  (*ctx).errnum = ERR_NOERROR;
+  (*ctx).errdetail = NULL;
+
+  return ctx;
+}
+
+void sem_delete_ctx(SEM_CTX *ctx) {
   for (uint32_t i = 0; i < ctx->count; i++) {
-    free(ctx->locals[i].name);
+    FREE_ARRAY(char *, ctx->locals[i].name, 0);
   }
-  FREE_ARRAY(SEM_LOCAL, ctx->locals, ctx->capacity);
+  FREE_ARRAY(SEM_LOCAL, ctx->locals, 0);
+  FREE_ARRAY(SEM_CTX, ctx, 0);
 }
 
 static void sem_walk(SEM_CTX *ctx, AS_NODE *node);
@@ -136,28 +135,20 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
   }
 }
 
-int8_t sem_check_locals(AS_NODE *root, char **errdetail) {
-  SEM_CTX ctx;
-  ctx.locals = NULL;
-  ctx.count = 0;
-  ctx.capacity = 0;
-  ctx.errnum = ERR_NOERROR;
-  ctx.errdetail = NULL;
-
-  sem_walk(&ctx, root);
+int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx) {
+  sem_walk(ctx, root);
 
   if (errdetail) {
-    *errdetail = ctx.errdetail;
-  } else if (ctx.errdetail) {
-    free(ctx.errdetail);
+    *errdetail = ctx->errdetail;
+  } else if (ctx->errdetail) {
+    free(ctx->errdetail);
   }
 
   // Local table!
   logmsg("Local table:\n");
-  for (int i = 0; i < ctx.count; i++) {
-    logmsg("Index %d: %s%s\n", ctx.locals[i].index, ctx.locals[i].name, ctx.locals[i].param?" (param)":"");
+  for (int i = 0; i < ctx->count; i++) {
+    logmsg("Index %d: %s%s\n", ctx->locals[i].index, ctx->locals[i].name, ctx->locals[i].param?" (param)":"");
   }
-  sem_free_ctx(&ctx);
-  return ctx.errnum;
+  return ctx->errnum;
 }
 
