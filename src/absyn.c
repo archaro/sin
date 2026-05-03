@@ -30,6 +30,7 @@ AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval) {
   AS_VALUE *newval;
   if (valtype == V_INT) {
     newval = as_new_value(V_INT, atoll(sval), NULL);
+    free(sval);
   } else {
     newval = as_new_value(valtype, 0, sval);
   }
