@@ -126,7 +126,9 @@ int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn, char **errdeta
 %right UMINUS TNOT
 %nonassoc TLPAREN TRPAREN TLBRACE TRBRACE TCOMMA
 
-%destructor { free ($$); } <char *>
+// Free lexer-allocated token strings when symbols are discarded by error
+// recovery or parser teardown.
+%destructor { free ($$); } TINTEGER TSTRINGLIT TLOCAL TLAYER TLIBNAME TCODEBODY TUNKNOWNCHAR
 %destructor { as_delete($$); } <AS_NODE*>
 %destructor { as_delete_if($$); } <AS_IF*>
 
