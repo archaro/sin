@@ -7,13 +7,20 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "log.h"
 #include "absyn.h"
 #include "error.h"
 #include "memory.h"
 #include "semant.h"
+ 
+typedef struct {
+  char *name;
+  int8_t index;
+  bool param;
+} SEM_LOCAL;
 
 typedef struct {
-  char **locals;
+  SEM_LOCAL *locals;
   uint32_t count;
   uint32_t capacity;
   int8_t errnum;
@@ -22,7 +29,7 @@ typedef struct {
 
 static bool sem_has_local(SEM_CTX *ctx, const char *name) {
   for (uint32_t i = 0; i < ctx->count; i++) {
-    if (strcmp(ctx->locals[i], name) == 0) {
+    if (strcmp(ctx->locals[i].name, name) == 0) {
       return true;
     }
   }
@@ -36,9 +43,13 @@ static void sem_add_local(SEM_CTX *ctx, const char *name) {
   if (ctx->count == ctx->capacity) {
     uint32_t oldcap = ctx->capacity;
     ctx->capacity = ctx->capacity == 0 ? 8 : ctx->capacity * 2;
-    ctx->locals = GROW_ARRAY(char *, ctx->locals, oldcap, ctx->capacity);
+    ctx->locals = GROW_ARRAY(SEM_LOCAL, ctx->locals, oldcap, ctx->capacity);
   }
-  ctx->locals[ctx->count++] = strdup(name);
+  SEM_LOCAL *local = &ctx->locals[ctx->count];
+  local->name = strdup(name);
+  local->index = ctx->count;
+  local->param = false;
+  ctx->count++;
 }
 
 static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name) {
@@ -53,9 +64,9 @@ static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name) {
 
 static void sem_free_ctx(SEM_CTX *ctx) {
   for (uint32_t i = 0; i < ctx->count; i++) {
-    free(ctx->locals[i]);
+    free(ctx->locals[i].name);
   }
-  FREE_ARRAY(char *, ctx->locals, ctx->capacity);
+  FREE_ARRAY(SEM_LOCAL *, ctx->locals, ctx->capacity);
 }
 
 static void sem_walk(SEM_CTX *ctx, AS_NODE *node);
@@ -141,6 +152,11 @@ int8_t sem_check_locals(AS_NODE *root, char **errdetail) {
     free(ctx.errdetail);
   }
 
+  // Local table!
+  logmsg("Local table:\n");
+  for (int i = 0; i < ctx.count; i++) {
+    logmsg("Index %d: %s%s\n", ctx.locals[i].index, ctx.locals[i].name, ctx.locals[i].param?" (param)":"");
+  }
   sem_free_ctx(&ctx);
   return ctx.errnum;
 }
