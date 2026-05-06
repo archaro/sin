@@ -139,8 +139,7 @@ bool ir_patch_labels(IR_CTX *fn) {
     if (fixup->label >= fn->label_count || !fn->labels[fixup->label].bound) {
       return false;
     }
-    fn->code[fixup->inst_index].operand.label = fixup->label;
+    fn->code[fixup->inst_index].operand.label = fn->labels[fixup->label].inst_index;
   }
   return true;
 }
-
