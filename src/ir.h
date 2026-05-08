@@ -10,6 +10,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "absyn.h"
+
 typedef enum {
   IR_OP_HALT = 0,
 
@@ -56,7 +58,8 @@ typedef enum {
   IR_OP_DELETE,
   IR_OP_NTHNAME,
   IR_OP_ROOTNAME,
-  IR_OP_POP
+  IR_OP_POP,
+  IR_OP_ITEM_SAVE_CODE
 } IR_Op;
 
 typedef struct {
@@ -85,8 +88,29 @@ typedef struct {
 } IR_LabelTable;
 
 typedef struct {
+  char* name;
+  uint8_t index;
+  bool param;
+} IR_EmbeddedLocal;
+
+typedef struct {
+  const char* source;
+  size_t param_count;
+  const char** params;
+  size_t local_count;
+  IR_EmbeddedLocal* locals;
+} IR_EmbeddedCodePayload;
+
+typedef struct {
+  size_t count;
+  size_t capacity;
+  IR_EmbeddedCodePayload* entries;
+} IR_EmbeddedCodeTable;
+
+typedef struct {
   IR_Function function;
   IR_LabelTable labels;
+  IR_EmbeddedCodeTable embedded_code;
 } IR_Unit;
 
 IR_Unit* ir_create_unit(void);
@@ -96,6 +120,8 @@ size_t ir_emit(IR_Unit* unit, IR_Inst inst);
 
 int32_t ir_new_label(IR_Unit* unit);
 bool ir_bind_label(IR_Unit* unit, int32_t label_id);
+int32_t ir_add_embedded_code_payload(IR_Unit* unit, IR_EmbeddedCodePayload payload);
+bool ir_embedded_locals_from_params(AS_NODE* params, IR_EmbeddedCodePayload* payload);
 
 void ir_dump(FILE* out, IR_Unit* unit);
 

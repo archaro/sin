@@ -35,6 +35,7 @@ static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node);
 static void lower_arglist(LOWER_CTX *ctx, AS_NODE *arglist, int32_t *argc);
 
 static void lower_item(LOWER_CTX *ctx, AS_NODE *item);
+static bool lower_build_embedded_payload(LOWER_CTX *ctx, AS_NODE *node, int32_t *payload_index);
 
 static void lower_layer_part(LOWER_CTX *ctx, AS_NODE *part) {
   AS_VALUE *value;
@@ -266,18 +267,9 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
       return;
 
     case N_CODE: {
-      AS_NODE *source = (AS_NODE *)node->rhs;
-      AS_VALUE *val;
-      if (!source || source->nodetype != N_VALUE) {
-        lower_set_unsupported(ctx, node, "code body must be value node");
-        return;
-      }
-      val = (AS_VALUE *)source->lhs;
-      if (!val || val->valtype != V_STR) {
-        lower_set_unsupported(ctx, node, "code body must be string");
-        return;
-      }
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_PUSH_STRING, .imm = (int64_t)(intptr_t)val->value.s});
+      int32_t payload_index = -1;
+      if (!lower_build_embedded_payload(ctx, node, &payload_index)) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = payload_index});
       return;
     }
 
@@ -373,9 +365,15 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
     case N_ASSITEM:
       lower_item(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
-      lower_expr(ctx, (AS_NODE *)node->rhs);
-      if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_SAVE});
+      if (((AS_NODE *)node->rhs)->nodetype == N_CODE) {
+        int32_t payload_index = -1;
+        if (!lower_build_embedded_payload(ctx, (AS_NODE *)node->rhs, &payload_index)) return;
+        ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = payload_index});
+      } else {
+        lower_expr(ctx, (AS_NODE *)node->rhs);
+        if (ctx->errnum != ERR_NOERROR) return;
+        ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_SAVE});
+      }
       return;
 
     case N_IFSTMT: {
@@ -429,6 +427,34 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
       lower_set_unsupported(ctx, node, "node type unsupported");
       return;
   }
+}
+
+static bool lower_build_embedded_payload(LOWER_CTX *ctx, AS_NODE *node, int32_t *payload_index) {
+  AS_NODE *source;
+  AS_VALUE *val;
+  IR_EmbeddedCodePayload payload = {0};
+
+  if (!node || node->nodetype != N_CODE) {
+    lower_set_unsupported(ctx, node, "expected code node");
+    return false;
+  }
+  source = (AS_NODE *)node->rhs;
+  if (!source || source->nodetype != N_VALUE) {
+    lower_set_unsupported(ctx, node, "code body must be value node");
+    return false;
+  }
+  val = (AS_VALUE *)source->lhs;
+  if (!val || val->valtype != V_STR) {
+    lower_set_unsupported(ctx, node, "code body must be string");
+    return false;
+  }
+  payload.source = val->value.s;
+  if (!ir_embedded_locals_from_params((AS_NODE *)node->lhs, &payload)) {
+    lower_set_unsupported(ctx, node, "code params must be local arg list");
+    return false;
+  }
+  *payload_index = ir_add_embedded_code_payload(ctx->ir, payload);
+  return true;
 }
 
 static void lower_node(LOWER_CTX *ctx, AS_NODE *node) {
