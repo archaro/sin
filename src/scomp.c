@@ -20,21 +20,24 @@
 CONFIG_t config;
 
 int main(int argc, char **argv) {
-  char *source, *errdetail;
+  char *source = NULL;
+  char *errdetail = NULL;
   int sourcelen;
-  AS_NODE *absyn;
-  SEM_CTX *ctx;
+  uint8_t result = ERR_NOERROR;
+  AS_NODE *absyn = NULL;
+  SEM_CTX *ctx = NULL;
   IR_Unit *ir = NULL;
-  OUTPUT_t *out;
+  OUTPUT_t *out = NULL;
 
   if (argc != 3) {
     printf("Syntax: maketest <input file> <output file>\n");
-    exit(1);
+    return 1;
   }
+
   FILE *in = fopen(argv[1], "r");
   if (!in) {
     printf("Unable to open input file.");
-    exit(1);
+    return 1;
   }
 
   fseek(in, 0, SEEK_END);
@@ -53,67 +56,89 @@ int main(int argc, char **argv) {
   logmsg("Parsing...\n");
   init_errmsg();
   ctx = sem_create_ctx();
-  uint8_t result = parse_source(source, sourcelen, &absyn, &errdetail);
-// DEBUG: Just delete the tree at this point.
-//        Eventually we should do something with it first.
-  if (result == ERR_NOERROR) {
-    logmsg("Walking the abstract syntax tree...\n");
-    as_walk(absyn);
-    result = sem_check_locals(absyn, &errdetail, ctx);
-    // Output the local table
-    logmsg("Local table:\n");
-    for (int i = 0; i < ctx->count; i++) {
-      logmsg("Index %d: %s%s\n", ctx->locals[i].index, ctx->locals[i].name, ctx->locals[i].param?" (param)":"");
-    }
-    if (result != ERR_NOERROR) {
-      logerr("Error: (#%d) %s\n", result, errmsg[result]);
-      logerr("Detail: %s\n", errdetail);
-      logerr("Compilation failed.\n");
-    } else {
-      result = lower_ast_to_ir(absyn, ctx, &ir, &errdetail);
-      if (result == ERR_NOERROR) {
-        result = ir_validate(ir, ctx->count, &errdetail);
-      }
-      if (result != ERR_NOERROR) {
-        logerr("Error: (#%d) %s\n", result, errmsg[result]);
-        logerr("Detail: %s\n", errdetail);
-        logerr("Compilation failed.\n");
-      }
-    }
-      if (result == ERR_NOERROR) {
-        uint8_t param_count = 0;
-        for (uint32_t i = 0; i < ctx->count; i++) {
-          if (ctx->locals[i].param) param_count++;
-        }
-        result = emit_bytecode(ir, (uint8_t)ctx->count, param_count, out, &errdetail);
-      }
 
-      if (result == ERR_NOERROR) {
-        logmsg("Compilation completed: %ld bytes.\n",
-               out->nextbyte - out->bytecode);
-        FILE *output;
-        output = fopen(argv[2], "w");
-        if (!output) {
-          printf("Unable to open output file.");
-          exit(1);
-        } else {
-          fwrite(out->bytecode, out->nextbyte - out->bytecode, 1, output);
-          fclose(output);
-        }
-      }
-  } else {
-    logerr("Error: (#%d) %s\n", result, errmsg[result]);
-    logerr("Detail: %s\n", errdetail);
-    logerr("Compilation failed.\n");
+  result = parse_source(source, sourcelen, &absyn, &errdetail);
+  if (result != ERR_NOERROR) {
+    goto compile_error;
   }
 
+#ifdef DEBUG
+  logmsg("Walking the abstract syntax tree...\n");
+  as_walk(absyn);
+#endif
+
+  result = sem_check_locals(absyn, &errdetail, ctx);
+  if (result != ERR_NOERROR) {
+    goto compile_error;
+  }
+
+#ifdef DEBUG
+  logmsg("Local table:\n");
+  for (int i = 0; i < ctx->count; i++) {
+    logmsg("Index %d: %s%s\n", ctx->locals[i].index, ctx->locals[i].name,
+           ctx->locals[i].param ? " (param)" : "");
+  }
+#endif
+
+  result = lower_ast_to_ir(absyn, ctx, &ir, &errdetail);
+  if (result != ERR_NOERROR) {
+    goto compile_error;
+  }
+
+  result = ir_validate(ir, ctx->count, &errdetail);
+  if (result != ERR_NOERROR) {
+    goto compile_error;
+  }
+
+  uint8_t param_count = 0;
+  for (uint32_t i = 0; i < ctx->count; i++) {
+    if (ctx->locals[i].param) {
+      param_count++;
+    }
+  }
+
+  result = emit_bytecode(ir, (uint8_t)ctx->count, param_count, out, &errdetail);
+  if (result != ERR_NOERROR) {
+    goto compile_error;
+  }
+
+  logmsg("Compilation completed: %ld bytes.\n", out->nextbyte - out->bytecode);
+  FILE *output = fopen(argv[2], "w");
+  if (!output) {
+    printf("Unable to open output file.");
+    goto cleanup;
+  }
+  fwrite(out->bytecode, out->nextbyte - out->bytecode, 1, output);
+  fclose(output);
+  goto cleanup;
+
+compile_error:
+  logerr("Error: (#%d) %s\n", result, errmsg[result]);
+  logerr("Detail: %s\n", errdetail);
+  logerr("Compilation failed.\n");
+
+cleanup:
   if (errdetail) {
     FREE_ARRAY(char, errdetail, 1);
   }
-  as_delete(absyn);
-  ir_destroy_unit(ir);
-  sem_delete_ctx(ctx);
-  FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
-  FREE_ARRAY(OUTPUT_t, out, 1);
-  FREE_ARRAY(char, source, sourcelen);
+  if (absyn) {
+    as_delete(absyn);
+  }
+  if (ir) {
+    ir_destroy_unit(ir);
+  }
+  if (ctx) {
+    sem_delete_ctx(ctx);
+  }
+  if (out) {
+    if (out->bytecode) {
+      FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
+    }
+    FREE_ARRAY(OUTPUT_t, out, 1);
+  }
+  if (source) {
+    FREE_ARRAY(char, source, sourcelen);
+  }
+
+  return result == ERR_NOERROR ? 0 : 1;
 }
