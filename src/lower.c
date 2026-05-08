@@ -32,6 +32,85 @@ static void lower_node(LOWER_CTX *ctx, AS_NODE *node);
 static void lower_expr(LOWER_CTX *ctx, AS_NODE *node);
 static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node);
 static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node);
+static void lower_arglist(LOWER_CTX *ctx, AS_NODE *arglist, int32_t *argc);
+
+static void lower_item(LOWER_CTX *ctx, AS_NODE *item);
+
+static void lower_layer_part(LOWER_CTX *ctx, AS_NODE *part) {
+  AS_VALUE *value;
+
+  if (!part || part->nodetype != N_VALUE) {
+    lower_set_unsupported(ctx, part, "item layer is not a value");
+    return;
+  }
+
+  value = (AS_VALUE *)part->lhs;
+  if (!value) {
+    lower_set_unsupported(ctx, part, "missing item layer payload");
+    return;
+  }
+
+  switch (value->valtype) {
+    case V_LAYER:
+    case V_STR:
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_PUSH_LAYER,
+                                 .imm = (int64_t)(intptr_t)value->value.s});
+      return;
+    case V_INT:
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_PUSH_LAYER, .imm = value->value.i});
+      return;
+    default:
+      lower_set_unsupported(ctx, part, "unsupported item layer value type");
+      return;
+  }
+}
+
+static void lower_deref_payload(LOWER_CTX *ctx, AS_NODE *payload) {
+  if (!payload) {
+    lower_set_unsupported(ctx, payload, "missing deref payload");
+    return;
+  }
+
+  if (payload->nodetype == N_ITEM) {
+    lower_item(ctx, payload);
+    return;
+  }
+
+  lower_expr(ctx, payload);
+}
+
+static void lower_item(LOWER_CTX *ctx, AS_NODE *item) {
+  AS_NODE *cursor;
+  if (!item || item->nodetype != N_ITEM) {
+    lower_set_unsupported(ctx, item, "expected item node");
+    return;
+  }
+
+  ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_BEGIN});
+  cursor = item;
+  while (cursor && ctx->errnum == ERR_NOERROR) {
+    AS_NODE *part = (AS_NODE *)cursor->lhs;
+    if (!part) {
+      lower_set_unsupported(ctx, cursor, "missing item component");
+      return;
+    }
+
+    if (part->nodetype == N_DEREF) {
+      lower_deref_payload(ctx, (AS_NODE *)part->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_PUSH_DEREF});
+    } else {
+      lower_layer_part(ctx, part);
+      if (ctx->errnum != ERR_NOERROR) return;
+    }
+
+    cursor = (AS_NODE *)cursor->rhs;
+  }
+
+  if (ctx->errnum == ERR_NOERROR) {
+    ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_END});
+  }
+}
 
 static void lower_value_expr(LOWER_CTX *ctx, AS_NODE *node) {
   AS_VALUE *value;
@@ -106,9 +185,120 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
       ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_NOT});
       return;
 
+    case N_ITEM:
+      lower_item(ctx, node);
+      return;
+
+    case N_DEREF:
+      lower_deref_payload(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_DEREF});
+      return;
+
+    case N_CALL: {
+      int32_t argc = 0;
+      lower_expr(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      lower_arglist(ctx, (AS_NODE *)node->rhs, &argc);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_CALL, .a = argc});
+      return;
+    }
+
+    case N_LIBCALL: {
+      AS_NODE *libitem = (AS_NODE *)node->lhs;
+      AS_NODE *libnode;
+      AS_NODE *funcnode;
+      AS_VALUE *libval;
+      AS_VALUE *funcval;
+      int32_t argc = 0;
+
+      if (!libitem || libitem->nodetype != N_ITEM || !libitem->rhs) {
+        lower_set_unsupported(ctx, node, "libcall target must be two-layer item");
+        return;
+      }
+      libnode = (AS_NODE *)libitem->lhs;
+      funcnode = (AS_NODE *)((AS_NODE *)libitem->rhs)->lhs;
+      if (!libnode || !funcnode || libnode->nodetype != N_VALUE || funcnode->nodetype != N_VALUE) {
+        lower_set_unsupported(ctx, node, "libcall target layers must be values");
+        return;
+      }
+
+      libval = (AS_VALUE *)libnode->lhs;
+      funcval = (AS_VALUE *)funcnode->lhs;
+      if (!libval || !funcval || libval->valtype != V_LAYER || funcval->valtype != V_LAYER) {
+        lower_set_unsupported(ctx, node, "libcall names must be layer identifiers");
+        return;
+      }
+
+      lower_arglist(ctx, (AS_NODE *)node->rhs, &argc);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_PUSH_STRING, .imm = (int64_t)(intptr_t)libval->value.s});
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_PUSH_STRING, .imm = (int64_t)(intptr_t)funcval->value.s});
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LIBCALL, .a = argc});
+      return;
+    }
+
+    case N_EXISTS:
+      lower_item(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_EXISTS});
+      return;
+
+    case N_DELETE:
+      lower_item(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_DELETE});
+      return;
+
+    case N_NTHNAME:
+      lower_item(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      lower_expr(ctx, (AS_NODE *)node->rhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_NTHNAME});
+      return;
+
+    case N_ROOTNAME:
+      lower_expr(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ROOTNAME});
+      return;
+
+    case N_CODE: {
+      AS_NODE *source = (AS_NODE *)node->rhs;
+      AS_VALUE *val;
+      if (!source || source->nodetype != N_VALUE) {
+        lower_set_unsupported(ctx, node, "code body must be value node");
+        return;
+      }
+      val = (AS_VALUE *)source->lhs;
+      if (!val || val->valtype != V_STR) {
+        lower_set_unsupported(ctx, node, "code body must be string");
+        return;
+      }
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_PUSH_STRING, .imm = (int64_t)(intptr_t)val->value.s});
+      return;
+    }
+
     default:
       lower_set_unsupported(ctx, node, "expression node type unsupported");
       return;
+  }
+}
+
+static void lower_arglist(LOWER_CTX *ctx, AS_NODE *arglist, int32_t *argc) {
+  AS_NODE *cursor = arglist;
+  if (argc) *argc = 0;
+  while (cursor && ctx->errnum == ERR_NOERROR) {
+    if (cursor->nodetype != N_ARGLIST) {
+      lower_set_unsupported(ctx, cursor, "expected arglist node");
+      return;
+    }
+    lower_expr(ctx, (AS_NODE *)cursor->lhs);
+    if (ctx->errnum != ERR_NOERROR) return;
+    if (argc) (*argc)++;
+    cursor = (AS_NODE *)cursor->rhs;
   }
 }
 
@@ -179,6 +369,14 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
       ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = index});
       return;
     }
+
+    case N_ASSITEM:
+      lower_item(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      lower_expr(ctx, (AS_NODE *)node->rhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_SAVE});
+      return;
 
     case N_IFSTMT: {
       AS_IF *branch = (AS_IF *)node->lhs;
