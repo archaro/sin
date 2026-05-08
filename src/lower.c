@@ -29,6 +29,7 @@ static void lower_set_unsupported(LOWER_CTX *ctx, const AS_NODE *node, const cha
 }
 
 static void lower_node(LOWER_CTX *ctx, AS_NODE *node);
+static void lower_expr(LOWER_CTX *ctx, AS_NODE *node);
 
 static void lower_value_expr(LOWER_CTX *ctx, AS_NODE *node) {
   AS_VALUE *value;
@@ -49,7 +50,7 @@ static void lower_value_expr(LOWER_CTX *ctx, AS_NODE *node) {
       ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = value->value.i});
       return;
     case V_STR:
-      lower_set_unsupported(ctx, node, "string lowering not implemented");
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_PUSH_STRING, .imm = (int64_t)(intptr_t)value->value.s});
       return;
     case V_LOCAL: {
       uint8_t index = 0;
@@ -69,11 +70,44 @@ static void lower_value_expr(LOWER_CTX *ctx, AS_NODE *node) {
 }
 
 static void lower_binary_expr(LOWER_CTX *ctx, AS_NODE *node, IR_Op op) {
-  lower_node(ctx, (AS_NODE *)node->lhs);
+  lower_expr(ctx, (AS_NODE *)node->lhs);
   if (ctx->errnum != ERR_NOERROR) return;
-  lower_node(ctx, (AS_NODE *)node->rhs);
+  lower_expr(ctx, (AS_NODE *)node->rhs);
   if (ctx->errnum != ERR_NOERROR) return;
   ir_emit(ctx->ir, (IR_Inst){.op = op});
+}
+
+static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
+  if (!ctx || !node || ctx->errnum != ERR_NOERROR) return;
+
+  switch (node->nodetype) {
+    case N_VALUE:
+      lower_value_expr(ctx, node);
+      return;
+
+    case N_ADD: lower_binary_expr(ctx, node, IR_OP_ADD); return;
+    case N_SUB: lower_binary_expr(ctx, node, IR_OP_SUB); return;
+    case N_MUL: lower_binary_expr(ctx, node, IR_OP_MUL); return;
+    case N_DIV: lower_binary_expr(ctx, node, IR_OP_DIV); return;
+    case N_EQUAL: lower_binary_expr(ctx, node, IR_OP_EQ); return;
+    case N_NOTEQ: lower_binary_expr(ctx, node, IR_OP_NEQ); return;
+    case N_LT: lower_binary_expr(ctx, node, IR_OP_LT); return;
+    case N_LTEQ: lower_binary_expr(ctx, node, IR_OP_LE); return;
+    case N_GT: lower_binary_expr(ctx, node, IR_OP_GT); return;
+    case N_GTEQ: lower_binary_expr(ctx, node, IR_OP_GE); return;
+    case N_AND: lower_binary_expr(ctx, node, IR_OP_AND); return;
+    case N_OR: lower_binary_expr(ctx, node, IR_OP_OR); return;
+
+    case N_NOT:
+      lower_expr(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_NOT});
+      return;
+
+    default:
+      lower_set_unsupported(ctx, node, "expression node type unsupported");
+      return;
+  }
 }
 
 static void lower_node(LOWER_CTX *ctx, AS_NODE *node) {
@@ -93,36 +127,13 @@ static void lower_node(LOWER_CTX *ctx, AS_NODE *node) {
 
     case N_STMT:
     case N_EXPRSTMT:
-      lower_node(ctx, (AS_NODE *)node->lhs);
+      lower_expr(ctx, (AS_NODE *)node->lhs);
       return;
 
     case N_RETURN:
-      lower_node(ctx, (AS_NODE *)node->lhs);
+      lower_expr(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
       ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_HALT});
-      return;
-
-    case N_VALUE:
-      lower_value_expr(ctx, node);
-      return;
-
-    case N_ADD: lower_binary_expr(ctx, node, IR_OP_ADD); return;
-    case N_SUB: lower_binary_expr(ctx, node, IR_OP_SUB); return;
-    case N_MUL: lower_binary_expr(ctx, node, IR_OP_MUL); return;
-    case N_DIV: lower_binary_expr(ctx, node, IR_OP_DIV); return;
-    case N_EQUAL: lower_binary_expr(ctx, node, IR_OP_EQ); return;
-    case N_NOTEQ: lower_binary_expr(ctx, node, IR_OP_NEQ); return;
-    case N_LT: lower_binary_expr(ctx, node, IR_OP_LT); return;
-    case N_LTEQ: lower_binary_expr(ctx, node, IR_OP_LE); return;
-    case N_GT: lower_binary_expr(ctx, node, IR_OP_GT); return;
-    case N_GTEQ: lower_binary_expr(ctx, node, IR_OP_GE); return;
-    case N_AND: lower_binary_expr(ctx, node, IR_OP_AND); return;
-    case N_OR: lower_binary_expr(ctx, node, IR_OP_OR); return;
-
-    case N_NOT:
-      lower_node(ctx, (AS_NODE *)node->lhs);
-      if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_NOT});
       return;
 
     default:
@@ -167,4 +178,3 @@ int8_t lower_ast_to_ir(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **err
   }
   return ctx.errnum;
 }
-
