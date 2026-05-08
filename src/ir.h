@@ -126,3 +126,4 @@ bool ir_embedded_locals_from_params(AS_NODE* params, IR_EmbeddedCodePayload* pay
 void ir_dump(FILE* out, IR_Unit* unit);
 
 const char* ir_op_name(IR_Op op);
+int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail);

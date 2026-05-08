@@ -10,6 +10,8 @@
 #include "parser.h"
 #include "absyn.h"
 #include "semant.h"
+#include "lower.h"
+#include "ir.h"
 #include "memory.h"
 #include "log.h"
 
@@ -21,6 +23,7 @@ int main(int argc, char **argv) {
   int sourcelen;
   AS_NODE *absyn;
   SEM_CTX *ctx;
+  IR_Unit *ir = NULL;
   OUTPUT_t *out;
 
   if (argc != 3) {
@@ -65,6 +68,16 @@ int main(int argc, char **argv) {
       logerr("Error: (#%d) %s\n", result, errmsg[result]);
       logerr("Detail: %s\n", errdetail);
       logerr("Compilation failed.\n");
+    } else {
+      result = lower_ast_to_ir(absyn, ctx, &ir, &errdetail);
+      if (result == ERR_NOERROR) {
+        result = ir_validate(ir, ctx->count, &errdetail);
+      }
+      if (result != ERR_NOERROR) {
+        logerr("Error: (#%d) %s\n", result, errmsg[result]);
+        logerr("Detail: %s\n", errdetail);
+        logerr("Compilation failed.\n");
+      }
     }
 // FIXME: WE HAVEN'T COMPILED THE BYTECODE YET! ONLY THE ABSTRACT SYNTAX!
 //    logmsg("Compilation completed: %ld bytes.\n",
@@ -88,6 +101,7 @@ int main(int argc, char **argv) {
     FREE_ARRAY(char, errdetail, 1);
   }
   as_delete(absyn);
+  ir_destroy_unit(ir);
   sem_delete_ctx(ctx);
   FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
   FREE_ARRAY(OUTPUT_t, out, 1);

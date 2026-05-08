@@ -6,7 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
+#include "error.h"
 #include "ir.h"
 #include "memory.h"
 
@@ -207,4 +209,98 @@ void ir_dump(FILE* out, IR_Unit* unit) {
     fprintf(out, "%04zu  %-14s a=%" PRId32 " b=%" PRId32 " imm=%" PRId64 "\n",
             i, ir_op_name(inst->op), inst->a, inst->b, inst->imm);
   }
+}
+
+static int8_t ir_validate_error(char **errdetail, int8_t errnum, const char *fmt, ...) {
+  if (errdetail != NULL) {
+    va_list args;
+    va_start(args, fmt);
+    int needed = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+    if (needed < 0) {
+      *errdetail = NULL;
+    } else {
+      *errdetail = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
+      va_start(args, fmt);
+      vsnprintf(*errdetail, (size_t)needed + 1, fmt, args);
+      va_end(args);
+    }
+  }
+  return errnum;
+}
+
+int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
+  if (errdetail != NULL) {
+    *errdetail = NULL;
+  }
+
+  if (unit == NULL) {
+    return ir_validate_error(errdetail, ERR_COMP_SYNTAX, "IR unit is null.");
+  }
+
+  for (size_t i = 0; i < unit->labels.count; i++) {
+    IR_Label* label = &unit->labels.entries[i];
+    if (!label->bound) {
+      return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
+                               "Unbound label .L%d.", label->id);
+    }
+  }
+
+  for (size_t i = 0; i < unit->function.count; i++) {
+    const IR_Inst* inst = &unit->function.code[i];
+    switch (inst->op) {
+      case IR_OP_JUMP:
+      case IR_OP_JUMP_IF_FALSE:
+      case IR_OP_LABEL: {
+        if (inst->a < 0 || (size_t)inst->a >= unit->labels.count) {
+          return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (%s) references invalid label id %d.",
+                                   i, ir_op_name(inst->op), inst->a);
+        }
+        if (!unit->labels.entries[inst->a].bound) {
+          return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (%s) references unbound label .L%d.",
+                                   i, ir_op_name(inst->op), inst->a);
+        }
+        break;
+      }
+      case IR_OP_LOAD_LOCAL:
+      case IR_OP_STORE_LOCAL:
+      case IR_OP_INC_LOCAL:
+      case IR_OP_DEC_LOCAL: {
+        if (inst->a < 0 || (uint32_t)inst->a >= local_count) {
+          return ir_validate_error(errdetail, ERR_COMP_LOCALBEFOREDEF,
+                                   "Instruction %zu (%s) has out-of-range local index %d (locals=%u).",
+                                   i, ir_op_name(inst->op), inst->a, local_count);
+        }
+        break;
+      }
+      case IR_OP_CALL:
+      case IR_OP_LIBCALL: {
+        if (inst->a < 0) {
+          return ir_validate_error(errdetail, ERR_COMP_TOOMANYARGS,
+                                   "Instruction %zu (%s) has negative arity %d.",
+                                   i, ir_op_name(inst->op), inst->a);
+        }
+        if (inst->op == IR_OP_LIBCALL) {
+          if (i < 2) {
+            return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
+                                     "Instruction %zu (LIBCALL) is missing library/function name operands.",
+                                     i);
+          }
+          const IR_Inst *libname = &unit->function.code[i - 2];
+          const IR_Inst *funcname = &unit->function.code[i - 1];
+          if (libname->op != IR_OP_PUSH_STRING || funcname->op != IR_OP_PUSH_STRING) {
+            return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
+                                     "Instruction %zu (LIBCALL) must be preceded by two PUSH_STRING instructions.",
+                                     i);
+          }
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return ERR_NOERROR;
 }
