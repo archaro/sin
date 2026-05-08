@@ -14,6 +14,7 @@
 #include "ir.h"
 #include "memory.h"
 #include "log.h"
+#include "emitbc.h"
 
 // Things which need to be known
 CONFIG_t config;
@@ -79,18 +80,27 @@ int main(int argc, char **argv) {
         logerr("Compilation failed.\n");
       }
     }
-// FIXME: WE HAVEN'T COMPILED THE BYTECODE YET! ONLY THE ABSTRACT SYNTAX!
-//    logmsg("Compilation completed: %ld bytes.\n",
-//                                          out->nextbyte - out->bytecode);
-//    FILE *output;
-//    output = fopen(argv[2], "w");
-//    if (!output) {
-//      printf("Unable to open output file.");
-//      exit(1);
-//    } else {
-//      fwrite(out->bytecode, out->nextbyte - out->bytecode, 1, output);
-//      fclose(output);
-//    }
+      if (result == ERR_NOERROR) {
+        uint8_t param_count = 0;
+        for (uint32_t i = 0; i < ctx->count; i++) {
+          if (ctx->locals[i].param) param_count++;
+        }
+        result = emit_bytecode(ir, (uint8_t)ctx->count, param_count, out, &errdetail);
+      }
+
+      if (result == ERR_NOERROR) {
+        logmsg("Compilation completed: %ld bytes.\n",
+               out->nextbyte - out->bytecode);
+        FILE *output;
+        output = fopen(argv[2], "w");
+        if (!output) {
+          printf("Unable to open output file.");
+          exit(1);
+        } else {
+          fwrite(out->bytecode, out->nextbyte - out->bytecode, 1, output);
+          fclose(output);
+        }
+      }
   } else {
     logerr("Error: (#%d) %s\n", result, errmsg[result]);
     logerr("Detail: %s\n", errdetail);
