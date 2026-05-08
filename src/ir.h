@@ -43,7 +43,19 @@ typedef enum {
 
   IR_OP_LABEL,
 
+  IR_OP_ITEM_BEGIN,
+  IR_OP_ITEM_PUSH_LAYER,
+  IR_OP_ITEM_PUSH_DEREF,
+  IR_OP_ITEM_END,
+  IR_OP_ITEM_DEREF,
+  IR_OP_ITEM_SAVE,
+
+  IR_OP_CALL,
   IR_OP_LIBCALL,
+  IR_OP_EXISTS,
+  IR_OP_DELETE,
+  IR_OP_NTHNAME,
+  IR_OP_ROOTNAME,
   IR_OP_POP
 } IR_Op;
 
@@ -88,4 +100,3 @@ bool ir_bind_label(IR_Unit* unit, int32_t label_id);
 void ir_dump(FILE* out, IR_Unit* unit);
 
 const char* ir_op_name(IR_Op op);
-
