@@ -4,6 +4,8 @@
 
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "ir.h"
 #include "memory.h"
@@ -49,6 +51,12 @@ void ir_destroy_unit(IR_Unit* unit) {
 
   FREE_ARRAY(IR_Inst, unit->function.code, unit->function.capacity);
   FREE_ARRAY(IR_Label, unit->labels.entries, unit->labels.capacity);
+  for (size_t i = 0; i < unit->embedded_code.count; i++) {
+    IR_EmbeddedCodePayload* payload = &unit->embedded_code.entries[i];
+    FREE_ARRAY(const char*, payload->params, payload->param_count);
+    FREE_ARRAY(IR_EmbeddedLocal, payload->locals, payload->local_count);
+  }
+  FREE_ARRAY(IR_EmbeddedCodePayload, unit->embedded_code.entries, unit->embedded_code.capacity);
   FREE_ARRAY(IR_Unit, unit, 1);
 }
 
@@ -81,6 +89,54 @@ bool ir_bind_label(IR_Unit* unit, int32_t label_id) {
   IR_Label* label = &unit->labels.entries[label_id];
   label->position = unit->function.count;
   label->bound = true;
+
+  return true;
+}
+
+static void ensure_embedded_capacity(IR_EmbeddedCodeTable* table, size_t needed) {
+  if (table->capacity >= needed) return;
+  size_t oldcap = table->capacity;
+  size_t newcap = GROW_CAPACITY(oldcap);
+  while (newcap < needed) newcap = GROW_CAPACITY(newcap);
+  table->entries = GROW_ARRAY(IR_EmbeddedCodePayload, table->entries, oldcap, newcap);
+  table->capacity = newcap;
+}
+
+int32_t ir_add_embedded_code_payload(IR_Unit* unit, IR_EmbeddedCodePayload payload) {
+  size_t idx = unit->embedded_code.count;
+  ensure_embedded_capacity(&unit->embedded_code, idx + 1);
+  unit->embedded_code.entries[idx] = payload;
+  unit->embedded_code.count++;
+  return (int32_t)idx;
+}
+
+bool ir_embedded_locals_from_params(AS_NODE* params, IR_EmbeddedCodePayload* payload) {
+  AS_NODE* cursor = params;
+  size_t count = 0;
+  while (cursor) {
+    if (cursor->nodetype != N_ARGLIST) return false;
+    count++;
+    cursor = (AS_NODE*)cursor->rhs;
+  }
+
+  payload->param_count = count;
+  payload->params = GROW_ARRAY(const char*, NULL, 0, count > 0 ? count : 1);
+  payload->locals = GROW_ARRAY(IR_EmbeddedLocal, NULL, 0, count > 0 ? count : 1);
+  payload->local_count = count;
+
+  cursor = params;
+  for (size_t i = 0; i < count; i++) {
+    AS_NODE* param = (AS_NODE*)cursor->lhs;
+    AS_VALUE* value;
+    if (!param || param->nodetype != N_VALUE) return false;
+    value = (AS_VALUE*)param->lhs;
+    if (!value || value->valtype != V_LOCAL || !value->value.s) return false;
+    payload->params[i] = value->value.s;
+    payload->locals[i].name = value->value.s;
+    payload->locals[i].index = (uint8_t)i;
+    payload->locals[i].param = true;
+    cursor = (AS_NODE*)cursor->rhs;
+  }
 
   return true;
 }
@@ -124,6 +180,7 @@ const char* ir_op_name(IR_Op op) {
     case IR_OP_NTHNAME: return "NTHNAME";
     case IR_OP_ROOTNAME: return "ROOTNAME";
     case IR_OP_POP: return "POP";
+    case IR_OP_ITEM_SAVE_CODE: return "ITEM_SAVE_CODE";
     default: return "<unknown>";
   }
 }
