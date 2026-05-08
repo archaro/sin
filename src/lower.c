@@ -30,6 +30,8 @@ static void lower_set_unsupported(LOWER_CTX *ctx, const AS_NODE *node, const cha
 
 static void lower_node(LOWER_CTX *ctx, AS_NODE *node);
 static void lower_expr(LOWER_CTX *ctx, AS_NODE *node);
+static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node);
+static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node);
 
 static void lower_value_expr(LOWER_CTX *ctx, AS_NODE *node) {
   AS_VALUE *value;
@@ -110,24 +112,39 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
   }
 }
 
-static void lower_node(LOWER_CTX *ctx, AS_NODE *node) {
+static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node) {
   AS_STMTLIST *stmtlist;
 
+  if (!ctx || !node || ctx->errnum != ERR_NOERROR) return;
+  if (node->nodetype != N_STMTLIST) {
+    lower_set_unsupported(ctx, node, "expected statement list");
+    return;
+  }
+
+  stmtlist = (AS_STMTLIST *)node->lhs;
+  if (!stmtlist) return;
+  for (uint32_t i = 0; i < stmtlist->count; i++) {
+    lower_stmt(ctx, stmtlist->stmts[i]);
+    if (ctx->errnum != ERR_NOERROR) return;
+  }
+}
+
+static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
   if (!ctx || !node || ctx->errnum != ERR_NOERROR) return;
 
   switch (node->nodetype) {
     case N_STMTLIST:
-      stmtlist = (AS_STMTLIST *)node->lhs;
-      if (!stmtlist) return;
-      for (uint32_t i = 0; i < stmtlist->count; i++) {
-        lower_node(ctx, stmtlist->stmts[i]);
-        if (ctx->errnum != ERR_NOERROR) return;
-      }
+      lower_stmtlist(ctx, node);
       return;
 
     case N_STMT:
+      lower_stmt(ctx, (AS_NODE *)node->lhs);
+      return;
+
     case N_EXPRSTMT:
       lower_expr(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_POP});
       return;
 
     case N_RETURN:
@@ -136,10 +153,88 @@ static void lower_node(LOWER_CTX *ctx, AS_NODE *node) {
       ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_HALT});
       return;
 
+    case N_ASSLOCAL: {
+      AS_NODE *local = (AS_NODE *)node->lhs;
+      AS_VALUE *value;
+      uint8_t index = 0;
+
+      if (!local || local->nodetype != N_VALUE) {
+        lower_set_unsupported(ctx, node, "assignment target is not a local value");
+        return;
+      }
+
+      value = (AS_VALUE *)local->lhs;
+      if (!value || value->valtype != V_LOCAL || !value->value.s) {
+        lower_set_unsupported(ctx, node, "missing local assignment target");
+        return;
+      }
+
+      if (!ctx->sem || !sem_get_local_index(ctx->sem, value->value.s, &index)) {
+        lower_set_error(ctx, ERR_COMP_LOCALBEFOREDEF, value->value.s);
+        return;
+      }
+
+      lower_expr(ctx, (AS_NODE *)node->rhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = index});
+      return;
+    }
+
+    case N_IFSTMT: {
+      AS_IF *branch = (AS_IF *)node->lhs;
+      int32_t end_label = ir_new_label(ctx->ir);
+
+      while (branch != NULL && ctx->errnum == ERR_NOERROR) {
+        int32_t else_label = ir_new_label(ctx->ir);
+
+        if (branch->condition != NULL) {
+          lower_expr(ctx, branch->condition);
+          if (ctx->errnum != ERR_NOERROR) return;
+          ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = else_label});
+        }
+
+        lower_stmtlist(ctx, branch->then);
+        if (ctx->errnum != ERR_NOERROR) return;
+
+        ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_JUMP, .a = end_label});
+        ir_bind_label(ctx->ir, else_label);
+        ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LABEL, .a = else_label});
+        branch = branch->elsif;
+      }
+
+      ir_bind_label(ctx->ir, end_label);
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LABEL, .a = end_label});
+      return;
+    }
+
+    case N_WHILESTMT: {
+      int32_t start_label = ir_new_label(ctx->ir);
+      int32_t end_label = ir_new_label(ctx->ir);
+
+      ir_bind_label(ctx->ir, start_label);
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LABEL, .a = start_label});
+
+      lower_expr(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = end_label});
+
+      lower_stmtlist(ctx, (AS_NODE *)node->rhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_JUMP, .a = start_label});
+
+      ir_bind_label(ctx->ir, end_label);
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LABEL, .a = end_label});
+      return;
+    }
+
     default:
       lower_set_unsupported(ctx, node, "node type unsupported");
       return;
   }
+}
+
+static void lower_node(LOWER_CTX *ctx, AS_NODE *node) {
+  lower_stmt(ctx, node);
 }
 
 int8_t lower_ast_to_ir(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **errdetail) {
