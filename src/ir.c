@@ -111,7 +111,18 @@ const char* ir_op_name(IR_Op op) {
     case IR_OP_JUMP: return "JUMP";
     case IR_OP_JUMP_IF_FALSE: return "JUMP_IF_FALSE";
     case IR_OP_LABEL: return "LABEL";
+    case IR_OP_ITEM_BEGIN: return "ITEM_BEGIN";
+    case IR_OP_ITEM_PUSH_LAYER: return "ITEM_PUSH_LAYER";
+    case IR_OP_ITEM_PUSH_DEREF: return "ITEM_PUSH_DEREF";
+    case IR_OP_ITEM_END: return "ITEM_END";
+    case IR_OP_ITEM_DEREF: return "ITEM_DEREF";
+    case IR_OP_ITEM_SAVE: return "ITEM_SAVE";
+    case IR_OP_CALL: return "CALL";
     case IR_OP_LIBCALL: return "LIBCALL";
+    case IR_OP_EXISTS: return "EXISTS";
+    case IR_OP_DELETE: return "DELETE";
+    case IR_OP_NTHNAME: return "NTHNAME";
+    case IR_OP_ROOTNAME: return "ROOTNAME";
     case IR_OP_POP: return "POP";
     default: return "<unknown>";
   }
@@ -140,4 +151,3 @@ void ir_dump(FILE* out, IR_Unit* unit) {
             i, ir_op_name(inst->op), inst->a, inst->b, inst->imm);
   }
 }
-
