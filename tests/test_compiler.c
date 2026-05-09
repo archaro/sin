@@ -9,6 +9,7 @@ void test_emitbc_header(void);
 void test_emitbc_opcode_map(void);
 void test_emitbc_opcode_map_unsupported_ir_op(void);
 void test_emitbc_jumps(void);
+void test_ir_validate(void);
 
 static void test_absyn_helpers(void) {
   AS_NODE *lhs = t_int(1);
@@ -58,5 +59,6 @@ int main(void) {
   test_emitbc_opcode_map();
   test_emitbc_opcode_map_unsupported_ir_op();
   test_emitbc_jumps();
+  test_ir_validate();
   return 0;
 }

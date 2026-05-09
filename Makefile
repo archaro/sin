@@ -13,7 +13,7 @@ LIB_DIR := lib
 # Test runner
 TEST_DIR := tests
 TEST_BIN := $(TEST_DIR)/test-compiler
-TEST_SOURCES := $(TEST_DIR)/test_compiler.c $(TEST_DIR)/test_helpers.c $(TEST_DIR)/test_emitbc_header.c $(TEST_DIR)/test_emitbc_opcode_map.c $(TEST_DIR)/test_emitbc_jumps.c
+TEST_SOURCES := $(TEST_DIR)/test_compiler.c $(TEST_DIR)/test_helpers.c $(TEST_DIR)/test_emitbc_header.c $(TEST_DIR)/test_emitbc_opcode_map.c $(TEST_DIR)/test_emitbc_jumps.c $(TEST_DIR)/test_ir_validate.c
 
 
 # Library of shared functions
