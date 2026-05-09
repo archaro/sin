@@ -83,7 +83,6 @@ void test_emitbc_opcode_map(void) {
       {"delete", IR_OP_DELETE, 'W', 0},
       {"nthname", IR_OP_NTHNAME, 'Y', 0},
       {"rootname", IR_OP_ROOTNAME, 'Z', 0},
-      {"pop_emits_nul_byte_intentional", IR_OP_POP, 0, 0},
       {"call", IR_OP_CALL, 'F', 0},
       {"libcall", IR_OP_LIBCALL, 'A', 0},
       {"item_save_code", IR_OP_ITEM_SAVE_CODE, 'B', 0},

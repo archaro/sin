@@ -58,7 +58,6 @@ typedef enum {
   IR_OP_DELETE,
   IR_OP_NTHNAME,
   IR_OP_ROOTNAME,
-  IR_OP_POP,
   IR_OP_ITEM_SAVE_CODE
 } IR_Op;
 

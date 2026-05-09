@@ -83,7 +83,6 @@ static uint8_t map_opcode(IR_Op op) {
      *   immediate operand byte, while ITEM_DEREF has no immediate.
      */
     case IR_OP_ITEM_SAVE: return 'C'; case IR_OP_EXISTS: return 'X'; case IR_OP_DELETE: return 'W'; case IR_OP_NTHNAME: return 'Y'; case IR_OP_ROOTNAME: return 'Z';
-    case IR_OP_POP: return 0;
     case IR_OP_CALL: return 'F';
     case IR_OP_LIBCALL: return 'A';
     case IR_OP_ITEM_SAVE_CODE: return 'B';
@@ -111,7 +110,6 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
   for (size_t i = 0; i < ir->function.count; i++) {
     IR_Inst *in = &ir->function.code[i];
     if (in->op == IR_OP_LABEL) continue;
-    if (in->op == IR_OP_POP) { write_u8(out, 0); continue; }
     uint8_t op = map_opcode(in->op);
     if (op == 0) {
       FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
