@@ -1,0 +1,148 @@
+#include <ctype.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "error.h"
+#include "lower.h"
+#include "parser.h"
+#include "semant.h"
+#include "test_assert.h"
+#include "test_helpers.h"
+
+typedef struct {
+  const char *name;
+  const char *source;
+  const char *fixture_path;
+} SourceGoldenCase;
+
+static uint8_t hex_nibble(char c) {
+  if (c >= '0' && c <= '9') return (uint8_t)(c - '0');
+  if (c >= 'a' && c <= 'f') return (uint8_t)(10 + c - 'a');
+  if (c >= 'A' && c <= 'F') return (uint8_t)(10 + c - 'A');
+  return 0xFF;
+}
+
+static uint8_t *load_hex_fixture(const char *path, size_t *out_len) {
+  FILE *f = fopen(path, "rb");
+  ASSERT_NOT_NULL(f);
+  uint8_t *buf = NULL;
+  size_t cap = 0, len = 0;
+  int c;
+  while ((c = fgetc(f)) != EOF) {
+    if (isspace(c)) continue;
+    if (c == '#') {
+      while ((c = fgetc(f)) != EOF && c != '\n') {
+      }
+      continue;
+    }
+    uint8_t hi = hex_nibble((char)c);
+    ASSERT_TRUE(hi != 0xFF);
+    int c2 = fgetc(f);
+    ASSERT_TRUE(c2 != EOF);
+    uint8_t lo = hex_nibble((char)c2);
+    ASSERT_TRUE(lo != 0xFF);
+    if (len == cap) {
+      cap = cap ? cap * 2 : 32;
+      buf = realloc(buf, cap);
+      ASSERT_NOT_NULL(buf);
+    }
+    buf[len++] = (uint8_t)((hi << 4) | lo);
+  }
+  fclose(f);
+  *out_len = len;
+  return buf;
+}
+
+static void run_source_case(const SourceGoldenCase *tc) {
+  AS_NODE *absyn = NULL;
+  char *errdetail = NULL;
+  int8_t rc = parse_source((char *)tc->source, (int)strlen(tc->source), &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(absyn);
+
+  SEM_CTX *sem = sem_create_ctx();
+  ASSERT_NOT_NULL(sem);
+
+  rc = sem_check_locals(absyn, &errdetail, sem);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+
+  IR_Unit *ir = NULL;
+  rc = lower_ast_to_ir(absyn, sem, &ir, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(ir);
+
+  rc = ir_validate(ir, sem->count, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+
+  OUTPUT_t out = {0};
+  out.maxsize = 128;
+  out.bytecode = malloc(out.maxsize);
+  out.nextbyte = out.bytecode;
+  ASSERT_NOT_NULL(out.bytecode);
+
+  rc = t_emit_bytecode(ir, (uint8_t)sem->count, 0, &out, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+
+  size_t expected_len = 0;
+  uint8_t *expected = load_hex_fixture(tc->fixture_path, &expected_len);
+  size_t actual_len = (size_t)(out.nextbyte - out.bytecode);
+  ASSERT_EQ_INT((int)expected_len, (int)actual_len);
+  ASSERT_EQ_INT(0, memcmp(expected, out.bytecode, expected_len));
+
+  free(expected);
+  free(out.bytecode);
+  ir_destroy_unit(ir);
+  sem_delete_ctx(sem);
+  as_delete(absyn);
+}
+
+static void test_source_pipeline_negative_cases(void) {
+  AS_NODE *absyn = NULL;
+  char *errdetail = NULL;
+
+  const char *bad_char = "^;";
+  int8_t rc = parse_source((char *)bad_char, (int)strlen(bad_char), &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strcmp(errdetail, "^") == 0);
+  free(errdetail);
+
+  const char *bad_semantic = "@x;";
+  rc = parse_source((char *)bad_semantic, (int)strlen(bad_semantic), &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(absyn);
+
+  SEM_CTX *sem = sem_create_ctx();
+  ASSERT_NOT_NULL(sem);
+  rc = sem_check_locals(absyn, &errdetail, sem);
+  ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strstr(errdetail, "x") != NULL);
+
+  free(errdetail);
+  sem_delete_ctx(sem);
+  as_delete(absyn);
+}
+
+void test_pipeline_source_golden(void) {
+  const SourceGoldenCase cases[] = {
+      {"int_literal", "42;", "tests/fixtures/int_literal.hex"},
+      {"locals_store_load", "@x = 7; @x;", "tests/fixtures/locals_store_load.hex"},
+      {"arithmetic_add", "2 + 3;", "tests/fixtures/arithmetic_add.hex"},
+      {"if_elsif_else", "if 1 < 2 then 9; elsif 0 < 1 then 8; else 7; endif;", "tests/fixtures/if_elsif_else.hex"},
+  };
+
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+    run_source_case(&cases[i]);
+  }
+
+  test_source_pipeline_negative_cases();
+}

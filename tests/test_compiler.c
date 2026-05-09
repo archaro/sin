@@ -10,6 +10,7 @@ void test_emitbc_opcode_map(void);
 void test_emitbc_opcode_map_unsupported_ir_op(void);
 void test_emitbc_jumps(void);
 void test_pipeline_golden(void);
+void test_pipeline_source_golden(void);
 void test_ir_validate(void);
 void test_absyn_nested_binary_expressions(void);
 void test_absyn_stmtlist_multiple_statements(void);
@@ -66,6 +67,7 @@ int main(void) {
   test_emitbc_opcode_map_unsupported_ir_op();
   test_emitbc_jumps();
   test_pipeline_golden();
+  test_pipeline_source_golden();
   test_ir_validate();
   test_absyn_nested_binary_expressions();
   test_absyn_stmtlist_multiple_statements();
