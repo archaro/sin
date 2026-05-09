@@ -88,12 +88,17 @@ int main(int argc, char **argv) {
   opcodeptr = bytecode;
 
   // First, do we have any locals?
-  uint8_t locals = *opcodeptr;
-  opcodeptr++;
+  uint8_t locals = *opcodeptr++;
+  uint8_t params = *opcodeptr++;
   if (locals > 0) {
     logmsg("Local variables: %d\n", locals);
   } else {
     logmsg("No local variables.\n");
+  }
+  if (params > 0) {
+    logmsg("(Of which, %d are parameters.)\n", locals);
+  } else {
+    logmsg("(No parameters.)\n");
   }
 
   // Locals processed, so now step through the bytecode until the HALT
