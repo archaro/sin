@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
         break;
       case 'o':
         // Mandatory: Name of the object code file.
-        in = fopen(optarg, "r");
+        in = fopen(optarg, "rb");
         if (!in) {
           logerr("Unable to open input file: %s\n", optarg);
           exit(EXIT_FAILURE);

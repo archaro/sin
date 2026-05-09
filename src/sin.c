@@ -178,7 +178,7 @@ int main(int argc, char **argv) {
       case 'o': {
         // Mandatory: Name of the object code file.
         // Load a file to interpret, otherwise what's the point?
-        in = fopen(optarg, "r");
+        in = fopen(optarg, "rb");
         if (!in) {
           logerr("Unable to open input file: %s\n", optarg);
           exit(EXIT_FAILURE);
