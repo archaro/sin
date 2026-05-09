@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 
 #include "config.h"
 #include "error.h"
@@ -22,15 +23,16 @@ CONFIG_t config;
 int main(int argc, char **argv) {
   char *source = NULL;
   char *errdetail = NULL;
-  int sourcelen;
+  int sourcelen = 0;
   uint8_t result = ERR_NOERROR;
   AS_NODE *absyn = NULL;
   SEM_CTX *ctx = NULL;
   IR_Unit *ir = NULL;
   OUTPUT_t *out = NULL;
+  init_errmsg();
 
   if (argc != 3) {
-    printf("Syntax: maketest <input file> <output file>\n");
+    printf("Syntax: scomp <input file> <output file>\n");
     return 1;
   }
 
@@ -40,11 +42,42 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  fseek(in, 0, SEEK_END);
-  sourcelen = ftell(in);
-  fseek(in, 0, SEEK_SET);
+  if (fseek(in, 0, SEEK_END) != 0) {
+    errdetail = GROW_ARRAY(char, NULL, 0, 128);
+    snprintf(errdetail, 128, "Unable to seek to end of input file '%s'.", argv[1]);
+    result = ERR_COMP_SYNTAX;
+    fclose(in);
+    goto compile_error;
+  }
+  long sourcefilelen = ftell(in);
+  if (sourcefilelen < 0 || sourcefilelen > INT_MAX) {
+    errdetail = GROW_ARRAY(char, NULL, 0, 160);
+    snprintf(errdetail, 160,
+             "Invalid input file length %ld for '%s' (must be 0..%d bytes).",
+             sourcefilelen, argv[1], INT_MAX);
+    result = ERR_COMP_SYNTAX;
+    fclose(in);
+    goto compile_error;
+  }
+  sourcelen = (int)sourcefilelen;
+  if (fseek(in, 0, SEEK_SET) != 0) {
+    errdetail = GROW_ARRAY(char, NULL, 0, 128);
+    snprintf(errdetail, 128, "Unable to rewind input file '%s'.", argv[1]);
+    result = ERR_COMP_SYNTAX;
+    fclose(in);
+    goto compile_error;
+  }
   source = GROW_ARRAY(char, NULL, 0, sourcelen);
-  fread(source, sourcelen, sizeof(char), in);
+  size_t bytesread = fread(source, sizeof(char), sourcelen, in);
+  if (bytesread != (size_t)sourcelen) {
+    errdetail = GROW_ARRAY(char, NULL, 0, 192);
+    snprintf(errdetail, 192,
+             "Input load failed for '%s': expected %d bytes but read %zu.",
+             argv[1], sourcelen, bytesread);
+    result = ERR_COMP_SYNTAX;
+    fclose(in);
+    goto compile_error;
+  }
   fclose(in);
   logmsg("Source loaded: %d bytes.\n", sourcelen);
 
@@ -54,7 +87,6 @@ int main(int argc, char **argv) {
   out->nextbyte = out->bytecode;
 
   logmsg("Parsing...\n");
-  init_errmsg();
   ctx = sem_create_ctx();
 
   result = parse_source(source, sourcelen, &absyn, &errdetail);
