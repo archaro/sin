@@ -10,6 +10,10 @@ void test_emitbc_opcode_map(void);
 void test_emitbc_opcode_map_unsupported_ir_op(void);
 void test_emitbc_jumps(void);
 void test_ir_validate(void);
+void test_absyn_nested_binary_expressions(void);
+void test_absyn_stmtlist_multiple_statements(void);
+void test_absyn_if_elsif_else_chain(void);
+void test_absyn_item_deref_chains(void);
 
 static void test_absyn_helpers(void) {
   AS_NODE *lhs = t_int(1);
@@ -60,5 +64,9 @@ int main(void) {
   test_emitbc_opcode_map_unsupported_ir_op();
   test_emitbc_jumps();
   test_ir_validate();
+  test_absyn_nested_binary_expressions();
+  test_absyn_stmtlist_multiple_statements();
+  test_absyn_if_elsif_else_chain();
+  test_absyn_item_deref_chains();
   return 0;
 }
