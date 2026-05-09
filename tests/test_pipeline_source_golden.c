@@ -92,6 +92,56 @@ static void test_source_pipeline_negative_cases(void) {
   as_delete(absyn);
 }
 
+
+static void test_source_exprstmt_libcall_no_pop(void) {
+  AS_NODE *absyn = NULL;
+  char *errdetail = NULL;
+  const char *source = "sys.log{\"hello\"};";
+
+  int8_t rc = parse_source((char *)source, (int)strlen(source), &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(absyn);
+
+  SEM_CTX *sem = sem_create_ctx();
+  ASSERT_NOT_NULL(sem);
+  rc = sem_check_locals(absyn, &errdetail, sem);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+
+  IR_Unit *ir = NULL;
+  rc = lower_ast_to_ir(absyn, sem, &ir, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+
+  OUTPUT_t out = {0};
+  out.maxsize = 128;
+  out.bytecode = malloc(out.maxsize);
+  out.nextbyte = out.bytecode;
+  ASSERT_NOT_NULL(out.bytecode);
+
+  rc = t_emit_bytecode(ir, (uint8_t)sem->count, 0, &out, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+
+  static const uint8_t expected[] = {
+      0x00, 0x00,
+      0x6c, 0x05, 0x00, 'h', 'e', 'l', 'l', 'o',
+      0x6c, 0x03, 0x00, 's', 'y', 's',
+      0x6c, 0x03, 0x00, 'l', 'o', 'g',
+      0x41, 0x01,
+      0x68,
+  };
+  size_t n = (size_t)(out.nextbyte - out.bytecode);
+  ASSERT_EQ_INT((int)sizeof(expected), (int)n);
+  ASSERT_EQ_INT(0, memcmp(expected, out.bytecode, n));
+
+  free(out.bytecode);
+  ir_destroy_unit(ir);
+  sem_delete_ctx(sem);
+  as_delete(absyn);
+}
+
 void test_pipeline_source_golden(void) {
   const SourceGoldenCase cases[] = {
       {"int_literal", "42;", "tests/fixtures/int_literal.hex"},
@@ -105,4 +155,5 @@ void test_pipeline_source_golden(void) {
   }
 
   test_source_pipeline_negative_cases();
+  test_source_exprstmt_libcall_no_pop();
 }

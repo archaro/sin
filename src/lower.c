@@ -324,9 +324,10 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
       return;
 
     case N_EXPRSTMT:
+      /* Expression statements rely on existing interpreter behavior and do not
+       * emit an explicit discard opcode. */
       lower_expr(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_POP});
       return;
 
     case N_RETURN:
