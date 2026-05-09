@@ -59,6 +59,9 @@ E - end of item definition.  Evaluate the full item name, and push the
     resulting item (or nil if not found) onto the stack.
 F - Pop the top of the stack (which must be a valid item), and push that
     item's contents in its place.
+    Note: IR_OP_CALL and IR_OP_ITEM_DEREF intentionally share this opcode.
+    Both lower to a fetch-item operation; CALL additionally carries one
+    following byte (argument count), while ITEM_DEREF carries no immediate.
 I - begin item definition.  Start interpreting the bytecode as layer names
     or dereferences, building up the fully dereferenced item name as it
     proceeds.

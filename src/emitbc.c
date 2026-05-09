@@ -72,6 +72,16 @@ static uint8_t map_opcode(IR_Op op) {
     case IR_OP_LOAD_LOCAL: return 'e'; case IR_OP_STORE_LOCAL: return 'c'; case IR_OP_INC_LOCAL: return 'f'; case IR_OP_DEC_LOCAL: return 'g';
     case IR_OP_JUMP: return 'j'; case IR_OP_JUMP_IF_FALSE: return 'k';
     case IR_OP_ITEM_BEGIN: return 'I'; case IR_OP_ITEM_PUSH_LAYER: return 'L'; case IR_OP_ITEM_PUSH_DEREF: return 'D'; case IR_OP_ITEM_END: return 'E'; case IR_OP_ITEM_DEREF: return 'F';
+    /*
+     * IR_OP_CALL intentionally aliases IR_OP_ITEM_DEREF to opcode 'F'.
+     * Both operations dispatch to op_fetchitem in the VM: they pop an item
+     * reference from the stack and replace it with the fetched value.
+     *
+     * Safety comes from IR lowering/validation context, not opcode identity:
+     * - ITEM_DEREF appears inside item-assembly flows after IR_OP_ITEM_PUSH_DEREF.
+     * - CALL appears after callee + args have been pushed and carries argc as an
+     *   immediate operand byte, while ITEM_DEREF has no immediate.
+     */
     case IR_OP_ITEM_SAVE: return 'C'; case IR_OP_EXISTS: return 'X'; case IR_OP_DELETE: return 'W'; case IR_OP_NTHNAME: return 'Y'; case IR_OP_ROOTNAME: return 'Z';
     case IR_OP_POP: return 0;
     case IR_OP_CALL: return 'F';

@@ -113,6 +113,35 @@ void test_emitbc_opcode_map(void) {
   }
 }
 
+
+void test_emitbc_opcode_map_call_item_deref_alias_layout(void) {
+  IR_Unit *unit = t_new_unit();
+  ASSERT_NOT_NULL(unit);
+
+  t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_DEREF});
+  t_emit(unit, (IR_Inst){.op = IR_OP_CALL, .a = 2});
+
+  OUTPUT_t out = {0};
+  out.maxsize = 8;
+  out.bytecode = malloc(out.maxsize);
+  out.nextbyte = out.bytecode;
+  ASSERT_NOT_NULL(out.bytecode);
+
+  char *errdetail = NULL;
+  int8_t rc = t_emit_bytecode(unit, 0, 0, &out, &errdetail);
+  ASSERT_EQ_INT(0, rc);
+  ASSERT_TRUE(errdetail == NULL);
+
+  /* header[2], ITEM_DEREF('F'), CALL('F'), CALL argc byte */
+  ASSERT_TRUE((size_t)(out.nextbyte - out.bytecode) >= 5);
+  ASSERT_EQ_INT('F', out.bytecode[2]);
+  ASSERT_EQ_INT('F', out.bytecode[3]);
+  ASSERT_EQ_INT(2, out.bytecode[4]);
+
+  free(out.bytecode);
+  ir_destroy_unit(unit);
+}
+
 void test_emitbc_opcode_map_unsupported_ir_op(void) {
   /* Keep this check aligned with src/emitbc.c:"unsupported IR op" error text. */
   IR_Unit *unit = t_new_unit();
