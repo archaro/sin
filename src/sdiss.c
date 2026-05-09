@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdarg.h>
 #include <getopt.h>
 
 #include "config.h"
@@ -25,6 +26,39 @@ uint8_t *decode_opcode(uint8_t *opcodeptr, uint8_t *end, int context);
 uint8_t *bytecode;
 
 static int decode_failed = 0;
+static int unknown_opcode_count = 0;
+static int warning_count = 0;
+static int instruction_count = 0;
+static int opt_raw = 0;
+static int opt_no_header = 0;
+static int opt_quiet = 0;
+
+static void outln(const char *fmt, ...) {
+  if (opt_quiet) return;
+  va_list args;
+  va_start(args, fmt);
+  vprintf(fmt, args);
+  va_end(args);
+}
+
+static void print_raw(uint8_t *start, uint8_t *end) {
+  if (!opt_raw || opt_quiet ) return;
+  outln(" [raw:");
+  for (uint8_t *p = start; p < end; p++) outln(" %02X", *p);
+  outln("]");
+}
+
+static void print_escaped_bytes(uint8_t *data, size_t len) {
+  for (size_t i = 0; i < len; i++) {
+    uint8_t c = data[i];
+    if (c == '\n') outln("\\n");
+    else if (c == '\r') outln("\\r");
+    else if (c == '\t') outln("\\t");
+    else if (c == '\\') outln("\\\\");
+    else if (c >= 32 && c <= 126) outln("%c", c);
+    else outln("\\x%02X", c);
+  }
+}
 
 typedef enum {
   DECODE_STMT = 0,
@@ -37,6 +71,10 @@ void usage() {
   logmsg("Options:\n");
   logmsg(" -h, --help\t\tThis message.\n");
   logmsg(" -o, --object <file>\tObject code to disassemble.\n");
+  logmsg("     --raw\t\tShow raw bytes per instruction.\n");
+  logmsg("     --no-header\tSkip locals/params header output.\n");
+  logmsg(" -q, --quiet\t\tSuppress disassembly lines.\n");
+  logmsg(" -v, --verbose\t\tEnable verbose output (default).\n");
 }
 
 static int require_bytes(uint8_t *opcodeptr, uint8_t *end, size_t count,
@@ -69,9 +107,13 @@ int main(int argc, char **argv) {
   {
     {"help", no_argument, 0, 'h'},
     {"object", required_argument, 0, 'o'},
+    {"raw", no_argument, 0, 1000},
+    {"no-header", no_argument, 0, 1001},
+    {"quiet", no_argument, 0, 'q'},
+    {"verbose", no_argument, 0, 'v'},
     {NULL, 0, 0, '\0'}
   };
-  while ((opt = getopt_long(argc, argv, "ho:", options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "ho:qv", options, NULL)) != -1) {
     switch(opt) {
       case 'h':
         usage();
@@ -92,6 +134,10 @@ int main(int argc, char **argv) {
         fclose(in);
         logmsg("Bytecode loaded: %d bytes.\n", filesize);
         break;
+      case 'q': opt_quiet = 1; break;
+      case 'v': opt_quiet = 0; break;
+      case 1000: opt_raw = 1; break;
+      case 1001: opt_no_header = 1; break;
       default:
         usage();
         return EXIT_FAILURE;
@@ -117,21 +163,21 @@ int main(int argc, char **argv) {
   }
   uint8_t locals = *opcodeptr++;
   uint8_t params = *opcodeptr++;
-  if (locals > 0) {
+  if (!opt_no_header && locals > 0) {
     logmsg("Local variables: %d\n", locals);
-  } else {
+  } else if (!opt_no_header) {
     logmsg("No local variables.\n");
   }
-  if (params > 0) {
+  if (!opt_no_header && params > 0) {
     logmsg("(Of which, %d are parameters.)\n", locals);
-  } else {
+  } else if (!opt_no_header) {
     logmsg("(No parameters.)\n");
   }
 
   // Locals processed, so now step through the bytecode until the HALT
   // instruction is found.  This is just one big switch.
   while (opcodeptr < end && *opcodeptr != 'h') {
-    logmsg("Byte %05u: ", opcodeptr - bytecode - 1); // -1 for the locals
+    outln("Byte %05u: ", opcodeptr - bytecode - 1);
     opcodeptr = decode_opcode(opcodeptr, end, DECODE_STMT);
     if (decode_failed) {
       break;
@@ -142,9 +188,10 @@ int main(int argc, char **argv) {
   } else if (opcodeptr >= end) {
     logerr("Decode error: unterminated stream (missing HALT 'h' before EOF).\n");
   } else {
-    logmsg("Byte %05u: ", opcodeptr - bytecode - 1); // -1 for the locals
-    logmsg("HALT\n");
+    outln("Byte %05u: HALT\n", opcodeptr - bytecode - 1);
   }
+  outln("Summary: instructions=%d unknown=%d warnings=%d\n",
+        instruction_count, unknown_opcode_count, warning_count);
 
   // Clean up
   logmsg("Shutting down.\n");
@@ -227,7 +274,9 @@ uint8_t *decode_opcode(uint8_t *opcodeptr, uint8_t *end, int context) {
   int16_t offset;
   int64_t ival;
   if (!require_bytes(opcodeptr, end, 1, "opcode")) return opcodeptr;
+  uint8_t *inst_start = opcodeptr;
   uint8_t op = *opcodeptr++;
+  instruction_count++;
   switch (op) {
     case 'a': logmsg("ADD\n"); break;
     case 'c':
@@ -251,13 +300,15 @@ uint8_t *decode_opcode(uint8_t *opcodeptr, uint8_t *end, int context) {
       if (!require_bytes(opcodeptr, end, 2, "JUMP offset")) return opcodeptr;
       memcpy(&offset, opcodeptr, sizeof(offset));
       opcodeptr += 2;
-      logmsg("JUMP %d\n", offset);
+      outln("JUMP rel=%d abs=%u\n", offset,
+            (unsigned int)((opcodeptr - bytecode) + offset));
       break;
     case 'k':
       if (!require_bytes(opcodeptr, end, 2, "JUMP IF FALSE offset")) return opcodeptr;
       memcpy(&offset, opcodeptr, sizeof(offset));
       opcodeptr += 2;
-      logmsg("JUMP IF FALSE %d\n", offset);
+      outln("JUMP IF FALSE rel=%d abs=%u\n", offset,
+            (unsigned int)((opcodeptr - bytecode) + offset));
       break;
     case 'l':
       if (!require_bytes(opcodeptr, end, 2, "STRINGLIT length")) return opcodeptr;
@@ -266,9 +317,10 @@ uint8_t *decode_opcode(uint8_t *opcodeptr, uint8_t *end, int context) {
       if (offset < 0 || !require_bytes(opcodeptr, end, (size_t)offset, "STRINGLIT data")) {
         return opcodeptr;
       }
-      logmsg("STRINGLIT: ");
-      for (uint16_t s = 0; s < offset; s++) logmsg("%c", *opcodeptr++);
-      logmsg("\n");
+      outln("STRINGLIT: ");
+      print_escaped_bytes(opcodeptr, (size_t)offset);
+      opcodeptr += offset;
+      outln("\n");
       break;
     case 'm': logmsg("MULTIPLY\n"); break;
     case 'n': logmsg("NEGATE\n"); break;
@@ -299,8 +351,9 @@ uint8_t *decode_opcode(uint8_t *opcodeptr, uint8_t *end, int context) {
       opcodeptr += 2;
       if (!require_bytes(opcodeptr, end, len, "EMBEDDED CODE data")) return opcodeptr;
       logmsg("EMBEDDED CODE (%d bytes):\n", len);
-      for (uint16_t s = 0; s < len; s++) logmsg("%c", *opcodeptr++);
-      logmsg("\n");
+      print_escaped_bytes(opcodeptr, len);
+      opcodeptr += len;
+      outln("\n");
       break;
     }
     case 'C': logmsg("SAVE ITEM\n"); break;
@@ -321,9 +374,13 @@ uint8_t *decode_opcode(uint8_t *opcodeptr, uint8_t *end, int context) {
     case 'Y': logmsg("NTHNAME\n"); break;
     case 'Z': logmsg("ROOTNAME\n"); break;
     default:
-      logmsg("UNKNOWN OPCODE 0x%02X (%c)\n", op,
+      unknown_opcode_count++;
+      warning_count++;
+      outln("UNKNOWN OPCODE 0x%02X (%c)\n", op,
              (op >= 32 && op <= 126) ? op : '.');
       break;
   }
+  print_raw(inst_start, opcodeptr);
+  if (opt_raw && !opt_quiet) outln("\n");
   return opcodeptr;
 }
