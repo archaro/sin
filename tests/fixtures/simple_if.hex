@@ -1,0 +1,12 @@
+00 00          # header: locals=0 params=0
+70             # p: push int
+01 00 00 00 00 00 00 00  # 1
+70             # p: push int
+02 00 00 00 00 00 00 00  # 2
+72             # r: lt
+6b 0f 00       # k: jump_if_false +15 bytes
+70             # p: push int
+09 00 00 00 00 00 00 00  # 9
+00             # pop
+6a 02 00       # j: jump +2 bytes to end
+68             # h: halt
