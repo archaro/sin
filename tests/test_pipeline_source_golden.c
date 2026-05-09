@@ -1,6 +1,4 @@
-#include <ctype.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -16,44 +14,6 @@ typedef struct {
   const char *source;
   const char *fixture_path;
 } SourceGoldenCase;
-
-static uint8_t hex_nibble(char c) {
-  if (c >= '0' && c <= '9') return (uint8_t)(c - '0');
-  if (c >= 'a' && c <= 'f') return (uint8_t)(10 + c - 'a');
-  if (c >= 'A' && c <= 'F') return (uint8_t)(10 + c - 'A');
-  return 0xFF;
-}
-
-static uint8_t *load_hex_fixture(const char *path, size_t *out_len) {
-  FILE *f = fopen(path, "rb");
-  ASSERT_NOT_NULL(f);
-  uint8_t *buf = NULL;
-  size_t cap = 0, len = 0;
-  int c;
-  while ((c = fgetc(f)) != EOF) {
-    if (isspace(c)) continue;
-    if (c == '#') {
-      while ((c = fgetc(f)) != EOF && c != '\n') {
-      }
-      continue;
-    }
-    uint8_t hi = hex_nibble((char)c);
-    ASSERT_TRUE(hi != 0xFF);
-    int c2 = fgetc(f);
-    ASSERT_TRUE(c2 != EOF);
-    uint8_t lo = hex_nibble((char)c2);
-    ASSERT_TRUE(lo != 0xFF);
-    if (len == cap) {
-      cap = cap ? cap * 2 : 32;
-      buf = realloc(buf, cap);
-      ASSERT_NOT_NULL(buf);
-    }
-    buf[len++] = (uint8_t)((hi << 4) | lo);
-  }
-  fclose(f);
-  *out_len = len;
-  return buf;
-}
 
 static void run_source_case(const SourceGoldenCase *tc) {
   AS_NODE *absyn = NULL;
