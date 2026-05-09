@@ -10,6 +10,12 @@ SRC_DIR := src
 OBJ_DIR := obj
 LIB_DIR := lib
 
+# Test runner
+TEST_DIR := tests
+TEST_BIN := $(TEST_DIR)/test-compiler
+TEST_SOURCES := $(TEST_DIR)/test_compiler.c $(TEST_DIR)/test_helpers.c
+
+
 # Library of shared functions
 LIB := $(LIB_DIR)/libsinshared.a
 LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o \
@@ -48,7 +54,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
-.PHONY: all clean lib
+.PHONY: all clean lib test-compiler
 
 all: $(LIB) scomp sdiss sin
 
@@ -84,7 +90,12 @@ $(OBJ_DIR)/lexer.o: $(SRC_DIR)/lexer.c
 # Include dependency files
 -include $(DEPS)
 
+test-compiler: $(TEST_BIN)
+
+$(TEST_BIN): $(TEST_SOURCES) $(LIB)
+	$(CC) $(CFLAGS) $(DEBUG) -Isrc -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
+
 clean:
 	rm -rf $(OBJ_DIR)/*.o $(OBJ_DIR)/*.d $(LIB) $(LIB_DIR) \
-         $(PARSER_GENERATED) $(LEXER_GENERATED)
+         $(PARSER_GENERATED) $(LEXER_GENERATED) $(TEST_BIN)
 
