@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 
 #include "test_assert.h"
 #include "test_helpers.h"
@@ -36,7 +37,10 @@ void test_sdiss_fixture_basic(void) {
   char output[4096];
   size_t total = fread(output, 1, sizeof(output) - 1, pipe);
   output[total] = '\0';
-  ASSERT_EQ_INT(0, pclose(pipe));
+  int rc = pclose(pipe);
+  ASSERT_TRUE(rc != -1);
+  ASSERT_TRUE(WIFEXITED(rc));
+  ASSERT_EQ_INT(0, WEXITSTATUS(rc));
 
   char *expected = read_text("tests/fixtures/sdiss/basic.expected.txt");
   char *line = strtok(expected, "\n");
