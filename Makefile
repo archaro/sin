@@ -18,10 +18,10 @@ TEST_SOURCES := $(TEST_DIR)/test_compiler.c $(TEST_DIR)/test_helpers.c $(TEST_DI
 
 # Library of shared functions
 LIB := $(LIB_DIR)/libsinshared.a
-LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o \
-               $(OBJ_DIR)/parser.o $(OBJ_DIR)/lexer.o $(OBJ_DIR)/absyn.o \
-               $(OBJ_DIR)/semant.o $(OBJ_DIR)/ir.o $(OBJ_DIR)/lower.o \
-               $(OBJ_DIR)/emitbc.o $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcall.o \
+LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/parser.o \
+               $(OBJ_DIR)/lexer.o $(OBJ_DIR)/absyn.o $(OBJ_DIR)/semant.o \
+               $(OBJ_DIR)/ir.o $(OBJ_DIR)/lower.o $(OBJ_DIR)/emitbc.o \
+               $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcall.o \
                $(OBJ_DIR)/stack.o $(OBJ_DIR)/value.o $(OBJ_DIR)/item.o \
                $(OBJ_DIR)/vm.o $(OBJ_DIR)/task.o $(OBJ_DIR)/interpret.o \
                $(OBJ_DIR)/network.o $(OBJ_DIR)/libtelnet.o
@@ -54,7 +54,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
-.PHONY: all clean lib test-compiler
+.PHONY: all clean lib test
 
 all: $(LIB) scomp sdiss sin
 
@@ -90,7 +90,7 @@ $(OBJ_DIR)/lexer.o: $(SRC_DIR)/lexer.c
 # Include dependency files
 -include $(DEPS)
 
-test-compiler: $(TEST_BIN)
+test: $(TEST_BIN)
 
 $(TEST_BIN): $(TEST_SOURCES) $(LIB)
 	$(CC) $(CFLAGS) $(DEBUG) -Isrc -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
