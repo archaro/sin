@@ -19,9 +19,16 @@ CONFIG_t config;
 
 uint8_t *process_item(uint8_t *opcodeptr);
 uint8_t *process_dereference(uint8_t *opcodeptr);
+uint8_t *decode_opcode(uint8_t *opcodeptr, int context);
 
 // This is used by a few functions to calculate the current opcode location
 uint8_t *bytecode;
+
+typedef enum {
+  DECODE_STMT = 0,
+  DECODE_ITEM = 1,
+  DECODE_DEREF = 2
+} decode_context_t;
 
 void usage() {
   logmsg("Sinistra disassembler.\nSyntax: sdiss <options>\n");
@@ -104,111 +111,8 @@ int main(int argc, char **argv) {
   // Locals processed, so now step through the bytecode until the HALT
   // instruction is found.  This is just one big switch.
   while (*opcodeptr != 'h') {
-    int16_t offset;
-    int64_t ival;
     logmsg("Byte %05u: ", opcodeptr - bytecode - 1); // -1 for the locals
-    switch (*opcodeptr++) {
-      case 'a':
-        logmsg("ADD\n");
-        break;
-      case 'c':
-        logmsg("SAVE LOCAL %d\n", *opcodeptr);
-        opcodeptr++;
-        break;
-      case 'd':
-        logmsg("DIVIDE\n");
-        break;
-      case 'e':
-        logmsg("RETRIEVE LOCAL %d\n", *opcodeptr);
-        opcodeptr++;
-        break;
-      case 'f':
-        logmsg("INCREMENT LOCAL %d\n", *opcodeptr);
-        opcodeptr++;
-        break;
-      case 'g':
-        logmsg("DECREMENT LOCAL %d\n", *opcodeptr);
-        opcodeptr++;
-        break;
-      case 'j':
-        offset = *(int16_t*)opcodeptr;
-        opcodeptr += 2;
-        logmsg("JUMP %d\n", offset);
-        break;
-      case 'k':
-        offset = *(int16_t*)opcodeptr;
-        opcodeptr += 2;
-        logmsg("JUMP IF FALSE %d\n", offset);
-        break;
-      case 'l':
-        offset = *(int16_t*)opcodeptr; // Length of string
-        opcodeptr += 2;
-        logmsg("STRINGLIT: ");
-        for (uint16_t s = 0; s < offset; s++) {
-          logmsg("%c", *opcodeptr);
-          opcodeptr++;
-        }
-        logmsg("\n");
-        break;
-      case 'm':
-        logmsg("MULTIPLY\n");
-        break;
-      case 'n':
-        logmsg("NEGATE\n");
-        break;
-      case 'o':
-        logmsg("BOOL EQ\n");
-        break;
-      case 'p':
-        ival = *(int64_t*)opcodeptr;
-        logmsg("INTEGER %ld\n", ival);
-        opcodeptr += 8;
-        break;
-      case 'q':
-        logmsg("BOOL NOTEQ\n");
-        break;
-      case 'r':
-        logmsg("BOOL LT\n");
-        break;
-      case 's':
-        logmsg("SUBTRACT\n");
-        break;
-      case 't':
-        logmsg("BOOL GT\n");
-        break;
-      case 'u':
-        logmsg("BOOL LTEQ\n");
-        break;
-      case 'v':
-        logmsg("BOOL GTEQ\n");
-        break;
-      case 'x':
-        logmsg("LOGICAL NOT\n");
-        break;
-      case 'B': {
-        uint16_t len = *(uint16_t*)opcodeptr;
-        opcodeptr += 2;
-        logmsg("EMBEDDED CODE (%d bytes):\n", len);
-        for (uint16_t s = 0; s < len; s++) {
-          logmsg("%c", *opcodeptr);
-          opcodeptr++;
-        }
-        logmsg("\n");
-        break;
-      }
-      case 'I':
-        logmsg("BEGIN ITEM ASSEMBLY\n");
-        opcodeptr = process_item(opcodeptr);
-        break;
-      case 'C':
-        logmsg("SAVE ITEM\n");
-        break;
-      case 'F':
-        logmsg("FETCH ITEM\n");
-        break;
-      default:
-        logerr("Undefined opcode: %c (%d)\n", *opcodeptr-1, *opcodeptr-1);
-    }
+    opcodeptr = decode_opcode(opcodeptr, DECODE_STMT);
   }
   logmsg("Byte %05u: ", opcodeptr - bytecode - 1); // -1 for the locals
   logmsg("HALT\n");
@@ -240,9 +144,13 @@ uint8_t *process_item(uint8_t *opcodeptr) {
         logmsg("BEGIN DEREFERENCE LAYER\n");
         opcodeptr = process_dereference(opcodeptr);
         break;
+      case 'F':
+        logmsg("Byte %05u: ", opcodeptr - bytecode - 2);
+        opcodeptr = decode_opcode(opcodeptr - 1, DECODE_ITEM);
+        break;
       default:
-        logmsg("Unknown opcode in item assembly %c (%d)\n",
-                                                  opcodeptr-1, opcodeptr-1);
+        logmsg("Unknown opcode in item assembly: 0x%02X (%c)\n",
+               *(opcodeptr - 1), (*(opcodeptr - 1) >= 32 && *(opcodeptr - 1) <= 126) ? *(opcodeptr - 1) : '.');
     }
   }
   // End of the item
@@ -270,3 +178,80 @@ uint8_t *process_dereference(uint8_t *opcodeptr) {
   return opcodeptr;
 }
 
+uint8_t *decode_opcode(uint8_t *opcodeptr, int context) {
+  int16_t offset;
+  int64_t ival;
+  uint8_t op = *opcodeptr++;
+  switch (op) {
+    case 'a': logmsg("ADD\n"); break;
+    case 'c': logmsg("SAVE LOCAL %d\n", *opcodeptr++); break;
+    case 'd': logmsg("DIVIDE\n"); break;
+    case 'e': logmsg("RETRIEVE LOCAL %d\n", *opcodeptr++); break;
+    case 'f': logmsg("INCREMENT LOCAL %d\n", *opcodeptr++); break;
+    case 'g': logmsg("DECREMENT LOCAL %d\n", *opcodeptr++); break;
+    case 'j':
+      offset = *(int16_t*)opcodeptr;
+      opcodeptr += 2;
+      logmsg("JUMP %d\n", offset);
+      break;
+    case 'k':
+      offset = *(int16_t*)opcodeptr;
+      opcodeptr += 2;
+      logmsg("JUMP IF FALSE %d\n", offset);
+      break;
+    case 'l':
+      offset = *(int16_t*)opcodeptr;
+      opcodeptr += 2;
+      logmsg("STRINGLIT: ");
+      for (uint16_t s = 0; s < offset; s++) logmsg("%c", *opcodeptr++);
+      logmsg("\n");
+      break;
+    case 'm': logmsg("MULTIPLY\n"); break;
+    case 'n': logmsg("NEGATE\n"); break;
+    case 'o': logmsg("BOOL EQ\n"); break;
+    case 'p':
+      ival = *(int64_t*)opcodeptr;
+      logmsg("INTEGER %ld\n", ival);
+      opcodeptr += 8;
+      break;
+    case 'q': logmsg("BOOL NOTEQ\n"); break;
+    case 'r': logmsg("BOOL LT\n"); break;
+    case 's': logmsg("SUBTRACT\n"); break;
+    case 't': logmsg("BOOL GT\n"); break;
+    case 'u': logmsg("BOOL LTEQ\n"); break;
+    case 'v': logmsg("BOOL GTEQ\n"); break;
+    case 'x': logmsg("LOGICAL NOT\n"); break;
+    case 'y': logmsg("LOGICAL AND\n"); break;
+    case 'z': logmsg("LOGICAL OR\n"); break;
+    case 'A': logmsg("LIBCALL ID %u\n", *opcodeptr++); break;
+    case 'B': {
+      uint16_t len = *(uint16_t*)opcodeptr;
+      opcodeptr += 2;
+      logmsg("EMBEDDED CODE (%d bytes):\n", len);
+      for (uint16_t s = 0; s < len; s++) logmsg("%c", *opcodeptr++);
+      logmsg("\n");
+      break;
+    }
+    case 'C': logmsg("SAVE ITEM\n"); break;
+    case 'F':
+      if (context == DECODE_ITEM || context == DECODE_DEREF) {
+        logmsg("ITEM DEREF\n");
+      } else {
+        logmsg("CALL ARGC %u\n", *opcodeptr++);
+      }
+      break;
+    case 'I':
+      logmsg("BEGIN ITEM ASSEMBLY\n");
+      opcodeptr = process_item(opcodeptr);
+      break;
+    case 'W': logmsg("DELETE ITEM\n"); break;
+    case 'X': logmsg("ITEM EXISTS\n"); break;
+    case 'Y': logmsg("NTHNAME\n"); break;
+    case 'Z': logmsg("ROOTNAME\n"); break;
+    default:
+      logmsg("UNKNOWN OPCODE 0x%02X (%c)\n", op,
+             (op >= 32 && op <= 126) ? op : '.');
+      break;
+  }
+  return opcodeptr;
+}
