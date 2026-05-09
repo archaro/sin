@@ -1,0 +1,39 @@
+name: Core compiler gate
+
+on:
+  pull_request:
+    paths:
+      - 'src/absyn.c'
+      - 'src/absyn.h'
+      - 'src/ir.c'
+      - 'src/ir.h'
+      - 'src/emitbc.c'
+      - 'src/emitbc.h'
+      - 'tests/**'
+      - 'Makefile'
+      - 'ci/gate_ir_absyn_emitbc.sh'
+      - '.github/workflows/core-compiler-gate.yml'
+  push:
+    paths:
+      - 'src/absyn.c'
+      - 'src/absyn.h'
+      - 'src/ir.c'
+      - 'src/ir.h'
+      - 'src/emitbc.c'
+      - 'src/emitbc.h'
+      - 'tests/**'
+      - 'Makefile'
+      - 'ci/gate_ir_absyn_emitbc.sh'
+      - '.github/workflows/core-compiler-gate.yml'
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bison flex libuv1-dev
+      - name: Run core compiler gate
+        run: ./ci/gate_ir_absyn_emitbc.sh
