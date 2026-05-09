@@ -33,3 +33,16 @@ The echoserver is now running.  Telnet to port 4001 and watch it reflect your in
 ## Contributions ##
 Are welcomed.  In fact, they are positively encouraged.  Send me a pull request.  *This project uses the MIT License*.
 
+
+## Contributor Checklist ##
+Before opening or updating a PR, confirm the following where applicable:
+
+- **Any new `IR_Op`** includes all of:
+  - validator updates,
+  - emitter mapping update,
+  - opcode-spec update,
+  - at least one positive test and one negative test.
+- **Any bytecode format change** updates:
+  - `bytecode.txt`, and
+  - associated header/encoding tests.
+- If you touch `src/absyn.c/.h`, `src/ir.c/.h`, or `src/emitbc.c/.h`, make sure the core gate passes (`./ci/gate_ir_absyn_emitbc.sh`).
