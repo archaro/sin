@@ -17,12 +17,14 @@
 // Things which need to be known
 CONFIG_t config;
 
-uint8_t *process_item(uint8_t *opcodeptr);
-uint8_t *process_dereference(uint8_t *opcodeptr);
-uint8_t *decode_opcode(uint8_t *opcodeptr, int context);
+uint8_t *process_item(uint8_t *opcodeptr, uint8_t *end);
+uint8_t *process_dereference(uint8_t *opcodeptr, uint8_t *end);
+uint8_t *decode_opcode(uint8_t *opcodeptr, uint8_t *end, int context);
 
 // This is used by a few functions to calculate the current opcode location
 uint8_t *bytecode;
+
+static int decode_failed = 0;
 
 typedef enum {
   DECODE_STMT = 0,
@@ -35,6 +37,19 @@ void usage() {
   logmsg("Options:\n");
   logmsg(" -h, --help\t\tThis message.\n");
   logmsg(" -o, --object <file>\tObject code to disassemble.\n");
+}
+
+static int require_bytes(uint8_t *opcodeptr, uint8_t *end, size_t count,
+                         const char *what) {
+  if ((size_t)(end - opcodeptr) < count) {
+    logerr("Decode error at byte %05u: insufficient bytes for %s "
+           "(need %zu, have %zu)\n",
+           (unsigned int)(opcodeptr - bytecode), what, count,
+           (size_t)(end - opcodeptr));
+    decode_failed = 1;
+    return 0;
+  }
+  return 1;
 }
 
 int main(int argc, char **argv) {
@@ -95,6 +110,11 @@ int main(int argc, char **argv) {
   opcodeptr = bytecode;
 
   // First, do we have any locals?
+  uint8_t *end = bytecode + filesize;
+  if (!require_bytes(opcodeptr, end, 2, "locals/params header")) {
+    FREE_ARRAY(unsigned char, bytecode, filesize);
+    exit(EXIT_FAILURE);
+  }
   uint8_t locals = *opcodeptr++;
   uint8_t params = *opcodeptr++;
   if (locals > 0) {
@@ -110,12 +130,21 @@ int main(int argc, char **argv) {
 
   // Locals processed, so now step through the bytecode until the HALT
   // instruction is found.  This is just one big switch.
-  while (*opcodeptr != 'h') {
+  while (opcodeptr < end && *opcodeptr != 'h') {
     logmsg("Byte %05u: ", opcodeptr - bytecode - 1); // -1 for the locals
-    opcodeptr = decode_opcode(opcodeptr, DECODE_STMT);
+    opcodeptr = decode_opcode(opcodeptr, end, DECODE_STMT);
+    if (decode_failed) {
+      break;
+    }
   }
-  logmsg("Byte %05u: ", opcodeptr - bytecode - 1); // -1 for the locals
-  logmsg("HALT\n");
+  if (decode_failed) {
+    logerr("Disassembly aborted due to malformed bytecode.\n");
+  } else if (opcodeptr >= end) {
+    logerr("Decode error: unterminated stream (missing HALT 'h' before EOF).\n");
+  } else {
+    logmsg("Byte %05u: ", opcodeptr - bytecode - 1); // -1 for the locals
+    logmsg("HALT\n");
+  }
 
   // Clean up
   logmsg("Shutting down.\n");
@@ -123,17 +152,26 @@ int main(int argc, char **argv) {
   exit(EXIT_SUCCESS);
 }
 
-uint8_t *process_item(uint8_t *opcodeptr) {
+uint8_t *process_item(uint8_t *opcodeptr, uint8_t *end) {
   // Recursive sub-processor to handle items.  Called whenever an I opcode
   // is encountered.  Returns when an E opcode is encountered.
-  while (*opcodeptr != 'E') {
+  while (opcodeptr < end && *opcodeptr != 'E') {
+    if (!require_bytes(opcodeptr, end, 1, "item opcode")) return opcodeptr;
     switch (*opcodeptr++) {
       case 'L':
         // Standard layer
         logmsg("Byte %05u: ", opcodeptr - bytecode - 2);
+        if (!require_bytes(opcodeptr, end, 1, "layer length")) return opcodeptr;
         uint8_t len = *opcodeptr++;
+        if (!require_bytes(opcodeptr, end, len, "layer string")) return opcodeptr;
         char layer[256];
-        strncpy(layer, (const char*)opcodeptr, len);
+        if (len >= sizeof(layer)) {
+          logerr("Decode error at byte %05u: layer name too long (%u)\n",
+                 (unsigned int)(opcodeptr - bytecode), len);
+          decode_failed = 1;
+          return opcodeptr;
+        }
+        memcpy(layer, opcodeptr, len);
         opcodeptr += len;
         layer[len] = '\0';
         logmsg("LAYER: %s\n", layer);
@@ -142,16 +180,21 @@ uint8_t *process_item(uint8_t *opcodeptr) {
         // Dereference!
         logmsg("Byte %05u: ", opcodeptr - bytecode - 2);
         logmsg("BEGIN DEREFERENCE LAYER\n");
-        opcodeptr = process_dereference(opcodeptr);
+        opcodeptr = process_dereference(opcodeptr, end);
         break;
       case 'F':
         logmsg("Byte %05u: ", opcodeptr - bytecode - 2);
-        opcodeptr = decode_opcode(opcodeptr - 1, DECODE_ITEM);
+        opcodeptr = decode_opcode(opcodeptr - 1, end, DECODE_ITEM);
         break;
       default:
         logmsg("Unknown opcode in item assembly: 0x%02X (%c)\n",
                *(opcodeptr - 1), (*(opcodeptr - 1) >= 32 && *(opcodeptr - 1) <= 126) ? *(opcodeptr - 1) : '.');
     }
+  }
+  if (opcodeptr >= end) {
+    logerr("Decode error: unterminated item stream (missing 'E' before EOF).\n");
+    decode_failed = 1;
+    return opcodeptr;
   }
   // End of the item
   logmsg("Byte %05u: ", opcodeptr - bytecode - 1);
@@ -159,18 +202,20 @@ uint8_t *process_item(uint8_t *opcodeptr) {
   return ++opcodeptr;
 }
 
-uint8_t *process_dereference(uint8_t *opcodeptr) {
+uint8_t *process_dereference(uint8_t *opcodeptr, uint8_t *end) {
   // Process a dereference layer.  This can recurse through process_item().
   // This can either be a local variable or an item.
+  if (!require_bytes(opcodeptr, end, 1, "dereference type")) return opcodeptr;
   uint8_t layertype = *opcodeptr++;
   if (layertype == 'V') {
     logmsg("Byte %05u: ", opcodeptr - bytecode - 2);
+    if (!require_bytes(opcodeptr, end, 1, "local variable index")) return opcodeptr;
     uint8_t localvar = *opcodeptr++;
     logmsg("LOCALVAR %d\n", localvar);
   } else if (layertype == 'I') {
     logmsg("Byte %05u: ", opcodeptr - bytecode - 2);
     logmsg("BEGIN ITEM ASSEMBLY\n");
-    opcodeptr = process_item(opcodeptr);
+    opcodeptr = process_item(opcodeptr, end);
   } else {
     logmsg("Byte %05u: ", opcodeptr - bytecode - 2);
     logmsg ("Unknown dereference type: %c (%d)\n",  layertype, layertype);
@@ -178,30 +223,49 @@ uint8_t *process_dereference(uint8_t *opcodeptr) {
   return opcodeptr;
 }
 
-uint8_t *decode_opcode(uint8_t *opcodeptr, int context) {
+uint8_t *decode_opcode(uint8_t *opcodeptr, uint8_t *end, int context) {
   int16_t offset;
   int64_t ival;
+  if (!require_bytes(opcodeptr, end, 1, "opcode")) return opcodeptr;
   uint8_t op = *opcodeptr++;
   switch (op) {
     case 'a': logmsg("ADD\n"); break;
-    case 'c': logmsg("SAVE LOCAL %d\n", *opcodeptr++); break;
+    case 'c':
+      if (!require_bytes(opcodeptr, end, 1, "SAVE LOCAL operand")) return opcodeptr;
+      logmsg("SAVE LOCAL %d\n", *opcodeptr++);
+      break;
     case 'd': logmsg("DIVIDE\n"); break;
-    case 'e': logmsg("RETRIEVE LOCAL %d\n", *opcodeptr++); break;
-    case 'f': logmsg("INCREMENT LOCAL %d\n", *opcodeptr++); break;
-    case 'g': logmsg("DECREMENT LOCAL %d\n", *opcodeptr++); break;
+    case 'e':
+      if (!require_bytes(opcodeptr, end, 1, "RETRIEVE LOCAL operand")) return opcodeptr;
+      logmsg("RETRIEVE LOCAL %d\n", *opcodeptr++);
+      break;
+    case 'f':
+      if (!require_bytes(opcodeptr, end, 1, "INCREMENT LOCAL operand")) return opcodeptr;
+      logmsg("INCREMENT LOCAL %d\n", *opcodeptr++);
+      break;
+    case 'g':
+      if (!require_bytes(opcodeptr, end, 1, "DECREMENT LOCAL operand")) return opcodeptr;
+      logmsg("DECREMENT LOCAL %d\n", *opcodeptr++);
+      break;
     case 'j':
-      offset = *(int16_t*)opcodeptr;
+      if (!require_bytes(opcodeptr, end, 2, "JUMP offset")) return opcodeptr;
+      memcpy(&offset, opcodeptr, sizeof(offset));
       opcodeptr += 2;
       logmsg("JUMP %d\n", offset);
       break;
     case 'k':
-      offset = *(int16_t*)opcodeptr;
+      if (!require_bytes(opcodeptr, end, 2, "JUMP IF FALSE offset")) return opcodeptr;
+      memcpy(&offset, opcodeptr, sizeof(offset));
       opcodeptr += 2;
       logmsg("JUMP IF FALSE %d\n", offset);
       break;
     case 'l':
-      offset = *(int16_t*)opcodeptr;
+      if (!require_bytes(opcodeptr, end, 2, "STRINGLIT length")) return opcodeptr;
+      memcpy(&offset, opcodeptr, sizeof(offset));
       opcodeptr += 2;
+      if (offset < 0 || !require_bytes(opcodeptr, end, (size_t)offset, "STRINGLIT data")) {
+        return opcodeptr;
+      }
       logmsg("STRINGLIT: ");
       for (uint16_t s = 0; s < offset; s++) logmsg("%c", *opcodeptr++);
       logmsg("\n");
@@ -210,7 +274,8 @@ uint8_t *decode_opcode(uint8_t *opcodeptr, int context) {
     case 'n': logmsg("NEGATE\n"); break;
     case 'o': logmsg("BOOL EQ\n"); break;
     case 'p':
-      ival = *(int64_t*)opcodeptr;
+      if (!require_bytes(opcodeptr, end, 8, "INTEGER literal")) return opcodeptr;
+      memcpy(&ival, opcodeptr, sizeof(ival));
       logmsg("INTEGER %ld\n", ival);
       opcodeptr += 8;
       break;
@@ -223,10 +288,16 @@ uint8_t *decode_opcode(uint8_t *opcodeptr, int context) {
     case 'x': logmsg("LOGICAL NOT\n"); break;
     case 'y': logmsg("LOGICAL AND\n"); break;
     case 'z': logmsg("LOGICAL OR\n"); break;
-    case 'A': logmsg("LIBCALL ID %u\n", *opcodeptr++); break;
+    case 'A':
+      if (!require_bytes(opcodeptr, end, 1, "LIBCALL id")) return opcodeptr;
+      logmsg("LIBCALL ID %u\n", *opcodeptr++);
+      break;
     case 'B': {
-      uint16_t len = *(uint16_t*)opcodeptr;
+      uint16_t len;
+      if (!require_bytes(opcodeptr, end, 2, "EMBEDDED CODE length")) return opcodeptr;
+      memcpy(&len, opcodeptr, sizeof(len));
       opcodeptr += 2;
+      if (!require_bytes(opcodeptr, end, len, "EMBEDDED CODE data")) return opcodeptr;
       logmsg("EMBEDDED CODE (%d bytes):\n", len);
       for (uint16_t s = 0; s < len; s++) logmsg("%c", *opcodeptr++);
       logmsg("\n");
@@ -237,12 +308,13 @@ uint8_t *decode_opcode(uint8_t *opcodeptr, int context) {
       if (context == DECODE_ITEM || context == DECODE_DEREF) {
         logmsg("ITEM DEREF\n");
       } else {
+        if (!require_bytes(opcodeptr, end, 1, "CALL arg count")) return opcodeptr;
         logmsg("CALL ARGC %u\n", *opcodeptr++);
       }
       break;
     case 'I':
       logmsg("BEGIN ITEM ASSEMBLY\n");
-      opcodeptr = process_item(opcodeptr);
+      opcodeptr = process_item(opcodeptr, end);
       break;
     case 'W': logmsg("DELETE ITEM\n"); break;
     case 'X': logmsg("ITEM EXISTS\n"); break;
