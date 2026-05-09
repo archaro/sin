@@ -3,5 +3,4 @@
 07 00 00 00 00 00 00 00  # int64 7
 63 00          # c: store local 0
 65 00          # e: load local 0
-00             # pop
 68             # h: halt

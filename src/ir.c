@@ -181,7 +181,6 @@ const char* ir_op_name(IR_Op op) {
     case IR_OP_DELETE: return "DELETE";
     case IR_OP_NTHNAME: return "NTHNAME";
     case IR_OP_ROOTNAME: return "ROOTNAME";
-    case IR_OP_POP: return "POP";
     case IR_OP_ITEM_SAVE_CODE: return "ITEM_SAVE_CODE";
     default: return "<unknown>";
   }
