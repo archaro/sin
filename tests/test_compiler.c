@@ -5,6 +5,8 @@
 #include "test_assert.h"
 #include "test_helpers.h"
 
+void test_emitbc_header(void);
+
 static void test_absyn_helpers(void) {
   AS_NODE *lhs = t_int(1);
   AS_NODE *rhs = t_int(2);
@@ -49,5 +51,6 @@ static void test_ir_and_emitbc_helpers(void) {
 int main(void) {
   test_absyn_helpers();
   test_ir_and_emitbc_helpers();
+  test_emitbc_header();
   return 0;
 }
