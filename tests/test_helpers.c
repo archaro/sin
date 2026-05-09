@@ -7,6 +7,10 @@
 
 #include "test_assert.h"
 
+// Tests intentionally allocate heap buffers/strings (e.g. strdup/realloc)
+// to mirror production ownership boundaries; call sites free these
+// allocations in the same test scope.
+
 AS_NODE *t_int(int64_t value) {
   char buf[32];
   snprintf(buf, sizeof(buf), "%lld", (long long)value);
