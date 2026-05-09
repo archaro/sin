@@ -65,6 +65,9 @@ void sem_delete_ctx(SEM_CTX *ctx) {
     FREE_ARRAY(char *, ctx->locals[i].name, 0);
   }
   FREE_ARRAY(SEM_LOCAL, ctx->locals, 0);
+  if (ctx->errdetail) {
+    free(ctx->errdetail);
+  }
   FREE_ARRAY(SEM_CTX, ctx, 0);
 }
 
@@ -136,12 +139,18 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
 }
 
 int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx) {
+  // sem_check_locals is reusable per SEM_CTX. It preserves discovered locals
+  // across calls, but resets and re-computes per-call error state.
+  if (ctx->errdetail) {
+    free(ctx->errdetail);
+    ctx->errdetail = NULL;
+  }
+  ctx->errnum = ERR_NOERROR;
+
   sem_walk(ctx, root);
 
   if (errdetail) {
-    *errdetail = ctx->errdetail;
-  } else if (ctx->errdetail) {
-    free(ctx->errdetail);
+    *errdetail = ctx->errdetail ? strdup(ctx->errdetail) : NULL;
   }
 
   return ctx->errnum;
