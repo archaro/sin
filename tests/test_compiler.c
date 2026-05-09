@@ -6,6 +6,8 @@
 #include "test_helpers.h"
 
 void test_emitbc_header(void);
+void test_emitbc_opcode_map(void);
+void test_emitbc_opcode_map_unsupported_ir_op(void);
 
 static void test_absyn_helpers(void) {
   AS_NODE *lhs = t_int(1);
@@ -52,5 +54,7 @@ int main(void) {
   test_absyn_helpers();
   test_ir_and_emitbc_helpers();
   test_emitbc_header();
+  test_emitbc_opcode_map();
+  test_emitbc_opcode_map_unsupported_ir_op();
   return 0;
 }
