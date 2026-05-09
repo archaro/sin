@@ -19,6 +19,7 @@ void test_absyn_stmtlist_multiple_statements(void);
 void test_absyn_if_elsif_else_chain(void);
 void test_absyn_item_deref_chains(void);
 void test_sem_check_locals_reusable_context(void);
+void test_sdiss_fixture_basic(void);
 
 static void test_absyn_helpers(void) {
   AS_NODE *lhs = t_int(1);
@@ -78,5 +79,6 @@ int main(void) {
   test_absyn_if_elsif_else_chain();
   test_absyn_item_deref_chains();
   test_sem_check_locals_reusable_context();
+  test_sdiss_fixture_basic();
   return 0;
 }
