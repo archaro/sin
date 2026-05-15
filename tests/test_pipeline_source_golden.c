@@ -90,6 +90,25 @@ static void test_source_pipeline_negative_cases(void) {
   free(errdetail);
   sem_delete_ctx(sem);
   as_delete(absyn);
+
+  absyn = NULL;
+  errdetail = NULL;
+  const char *bad_inc_semantic = "@y++;";
+  rc = parse_source((char *)bad_inc_semantic, (int)strlen(bad_inc_semantic), &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(absyn);
+
+  sem = sem_create_ctx();
+  ASSERT_NOT_NULL(sem);
+  rc = sem_check_locals(absyn, &errdetail, sem);
+  ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strstr(errdetail, "y") != NULL);
+
+  free(errdetail);
+  sem_delete_ctx(sem);
+  as_delete(absyn);
 }
 
 
