@@ -380,6 +380,33 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
       return;
     }
 
+    case N_INC:
+    case N_DEC: {
+      AS_NODE *local = (AS_NODE *)node->lhs;
+      AS_VALUE *value;
+      uint8_t index = 0;
+
+      if (!local || local->nodetype != N_VALUE) {
+        lower_set_unsupported(ctx, node, "inc/dec target is not a local value");
+        return;
+      }
+
+      value = (AS_VALUE *)local->lhs;
+      if (!value || value->valtype != V_LOCAL || !value->value.s) {
+        lower_set_unsupported(ctx, node, "missing local inc/dec target");
+        return;
+      }
+
+      if (!ctx->sem || !sem_get_local_index(ctx->sem, value->value.s, &index)) {
+        lower_set_error(ctx, ERR_COMP_LOCALBEFOREDEF, value->value.s);
+        return;
+      }
+
+      ir_emit(ctx->ir, (IR_Inst){.op = node->nodetype == N_INC ? IR_OP_INC_LOCAL : IR_OP_DEC_LOCAL,
+                                 .a = index});
+      return;
+    }
+
     case N_ASSITEM:
       lower_item(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;

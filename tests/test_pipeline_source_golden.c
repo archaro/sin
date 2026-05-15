@@ -198,6 +198,8 @@ void test_pipeline_source_golden(void) {
       {"locals_store_load", "@x = 7; @x;", "tests/fixtures/locals_store_load.hex"},
       {"arithmetic_add", "2 + 3;", "tests/fixtures/arithmetic_add.hex"},
       {"if_elsif_else", "if 1 < 2 then 9; elsif 0 < 1 then 8; else 7; endif;", "tests/fixtures/if_elsif_else.hex"},
+      {"locals_inc", "@x = 1; @x++; @x;", "tests/fixtures/locals_inc.hex"},
+      {"locals_dec", "@x = 2; @x--; @x;", "tests/fixtures/locals_dec.hex"},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
