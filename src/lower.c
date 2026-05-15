@@ -58,7 +58,24 @@ static void lower_layer_part(LOWER_CTX *ctx, AS_NODE *part) {
                                  .imm = (int64_t)(intptr_t)value->value.s});
       return;
     case V_INT:
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_PUSH_LAYER, .imm = value->value.i});
+      {
+        char buf[32];
+        int len = snprintf(buf, sizeof(buf), "%lld", (long long)value->value.i);
+        char *layer = NULL;
+        if (len < 0 || (size_t)len >= sizeof(buf)) {
+          lower_set_error(ctx, ERR_COMP_SYNTAX, "invalid integer layer literal");
+          return;
+        }
+        layer = strdup(buf);
+        if (!layer) {
+          lower_set_error(ctx, ERR_COMP_SYNTAX, "out of memory formatting integer layer");
+          return;
+        }
+        value->valtype = V_STR;
+        value->value.s = layer;
+        ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_PUSH_LAYER,
+                                   .imm = (int64_t)(intptr_t)layer});
+      }
       return;
     default:
       lower_set_unsupported(ctx, part, "unsupported item layer value type");

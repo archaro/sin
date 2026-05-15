@@ -166,6 +166,10 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       }
       case IR_OP_ITEM_PUSH_LAYER: {
         const char *s = (const char *)(intptr_t)in->imm;
+        if (!s) {
+          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          return emit_error(errdetail, ERR_COMP_SYNTAX, "null layer name");
+        }
         size_t len = strlen(s);
         if (len > UINT8_MAX) {
           FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
