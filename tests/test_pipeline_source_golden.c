@@ -199,6 +199,7 @@ static void test_source_item_with_numeric_layer(void) {
       'L', 0x03, 'f', 'o', 'o',
       'L', 0x02, '1', '2',
       'E',
+      'F', 0x00, 0x00,
       'h',
   };
   size_t n = (size_t)(out.nextbyte - out.bytecode);
