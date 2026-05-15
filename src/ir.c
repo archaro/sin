@@ -274,26 +274,24 @@ int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
         }
         break;
       }
-      case IR_OP_CALL:
-      case IR_OP_LIBCALL: {
+      case IR_OP_CALL: {
         if (inst->a < 0) {
           return ir_validate_error(errdetail, ERR_COMP_TOOMANYARGS,
-                                   "Instruction %zu (%s) has negative arity %d.",
+                                   "Instruction %zu (CALL) has negative arity %d.",
                                    i, ir_op_name(inst->op), inst->a);
         }
-        if (inst->op == IR_OP_LIBCALL) {
-          if (i < 2) {
-            return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
-                                     "Instruction %zu (LIBCALL) is missing library/function name operands.",
-                                     i);
-          }
-          const IR_Inst *libname = &unit->function.code[i - 2];
-          const IR_Inst *funcname = &unit->function.code[i - 1];
-          if (libname->op != IR_OP_PUSH_STRING || funcname->op != IR_OP_PUSH_STRING) {
-            return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
-                                     "Instruction %zu (LIBCALL) must be preceded by two PUSH_STRING instructions.",
-                                     i);
-          }
+        break;
+      }
+      case IR_OP_LIBCALL: {
+        if (inst->a < 0) {
+          return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (LIBCALL) has negative library index %d.",
+                                   i, inst->a);
+        }
+        if (inst->b < 0) {
+          return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (LIBCALL) has negative function index %d.",
+                                   i, inst->b);
         }
         break;
       }

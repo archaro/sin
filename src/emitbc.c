@@ -52,10 +52,11 @@ static int inst_size(const IR_Inst *in) {
     case IR_OP_STORE_LOCAL:
     case IR_OP_INC_LOCAL:
     case IR_OP_DEC_LOCAL:
-    case IR_OP_LIBCALL: return 2;
+    case IR_OP_LIBCALL: return 3;
     case IR_OP_CALL: return 3;
     case IR_OP_JUMP:
     case IR_OP_JUMP_IF_FALSE: return 3;
+    case IR_OP_ITEM_SAVE_CODE: return 1 + 2;
     default: return 1;
   }
 }
@@ -100,8 +101,17 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
   size_t *pos = GROW_ARRAY(size_t, NULL, 0, ir->function.count > 0 ? ir->function.count : 1);
   size_t pc = 2;
   for (size_t i = 0; i < ir->function.count; i++) {
+    int isz;
+    const IR_Inst *in = &ir->function.code[i];
     pos[i] = pc;
-    pc += (size_t)inst_size(&ir->function.code[i]);
+    isz = inst_size(in);
+    if (in->op == IR_OP_ITEM_SAVE_CODE && in->a >= 0 && (size_t)in->a < ir->embedded_code.count) {
+      const IR_EmbeddedCodePayload *payload = &ir->embedded_code.entries[in->a];
+      if (payload->source != NULL) {
+        isz += (int)strlen(payload->source);
+      }
+    }
+    pc += (size_t)isz;
   }
 
   ensure_out(out, 2);
@@ -137,8 +147,11 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case IR_OP_STORE_LOCAL:
       case IR_OP_INC_LOCAL:
       case IR_OP_DEC_LOCAL:
+        write_u8(out, (uint8_t)in->a);
+        break;
       case IR_OP_LIBCALL:
         write_u8(out, (uint8_t)in->a);
+        write_u8(out, (uint8_t)in->b);
         break;
       case IR_OP_CALL:
         write_u16(out, (uint16_t)in->a);
@@ -178,6 +191,27 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
         write_u8(out, (uint8_t)len);
         ensure_out(out, len);
         memcpy(out->nextbyte, s, len);
+        out->nextbyte += len;
+        break;
+      }
+      case IR_OP_ITEM_SAVE_CODE: {
+        if (in->a < 0 || (size_t)in->a >= ir->embedded_code.count) {
+          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          return emit_error(errdetail, ERR_COMP_SYNTAX, "invalid embedded code payload index %d", in->a);
+        }
+        const IR_EmbeddedCodePayload *payload = &ir->embedded_code.entries[in->a];
+        if (!payload->source) {
+          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          return emit_error(errdetail, ERR_COMP_SYNTAX, "embedded code payload %d has null source", in->a);
+        }
+        size_t len = strlen(payload->source);
+        if (len > UINT16_MAX) {
+          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          return emit_error(errdetail, ERR_COMP_SYNTAX, "embedded code too long: %zu", len);
+        }
+        write_u16(out, (uint16_t)len);
+        ensure_out(out, len);
+        memcpy(out->nextbyte, payload->source, len);
         out->nextbyte += len;
         break;
       }
