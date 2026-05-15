@@ -57,6 +57,17 @@ uint8_t hex_nibble(char c) {
 
 uint8_t *load_hex_fixture(const char *path, size_t *out_len) {
   FILE *f = fopen(path, "rb");
+  if (!f) {
+    char alt[512];
+    if (strncmp(path, "tests/", 6) == 0) {
+      snprintf(alt, sizeof(alt), "%s", path + 6);
+      f = fopen(alt, "rb");
+    }
+    if (!f) {
+      snprintf(alt, sizeof(alt), "../%s", path);
+      f = fopen(alt, "rb");
+    }
+  }
   ASSERT_NOT_NULL(f);
   uint8_t *buf = NULL;
   size_t cap = 0, len = 0;
