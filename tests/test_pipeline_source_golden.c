@@ -146,9 +146,7 @@ static void test_source_exprstmt_libcall_no_pop(void) {
   static const uint8_t expected[] = {
       0x00, 0x00,
       0x6c, 0x05, 0x00, 'h', 'e', 'l', 'l', 'o',
-      0x6c, 0x03, 0x00, 's', 'y', 's',
-      0x6c, 0x03, 0x00, 'l', 'o', 'g',
-      0x41, 0x01,
+      0x41, 0x01, 0x01,
       0x68,
   };
   size_t n = (size_t)(out.nextbyte - out.bytecode);

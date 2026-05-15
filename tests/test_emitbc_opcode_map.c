@@ -27,9 +27,18 @@ static void emit_case_inst(IR_Unit *unit, IR_Op op) {
     case IR_OP_INC_LOCAL:
     case IR_OP_DEC_LOCAL:
     case IR_OP_CALL:
-    case IR_OP_LIBCALL:
       t_emit(unit, (IR_Inst){.op = op, .a = 3});
       break;
+    case IR_OP_LIBCALL:
+      t_emit(unit, (IR_Inst){.op = op, .a = 1, .b = 1});
+      break;
+    case IR_OP_ITEM_SAVE_CODE: {
+      IR_EmbeddedCodePayload payload = {0};
+      payload.source = "x";
+      int32_t idx = ir_add_embedded_code_payload(unit, payload);
+      t_emit(unit, (IR_Inst){.op = op, .a = idx});
+      break;
+    }
     case IR_OP_JUMP:
     case IR_OP_JUMP_IF_FALSE: {
       int32_t label = ir_new_label(unit);
