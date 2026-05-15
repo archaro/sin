@@ -52,8 +52,8 @@ static int inst_size(const IR_Inst *in) {
     case IR_OP_STORE_LOCAL:
     case IR_OP_INC_LOCAL:
     case IR_OP_DEC_LOCAL:
-    case IR_OP_CALL:
     case IR_OP_LIBCALL: return 2;
+    case IR_OP_CALL: return 3;
     case IR_OP_JUMP:
     case IR_OP_JUMP_IF_FALSE: return 3;
     default: return 1;
@@ -80,7 +80,9 @@ static uint8_t map_opcode(IR_Op op) {
      * Safety comes from IR lowering/validation context, not opcode identity:
      * - ITEM_DEREF appears inside item-assembly flows after IR_OP_ITEM_PUSH_DEREF.
      * - CALL appears after callee + args have been pushed and carries argc as an
-     *   immediate operand byte, while ITEM_DEREF has no immediate.
+     *   immediate 16-bit operand, while ITEM_DEREF has no immediate.
+     *
+     * Bytecode format note: CALL widened from 1-byte to 2-byte immediate argc.
      */
     case IR_OP_ITEM_SAVE: return 'C'; case IR_OP_EXISTS: return 'X'; case IR_OP_DELETE: return 'W'; case IR_OP_NTHNAME: return 'Y'; case IR_OP_ROOTNAME: return 'Z';
     case IR_OP_CALL: return 'F';
@@ -135,9 +137,11 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case IR_OP_STORE_LOCAL:
       case IR_OP_INC_LOCAL:
       case IR_OP_DEC_LOCAL:
-      case IR_OP_CALL:
       case IR_OP_LIBCALL:
         write_u8(out, (uint8_t)in->a);
+        break;
+      case IR_OP_CALL:
+        write_u16(out, (uint16_t)in->a);
         break;
       case IR_OP_JUMP:
       case IR_OP_JUMP_IF_FALSE: {
