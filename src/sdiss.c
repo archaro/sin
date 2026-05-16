@@ -232,9 +232,11 @@ static uint8_t *h_dec_local(uint8_t *p, uint8_t *e, decode_context_t c) {
 }
 static uint8_t *h_libcall(uint8_t *p, uint8_t *e, decode_context_t c) {
   (void) c;
+  uint8_t argc;
   uint8_t id;
+  if (read_u8(&p, e, &argc, "LIBCALL arg count") != PARSE_OK) return p;
   if (read_u8(&p, e, &id, "LIBCALL id") != PARSE_OK) return p;
-  logmsg("LIBCALL ID %u\n", id);
+  logmsg("LIBCALL ARGC %u ID %u\n", argc, id);
   return p;
 }
 static uint8_t *h_jump(uint8_t *p, uint8_t *e, decode_context_t c) {
@@ -290,9 +292,9 @@ static uint8_t *h_f(uint8_t *p, uint8_t *e, decode_context_t c) {
     logmsg("ITEM DEREF\n");
     return p;
   }
-  uint8_t argc;
-  if (read_u8(&p, e, &argc, "CALL arg count") != PARSE_OK) return p;
-  logmsg("CALL ARGC %u\n", argc);
+  int16_t argc;
+  if (read_i16(&p, e, &argc, "CALL arg count") != PARSE_OK) return p;
+  logmsg("CALL ARGC %d\n", argc);
   return p;
 }
 static uint8_t *h_I(uint8_t *p, uint8_t *e, decode_context_t c) {
