@@ -1,7 +1,6 @@
 ===stdout===
 Bytecode loaded: 589 bytes.
-Listening on port 4001.
 ===stderr===
-Library call not found.
+Failed to start listening: address already in use
 ===exit===
 -1

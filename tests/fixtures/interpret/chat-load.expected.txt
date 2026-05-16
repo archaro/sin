@@ -1,7 +1,6 @@
 ===stdout===
-Bytecode loaded: 224 bytes.
-Listening on port 4001.
+Using 'srcroot' as the source root.
 ===stderr===
-Undefined opcode:
+
 ===exit===
 -1
