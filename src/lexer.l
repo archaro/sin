@@ -34,10 +34,25 @@
     *bufptr += 1;
     *len += 1;
   }
+
+  char *strdup_lc(const char *s) {
+    size_t n = strlen(s);
+    char *d = malloc(n + 1);
+    if (!d) return NULL;
+    const unsigned char *src = (const unsigned char *)s;
+    unsigned char *dst = (unsigned char *)d;
+    for (size_t i = 0; i < n; ++i) {
+      unsigned char c = src[i];
+      // Branchless ASCII lowercase:
+      // if ('A' <= c <= 'Z') -> c + 32
+      dst[i] = c + ((c >= 'A' && c <= 'Z') << 5);
+    }
+    dst[n] = '\0';
+    return d;
+  }
 %}
 
 %option noinput nounput noyywrap reentrant bison-bridge case-insensitive
-%x DEREF
 %x STRINGLIT
 %x CODE
 %x CODEBODY
@@ -65,23 +80,23 @@ integer     [0-9]+
   "endwhile"    { return TENDWHILE; }
   "exists"      { return TEXISTS; }
   "if"          { return TIF; }
-  "net"         { yylval->string = strdup(yytext); return TLIBNAME; }
+  "net"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "nthname"     { return TNTHNAME; }
   "or"          { return TOR; }
   "return"      { return TRETURN; }
   "rootname"    { return TROOTNAME; }
-  "str"         { yylval->string = strdup(yytext); return TLIBNAME; }
-  "sys"         { yylval->string = strdup(yytext); return TLIBNAME; }
-  "task"        { yylval->string = strdup(yytext); return TLIBNAME; }
+  "str"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
+  "sys"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
+  "task"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "then"        { return TTHEN; }
   "while"       { return TWHILE; }
   "="           { return TASSIGN; }
   "=="          { return TEQUAL; }
   "!"           { return TNOT; }
   "!="          { return TNOTEQUAL; }
-  "<"           { return TLESSTHAN; }
+  "<"           { return TLT; }
   "<="          { return TLTEQ; }
-  ">"           { return TGREATERTHAN; }
+  ">"           { return TGT; }
   ">="          { return TGTEQ; }
   "++"          { return TINC; }
   "+"           { return TPLUS; }
@@ -104,26 +119,24 @@ integer     [0-9]+
                   BEGIN(STRINGLIT);
                 }
   [ \t\n]+      ; // Inline whitespace handling
-  {integer}     { yylval->string = strdup(yytext); return TINTEGER; }
-  {local}       { yylval->string = strdup(yytext); return TLOCAL; }
-  {layer}       { yylval->string = strdup(yytext); return TLAYER; }
+  {integer}     { yylval->TSTRINGLIT = strdup(yytext); return TINTEGER; }
+  {local}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLOCAL; }
+  {layer}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLAYER; }
   "\."          { return TLAYERSEP; }
-  "\["          { BEGIN(DEREF);
-                  yyextra.deref_depth++;
-                  return TDEREFSTART;
-                }
+  "\["          { return TDEREFSTART; }
+  "\]"          { return TDEREFEND; }
 }
 <STRINGLIT>{
   \"            { /* saw closing quote - all done */
                   BEGIN(INITIAL);
                   *strbuf_ptr = '\0';
-                  yylval->string = strdup(strbuf);
+                  yylval->TSTRINGLIT = strdup(strbuf);
                   free(strbuf);
                   return TSTRINGLIT;
                 }
   \n            {
                   BEGIN(INITIAL);
-                  yylval->string = strdup("Newline in string.");
+                  yylval->TSTRINGLIT = strdup("Newline in string.");
                   free(strbuf);
                   return TUNKNOWNCHAR;
                 }
@@ -133,7 +146,7 @@ integer     [0-9]+
                   (void) sscanf( yytext + 1, "%o", &result );
                   if ( result > 0xff ) {
                     BEGIN(INITIAL);
-                    yylval->string = strdup("Escape sequence too big.");
+                    yylval->TSTRINGLIT = strdup("Escape sequence too big.");
                     free(strbuf);
                     return TUNKNOWNCHAR;
                   }
@@ -155,22 +168,8 @@ integer     [0-9]+
   [^\\\n\"]+    { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
                                               &strbuf_capacity, yytext); }
 }
-<DEREF>{
-  {local}       { yylval->string = strdup(yytext); return TLOCAL; }
-  {layer}       { yylval->string = strdup(yytext); return TLAYER; }
-  "\."          { return TLAYERSEP; }
-  "\["          { // Handle nested dereferences
-                  yyextra.deref_depth++;
-                  return TDEREFSTART;
-                }
-  "\]"          { if (--yyextra.deref_depth == 0) {
-                    BEGIN(INITIAL);
-                  }
-                  return TDEREFEND;
-                }
-}
 <CODE>{
-  "("           { code_paren = 0;
+  "("           { code_paren = 1;
                   strbuf_capacity = 512;
                   strbuf = (char *)malloc(strbuf_capacity + 1);
                   strbuf_ptr = strbuf;
@@ -181,7 +180,7 @@ integer     [0-9]+
   [ \t\n]+      ; // Inline whitespace handling
 }
 <CODEPARAMS>{
-  {local}       { yylval->string = strdup(yytext); return TLOCAL; }
+  {local}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLOCAL; }
   ","           { return TCOMMA; }
   "}"           { BEGIN(CODE); return TRBRACE; }
   [ \t\n]+      ; // Inline whitespace handling
@@ -202,7 +201,7 @@ integer     [0-9]+
                     // This ends the code segment.  Return the buffer.
                     BEGIN(INITIAL);
                     *strbuf_ptr = '\0';
-                    yylval->string = strdup(strbuf);
+                    yylval->TSTRINGLIT = strdup(strbuf);
                     free(strbuf);
                     return TCODEBODY;
                   }
@@ -240,8 +239,31 @@ integer     [0-9]+
   "*/"        { BEGIN(INITIAL); }
   .|\n        { /* Eat everything else */ }
 }
-<INITIAL,DEREF,CODE>{
-  .             { yylval->string = strdup(yytext); return TUNKNOWNCHAR; }
+<INITIAL,CODE>{
+  .             { yylval->TSTRINGLIT = strdup(yytext); return TUNKNOWNCHAR; }
+}
+<STRINGLIT><<EOF>> {
+  BEGIN(INITIAL);
+  yylval->TSTRINGLIT = strdup("Unterminated string literal.");
+  free(strbuf);
+  return TUNKNOWNCHAR;
+}
+<CODEBODY><<EOF>> {
+  BEGIN(INITIAL);
+  yylval->TSTRINGLIT = strdup("Unterminated code(...) body.");
+  free(strbuf);
+  return TUNKNOWNCHAR;
+}
+<CODESTREMBED><<EOF>> {
+  BEGIN(INITIAL);
+  yylval->TSTRINGLIT = strdup("Unterminated quoted string inside code(...) body.");
+  free(strbuf);
+  return TUNKNOWNCHAR;
+}
+<COMMENT><<EOF>> {
+  BEGIN(INITIAL);
+  yylval->TSTRINGLIT = strdup("Unterminated comment.");
+  return TUNKNOWNCHAR;
 }
 %%
 

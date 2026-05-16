@@ -1,0 +1,4 @@
+INTEGER 42
+ADD
+HALT
+Summary: instructions=2 unknown=0 warnings=0

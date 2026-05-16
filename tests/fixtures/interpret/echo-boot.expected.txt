@@ -1,0 +1,7 @@
+===stdout===
+Bytecode loaded: 37 bytes.
+Starting the echo server...
+===stderr===
+Input item does not exist!  Cannot continue.
+===exit===
+-1

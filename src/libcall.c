@@ -139,7 +139,7 @@ uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
     FREE_STR(repeatin);
     FREE_STR(startin);
     FREE_STR(itemname);
-    set_error_item(ERR_RUNTIME_INVALIDARGS);
+    set_error_item(ERR_RUNTIME_INVALIDARGS, NULL);
     push_stack(VM->stack, VALUE_NIL);
     return nextop;
   }
@@ -148,7 +148,7 @@ uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
     // If the task item doesn't exist, it can't be run.
     FREE_STR(itemname);
     push_stack(VM->stack, VALUE_NIL);
-    set_error_item(ERR_RUNTIME_NOSUCHITEM);
+    set_error_item(ERR_RUNTIME_NOSUCHITEM, NULL);
     return nextop;
   }
   // We have the task item, and the start and repeat intervals.
@@ -176,7 +176,7 @@ uint8_t *lc_task_killtask(uint8_t *nextop, ITEM_t *item) {
   VALUE_t taskid = pop_stack(VM->stack);
   if (taskid.type != VALUE_int) {
     FREE_STR(taskid);
-    set_error_item(ERR_RUNTIME_INVALIDARGS);
+    set_error_item(ERR_RUNTIME_INVALIDARGS, NULL);
     push_stack(VM->stack, VALUE_NIL);
     return nextop;
   }
@@ -253,7 +253,7 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
   if (linenum.type != VALUE_int || linenum.i < 0 
                                         || linenum.i >= config.maxconns) {
     FREE_STR(out);
-    set_error_item(ERR_RUNTIME_INVALIDARGS);
+    set_error_item(ERR_RUNTIME_INVALIDARGS, NULL);
     push_stack(VM->stack, VALUE_NIL);
     return nextop;
   } else {

@@ -1,0 +1,7 @@
+00 00          # header: locals=0 params=0
+70             # p: push int
+01 00 00 00 00 00 00 00  # 1
+70             # p: push int
+02 00 00 00 00 00 00 00  # 2
+72             # r: lt
+68             # h: halt

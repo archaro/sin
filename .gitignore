@@ -7,7 +7,9 @@ parser.h
 scomp
 sin
 sdiss
+tests/test-compiler
 .vscode/
+.*.swp
 sin.code-workspace
 srcroot
 
@@ -17,7 +19,6 @@ srcroot
 # Object files
 *.o
 *.ko
-*.obj
 *.elf
 
 # Linker output

@@ -1,0 +1,7 @@
+===stdout===
+Bytecode loaded: 46 bytes.
+Starting the chat server...
+===stderr===
+Input item does not exist!  Cannot continue.
+===exit===
+-1

@@ -1,0 +1,8 @@
+# locals=0 params=0
+00 00
+# push int 42
+70 2A 00 00 00 00 00 00 00
+# add
+61
+# halt
+68

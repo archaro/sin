@@ -107,3 +107,18 @@ The `str` library contains libcalls which operate on string values.  They have n
 `str.lower{<expr>}` converts the whole string to lowercase.  
 `str.upper{<expr>}` converts the whole string to uppercase.  
 
+
+## Opcode schema workflow
+
+IR opcode semantics are centralized in `src/compiler/ir/opcode_schema.def`.
+When adding a new opcode, update exactly one schema row (`OP(...)`) with:
+- enum name (must match `IR_OP_<NAME>`)
+- encoded symbol
+- operand kind
+- size policy
+- validator policy
+
+`ir.c` materializes the schema into `g_ir_opcode_schema` and `emitbc.c` consumes it for encoding, size accounting, and validator dispatch. Add any truly custom payload writing logic in `emitbc.c` only when the schema policy requires variable-length handling.
+
+Run `make test` to validate schema consistency checks and emitter behavior.
+

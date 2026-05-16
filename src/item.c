@@ -818,14 +818,23 @@ bool is_valid_layer(const char *str) {
   return true;
 }
 
-void set_error_item(const int errnum) {
+void set_error_item(const int errnum, const char *errdetail) {
   // Helper function to set the error item.
   VALUE_t e, emsg;
   e.type = VALUE_int;
   e.i = errnum;
   set_item(config.itemroot, "error", e);
   emsg.type = VALUE_str;
-  emsg.s = strdup(errmsg[errnum]);
+  if (errdetail) {
+    // It's possible that there is an extended error message.
+    // Allocate enough space for the two error messages, plus
+    // the extra characters "errmsg (errdetail)"
+    int elen = strlen(errmsg[errnum]) + strlen(errdetail) + 4;
+    emsg.s = GROW_ARRAY(char, NULL, 0, elen);
+    snprintf(emsg.s, elen, "%s (%s)", errmsg[errnum], errdetail);
+  } else {
+    emsg.s = strdup(errmsg[errnum]);
+  }
   set_item(config.itemroot, "error.msg", emsg);
 }
 

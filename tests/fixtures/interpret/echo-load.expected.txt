@@ -1,0 +1,6 @@
+===stdout===
+Bytecode loaded: 589 bytes.
+===stderr===
+
+===exit===
+-1
