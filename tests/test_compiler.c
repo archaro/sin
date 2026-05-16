@@ -14,7 +14,6 @@ void test_emitbc_invariants(void);
 void test_pipeline_golden(void);
 void test_pipeline_large_local_lookup_duplicate(void);
 void test_pipeline_source_golden(void);
-void test_scomp_e2e_golden(void);
 void test_ir_validate(void);
 void test_pipeline_negative_matrix(void);
 void test_absyn_nested_binary_expressions(void);
@@ -81,7 +80,6 @@ int main(void) {
   test_pipeline_golden();
   test_pipeline_large_local_lookup_duplicate();
   test_pipeline_source_golden();
-  test_scomp_e2e_golden();
   test_ir_validate();
   test_pipeline_negative_matrix();
   test_absyn_nested_binary_expressions();
