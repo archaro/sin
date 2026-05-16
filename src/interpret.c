@@ -567,7 +567,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
 
   if (*nextop == 'P') {
     // Parameters definition follows.  Handle this first.
-    // FIXME: This is probably broken.  Examine carefully.
+    // FIXME: This may be broken.  Examine carefully.
     nextop++;
     // Each parameter is a 2-byte length followed by a string
     // After the last string, there is a 2-byte zero.
@@ -587,8 +587,8 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
       nextop += 2;
     }
     // All parameters processed.
-    // FIXME: Now we have the parameters, do something with them...
-    // FIXME: They will be relevant once the abstract syntax tree is created.
+    // FIXME: Now we have the parameters, we need to pass them to the
+    // compiler as the initial contents of the local definitions table.
   }
 
   // Now we have the parameters (if any), get the source code for this item.
