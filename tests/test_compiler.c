@@ -26,6 +26,7 @@ void test_sem_check_locals_reusable_context(void);
 void test_sem_duplicate_local_keeps_original_index(void);
 void test_sem_code_params_are_treated_as_defined_locals(void);
 void test_sdiss_fixture_basic(void);
+void test_sdiss_reads_compiler_operand_widths(void);
 void test_parser_examples_obj_golden(void);
 void test_interpret_semantics_golden(void);
 void test_fixture_policy_declared_goldens_exist(void);
@@ -104,6 +105,7 @@ int main(void) {
   run_test("test_sem_duplicate_local_keeps_original_index", test_sem_duplicate_local_keeps_original_index);
   run_test("test_sem_code_params_are_treated_as_defined_locals", test_sem_code_params_are_treated_as_defined_locals);
   run_test("test_sdiss_fixture_basic", test_sdiss_fixture_basic);
+  run_test("test_sdiss_reads_compiler_operand_widths", test_sdiss_reads_compiler_operand_widths);
   run_test("test_parser_examples_obj_golden", test_parser_examples_obj_golden);
   run_test("test_interpret_semantics_golden", test_interpret_semantics_golden);
   run_test("test_fixture_policy_declared_goldens_exist", test_fixture_policy_declared_goldens_exist);

@@ -50,3 +50,31 @@ void test_sdiss_fixture_basic(void) {
   }
   free(expected);
 }
+
+void test_sdiss_reads_compiler_operand_widths(void) {
+  const uint8_t bytes[] = {
+      0x00, 0x00, /* locals/params */
+      'A', 0x02, 0x03, /* LIBCALL argc=2 id=3 */
+      'F', 0x02, 0x00, /* CALL argc=2 */
+      'h'};
+
+  const char *tmp_path = "tests/fixtures/sdiss/operand-widths.bin";
+  FILE *out = fopen(tmp_path, "wb");
+  ASSERT_NOT_NULL(out);
+  ASSERT_EQ_INT((int)sizeof(bytes), (int)fwrite(bytes, 1, sizeof(bytes), out));
+  fclose(out);
+
+  FILE *pipe = popen("./sdiss --no-header -o tests/fixtures/sdiss/operand-widths.bin 2>&1", "r");
+  ASSERT_NOT_NULL(pipe);
+  char output[4096];
+  size_t total = fread(output, 1, sizeof(output) - 1, pipe);
+  output[total] = '\0';
+  int rc = pclose(pipe);
+  ASSERT_TRUE(rc != -1);
+  ASSERT_TRUE(WIFEXITED(rc));
+  ASSERT_EQ_INT(0, WEXITSTATUS(rc));
+
+  ASSERT_TRUE(strstr(output, "LIBCALL ARGC 2 ID 3") != NULL);
+  ASSERT_TRUE(strstr(output, "CALL ARGC 2") != NULL);
+  ASSERT_TRUE(strstr(output, "unknown=0") != NULL);
+}
