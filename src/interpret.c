@@ -1115,9 +1115,6 @@ VALUE_t interpret(ITEM_t *item) {
     uint8_t *nextop = op + 1;
     op = opcode[*op](nextop, item);
   }
-  if (op >= end) {
-    logerr("Reached end of bytecode for item '%s' without HALT.\n", item->name);
-  }
 
   // Item is now free to be replaced or deleted
   item->inuse = false;
