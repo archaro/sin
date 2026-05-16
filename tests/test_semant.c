@@ -40,3 +40,28 @@ void test_sem_check_locals_reusable_context(void) {
   as_delete(bad_prog);
   sem_delete_ctx(ctx);
 }
+
+void test_sem_duplicate_local_keeps_original_index(void) {
+  SEM_CTX *ctx = sem_create_ctx();
+  ASSERT_NOT_NULL(ctx);
+
+  AS_NODE *list = as_new_stmtlist_node();
+  list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local("x"), t_int(1)));
+  list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local("y"), t_int(2)));
+  list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local("x"), t_int(3)));
+
+  char *errdetail = NULL;
+  int8_t rc = sem_check_locals(list, &errdetail, ctx);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(2, (int)ctx->count);
+
+  uint8_t idx = 255;
+  ASSERT_TRUE(sem_get_local_index(ctx, "x", &idx));
+  ASSERT_EQ_INT(0, (int)idx);
+  ASSERT_TRUE(sem_get_local_index(ctx, "y", &idx));
+  ASSERT_EQ_INT(1, (int)idx);
+
+  as_delete(list);
+  sem_delete_ctx(ctx);
+}

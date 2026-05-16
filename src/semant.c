@@ -15,27 +15,68 @@
 #include "semant.h"
  
 static bool sem_has_local(SEM_CTX *ctx, const char *name) {
-  for (uint32_t i = 0; i < ctx->count; i++) {
-    if (strcmp(ctx->locals[i].name, name) == 0) {
+  return sem_get_local_index(ctx, name, NULL);
+}
+
+static bool sem_find_local_index_slot(SEM_CTX *ctx, const char *name,
+                                      uint32_t *pos_out, bool *found_out) {
+  uint32_t lo = 0;
+  uint32_t hi = ctx->count;
+
+  while (lo < hi) {
+    uint32_t mid = lo + (hi - lo) / 2;
+    int cmp = strcmp(name, ctx->local_index[mid].name);
+    if (cmp == 0) {
+      if (pos_out) *pos_out = mid;
+      if (found_out) *found_out = true;
       return true;
     }
+    if (cmp < 0) {
+      hi = mid;
+    } else {
+      lo = mid + 1;
+    }
   }
-  return false;
+
+  if (pos_out) *pos_out = lo;
+  if (found_out) *found_out = false;
+  return true;
 }
 
 static void sem_add_local(SEM_CTX *ctx, const char *name) {
-  if (sem_has_local(ctx, name)) {
+  uint32_t slot = 0;
+  bool found = false;
+
+  sem_find_local_index_slot(ctx, name, &slot, &found);
+  if (found) {
     return;
   }
+
   if (ctx->count == ctx->capacity) {
     uint32_t oldcap = ctx->capacity;
     ctx->capacity = ctx->capacity == 0 ? 8 : ctx->capacity * 2;
     ctx->locals = GROW_ARRAY(SEM_LOCAL, ctx->locals, oldcap, ctx->capacity);
   }
+
+  if (ctx->count == ctx->index_capacity) {
+    uint32_t oldcap = ctx->index_capacity;
+    ctx->index_capacity = ctx->index_capacity == 0 ? 8 : ctx->index_capacity * 2;
+    ctx->local_index = GROW_ARRAY(SEM_LOCAL_INDEX, ctx->local_index,
+                                  oldcap, ctx->index_capacity);
+  }
+
   SEM_LOCAL *local = &ctx->locals[ctx->count];
   local->name = strdup(name);
   local->index = ctx->count;
   local->param = false;
+
+  if (slot < ctx->count) {
+    memmove(&ctx->local_index[slot + 1], &ctx->local_index[slot],
+            (ctx->count - slot) * sizeof(SEM_LOCAL_INDEX));
+  }
+  ctx->local_index[slot].name = local->name;
+  ctx->local_index[slot].index = local->index;
+
   ctx->count++;
 }
 
@@ -49,8 +90,10 @@ SEM_CTX *sem_create_ctx() {
   SEM_CTX *ctx = NULL;
   ctx = GROW_ARRAY(SEM_CTX, ctx, 0, 1);
   (*ctx).locals = NULL;
+  (*ctx).local_index = NULL;
   (*ctx).count = 0;
   (*ctx).capacity = 0;
+  (*ctx).index_capacity = 0;
   (*ctx).errnum = ERR_NOERROR;
   (*ctx).errdetail = NULL;
 
@@ -62,6 +105,7 @@ void sem_delete_ctx(SEM_CTX *ctx) {
     FREE_ARRAY(char *, ctx->locals[i].name, 0);
   }
   FREE_ARRAY(SEM_LOCAL, ctx->locals, 0);
+  FREE_ARRAY(SEM_LOCAL_INDEX, ctx->local_index, 0);
   compdiag_reset_detail(&ctx->errdetail);
   FREE_ARRAY(SEM_CTX, ctx, 0);
 }
@@ -152,14 +196,14 @@ bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out) {
   // Find a local in the locals lookup table.
   // Return true or false depending on whether the local is found.
   // If the local is found, return its index in *index_out.
-  if (!ctx || !name || !index_out) {
+  if (!ctx || !name) {
     return false;
   }
-  for (int i = 0; i < ctx->count; i++) {
-    if (strcmp(ctx->locals[i].name, name) == 0) {
-      *index_out = ctx->locals[i].index;
-      return true;
-    }
-  }
-  return false;
+  uint32_t slot = 0;
+  bool found = false;
+
+  sem_find_local_index_slot(ctx, name, &slot, &found);
+  if (!found) return false;
+  if (index_out) *index_out = ctx->local_index[slot].index;
+  return true;
 }

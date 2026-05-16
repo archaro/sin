@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -97,6 +98,21 @@ static AS_NODE *build_simple_if_program(void) {
   return as_stmtlist_append(list, ifstmt);
 }
 
+static AS_NODE *build_many_locals_with_duplicate_program(void) {
+  AS_NODE *list = as_new_stmtlist_node();
+  char name[32];
+
+  for (int i = 0; i < 120; i++) {
+    snprintf(name, sizeof(name), "local_%03d", i);
+    list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local(name), v_int(i)));
+  }
+
+  list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local("local_057"), v_int(999)));
+  list = as_stmtlist_append(list, t_node(N_EXPRSTMT, t_local("local_057"), NULL));
+  list = as_stmtlist_append(list, t_node(N_EXPRSTMT, t_local("local_119"), NULL));
+  return list;
+}
+
 void test_pipeline_golden(void) {
   const GoldenCase cases[] = {
       {"int_literal", build_int_literal_program, "tests/fixtures/int_literal.hex"},
@@ -110,4 +126,33 @@ void test_pipeline_golden(void) {
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
     run_case(&cases[i]);
   }
+}
+
+void test_pipeline_large_local_lookup_duplicate(void) {
+  AS_NODE *root = build_many_locals_with_duplicate_program();
+  ASSERT_NOT_NULL(root);
+
+  SEM_CTX *sem = sem_create_ctx();
+  ASSERT_NOT_NULL(sem);
+  char *errdetail = NULL;
+  int8_t rc = sem_check_locals(root, &errdetail, sem);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(120, (int)sem->count);
+
+  uint8_t idx = 255;
+  ASSERT_TRUE(sem_get_local_index(sem, "local_057", &idx));
+  ASSERT_EQ_INT(57, (int)idx);
+  ASSERT_TRUE(sem_get_local_index(sem, "local_119", &idx));
+  ASSERT_EQ_INT(119, (int)idx);
+
+  IR_Unit *ir = NULL;
+  rc = lower_ast_to_ir(root, sem, &ir, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(ir);
+
+  ir_destroy_unit(ir);
+  sem_delete_ctx(sem);
+  as_delete(root);
 }

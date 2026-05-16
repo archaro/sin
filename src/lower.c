@@ -93,7 +93,12 @@ static bool lower_resolve_local_index(LOWER_CTX *ctx, AS_NODE *node, uint8_t *ou
     return false;
   }
 
-  if (!ctx->sem || !sem_get_local_index(ctx->sem, name, &index)) {
+  if (!ctx->sem) {
+    lower_set_error(ctx, ERR_COMP_LOCALBEFOREDEF, name);
+    return false;
+  }
+
+  if (!sem_get_local_index(ctx->sem, name, &index)) {
     lower_set_error(ctx, ERR_COMP_LOCALBEFOREDEF, name);
     return false;
   }
