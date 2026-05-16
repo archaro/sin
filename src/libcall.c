@@ -202,8 +202,7 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
   if (config.lastconn >= config.maxconns) {
     config.lastconn = 0;
   }
-  uint16_t scans = 0;
-  while (scans < config.maxconns) {
+  for (uint16_t scans = 0; scans < config.maxconns; scans++) {
     VALUE_t val = {VALUE_int, {0}};
     // Find some activity.
     switch (line[config.lastconn].status) {
@@ -241,7 +240,6 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
         if (config.lastconn >= config.maxconns) {
           config.lastconn = 0;
         }
-        scans++;
     }
   }
   // No activity found.
