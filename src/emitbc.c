@@ -5,24 +5,42 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "compdiag.h"
 #include "error.h"
 #include "memory.h"
 
 static int8_t emit_error(char **errdetail, int8_t errnum, const char *fmt, ...) {
-  if (errdetail) {
-    va_list args;
-    va_start(args, fmt);
-    int needed = vsnprintf(NULL, 0, fmt, args);
-    va_end(args);
-    if (needed >= 0) {
-      *errdetail = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
-      va_start(args, fmt);
-      vsnprintf(*errdetail, (size_t)needed + 1, fmt, args);
-      va_end(args);
-    } else {
-      *errdetail = NULL;
-    }
+  va_list args;
+  int needed;
+  char *msg;
+
+  if (!errdetail) return errnum;
+
+  va_start(args, fmt);
+  needed = vsnprintf(NULL, 0, fmt, args);
+  va_end(args);
+  if (needed < 0) {
+    int8_t current = ERR_NOERROR;
+    compdiag_set_once(&current, errdetail, errnum, "emitbc", "formatting error");
+    return errnum;
   }
+
+  msg = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
+  if (!msg) {
+    int8_t current = ERR_NOERROR;
+    compdiag_set_once(&current, errdetail, errnum, "emitbc", "out of memory");
+    return errnum;
+  }
+
+  va_start(args, fmt);
+  vsnprintf(msg, (size_t)needed + 1, fmt, args);
+  va_end(args);
+
+  {
+    int8_t current = ERR_NOERROR;
+    compdiag_set_once(&current, errdetail, errnum, "emitbc", msg);
+  }
+  FREE_ARRAY(char, msg, (size_t)needed + 1);
   return errnum;
 }
 
@@ -95,7 +113,7 @@ static uint8_t map_opcode(IR_Op op) {
 
 int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
                      OUTPUT_t *out, char **errdetail) {
-  if (errdetail) *errdetail = NULL;
+  if (errdetail) compdiag_reset_detail(errdetail);
   if (!ir || !out) return emit_error(errdetail, ERR_COMP_SYNTAX, "emit_bytecode: null input");
 
   size_t *pos = GROW_ARRAY(size_t, NULL, 0, ir->function.count > 0 ? ir->function.count : 1);
