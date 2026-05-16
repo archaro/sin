@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <getopt.h>
 
+#include "version.h"
 #include "config.h"
 #include "memory.h"
 #include "log.h"
@@ -67,7 +68,7 @@ static void print_escaped_bytes(uint8_t *data, size_t len) {
 }
 
 void usage() {
-  logmsg("Sinistra disassembler.\nSyntax: sdiss <options>\n");
+  logmsg("Sinistra disassembler version %s.\nSyntax: sdiss <options>\n", SINVERSION);
   logmsg("Options:\n");
   logmsg(" -h, --help\t\tThis message.\n");
   logmsg(" -o, --object <file>\tObject code to disassemble.\n");

@@ -12,6 +12,7 @@
 #include <setjmp.h>
 #include <uv.h>
 
+#include "version.h"
 #include "config.h"
 #include "error.h"
 #include "memory.h"
@@ -43,7 +44,7 @@ void handle_sigusr1(int sig) {
 }
 
 void usage() {
-  logmsg("Sin interpreter.\nSyntax: sin <options>\n");
+  logmsg("Syntax: sin <options>\n", SINVERSION);
   logmsg("Options:\n");
   logmsg(" -b, --bootonly\t\tOnly execute the bootstrap code.\n");
   logmsg("\t\t\t  This option is used to compile items without running\n");
@@ -75,6 +76,7 @@ int main(int argc, char **argv) {
   uint8_t *bytecode = NULL;
   bool bootonly = false;
 
+  logmsg("Sinistra interpreter version %s.\n", SINVERSION);
   if (argc < 2) {
     usage();
     exit(EXIT_FAILURE);

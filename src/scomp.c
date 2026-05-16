@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "version.h"
 #include "config.h"
 #include "error.h"
 #include "compiler_pipeline.h"
@@ -58,8 +59,10 @@ int main(int argc, char **argv) {
   OUTPUT_t *out = NULL;
   init_errmsg();
 
+  logmsg("Sinistra compiler version %s\n", SINVERSION);
+
   if (argc != 3) {
-    printf("Syntax: scomp <input file> <output file>\n");
+    logmsg("Syntax: scomp <input file> <output file>\n");
     return 1;
   }
 
