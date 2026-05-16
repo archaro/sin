@@ -608,8 +608,8 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
 
   // We have the source.  Compile it.
   DISASS_LOG("Source to compile: %s\n", sourcecode);
-  bool result;
-  char *errdetail;
+  int8_t result;
+  char *errdetail = NULL;
   ITEM_t *testitem = find_item(config.itemroot, itemname.s);
   if (testitem && testitem->inuse) {
     char name[MAX_ITEM_NAME];
@@ -653,9 +653,8 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     if (param_count > 0) {
       strcat(src, "{");
       for (int pc = 0; pc < param_count; pc++) {
-        // FIXME: In abstract syntax world, how do we reconstruct
-        // the parameter list?
-        //strcat(src, local.id[pc]);
+        // Reconstruct the parameter list in source form.
+        strcat(src, params[pc]);
         if (pc < (param_count -1)) {
           strcat(src, ", ");
         }
@@ -684,7 +683,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     logerr("Compilation failed.\n");
     // Set the error item to the compiler error.
     set_error_item(result, errdetail);
-    FREE_ARRAY(char, errdetail, 1);
+    if (errdetail) FREE_ARRAY(char, errdetail, strlen(errdetail) + 1);
   }
 
   // Clean up.
