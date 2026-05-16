@@ -8,11 +8,7 @@
 
 #include "config.h"
 #include "error.h"
-#include "parser.h"
-#include "absyn.h"
-#include "semant.h"
-#include "lower.h"
-#include "ir.h"
+#include "compiler_pipeline.h"
 #include "memory.h"
 #include "log.h"
 #include "emitbc.h"
@@ -25,9 +21,6 @@ int main(int argc, char **argv) {
   char *errdetail = NULL;
   int sourcelen = 0;
   uint8_t result = ERR_NOERROR;
-  AS_NODE *absyn = NULL;
-  SEM_CTX *ctx = NULL;
-  IR_Unit *ir = NULL;
   OUTPUT_t *out = NULL;
   init_errmsg();
 
@@ -81,55 +74,8 @@ int main(int argc, char **argv) {
   fclose(in);
   logmsg("Source loaded: %d bytes.\n", sourcelen);
 
-  out = GROW_ARRAY(OUTPUT_t, NULL, 0, 1);
-  out->maxsize = 1024;
-  out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, out->maxsize);
-  out->nextbyte = out->bytecode;
-
-  logmsg("Parsing...\n");
-  ctx = sem_create_ctx();
-
-  result = parse_source(source, sourcelen, &absyn, &errdetail);
-  if (result != ERR_NOERROR) {
-    goto compile_error;
-  }
-
-#ifdef DEBUG
-  logmsg("Walking the abstract syntax tree...\n");
-  as_walk(absyn);
-#endif
-
-  result = sem_check_locals(absyn, &errdetail, ctx);
-  if (result != ERR_NOERROR) {
-    goto compile_error;
-  }
-
-#ifdef DEBUG
-  logmsg("Local table:\n");
-  for (int i = 0; i < ctx->count; i++) {
-    logmsg("Index %d: %s%s\n", ctx->locals[i].index, ctx->locals[i].name,
-           ctx->locals[i].param ? " (param)" : "");
-  }
-#endif
-
-  result = lower_ast_to_ir(absyn, ctx, &ir, &errdetail);
-  if (result != ERR_NOERROR) {
-    goto compile_error;
-  }
-
-  result = ir_validate(ir, ctx->count, &errdetail);
-  if (result != ERR_NOERROR) {
-    goto compile_error;
-  }
-
-  uint8_t param_count = 0;
-  for (uint32_t i = 0; i < ctx->count; i++) {
-    if (ctx->locals[i].param) {
-      param_count++;
-    }
-  }
-
-  result = emit_bytecode(ir, (uint8_t)ctx->count, param_count, out, &errdetail);
+  logmsg("Compiling...\n");
+  result = compile_source_to_bytecode(source, (size_t)sourcelen, &out, &errdetail);
   if (result != ERR_NOERROR) {
     goto compile_error;
   }
@@ -152,15 +98,6 @@ compile_error:
 cleanup:
   if (errdetail) {
     FREE_ARRAY(char, errdetail, 1);
-  }
-  if (absyn) {
-    as_delete(absyn);
-  }
-  if (ir) {
-    ir_destroy_unit(ir);
-  }
-  if (ctx) {
-    sem_delete_ctx(ctx);
   }
   if (out) {
     if (out->bytecode) {
