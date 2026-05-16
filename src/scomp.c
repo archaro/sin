@@ -9,6 +9,7 @@
 #include "config.h"
 #include "error.h"
 #include "compiler_pipeline.h"
+#include "compiler_diag.h"
 #include "memory.h"
 #include "log.h"
 #include "emitbc.h"
@@ -18,7 +19,8 @@ CONFIG_t config;
 
 int main(int argc, char **argv) {
   char *source = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   int sourcelen = 0;
   uint8_t result = ERR_NOERROR;
   OUTPUT_t *out = NULL;
@@ -35,39 +37,27 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  if (fseek(in, 0, SEEK_END) != 0) {
-    errdetail = GROW_ARRAY(char, NULL, 0, 128);
-    snprintf(errdetail, 128, "Unable to seek to end of input file '%s'.", argv[1]);
-    result = ERR_COMP_SYNTAX;
+  if (fseek(in, 0, SEEK_END) != 0) {    result = ERR_COMP_SYNTAX;
+    compiler_diag_set(&diag, result, DIAG_PHASE_IO, "input file IO failure");
     fclose(in);
     goto compile_error;
   }
   long sourcefilelen = ftell(in);
-  if (sourcefilelen < 0 || sourcefilelen > INT_MAX) {
-    errdetail = GROW_ARRAY(char, NULL, 0, 160);
-    snprintf(errdetail, 160,
-             "Invalid input file length %ld for '%s' (must be 0..%d bytes).",
-             sourcefilelen, argv[1], INT_MAX);
-    result = ERR_COMP_SYNTAX;
+  if (sourcefilelen < 0 || sourcefilelen > INT_MAX) {    result = ERR_COMP_SYNTAX;
+    compiler_diag_set(&diag, result, DIAG_PHASE_IO, "input file IO failure");
     fclose(in);
     goto compile_error;
   }
   sourcelen = (int)sourcefilelen;
-  if (fseek(in, 0, SEEK_SET) != 0) {
-    errdetail = GROW_ARRAY(char, NULL, 0, 128);
-    snprintf(errdetail, 128, "Unable to rewind input file '%s'.", argv[1]);
-    result = ERR_COMP_SYNTAX;
+  if (fseek(in, 0, SEEK_SET) != 0) {    result = ERR_COMP_SYNTAX;
+    compiler_diag_set(&diag, result, DIAG_PHASE_IO, "input file IO failure");
     fclose(in);
     goto compile_error;
   }
   source = GROW_ARRAY(char, NULL, 0, sourcelen);
   size_t bytesread = fread(source, sizeof(char), sourcelen, in);
-  if (bytesread != (size_t)sourcelen) {
-    errdetail = GROW_ARRAY(char, NULL, 0, 192);
-    snprintf(errdetail, 192,
-             "Input load failed for '%s': expected %d bytes but read %zu.",
-             argv[1], sourcelen, bytesread);
-    result = ERR_COMP_SYNTAX;
+  if (bytesread != (size_t)sourcelen) {    result = ERR_COMP_SYNTAX;
+    compiler_diag_set(&diag, result, DIAG_PHASE_IO, "input file IO failure");
     fclose(in);
     goto compile_error;
   }
@@ -75,7 +65,7 @@ int main(int argc, char **argv) {
   logmsg("Source loaded: %d bytes.\n", sourcelen);
 
   logmsg("Compiling...\n");
-  result = compile_source_to_bytecode(source, (size_t)sourcelen, &out, &errdetail);
+  result = compile_source_to_bytecode_diag(source, (size_t)sourcelen, &out, &diag);
   if (result != ERR_NOERROR) {
     goto compile_error;
   }
@@ -92,13 +82,11 @@ int main(int argc, char **argv) {
 
 compile_error:
   logerr("Error: (#%d) %s\n", result, errmsg[result]);
-  logerr("Detail: %s\n", errdetail);
+  logerr("Diag: code=%d phase=%s message=%s\n", diag.code, compiler_diag_phase_name(diag.phase), diag.message ? diag.message : "");
   logerr("Compilation failed.\n");
 
 cleanup:
-  if (errdetail) {
-    FREE_ARRAY(char, errdetail, 1);
-  }
+  compiler_diag_reset(&diag);
   if (out) {
     if (out->bytecode) {
       FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);

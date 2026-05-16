@@ -13,7 +13,7 @@ LIB_DIR := lib
 # Test runner
 TEST_DIR := tests
 TEST_BIN := $(TEST_DIR)/test-compiler
-TEST_SOURCES := $(TEST_DIR)/test_compiler.c $(TEST_DIR)/test_helpers.c $(TEST_DIR)/test_emitbc_header.c $(TEST_DIR)/test_emitbc_opcode_map.c $(TEST_DIR)/test_emitbc_jumps.c $(TEST_DIR)/test_emitbc_invariants.c $(TEST_DIR)/test_pipeline_golden.c $(TEST_DIR)/test_pipeline_source_golden.c $(TEST_DIR)/test_ir_validate.c $(TEST_DIR)/test_pipeline_negative_matrix.c $(TEST_DIR)/test_absyn_lifecycle.c $(TEST_DIR)/test_semant.c $(TEST_DIR)/test_sdiss_fixtures.c $(TEST_DIR)/test_parser_examples_obj_golden.c $(TEST_DIR)/test_interpret_semantics_golden.c $(TEST_DIR)/test_fixture_policy.c $(TEST_DIR)/test_compiler_context_failures.c
+TEST_SOURCES := $(TEST_DIR)/test_compiler.c $(TEST_DIR)/test_helpers.c $(TEST_DIR)/test_emitbc_header.c $(TEST_DIR)/test_emitbc_opcode_map.c $(TEST_DIR)/test_emitbc_jumps.c $(TEST_DIR)/test_emitbc_invariants.c $(TEST_DIR)/test_pipeline_golden.c $(TEST_DIR)/test_pipeline_source_golden.c $(TEST_DIR)/test_ir_validate.c $(TEST_DIR)/test_pipeline_negative_matrix.c $(TEST_DIR)/test_absyn_lifecycle.c $(TEST_DIR)/test_semant.c $(TEST_DIR)/test_sdiss_fixtures.c $(TEST_DIR)/test_parser_examples_obj_golden.c $(TEST_DIR)/test_interpret_semantics_golden.c $(TEST_DIR)/test_fixture_policy.c $(TEST_DIR)/test_compiler_context_failures.c $(TEST_DIR)/test_compiler_diag_pipeline.c
 
 
 # Library of shared functions
@@ -21,7 +21,7 @@ LIB := $(LIB_DIR)/libsinshared.a
 LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/parser.o \
                $(OBJ_DIR)/lexer.o $(OBJ_DIR)/absyn.o $(OBJ_DIR)/semant.o \
                $(OBJ_DIR)/ir.o $(OBJ_DIR)/lower.o $(OBJ_DIR)/compiler_context.o $(OBJ_DIR)/compiler_pipeline.o $(OBJ_DIR)/emitbc.o \
-               $(OBJ_DIR)/compdiag.o $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcall.o \
+               $(OBJ_DIR)/compdiag.o $(OBJ_DIR)/compiler_diag.o $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcall.o \
                $(OBJ_DIR)/stack.o $(OBJ_DIR)/value.o $(OBJ_DIR)/item.o \
                $(OBJ_DIR)/vm.o $(OBJ_DIR)/task.o $(OBJ_DIR)/interpret.o \
                $(OBJ_DIR)/network.o $(OBJ_DIR)/libtelnet.o

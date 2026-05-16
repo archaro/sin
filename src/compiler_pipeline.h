@@ -1,3 +1,4 @@
+#include "compiler_diag.h"
 #ifndef COMPILER_PIPELINE_H
 #define COMPILER_PIPELINE_H
 
@@ -12,3 +13,5 @@ int8_t compile_source_to_bytecode_with_params(const char *source, size_t len,
                                               OUTPUT_t **out, char **errdetail);
 
 #endif
+
+int8_t compile_source_to_bytecode_diag(const char *source, size_t len, OUTPUT_t **out, CompilerDiagnostic *out_diag);
