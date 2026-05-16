@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdarg.h>
 
+#include "compdiag.h"
 #include "error.h"
 #include "ir.h"
 #include "memory.h"
@@ -211,26 +212,43 @@ void ir_dump(FILE* out, IR_Unit* unit) {
 }
 
 static int8_t ir_validate_error(char **errdetail, int8_t errnum, const char *fmt, ...) {
-  if (errdetail != NULL) {
-    va_list args;
-    va_start(args, fmt);
-    int needed = vsnprintf(NULL, 0, fmt, args);
-    va_end(args);
-    if (needed < 0) {
-      *errdetail = NULL;
-    } else {
-      *errdetail = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
-      va_start(args, fmt);
-      vsnprintf(*errdetail, (size_t)needed + 1, fmt, args);
-      va_end(args);
-    }
+  va_list args;
+  int needed;
+  char *msg;
+
+  if (errdetail == NULL) return errnum;
+
+  va_start(args, fmt);
+  needed = vsnprintf(NULL, 0, fmt, args);
+  va_end(args);
+  if (needed < 0) {
+    int8_t current = ERR_NOERROR;
+    compdiag_set_once(&current, errdetail, errnum, "ir", "formatting error");
+    return errnum;
   }
+
+  msg = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
+  if (!msg) {
+    int8_t current = ERR_NOERROR;
+    compdiag_set_once(&current, errdetail, errnum, "ir", "out of memory");
+    return errnum;
+  }
+
+  va_start(args, fmt);
+  vsnprintf(msg, (size_t)needed + 1, fmt, args);
+  va_end(args);
+
+  {
+    int8_t current = ERR_NOERROR;
+    compdiag_set_once(&current, errdetail, errnum, "ir", msg);
+  }
+  FREE_ARRAY(char, msg, (size_t)needed + 1);
   return errnum;
 }
 
 int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
   if (errdetail != NULL) {
-    *errdetail = NULL;
+    compdiag_reset_detail(errdetail);
   }
 
   if (unit == NULL) {

@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "compdiag.h"
 #include "error.h"
 
 typedef struct {
@@ -48,12 +49,8 @@ static bool lower_lookup_libcall(const char *lib, const char *func,
 }
 
 static void lower_set_error(LOWER_CTX *ctx, int8_t errnum, const char *detail) {
-  if (!ctx || ctx->errnum != ERR_NOERROR) return;
-
-  ctx->errnum = errnum;
-  if (detail) {
-    ctx->errdetail = strdup(detail);
-  }
+  if (!ctx) return;
+  compdiag_set_once(&ctx->errnum, &ctx->errdetail, errnum, "lower", detail);
 }
 
 static void lower_set_unsupported(LOWER_CTX *ctx, const AS_NODE *node, const char *reason) {
@@ -555,7 +552,7 @@ int8_t lower_ast_to_ir(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **err
   LOWER_CTX ctx;
 
   if (!out_ir) {
-    if (errdetail) *errdetail = strdup("out_ir is NULL");
+    if (errdetail) *errdetail = strdup("lower: out_ir is NULL");
     return ERR_COMP_SYNTAX;
   }
 
@@ -568,7 +565,7 @@ int8_t lower_ast_to_ir(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **err
   ctx.errnum = ERR_NOERROR;
 
   if (!ctx.ir) {
-    if (errdetail) *errdetail = strdup("failed to allocate IR unit");
+    if (errdetail) *errdetail = strdup("lower: failed to allocate IR unit");
     return ERR_COMP_INUSE;
   }
 

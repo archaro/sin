@@ -11,6 +11,7 @@
 #include "absyn.h"
 #include "error.h"
 #include "memory.h"
+#include "compdiag.h"
 #include "semant.h"
  
 static bool sem_has_local(SEM_CTX *ctx, const char *name) {
@@ -39,13 +40,10 @@ static void sem_add_local(SEM_CTX *ctx, const char *name) {
 }
 
 static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name) {
-  if (ctx->errnum != ERR_NOERROR) {
-    return;
-  }
-  ctx->errnum = errnum;
-  if (local_name) {
-    ctx->errdetail = strdup(local_name);
-  }
+  if (!ctx) return;
+  compdiag_setf_once(&ctx->errnum, &ctx->errdetail, errnum, "semant",
+                     "undefined local %s",
+                     local_name ? local_name : "<null>");
 }
 
 SEM_CTX *sem_create_ctx() {
@@ -65,9 +63,7 @@ void sem_delete_ctx(SEM_CTX *ctx) {
     FREE_ARRAY(char *, ctx->locals[i].name, 0);
   }
   FREE_ARRAY(SEM_LOCAL, ctx->locals, 0);
-  if (ctx->errdetail) {
-    free(ctx->errdetail);
-  }
+  compdiag_reset_detail(&ctx->errdetail);
   FREE_ARRAY(SEM_CTX, ctx, 0);
 }
 
@@ -141,10 +137,7 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
 int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx) {
   // sem_check_locals is reusable per SEM_CTX. It preserves discovered locals
   // across calls, but resets and re-computes per-call error state.
-  if (ctx->errdetail) {
-    free(ctx->errdetail);
-    ctx->errdetail = NULL;
-  }
+  compdiag_reset_detail(&ctx->errdetail);
   ctx->errnum = ERR_NOERROR;
 
   sem_walk(ctx, root);
