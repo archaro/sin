@@ -93,7 +93,7 @@ $(OBJ_DIR)/lexer.o: $(SRC_DIR)/lexer.c
 test: $(TEST_BIN)
 	./$(TEST_BIN)
 
-$(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss
+$(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
 	$(CC) $(CFLAGS) $(DEBUG) -Isrc -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
 clean:
