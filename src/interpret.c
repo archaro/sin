@@ -14,6 +14,7 @@
 #include "log.h"
 #include "memory.h"
 #include "parser.h"
+#include "compiler_pipeline.h"
 #include "absyn.h"
 #include "value.h"
 #include "stack.h"
@@ -562,8 +563,9 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   // If the compilation is successful, assign its value to the item
   // on the top of the stack.  Otherwise, assign nil to the item.
 
-  int plen = 0; // For the source reconstruction
   int param_count = 0;
+  const char **params = NULL;
+  int plen = 0;
 
   if (*nextop == 'P') {
     // Parameters definition follows.  Handle this first.
@@ -582,6 +584,8 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
       nextop += param_len;
       plen += param_len;
       param_count++;
+      params = GROW_ARRAY(const char *, params, param_count - 1, param_count);
+      params[param_count - 1] = param;
       // Get the next one...
       memcpy(&param_len, nextop, 2);
       nextop += 2;
@@ -606,36 +610,46 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   // We have the source.  Compile it.
   DISASS_LOG("Source to compile: %s\n", sourcecode);
   // FIXME: WE HAVEN'T YET COMPILED THE BYTECODE! ONLY THE ABSTRACT SYNTAX!
-  OUTPUT_t *out = GROW_ARRAY(OUTPUT_t, NULL, 0, 1);
-  out->maxsize = 1024;
-  out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, out->maxsize);
-  out->nextbyte = out->bytecode;
-
   // Now we have processed the bytecode and tidied up the stack,
   // check to see if the item is in use - if it is, we can't
   // overwrite it.
   bool result;
   char *errdetail;
-  AS_NODE *absyn;
   ITEM_t *testitem = find_item(config.itemroot, itemname.s);
   if (testitem && testitem->inuse) {
     char name[MAX_ITEM_NAME];
     get_itemname(testitem, name);
     result = ERR_COMP_INUSE;
   } else {
-    result = parse_source(sourcecode, sclen, &absyn, &errdetail);
-    // absyn now points to the root of the abstract syntax tree
+    OUTPUT_t *out = NULL;
+    result = compile_source_to_bytecode_with_params(sourcecode, sclen,
+                                                    params, (size_t)param_count,
+                                                    &out, &errdetail);
+    if (result == 0) {
+      uint32_t len = out->nextbyte - out->bytecode;
+      ITEM_t *item = insert_code_item(config.itemroot, itemname.s, len,
+                                                              out->bytecode);
+      if (!item) {
+        result = ERR_COMP_INUSE;
+      }
+    }
+    if (out) {
+      if (result != 0 && out->bytecode) {
+        FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
+      }
+      FREE_ARRAY(OUTPUT_t, out, 1);
+    }
   }
 
   if (result == 0) {
     // Compilation succeeded.  Assign it to the item.
     // The item type is ITEM_code.
-    uint32_t len = out->nextbyte - out->bytecode;
-    ITEM_t *item = insert_code_item(config.itemroot, itemname.s, len,
-                                                            out->bytecode);
     // Now reconstruct the source code and save it to srcroot.
+    int plen = 0;
+    for (int pc = 0; pc < param_count; pc++) plen += (int)strlen(params[pc]);
     plen += 2 * (param_count - 1);
-    len = plen + sclen + 13; // Big enough for everything!
+    ITEM_t *item = find_item(config.itemroot, itemname.s);
+    uint32_t len = plen + sclen + 13; // Big enough for everything!
     char *src = GROW_ARRAY(char, NULL, 0, len);
     src[0] = '\0';
     strcat(src, "code ");
@@ -674,17 +688,15 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     // Set the error item to the compiler error.
     set_error_item(result, errdetail);
     FREE_ARRAY(char, errdetail, 1);
-    FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
   }
 
   // Clean up.
-  FREE_ARRAY(OUTPUT_t, out, 1);
   FREE_ARRAY(char, sourcecode, sclen + 1);
   FREE_ARRAY(char, itemname.s, strlen(itemname.s));
-  // FIXME: No longer relevant - rework for abstract syntax
-  //for (int l = 0; l < local.count; l++) {
-  //  free(local.id[l]);
-  //}
+  for (int pc = 0; pc < param_count; pc++) {
+    FREE_ARRAY(char, (char *)params[pc], strlen(params[pc]) + 1);
+  }
+  FREE_ARRAY(const char *, params, param_count);
   return nextop;
 }
 

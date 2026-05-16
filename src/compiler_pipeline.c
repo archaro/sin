@@ -33,7 +33,9 @@ static void cleanup_compile_objects(CompileObjects *objs) {
   }
 }
 
-int8_t compile_source_to_bytecode(const char *source, size_t len, OUTPUT_t **out, char **errdetail) {
+int8_t compile_source_to_bytecode_with_params(const char *source, size_t len,
+                                              const char **params, size_t param_count,
+                                              OUTPUT_t **out, char **errdetail) {
   CompileObjects objs = {0};
   int8_t rc = ERR_NOERROR;
 
@@ -55,6 +57,8 @@ int8_t compile_source_to_bytecode(const char *source, size_t len, OUTPUT_t **out
     goto fail;
   }
 
+  sem_seed_params(objs.sem, params, param_count);
+
   rc = sem_check_locals(objs.absyn, errdetail, objs.sem);
   if (rc != ERR_NOERROR) {
     goto fail;
@@ -70,14 +74,14 @@ int8_t compile_source_to_bytecode(const char *source, size_t len, OUTPUT_t **out
     goto fail;
   }
 
-  uint8_t param_count = 0;
+  uint8_t emitted_param_count = 0;
   for (uint32_t i = 0; i < objs.sem->count; i++) {
     if (objs.sem->locals[i].param) {
-      param_count++;
+      emitted_param_count++;
     }
   }
 
-  rc = emit_bytecode(objs.ir, (uint8_t)objs.sem->count, param_count, objs.out, errdetail);
+  rc = emit_bytecode(objs.ir, (uint8_t)objs.sem->count, emitted_param_count, objs.out, errdetail);
   if (rc != ERR_NOERROR) {
     goto fail;
   }
@@ -90,4 +94,8 @@ int8_t compile_source_to_bytecode(const char *source, size_t len, OUTPUT_t **out
 fail:
   cleanup_compile_objects(&objs);
   return rc;
+}
+
+int8_t compile_source_to_bytecode(const char *source, size_t len, OUTPUT_t **out, char **errdetail) {
+  return compile_source_to_bytecode_with_params(source, len, NULL, 0, out, errdetail);
 }
