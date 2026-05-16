@@ -30,13 +30,16 @@ typedef struct {
 
 static int bw_ensure(BC_Writer *w, size_t extra) {
   if (w->failed) return 0;
-  size_t needed = w->used + extra;
+  size_t needed = 0;
+  if (alloc_add_overflow(w->used, extra, &needed)) { w->failed = 1; return 0; }
   if (needed <= w->out->maxsize) return 1;
   size_t oldcap = w->out->maxsize;
-  size_t newcap = GROW_CAPACITY(oldcap);
-  while (newcap < needed) newcap = GROW_CAPACITY(newcap);
-  w->out->bytecode = GROW_ARRAY(unsigned char, w->out->bytecode, oldcap, newcap);
-  if (!w->out->bytecode) {
+  size_t newcap = 0;
+  if (!alloc_grow_capacity(oldcap, needed, &newcap)) {
+    w->failed = 1;
+    return 0;
+  }
+  if (!alloc_grow_array((void **)&w->out->bytecode, oldcap, newcap, sizeof(unsigned char))) {
     w->failed = 1;
     return 0;
   }
@@ -126,7 +129,13 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     return errnum;
   }
 
-  size_t *pos = GROW_ARRAY(size_t, NULL, 0, ir->function.count > 0 ? ir->function.count : 1);
+  size_t pos_count = ir->function.count > 0 ? ir->function.count : 1;
+  size_t *pos = NULL;
+  if (!alloc_grow_array((void **)&pos, 0, pos_count, sizeof(size_t))) {
+    int8_t errnum = ERR_NOERROR;
+    compdiag_set_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "out of memory allocating position map");
+    return errnum;
+  }
   size_t pc = 2;
   for (size_t i = 0; i < ir->function.count; i++) {
     const IR_Inst *in = &ir->function.code[i];

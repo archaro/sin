@@ -75,18 +75,24 @@ AS_NODE *as_new_stmtlist_node(void) {
   return as_new_node(N_STMTLIST, as_new_stmtlist(), NULL);
 }
 
-AS_NODE *as_stmtlist_append(AS_NODE *stmtlist_node, AS_NODE *stmt) {
+bool as_stmtlist_append_checked(AS_NODE *stmtlist_node, AS_NODE *stmt) {
   if (!stmtlist_node || stmtlist_node->nodetype != N_STMTLIST || !stmt) {
-    return stmtlist_node;
+    return true;
   }
   AS_STMTLIST *stmtlist = (AS_STMTLIST *)stmtlist_node->lhs;
   if (stmtlist->count == stmtlist->capacity) {
-    int oldcap = stmtlist->capacity;
-    stmtlist->capacity = stmtlist->capacity == 0 ? 4 : stmtlist->capacity * 2;
-    stmtlist->stmts = GROW_ARRAY(AS_NODE*, stmtlist->stmts, oldcap,
-                                                          stmtlist->capacity);
+    size_t oldcap = stmtlist->capacity;
+    size_t newcap = 0;
+    if (!alloc_grow_capacity(oldcap, oldcap + 1, &newcap)) return false;
+    if (!alloc_grow_array((void **)&stmtlist->stmts, oldcap, newcap, sizeof(AS_NODE*))) return false;
+    stmtlist->capacity = (uint32_t)newcap;
   }
   stmtlist->stmts[stmtlist->count++] = stmt;
+  return true;
+}
+
+AS_NODE *as_stmtlist_append(AS_NODE *stmtlist_node, AS_NODE *stmt) {
+  (void)as_stmtlist_append_checked(stmtlist_node, stmt);
   return stmtlist_node;
 }
 
