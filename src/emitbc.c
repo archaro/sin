@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "compdiag.h"
+#include "compiler/ir/opcode_schema.h"
 #include "error.h"
 #include "memory.h"
 
@@ -14,19 +15,6 @@ typedef struct {
   int failed;
 } BC_Writer;
 
-typedef enum {
-  META_SIZE_FIXED_0,
-  META_SIZE_FIXED_1,
-  META_SIZE_FIXED_3,
-  META_SIZE_PUSH_INT,
-  META_SIZE_PUSH_STRING,
-  META_SIZE_ITEM_SAVE_CODE
-} InstSizePolicy;
-
-typedef struct {
-  InstSizePolicy size_policy;
-  uint8_t opcode;
-} OpMeta;
 
 static int bw_ensure(BC_Writer *w, size_t extra) {
   if (w->failed) return 0;
@@ -76,50 +64,6 @@ static int bw_write_bytes(BC_Writer *w, const void *src, size_t n) {
   return 1;
 }
 
-static const OpMeta *op_meta(IR_Op op) {
-  static const OpMeta m[] = {
-      [IR_OP_HALT] = {META_SIZE_FIXED_1, 'h'},
-      [IR_OP_LABEL] = {META_SIZE_FIXED_0, 0},
-      [IR_OP_PUSH_INT] = {META_SIZE_PUSH_INT, 'p'},
-      [IR_OP_PUSH_STRING] = {META_SIZE_PUSH_STRING, 'l'},
-      [IR_OP_ADD] = {META_SIZE_FIXED_1, 'a'},
-      [IR_OP_SUB] = {META_SIZE_FIXED_1, 's'},
-      [IR_OP_MUL] = {META_SIZE_FIXED_1, 'm'},
-      [IR_OP_DIV] = {META_SIZE_FIXED_1, 'd'},
-      [IR_OP_NEG] = {META_SIZE_FIXED_1, 'n'},
-      [IR_OP_EQ] = {META_SIZE_FIXED_1, 'o'},
-      [IR_OP_NEQ] = {META_SIZE_FIXED_1, 'q'},
-      [IR_OP_LT] = {META_SIZE_FIXED_1, 'r'},
-      [IR_OP_GT] = {META_SIZE_FIXED_1, 't'},
-      [IR_OP_LE] = {META_SIZE_FIXED_1, 'u'},
-      [IR_OP_GE] = {META_SIZE_FIXED_1, 'v'},
-      [IR_OP_NOT] = {META_SIZE_FIXED_1, 'x'},
-      [IR_OP_AND] = {META_SIZE_FIXED_1, 'y'},
-      [IR_OP_OR] = {META_SIZE_FIXED_1, 'z'},
-      [IR_OP_LOAD_LOCAL] = {META_SIZE_FIXED_3, 'e'},
-      [IR_OP_STORE_LOCAL] = {META_SIZE_FIXED_3, 'c'},
-      [IR_OP_INC_LOCAL] = {META_SIZE_FIXED_3, 'f'},
-      [IR_OP_DEC_LOCAL] = {META_SIZE_FIXED_3, 'g'},
-      [IR_OP_JUMP] = {META_SIZE_FIXED_3, 'j'},
-      [IR_OP_JUMP_IF_FALSE] = {META_SIZE_FIXED_3, 'k'},
-      [IR_OP_ITEM_BEGIN] = {META_SIZE_FIXED_1, 'I'},
-      [IR_OP_ITEM_PUSH_LAYER] = {META_SIZE_FIXED_1, 'L'},
-      [IR_OP_ITEM_PUSH_DEREF] = {META_SIZE_FIXED_1, 'D'},
-      [IR_OP_ITEM_END] = {META_SIZE_FIXED_1, 'E'},
-      [IR_OP_ITEM_DEREF] = {META_SIZE_FIXED_1, 'F'},
-      [IR_OP_ITEM_SAVE] = {META_SIZE_FIXED_1, 'C'},
-      [IR_OP_EXISTS] = {META_SIZE_FIXED_1, 'X'},
-      [IR_OP_DELETE] = {META_SIZE_FIXED_1, 'W'},
-      [IR_OP_NTHNAME] = {META_SIZE_FIXED_1, 'Y'},
-      [IR_OP_ROOTNAME] = {META_SIZE_FIXED_1, 'Z'},
-      [IR_OP_CALL] = {META_SIZE_FIXED_3, 'F'},
-      [IR_OP_LIBCALL] = {META_SIZE_FIXED_3, 'A'},
-      [IR_OP_ITEM_SAVE_CODE] = {META_SIZE_ITEM_SAVE_CODE, 'B'},
-  };
-  if (op < 0 || op >= (IR_Op)(sizeof(m) / sizeof(m[0]))) return NULL;
-  return &m[op];
-}
-
 int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
                      OUTPUT_t *out, char **errdetail) {
   if (errdetail) compdiag_reset_detail(errdetail);
@@ -140,16 +84,18 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
   for (size_t i = 0; i < ir->function.count; i++) {
     const IR_Inst *in = &ir->function.code[i];
     int isz = 0;
-    const OpMeta *meta = op_meta(in->op);
+    const IR_OpSchema *meta = ir_opcode_schema(in->op);
     pos[i] = pc;
     if (!meta) continue;
     switch (meta->size_policy) {
-      case META_SIZE_FIXED_0: isz = 0; break;
-      case META_SIZE_FIXED_1: isz = 1; break;
-      case META_SIZE_FIXED_3: isz = 3; break;
-      case META_SIZE_PUSH_INT: isz = 1 + 8; break;
-      case META_SIZE_PUSH_STRING: isz = 1 + 2 + (int)strlen((const char *)(intptr_t)in->imm); break;
-      case META_SIZE_ITEM_SAVE_CODE:
+      case SIZE_FIXED_0: isz = 0; break;
+      case SIZE_FIXED_1: isz = 1; break;
+      case SIZE_FIXED_2: isz = 2; break;
+      case SIZE_FIXED_3: isz = 3; break;
+      case SIZE_PUSH_INT: isz = 1 + 8; break;
+      case SIZE_PUSH_STRING: isz = 1 + 2 + (int)strlen((const char *)(intptr_t)in->imm); break;
+      case SIZE_ITEM_PUSH_LAYER: isz = 1 + 1 + (int)strlen((const char *)(intptr_t)in->imm); break;
+      case SIZE_ITEM_SAVE_CODE:
         isz = 1 + 2;
         if (in->a >= 0 && (size_t)in->a < ir->embedded_code.count) {
           const IR_EmbeddedCodePayload *payload = &ir->embedded_code.entries[in->a];
@@ -175,8 +121,8 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
   for (size_t i = 0; i < ir->function.count; i++) {
     IR_Inst *in = &ir->function.code[i];
     if (in->op == IR_OP_LABEL) continue;
-    const OpMeta *meta = op_meta(in->op);
-    if (!meta || meta->opcode == 0) {
+    const IR_OpSchema *meta = ir_opcode_schema(in->op);
+    if (!meta || meta->encoded_symbol == 0) {
       FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
       {
         int8_t errnum = ERR_NOERROR;
@@ -184,7 +130,38 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
         return errnum;
       }
     }
-    if (!bw_write_u8(&w, meta->opcode)) goto oom;
+    if (!bw_write_u8(&w, meta->encoded_symbol)) goto oom;
+    switch (meta->validator) {
+      case VALIDATE_NONE: break;
+      case VALIDATE_A_U8:
+        if (in->a < 0 || in->a > UINT8_MAX) {
+          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "%s operand a out of range for u8: %d", meta->name, in->a);
+          return errnum;
+        }
+        break;
+      case VALIDATE_A_U16:
+        if (in->a < 0 || in->a > UINT16_MAX) {
+          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "%s operand a out of range for u16: %d", meta->name, in->a);
+          return errnum;
+        }
+        break;
+      case VALIDATE_A_B_U8:
+        if (in->a < 0 || in->a > UINT8_MAX || in->b < 0 || in->b > UINT8_MAX) {
+          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "%s operands out of range for u8: a=%d b=%d", meta->name, in->a, in->b);
+          return errnum;
+        }
+        break;
+      case VALIDATE_LABEL_ID:
+      case VALIDATE_NON_NULL_IMM:
+      case VALIDATE_EMBEDDED_INDEX:
+        break;
+    }
     switch (in->op) {
       case IR_OP_PUSH_INT: if (!bw_write_i64(&w, in->imm)) goto oom; break;
       case IR_OP_PUSH_STRING: {

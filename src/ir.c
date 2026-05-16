@@ -11,6 +11,7 @@
 #include "compdiag.h"
 #include "error.h"
 #include "ir.h"
+#include "compiler/ir/opcode_schema.h"
 #include "memory.h"
 
 static bool ensure_inst_capacity(IR_Function* function, size_t needed) {
@@ -140,46 +141,9 @@ bool ir_embedded_locals_from_params(AS_NODE* params, IR_EmbeddedCodePayload* pay
 }
 
 const char* ir_op_name(IR_Op op) {
-  switch (op) {
-    case IR_OP_HALT: return "HALT";
-    case IR_OP_PUSH_INT: return "PUSH_INT";
-    case IR_OP_PUSH_STRING: return "PUSH_STRING";
-    case IR_OP_ADD: return "ADD";
-    case IR_OP_SUB: return "SUB";
-    case IR_OP_MUL: return "MUL";
-    case IR_OP_DIV: return "DIV";
-    case IR_OP_NEG: return "NEG";
-    case IR_OP_EQ: return "EQ";
-    case IR_OP_NEQ: return "NEQ";
-    case IR_OP_LT: return "LT";
-    case IR_OP_GT: return "GT";
-    case IR_OP_LE: return "LE";
-    case IR_OP_GE: return "GE";
-    case IR_OP_NOT: return "NOT";
-    case IR_OP_AND: return "AND";
-    case IR_OP_OR: return "OR";
-    case IR_OP_LOAD_LOCAL: return "LOAD_LOCAL";
-    case IR_OP_STORE_LOCAL: return "STORE_LOCAL";
-    case IR_OP_INC_LOCAL: return "INC_LOCAL";
-    case IR_OP_DEC_LOCAL: return "DEC_LOCAL";
-    case IR_OP_JUMP: return "JUMP";
-    case IR_OP_JUMP_IF_FALSE: return "JUMP_IF_FALSE";
-    case IR_OP_LABEL: return "LABEL";
-    case IR_OP_ITEM_BEGIN: return "ITEM_BEGIN";
-    case IR_OP_ITEM_PUSH_LAYER: return "ITEM_PUSH_LAYER";
-    case IR_OP_ITEM_PUSH_DEREF: return "ITEM_PUSH_DEREF";
-    case IR_OP_ITEM_END: return "ITEM_END";
-    case IR_OP_ITEM_DEREF: return "ITEM_DEREF";
-    case IR_OP_ITEM_SAVE: return "ITEM_SAVE";
-    case IR_OP_CALL: return "CALL";
-    case IR_OP_LIBCALL: return "LIBCALL";
-    case IR_OP_EXISTS: return "EXISTS";
-    case IR_OP_DELETE: return "DELETE";
-    case IR_OP_NTHNAME: return "NTHNAME";
-    case IR_OP_ROOTNAME: return "ROOTNAME";
-    case IR_OP_ITEM_SAVE_CODE: return "ITEM_SAVE_CODE";
-    default: return "<unknown>";
-  }
+  const IR_OpSchema *meta = ir_opcode_schema(op);
+  if (!meta || !meta->name) return "<unknown>";
+  return meta->name;
 }
 
 void ir_dump(FILE* out, IR_Unit* unit) {
@@ -311,6 +275,39 @@ int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
       default:
         break;
     }
+  }
+  return ERR_NOERROR;
+}
+const IR_OpSchema g_ir_opcode_schema[] = {
+#define OP(NAME, SYMBOL, OPERAND, SIZE, VALIDATOR) \
+    [IR_OP_##NAME] = {IR_OP_##NAME, #NAME, (uint8_t)(SYMBOL), OPERAND, SIZE, VALIDATOR},
+#include "compiler/ir/opcode_schema.def"
+#undef OP
+};
+const size_t g_ir_opcode_schema_count = sizeof(g_ir_opcode_schema) / sizeof(g_ir_opcode_schema[0]);
+
+const IR_OpSchema* ir_opcode_schema(IR_Op op) {
+  if (op < 0 || op >= (IR_Op)g_ir_opcode_schema_count) return NULL;
+  return &g_ir_opcode_schema[op];
+}
+
+int8_t ir_opcode_schema_validate_unique(char **errdetail) {
+  bool seen[256] = {0};
+  IR_Op seen_by[256] = {0};
+  if (errdetail) compdiag_reset_detail(errdetail);
+  for (size_t i = 0; i < g_ir_opcode_schema_count; i++) {
+    const IR_OpSchema *meta = &g_ir_opcode_schema[i];
+    if (meta->op != (IR_Op)i) continue;
+    if (meta->encoded_symbol == 0) continue;
+    if (seen[meta->encoded_symbol]) {
+      int8_t errnum = ERR_NOERROR;
+      compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "opcode_schema",
+                         "ambiguous opcode encoding '%c' for %s and %s",
+                         (char)meta->encoded_symbol, ir_op_name(seen_by[meta->encoded_symbol]), meta->name);
+      return errnum;
+    }
+    seen[meta->encoded_symbol] = true;
+    seen_by[meta->encoded_symbol] = meta->op;
   }
   return ERR_NOERROR;
 }
