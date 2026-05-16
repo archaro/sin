@@ -590,9 +590,8 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
       memcpy(&param_len, nextop, 2);
       nextop += 2;
     }
-    // All parameters processed.
-    // FIXME: Now we have the parameters, we need to pass them to the
-    // compiler as the initial contents of the local definitions table.
+    // All parameters processed.  We need to pass them to the compiler
+    // as the initial contents of the local definitions table.
   }
 
   // Now we have the parameters (if any), get the source code for this item.
@@ -609,10 +608,6 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
 
   // We have the source.  Compile it.
   DISASS_LOG("Source to compile: %s\n", sourcecode);
-  // FIXME: WE HAVEN'T YET COMPILED THE BYTECODE! ONLY THE ABSTRACT SYNTAX!
-  // Now we have processed the bytecode and tidied up the stack,
-  // check to see if the item is in use - if it is, we can't
-  // overwrite it.
   bool result;
   char *errdetail;
   ITEM_t *testitem = find_item(config.itemroot, itemname.s);
@@ -625,6 +620,8 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     result = compile_source_to_bytecode_with_params(sourcecode, sclen,
                                                     params, (size_t)param_count,
                                                     &out, &errdetail);
+    // Now we have processed the bytecode and tidied up the stack, check
+    // to see if the item is in use - if it is, we can't overwrite it.
     if (result == 0) {
       uint32_t len = out->nextbyte - out->bytecode;
       ITEM_t *item = insert_code_item(config.itemroot, itemname.s, len,
