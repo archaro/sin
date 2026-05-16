@@ -10,6 +10,7 @@ void test_emitbc_opcode_map(void);
 void test_emitbc_opcode_map_unsupported_ir_op(void);
 void test_emitbc_opcode_map_call_item_deref_alias_layout(void);
 void test_emitbc_jumps(void);
+void test_emitbc_invariants(void);
 void test_pipeline_golden(void);
 void test_pipeline_large_local_lookup_duplicate(void);
 void test_pipeline_source_golden(void);
@@ -75,6 +76,7 @@ int main(void) {
   test_emitbc_opcode_map_call_item_deref_alias_layout();
   test_emitbc_opcode_map_unsupported_ir_op();
   test_emitbc_jumps();
+  test_emitbc_invariants();
   test_pipeline_golden();
   test_pipeline_large_local_lookup_duplicate();
   test_pipeline_source_golden();
