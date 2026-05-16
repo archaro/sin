@@ -28,6 +28,7 @@ void test_sdiss_fixture_basic(void);
 void test_parser_examples_obj_golden(void);
 void test_interpret_semantics_golden(void);
 void test_fixture_policy_declared_goldens_exist(void);
+void test_compiler_context_failures(void);
 
 static void test_absyn_helpers(void) {
   AS_NODE *lhs = t_int(1);
@@ -102,5 +103,6 @@ int main(void) {
   run_test("test_parser_examples_obj_golden", test_parser_examples_obj_golden);
   run_test("test_interpret_semantics_golden", test_interpret_semantics_golden);
   run_test("test_fixture_policy_declared_goldens_exist", test_fixture_policy_declared_goldens_exist);
+  run_test("test_compiler_context_failures", test_compiler_context_failures);
   return 0;
 }

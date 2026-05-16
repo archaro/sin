@@ -1,42 +1,14 @@
 #include "compiler_pipeline.h"
 
-#include "absyn.h"
+#include "compiler_context.h"
 #include "error.h"
-#include "ir.h"
 #include "lower.h"
-#include "memory.h"
 #include "parser.h"
-#include "semant.h"
-
-typedef struct {
-  AS_NODE *absyn;
-  SEM_CTX *sem;
-  IR_Unit *ir;
-  OUTPUT_t *out;
-} CompileObjects;
-
-static void cleanup_compile_objects(CompileObjects *objs) {
-  if (objs->absyn) {
-    as_delete(objs->absyn);
-  }
-  if (objs->sem) {
-    sem_delete_ctx(objs->sem);
-  }
-  if (objs->ir) {
-    ir_destroy_unit(objs->ir);
-  }
-  if (objs->out) {
-    if (objs->out->bytecode) {
-      FREE_ARRAY(unsigned char, objs->out->bytecode, objs->out->maxsize);
-    }
-    FREE_ARRAY(OUTPUT_t, objs->out, 1);
-  }
-}
 
 int8_t compile_source_to_bytecode_with_params(const char *source, size_t len,
                                               const char **params, size_t param_count,
                                               OUTPUT_t **out, char **errdetail) {
-  CompileObjects objs = {0};
+  CompilerContext ctx;
   int8_t rc = ERR_NOERROR;
 
   if (!source || !out) {
@@ -44,55 +16,53 @@ int8_t compile_source_to_bytecode_with_params(const char *source, size_t len,
   }
 
   *out = NULL;
+  compiler_context_init(&ctx, source, len);
 
-  objs.out = GROW_ARRAY(OUTPUT_t, NULL, 0, 1);
-  objs.out->maxsize = 1024;
-  objs.out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, objs.out->maxsize);
-  objs.out->nextbyte = objs.out->bytecode;
-
-  objs.sem = sem_create_ctx();
-
-  rc = parse_source((char *)source, (int)len, &objs.absyn, errdetail);
-  if (rc != ERR_NOERROR) {
-    goto fail;
+  if (compiler_context_prepare_bytecode_output(&ctx, 1024) != 0) {
+    rc = ERR_COMP_SYNTAX;
+    goto done;
   }
 
-  sem_seed_params(objs.sem, params, param_count);
-
-  rc = sem_check_locals(objs.absyn, errdetail, objs.sem);
+  ctx.sem_ctx = sem_create_ctx();
+  rc = parse_source((char *)ctx.source, (int)ctx.source_len, &ctx.ast_root, errdetail);
   if (rc != ERR_NOERROR) {
-    goto fail;
+    goto done;
   }
 
-  rc = lower_ast_to_ir(objs.absyn, objs.sem, &objs.ir, errdetail);
+  sem_seed_params(ctx.sem_ctx, params, param_count);
+
+  rc = sem_check_locals(ctx.ast_root, errdetail, ctx.sem_ctx);
   if (rc != ERR_NOERROR) {
-    goto fail;
+    goto done;
   }
 
-  rc = ir_validate(objs.ir, objs.sem->count, errdetail);
+  rc = lower_ast_to_ir(ctx.ast_root, ctx.sem_ctx, &ctx.ir_unit, errdetail);
   if (rc != ERR_NOERROR) {
-    goto fail;
+    goto done;
+  }
+
+  rc = ir_validate(ctx.ir_unit, ctx.sem_ctx->count, errdetail);
+  if (rc != ERR_NOERROR) {
+    goto done;
   }
 
   uint8_t emitted_param_count = 0;
-  for (uint32_t i = 0; i < objs.sem->count; i++) {
-    if (objs.sem->locals[i].param) {
+  for (uint32_t i = 0; i < ctx.sem_ctx->count; i++) {
+    if (ctx.sem_ctx->locals[i].param) {
       emitted_param_count++;
     }
   }
 
-  rc = emit_bytecode(objs.ir, (uint8_t)objs.sem->count, emitted_param_count, objs.out, errdetail);
+  rc = emit_bytecode(ctx.ir_unit, (uint8_t)ctx.sem_ctx->count, emitted_param_count, ctx.bytecode_out, errdetail);
   if (rc != ERR_NOERROR) {
-    goto fail;
+    goto done;
   }
 
-  *out = objs.out;
-  objs.out = NULL;
-  cleanup_compile_objects(&objs);
-  return ERR_NOERROR;
+  *out = ctx.bytecode_out;
+  ctx.bytecode_out = NULL;
 
-fail:
-  cleanup_compile_objects(&objs);
+done:
+  compiler_context_destroy(&ctx);
   return rc;
 }
 
