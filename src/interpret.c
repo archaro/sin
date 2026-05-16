@@ -28,6 +28,14 @@ extern CONFIG_t config;
 
 static OP_t opcode[256];
 
+static void debug_dump_bytes(const char *label, const uint8_t *buf, uint32_t len) {
+  if (!buf) return;
+  logmsg("%s (%u bytes):\n", label, len);
+  for (uint32_t i = 0; i < len; i++) {
+    logmsg("%02x%s", buf[i], ((i + 1) % 16 == 0 || i + 1 == len) ? "\n" : " ");
+  }
+}
+
 uint8_t *op_nop(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
@@ -624,6 +632,8 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     // to see if the item is in use - if it is, we can't overwrite it.
     if (result == 0) {
       uint32_t len = out->nextbyte - out->bytecode;
+      DISASS_LOG("op_assigncodeitem compiled bytecode for %s\n", itemname.s);
+      debug_dump_bytes("compiled-code", out->bytecode, len);
       ITEM_t *item = insert_code_item(config.itemroot, itemname.s, len,
                                                               out->bytecode);
       if (!item) {
