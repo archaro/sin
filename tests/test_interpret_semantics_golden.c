@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "test_assert.h"
 
@@ -75,24 +79,58 @@ static int contains_all_lines(const char *expected_lines, const char *actual, in
   return 1;
 }
 
-static RunResult run_and_capture(const char *cmd_base, const char *tag) {
+static RunResult run_and_capture_obj(const char *obj_path, const char *tag) {
   char out_path[256];
   char err_path[256];
-  char cmd[1024];
   int rc = snprintf(out_path, sizeof(out_path), "tests/fixtures/interpret/%s.stdout.tmp", tag);
   ASSERT_TRUE(rc > 0 && (size_t)rc < sizeof(out_path));
   rc = snprintf(err_path, sizeof(err_path), "tests/fixtures/interpret/%s.stderr.tmp", tag);
   ASSERT_TRUE(rc > 0 && (size_t)rc < sizeof(err_path));
-  rc = snprintf(cmd, sizeof(cmd), "%s > %s 2> %s", cmd_base, out_path, err_path);
-  ASSERT_TRUE(rc > 0 && (size_t)rc < sizeof(cmd));
 
-  int sysrc = system(cmd);
-  ASSERT_TRUE(sysrc >= 0);
+  pid_t pid = fork();
+  ASSERT_TRUE(pid >= 0);
+
+  if (pid == 0) {
+    FILE *out = fopen(out_path, "wb");
+    FILE *err = fopen(err_path, "wb");
+    if (!out || !err) {
+      _exit(127);
+    }
+    if (dup2(fileno(out), STDOUT_FILENO) < 0 || dup2(fileno(err), STDERR_FILENO) < 0) {
+      _exit(127);
+    }
+    fclose(out);
+    fclose(err);
+    execl("./sin", "./sin", "-o", obj_path, (char *)NULL);
+    _exit(127);
+  }
+
+  int status = 0;
+  int waited = 0;
+  while (waited < 20) {
+    pid_t w = waitpid(pid, &status, WNOHANG);
+    ASSERT_TRUE(w >= 0);
+    if (w == pid) {
+      break;
+    }
+    usleep(100000);
+    waited++;
+  }
+  if (waited >= 20) {
+    kill(pid, SIGKILL);
+    ASSERT_EQ_INT(pid, waitpid(pid, &status, 0));
+  }
 
   RunResult result;
   result.stdout_text = normalize_text(read_text_file(out_path));
   result.stderr_text = normalize_text(read_text_file(err_path));
-  result.exit_code = (sysrc >> 8) & 0xFF;
+  if (WIFEXITED(status)) {
+    result.exit_code = WEXITSTATUS(status);
+  } else if (WIFSIGNALED(status)) {
+    result.exit_code = 128 + WTERMSIG(status);
+  } else {
+    result.exit_code = -1;
+  }
 
   remove(out_path);
   remove(err_path);
@@ -143,16 +181,10 @@ static void run_case(const InterpretGoldenCase *tc) {
                         .stderr_text = expected_stderr,
                         .exit_code = atoi(expected_exit)};
 
-  char generated_cmd[512];
-  rc = snprintf(generated_cmd, sizeof(generated_cmd), "timeout 2s ./sin -o %s", tc->generated_obj_path);
-  ASSERT_TRUE(rc > 0 && (size_t)rc < sizeof(generated_cmd));
-  RunResult generated = run_and_capture(generated_cmd, "generated");
+  RunResult generated = run_and_capture_obj(tc->generated_obj_path, "generated");
   assert_run_matches(tc->name, "generated_obj", &generated, &expected);
 
-  char golden_cmd[512];
-  rc = snprintf(golden_cmd, sizeof(golden_cmd), "timeout 2s ./sin -o %s", tc->golden_obj_path);
-  ASSERT_TRUE(rc > 0 && (size_t)rc < sizeof(golden_cmd));
-  RunResult golden = run_and_capture(golden_cmd, "golden");
+  RunResult golden = run_and_capture_obj(tc->golden_obj_path, "golden");
   assert_run_matches(tc->name, "golden_obj", &golden, &expected);
 
   free(generated.stdout_text);
