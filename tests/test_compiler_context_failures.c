@@ -18,7 +18,8 @@ static void test_context_parse_failure_cleanup(void) {
   ASSERT_EQ_INT(0, compiler_context_prepare_bytecode_output(&ctx, 64));
   ctx.sem_ctx = sem_create_ctx();
 
-  int8_t rc = parse_source((char *)ctx.source, (int)ctx.source_len, &ctx.ast_root, &errdetail);
+  ParseInput input = {ctx.source, ctx.source_len, "<test>"};
+  int8_t rc = parse_source(&input, &ctx.ast_root, &errdetail);
   ASSERT_TRUE(rc != ERR_NOERROR);
   ASSERT_NOT_NULL(errdetail);
 
@@ -33,9 +34,10 @@ static void test_context_semant_failure_cleanup(void) {
   compiler_context_init(&ctx, src, strlen(src));
   ASSERT_EQ_INT(0, compiler_context_prepare_bytecode_output(&ctx, 64));
   ctx.sem_ctx = sem_create_ctx();
+  ParseInput input = {ctx.source, ctx.source_len, "<test>"};
 
   ASSERT_EQ_INT(ERR_NOERROR,
-                parse_source((char *)ctx.source, (int)ctx.source_len, &ctx.ast_root, &errdetail));
+                parse_source(&input, &ctx.ast_root, &errdetail));
   int8_t rc = sem_check_locals(ctx.ast_root, &errdetail, ctx.sem_ctx);
   ASSERT_TRUE(rc != ERR_NOERROR);
   ASSERT_NOT_NULL(errdetail);
@@ -51,9 +53,10 @@ static void test_context_lower_failure_cleanup(void) {
   compiler_context_init(&ctx, src, strlen(src));
   ASSERT_EQ_INT(0, compiler_context_prepare_bytecode_output(&ctx, 64));
   ctx.sem_ctx = sem_create_ctx();
+  ParseInput input = {ctx.source, ctx.source_len, "<test>"};
 
   ASSERT_EQ_INT(ERR_NOERROR,
-                parse_source((char *)ctx.source, (int)ctx.source_len, &ctx.ast_root, &errdetail));
+                parse_source(&input, &ctx.ast_root, &errdetail));
 
   int8_t rc = lower_ast_to_ir(ctx.ast_root, ctx.sem_ctx, &ctx.ir_unit, &errdetail);
   ASSERT_TRUE(rc != ERR_NOERROR);

@@ -31,6 +31,7 @@ void test_interpret_semantics_golden(void);
 void test_fixture_policy_declared_goldens_exist(void);
 void test_compiler_context_failures(void);
 void test_compiler_diag_pipeline(void);
+void test_parser_input_api(void);
 
 static void test_absyn_helpers(void) {
   AS_NODE *lhs = t_int(1);
@@ -108,5 +109,6 @@ int main(void) {
   run_test("test_fixture_policy_declared_goldens_exist", test_fixture_policy_declared_goldens_exist);
   run_test("test_compiler_context_failures", test_compiler_context_failures);
   run_test("test_compiler_diag_pipeline", test_compiler_diag_pipeline);
+  run_test("test_parser_input_api", test_parser_input_api);
   return 0;
 }
