@@ -282,9 +282,11 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
 
     case N_CALL: {
       int32_t argc = 0;
-      lower_expr(ctx, (AS_NODE *)node->lhs);
-      if (ctx->errnum != ERR_NOERROR) return;
       lower_arglist(ctx, (AS_NODE *)node->rhs, &argc);
+      if (ctx->errnum != ERR_NOERROR) return;
+      // Call opcode expects stack top to be the item name, with arguments
+      // below it. Emit argument expressions first, then the item expression.
+      lower_expr(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
       ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_CALL, .a = argc});
       return;
