@@ -1074,6 +1074,24 @@ VALUE_t interpret(ITEM_t *item) {
   // Given some bytecode, interpret it until the HALT instruction is seen
   // NB: The HALT opcode (currently represented by the character 'h') does
   // not have an associated function.
+  if (!item) {
+    return VALUE_NIL;
+  }
+
+  // Interpreting a value item means returning a copy of its value.
+  // This can happen when the input item is configured as plain data.
+  if (item->type == ITEM_value) {
+    VALUE_t v = item->value;
+    if (v.type == VALUE_str && v.s) {
+      v.s = strdup(v.s);
+    }
+    return v;
+  }
+
+  if (!item->bytecode || item->bytecode_len < 3) {
+    logerr("Unable to interpret item '%s': invalid bytecode.\n", item->name);
+    return VALUE_NIL;
+  }
 
   // First set up the locals
   uint8_t numlocals = item->bytecode[0];
@@ -1089,14 +1107,14 @@ VALUE_t interpret(ITEM_t *item) {
   VM->stack->locals = numlocals;
   VM->stack->params = numparams;
   // The actual bytecode starts at the third byte.
-  uint8_t *op = item->bytecode + 2; 
-  while (*op != 'h') {
+  uint8_t *op = item->bytecode + 2;
+  uint8_t *end = item->bytecode + item->bytecode_len;
+  while (op < end && *op != 'h') {
     // We do it this way to avoid undefined behaviour between
     // two sequence points:
     uint8_t *nextop = op + 1;
     op = opcode[*op](nextop, item);
   }
-
   // Item is now free to be replaced or deleted
   item->inuse = false;
 
