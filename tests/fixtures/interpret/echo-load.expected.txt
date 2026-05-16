@@ -1,6 +1,6 @@
 ===stdout===
 Bytecode loaded: 589 bytes.
 ===stderr===
-Failed to start listening: address already in use
+
 ===exit===
 -1
