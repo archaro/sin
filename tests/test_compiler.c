@@ -23,6 +23,7 @@ void test_absyn_if_elsif_else_chain(void);
 void test_absyn_item_deref_chains(void);
 void test_sem_check_locals_reusable_context(void);
 void test_sem_duplicate_local_keeps_original_index(void);
+void test_sem_code_params_are_treated_as_defined_locals(void);
 void test_sdiss_fixture_basic(void);
 void test_parser_examples_obj_golden(void);
 void test_interpret_semantics_golden(void);
@@ -96,6 +97,7 @@ int main(void) {
   run_test("test_absyn_item_deref_chains", test_absyn_item_deref_chains);
   run_test("test_sem_check_locals_reusable_context", test_sem_check_locals_reusable_context);
   run_test("test_sem_duplicate_local_keeps_original_index", test_sem_duplicate_local_keeps_original_index);
+  run_test("test_sem_code_params_are_treated_as_defined_locals", test_sem_code_params_are_treated_as_defined_locals);
   run_test("test_sdiss_fixture_basic", test_sdiss_fixture_basic);
   run_test("test_parser_examples_obj_golden", test_parser_examples_obj_golden);
   run_test("test_interpret_semantics_golden", test_interpret_semantics_golden);

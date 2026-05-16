@@ -4,8 +4,9 @@
 
 #pragma once
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "absyn.h"
 
@@ -39,3 +40,4 @@ void sem_delete_ctx(SEM_CTX *ctx);
 // - if errdetail is non-NULL, returns an owned heap copy (caller frees)
 int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx);
 bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out);
+void sem_seed_params(SEM_CTX *ctx, const char **params, size_t count);

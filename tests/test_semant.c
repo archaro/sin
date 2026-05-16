@@ -65,3 +65,22 @@ void test_sem_duplicate_local_keeps_original_index(void) {
   as_delete(list);
   sem_delete_ctx(ctx);
 }
+
+void test_sem_code_params_are_treated_as_defined_locals(void) {
+  SEM_CTX *ctx = sem_create_ctx();
+  ASSERT_NOT_NULL(ctx);
+
+  AS_NODE *params = as_new_node(N_ARGLIST, t_local("a"), NULL);
+  AS_NODE *body_stmt = t_node(N_EXPRSTMT, t_local("a"), NULL);
+  AS_NODE *body = t_stmtlist_with_one(body_stmt);
+  AS_NODE *code = t_node(N_CODE, params, body);
+  AS_NODE *program = t_stmtlist_with_one(t_node(N_EXPRSTMT, code, NULL));
+
+  char *errdetail = NULL;
+  int8_t rc = sem_check_locals(program, &errdetail, ctx);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+
+  as_delete(program);
+  sem_delete_ctx(ctx);
+}

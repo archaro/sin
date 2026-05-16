@@ -112,6 +112,26 @@ void sem_delete_ctx(SEM_CTX *ctx) {
 
 static void sem_walk(SEM_CTX *ctx, AS_NODE *node);
 
+static void sem_seed_code_params(SEM_CTX *ctx, AS_NODE *params) {
+  AS_NODE *cursor = params;
+  while (cursor) {
+    if (cursor->nodetype != N_ARGLIST) {
+      return;
+    }
+
+    AS_NODE *param = (AS_NODE *)cursor->lhs;
+    if (param && param->nodetype == N_VALUE) {
+      AS_VALUE *value = (AS_VALUE *)param->lhs;
+      if (value && value->valtype == V_LOCAL && value->value.s) {
+        sem_add_local(ctx, value->value.s);
+        ctx->locals[ctx->count - 1].param = true;
+      }
+    }
+
+    cursor = (AS_NODE *)cursor->rhs;
+  }
+}
+
 static void sem_walk_if(SEM_CTX *ctx, AS_IF *ifstmt) {
   if (!ifstmt || ctx->errnum != ERR_NOERROR) return;
 
@@ -162,6 +182,18 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       sem_walk_if(ctx, (AS_IF *)node->lhs);
       return;
     }
+    case N_CODE: {
+      SEM_CTX *embedded = sem_create_ctx();
+      sem_seed_code_params(embedded, (AS_NODE *)node->lhs);
+      sem_walk(embedded, (AS_NODE *)node->rhs);
+
+      if (embedded->errnum != ERR_NOERROR) {
+        sem_set_error(ctx, embedded->errnum, embedded->errdetail);
+      }
+
+      sem_delete_ctx(embedded);
+      return;
+    }
     case N_VALUE: {
       // This could be any sort of value, but right now we are only
       // interested if it is of type V_LOCAL
@@ -206,4 +238,13 @@ bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out) {
   if (!found) return false;
   if (index_out) *index_out = ctx->local_index[slot].index;
   return true;
+}
+
+void sem_seed_params(SEM_CTX *ctx, const char **params, size_t count) {
+  if (!ctx || !params) return;
+  for (size_t i = 0; i < count; i++) {
+    if (!params[i]) continue;
+    sem_add_local(ctx, params[i]);
+    ctx->locals[ctx->count - 1].param = true;
+  }
 }
