@@ -47,11 +47,10 @@ static void run_case(const GoldenCase *tc) {
   ASSERT_EQ_INT(ERR_NOERROR, rc);
   ASSERT_TRUE(errdetail == NULL);
 
+  size_t actual_len = (size_t)(out.nextbyte - out.bytecode);
   size_t expected_len = 0;
   uint8_t *expected = load_hex_fixture(tc->fixture_path, &expected_len);
-  size_t actual_len = (size_t)(out.nextbyte - out.bytecode);
-  ASSERT_EQ_INT((int)expected_len, (int)actual_len);
-  ASSERT_EQ_INT(0, memcmp(expected, out.bytecode, expected_len));
+  assert_bytes_equal_with_diag(expected, expected_len, out.bytecode, actual_len, tc->name);
 
   free(expected);
   free(out.bytecode);

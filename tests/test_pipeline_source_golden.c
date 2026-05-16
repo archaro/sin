@@ -15,22 +15,8 @@ typedef struct {
 } SourceGoldenCase;
 
 static void run_source_case(const SourceGoldenCase *tc) {
-  char *errdetail = NULL;
-  OUTPUT_t *out = NULL;
-  int8_t rc = compile_source_to_bytecode(tc->source, strlen(tc->source), &out, &errdetail);
-  ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
-  ASSERT_NOT_NULL(out);
-
-  size_t expected_len = 0;
-  uint8_t *expected = load_hex_fixture(tc->fixture_path, &expected_len);
-  size_t actual_len = (size_t)(out->nextbyte - out->bytecode);
-  ASSERT_EQ_INT((int)expected_len, (int)actual_len);
-  ASSERT_EQ_INT(0, memcmp(expected, out->bytecode, expected_len));
-
-  free(expected);
-  free(out->bytecode);
-  free(out);
+  (void)tc->name;
+  compile_source_and_assert_hex(tc->source, tc->fixture_path);
 }
 
 static void test_source_pipeline_negative_cases(void) {
@@ -79,8 +65,7 @@ static void test_source_exprstmt_libcall_no_pop(void) {
       0x68,
   };
   size_t n = (size_t)(out->nextbyte - out->bytecode);
-  ASSERT_EQ_INT((int)sizeof(expected), (int)n);
-  ASSERT_EQ_INT(0, memcmp(expected, out->bytecode, n));
+  assert_bytes_equal_with_diag(expected, sizeof(expected), out->bytecode, n, "exprstmt_libcall_no_pop");
 
   free(out->bytecode);
   free(out);
@@ -106,8 +91,7 @@ static void test_source_item_with_numeric_layer(void) {
       'h',
   };
   size_t n = (size_t)(out->nextbyte - out->bytecode);
-  ASSERT_EQ_INT((int)sizeof(expected), (int)n);
-  ASSERT_EQ_INT(0, memcmp(expected, out->bytecode, n));
+  assert_bytes_equal_with_diag(expected, sizeof(expected), out->bytecode, n, "item_with_numeric_layer");
 
   free(out->bytecode);
   free(out);

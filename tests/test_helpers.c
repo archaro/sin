@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "compiler_pipeline.h"
+#include "error.h"
 #include "test_assert.h"
 
 // Tests intentionally allocate heap buffers/strings (e.g. strdup/realloc)
@@ -56,6 +58,8 @@ uint8_t hex_nibble(char c) {
 }
 
 uint8_t *load_hex_fixture(const char *path, size_t *out_len) {
+  ASSERT_NOT_NULL(path);
+  ASSERT_NOT_NULL(out_len);
   FILE *f = fopen(path, "rb");
   if (!f) {
     char alt[512];
@@ -95,4 +99,100 @@ uint8_t *load_hex_fixture(const char *path, size_t *out_len) {
   fclose(f);
   *out_len = len;
   return buf;
+}
+
+void assert_bytes_equal_with_diag(const uint8_t *expected, size_t expected_len,
+                                  const uint8_t *actual, size_t actual_len,
+                                  const char *context) {
+  const char *ctx = context ? context : "byte-compare";
+  if (expected_len != actual_len) {
+    TEST_FAILF("%s length mismatch: expected len=%zu actual len=%zu first differing byte offset=0",
+               ctx, expected_len, actual_len);
+  }
+
+  for (size_t i = 0; i < expected_len; i++) {
+    if (expected[i] != actual[i]) {
+      TEST_FAILF("%s byte mismatch: expected len=%zu actual len=%zu first differing byte offset=%zu (expected=0x%02x actual=0x%02x)",
+                 ctx, expected_len, actual_len, i, expected[i], actual[i]);
+    }
+  }
+}
+
+void assert_file_bytes_equal(const char *expected_path, const char *actual_path,
+                             const char *context) {
+  FILE *expected_f = fopen(expected_path, "rb");
+  ASSERT_NOT_NULL(expected_f);
+  FILE *actual_f = fopen(actual_path, "rb");
+  ASSERT_NOT_NULL(actual_f);
+
+  ASSERT_EQ_INT(0, fseek(expected_f, 0, SEEK_END));
+  long expected_n = ftell(expected_f);
+  ASSERT_TRUE(expected_n >= 0);
+  ASSERT_EQ_INT(0, fseek(expected_f, 0, SEEK_SET));
+
+  ASSERT_EQ_INT(0, fseek(actual_f, 0, SEEK_END));
+  long actual_n = ftell(actual_f);
+  ASSERT_TRUE(actual_n >= 0);
+  ASSERT_EQ_INT(0, fseek(actual_f, 0, SEEK_SET));
+
+  size_t expected_len = (size_t)expected_n;
+  size_t actual_len = (size_t)actual_n;
+  uint8_t *expected = malloc(expected_len ? expected_len : 1);
+  uint8_t *actual = malloc(actual_len ? actual_len : 1);
+  ASSERT_NOT_NULL(expected);
+  ASSERT_NOT_NULL(actual);
+
+  ASSERT_EQ_INT((int)expected_len, (int)fread(expected, 1, expected_len, expected_f));
+  ASSERT_EQ_INT((int)actual_len, (int)fread(actual, 1, actual_len, actual_f));
+  fclose(expected_f);
+  fclose(actual_f);
+
+  assert_bytes_equal_with_diag(expected, expected_len, actual, actual_len, context);
+  free(expected);
+  free(actual);
+}
+
+void compile_source_and_assert_hex(const char *source, const char *fixture_path) {
+  char *errdetail = NULL;
+  OUTPUT_t *out = NULL;
+  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(out);
+
+  size_t expected_len = 0;
+  uint8_t *expected = load_hex_fixture(fixture_path, &expected_len);
+  size_t actual_len = (size_t)(out->nextbyte - out->bytecode);
+  assert_bytes_equal_with_diag(expected, expected_len, out->bytecode, actual_len, fixture_path);
+
+  free(expected);
+  free(out->bytecode);
+  free(out);
+}
+
+int run_command_and_capture(const char *cmd, char **captured_output) {
+  ASSERT_NOT_NULL(cmd);
+  ASSERT_NOT_NULL(captured_output);
+  *captured_output = NULL;
+
+  FILE *pipe = popen(cmd, "r");
+  ASSERT_NOT_NULL(pipe);
+
+  size_t cap = 256;
+  size_t len = 0;
+  char *buf = malloc(cap);
+  ASSERT_NOT_NULL(buf);
+
+  int c;
+  while ((c = fgetc(pipe)) != EOF) {
+    if (len + 1 >= cap) {
+      cap *= 2;
+      buf = realloc(buf, cap);
+      ASSERT_NOT_NULL(buf);
+    }
+    buf[len++] = (char)c;
+  }
+  buf[len] = '\0';
+  *captured_output = buf;
+  return pclose(pipe);
 }
