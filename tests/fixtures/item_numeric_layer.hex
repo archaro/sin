@@ -1,0 +1,9 @@
+00 00          # header: locals=0 params=0
+49             # I: item begin
+4c 03          # L: item layer len=3
+66 6f 6f       # "foo"
+4c 02          # L: item layer len=2
+31 32          # "12"
+45             # E: item end
+46 00 00       # F: deref stack item target
+68             # h: halt

@@ -47,56 +47,6 @@ static void test_source_pipeline_negative_cases(void) {
   free(errdetail);
 }
 
-
-static void test_source_exprstmt_libcall_no_pop(void) {
-  char *errdetail = NULL;
-  const char *source = "sys.log{\"hello\"};";
-  OUTPUT_t *out = NULL;
-
-  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
-  ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
-  ASSERT_NOT_NULL(out);
-
-  static const uint8_t expected[] = {
-      0x00, 0x00,
-      0x6c, 0x05, 0x00, 'h', 'e', 'l', 'l', 'o',
-      0x41, 0x01, 0x01,
-      0x68,
-  };
-  size_t n = (size_t)(out->nextbyte - out->bytecode);
-  assert_bytes_equal_with_diag(expected, sizeof(expected), out->bytecode, n, "exprstmt_libcall_no_pop");
-
-  free(out->bytecode);
-  free(out);
-}
-
-static void test_source_item_with_numeric_layer(void) {
-  char *errdetail = NULL;
-  const char *source = "foo.12;";
-  OUTPUT_t *out = NULL;
-
-  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
-  ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
-  ASSERT_NOT_NULL(out);
-
-  static const uint8_t expected[] = {
-      0x00, 0x00,
-      'I',
-      'L', 0x03, 'f', 'o', 'o',
-      'L', 0x02, '1', '2',
-      'E',
-      'F', 0x00, 0x00,
-      'h',
-  };
-  size_t n = (size_t)(out->nextbyte - out->bytecode);
-  assert_bytes_equal_with_diag(expected, sizeof(expected), out->bytecode, n, "item_with_numeric_layer");
-
-  free(out->bytecode);
-  free(out);
-}
-
 void test_pipeline_source_golden(void) {
   const SourceGoldenCase cases[] = {
       {"int_literal", "42;", "tests/fixtures/int_literal.hex"},
@@ -105,6 +55,8 @@ void test_pipeline_source_golden(void) {
       {"if_elsif_else", "if 1 < 2 then 9; elsif 0 < 1 then 8; else 7; endif;", "tests/fixtures/if_elsif_else.hex"},
       {"locals_inc", "@x = 1; @x++; @x;", "tests/fixtures/locals_inc.hex"},
       {"locals_dec", "@x = 2; @x--; @x;", "tests/fixtures/locals_dec.hex"},
+      {"libcall_exprstmt", "sys.log{\"hello\"};", "tests/fixtures/libcall_exprstmt.hex"},
+      {"item_numeric_layer", "foo.12;", "tests/fixtures/item_numeric_layer.hex"},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
@@ -112,6 +64,4 @@ void test_pipeline_source_golden(void) {
   }
 
   test_source_pipeline_negative_cases();
-  test_source_exprstmt_libcall_no_pop();
-  test_source_item_with_numeric_layer();
 }

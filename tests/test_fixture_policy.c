@@ -39,6 +39,8 @@ void test_fixture_policy_declared_goldens_exist(void) {
       {"if_elsif_else_hex", "tests/fixtures/if_elsif_else.hex", "SOT: inline source in tests/test_pipeline_source_golden.c | regen: make regen-fixtures"},
       {"locals_inc_hex", "tests/fixtures/locals_inc.hex", "SOT: inline source in tests/test_pipeline_source_golden.c | regen: make regen-fixtures"},
       {"locals_dec_hex", "tests/fixtures/locals_dec.hex", "SOT: inline source in tests/test_pipeline_source_golden.c | regen: make regen-fixtures"},
+      {"libcall_exprstmt_hex", "tests/fixtures/libcall_exprstmt.hex", "SOT: inline source in tests/test_pipeline_source_golden.c | regen: make regen-fixtures"},
+      {"item_numeric_layer_hex", "tests/fixtures/item_numeric_layer.hex", "SOT: inline source in tests/test_pipeline_source_golden.c | regen: make regen-fixtures"},
       {"sdiss_basic_hex", "tests/fixtures/sdiss/basic.hex", "SOT: hand-authored disassembly sample | regen: manual update plus expected sync"},
   };
 
