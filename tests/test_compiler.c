@@ -11,6 +11,7 @@ void test_emitbc_opcode_map_unsupported_ir_op(void);
 void test_emitbc_opcode_map_call_item_deref_alias_layout(void);
 void test_emitbc_jumps(void);
 void test_pipeline_golden(void);
+void test_pipeline_large_local_lookup_duplicate(void);
 void test_pipeline_source_golden(void);
 void test_scomp_e2e_golden(void);
 void test_ir_validate(void);
@@ -19,6 +20,7 @@ void test_absyn_stmtlist_multiple_statements(void);
 void test_absyn_if_elsif_else_chain(void);
 void test_absyn_item_deref_chains(void);
 void test_sem_check_locals_reusable_context(void);
+void test_sem_duplicate_local_keeps_original_index(void);
 void test_sdiss_fixture_basic(void);
 void test_parser_examples_obj_golden(void);
 
@@ -72,6 +74,7 @@ int main(void) {
   test_emitbc_opcode_map_unsupported_ir_op();
   test_emitbc_jumps();
   test_pipeline_golden();
+  test_pipeline_large_local_lookup_duplicate();
   test_pipeline_source_golden();
   test_scomp_e2e_golden();
   test_ir_validate();
@@ -80,6 +83,7 @@ int main(void) {
   test_absyn_if_elsif_else_chain();
   test_absyn_item_deref_chains();
   test_sem_check_locals_reusable_context();
+  test_sem_duplicate_local_keeps_original_index();
   test_sdiss_fixture_basic();
   test_parser_examples_obj_golden();
   return 0;

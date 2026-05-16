@@ -16,9 +16,16 @@ typedef struct {
 } SEM_LOCAL;
 
 typedef struct {
+  const char *name;
+  uint8_t index;
+} SEM_LOCAL_INDEX;
+
+typedef struct {
   SEM_LOCAL *locals;
+  SEM_LOCAL_INDEX *local_index;
   uint32_t count;
   uint32_t capacity;
+  uint32_t index_capacity;
   int8_t errnum;
   char *errdetail;
 } SEM_CTX;
