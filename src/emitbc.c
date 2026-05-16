@@ -1,3 +1,6 @@
+// Bytecode emitter
+
+// Licensed under the MIT License - see LICENSE file for details.
 #include "emitbc.h"
 
 #include <limits.h>

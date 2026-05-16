@@ -1,5 +1,8 @@
-#ifndef PARSE_INPUT_H
-#define PARSE_INPUT_H
+// ParserInput type - used in various parts of the compiler
+
+// Licensed under the MIT License - see LICENSE file for details.
+
+#pragma once
 
 #include <stddef.h>
 
@@ -9,4 +12,3 @@ typedef struct {
   const char *source_name;
 } ParseInput;
 
-#endif

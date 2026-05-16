@@ -1,3 +1,6 @@
+// Compiler pipeline - inputs source, outputs bytecode
+
+// Licensed under the MIT License - see LICENSE file for details.
 #include "compiler_pipeline.h"
 
 #include "compiler_context.h"

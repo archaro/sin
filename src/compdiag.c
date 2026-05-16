@@ -1,3 +1,7 @@
+// Compiler diagnostics
+
+// Licensed under the MIT License - see LICENSE file for details.
+
 #include "compdiag.h"
 
 #include <stdarg.h>
