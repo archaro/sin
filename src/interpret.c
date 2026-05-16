@@ -1087,14 +1087,103 @@ VALUE_t interpret(ITEM_t *item) {
   VM->stack->current += numlocals - numparams;
   VM->stack->locals = numlocals;
   VM->stack->params = numparams;
+
   // The actual bytecode starts at the third byte.
-  uint8_t *op = item->bytecode + 2; 
+  uint8_t *op = item->bytecode + 2;
+
+#if defined(__GNUC__) || defined(__clang__)
+  // On compilers that support labels-as-values, use computed-goto dispatch.
+  // This avoids the indirect function-pointer call at every opcode dispatch,
+  // while keeping the exact same opcode-to-handler mapping.
+  //
+  // IMPORTANT: when adding/updating opcodes, update both this jump table and
+  // init_interpreter() so the computed-goto and portable paths stay aligned.
+  static void *jump_table[256] = {
+      [0 ... 255] = &&op_undefined_label,
+      [0] = &&op_nop_label,
+      ['a'] = &&op_add_label,
+      ['c'] = &&op_savelocal_label,
+      ['d'] = &&op_divide_label,
+      ['e'] = &&op_getlocal_label,
+      ['f'] = &&op_inclocal_label,
+      ['g'] = &&op_declocal_label,
+      ['j'] = &&op_jump_label,
+      ['k'] = &&op_jumpfalse_label,
+      ['l'] = &&op_pushstr_label,
+      ['m'] = &&op_multiply_label,
+      ['n'] = &&op_negate_label,
+      ['o'] = &&op_equal_label,
+      ['p'] = &&op_pushint_label,
+      ['q'] = &&op_notequal_label,
+      ['r'] = &&op_lessthan_label,
+      ['s'] = &&op_subtract_label,
+      ['t'] = &&op_greaterthan_label,
+      ['u'] = &&op_lessthanorequal_label,
+      ['v'] = &&op_greaterthanorequal_label,
+      ['x'] = &&op_logicalnot_label,
+      ['y'] = &&op_logicaland_label,
+      ['z'] = &&op_logicalor_label,
+      ['A'] = &&op_libcall_label,
+      ['B'] = &&op_assigncodeitem_label,
+      ['C'] = &&op_assignitem_label,
+      ['F'] = &&op_fetchitem_label,
+      ['I'] = &&op_assembleitem_label,
+      ['W'] = &&op_delete_label,
+      ['X'] = &&op_exists_label,
+      ['Y'] = &&op_nthname_label,
+      ['Z'] = &&op_rootname_label,
+  };
+
+#define DISPATCH() do { if (*op == 'h') goto op_halt_label; goto *jump_table[*op]; } while (0)
+#define OPCASE(label_name, fn)   label_name: {     uint8_t *nextop = op + 1;     op = fn(nextop, item);     DISPATCH();   }
+
+  DISPATCH();
+  OPCASE(op_nop_label, op_nop)
+  OPCASE(op_add_label, op_add)
+  OPCASE(op_savelocal_label, op_savelocal)
+  OPCASE(op_divide_label, op_divide)
+  OPCASE(op_getlocal_label, op_getlocal)
+  OPCASE(op_inclocal_label, op_inclocal)
+  OPCASE(op_declocal_label, op_declocal)
+  OPCASE(op_jump_label, op_jump)
+  OPCASE(op_jumpfalse_label, op_jumpfalse)
+  OPCASE(op_pushstr_label, op_pushstr)
+  OPCASE(op_multiply_label, op_multiply)
+  OPCASE(op_negate_label, op_negate)
+  OPCASE(op_equal_label, op_equal)
+  OPCASE(op_pushint_label, op_pushint)
+  OPCASE(op_notequal_label, op_notequal)
+  OPCASE(op_lessthan_label, op_lessthan)
+  OPCASE(op_subtract_label, op_subtract)
+  OPCASE(op_greaterthan_label, op_greaterthan)
+  OPCASE(op_lessthanorequal_label, op_lessthanorequal)
+  OPCASE(op_greaterthanorequal_label, op_greaterthanorequal)
+  OPCASE(op_logicalnot_label, op_logicalnot)
+  OPCASE(op_logicaland_label, op_logicaland)
+  OPCASE(op_logicalor_label, op_logicalor)
+  OPCASE(op_libcall_label, op_libcall)
+  OPCASE(op_assigncodeitem_label, op_assigncodeitem)
+  OPCASE(op_assignitem_label, op_assignitem)
+  OPCASE(op_fetchitem_label, op_fetchitem)
+  OPCASE(op_assembleitem_label, op_assembleitem)
+  OPCASE(op_delete_label, op_delete)
+  OPCASE(op_exists_label, op_exists)
+  OPCASE(op_nthname_label, op_nthname)
+  OPCASE(op_rootname_label, op_rootname)
+  OPCASE(op_undefined_label, op_undefined)
+
+op_halt_label:
+#undef OPCASE
+#undef DISPATCH
+#else
+  // Portable fallback: indirect function-pointer dispatch table.
   while (*op != 'h') {
     // We do it this way to avoid undefined behaviour between
     // two sequence points:
     uint8_t *nextop = op + 1;
     op = opcode[*op](nextop, item);
   }
+#endif
 
   // Item is now free to be replaced or deleted
   item->inuse = false;
