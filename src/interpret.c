@@ -1115,6 +1115,7 @@ VALUE_t interpret(ITEM_t *item) {
     uint8_t *nextop = op + 1;
     op = opcode[*op](nextop, item);
   }
+
   // Item is now free to be replaced or deleted
   item->inuse = false;
 
