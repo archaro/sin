@@ -4,6 +4,7 @@
 #include "error.h"
 #include "lower.h"
 #include "parser.h"
+#include <stdlib.h>
 
 int8_t compile_source_to_bytecode_with_params(const char *source, size_t len,
                                               const char **params, size_t param_count,
@@ -68,4 +69,24 @@ done:
 
 int8_t compile_source_to_bytecode(const char *source, size_t len, OUTPUT_t **out, char **errdetail) {
   return compile_source_to_bytecode_with_params(source, len, NULL, 0, out, errdetail);
+}
+
+#include <string.h>
+
+static DiagPhase phase_from_detail(const char *d){
+  if(!d) return DIAG_PHASE_NONE;
+  if(strncmp(d,"semant:",7)==0) return DIAG_PHASE_SEMANT;
+  if(strncmp(d,"lower:",6)==0) return DIAG_PHASE_LOWER;
+  if(strncmp(d,"ir:",3)==0) return DIAG_PHASE_IR_VALIDATE;
+  if(strncmp(d,"emitbc:",7)==0) return DIAG_PHASE_EMITBC;
+  if(strstr(d,"syntax error")||strcmp(d,"^")==0) return DIAG_PHASE_PARSE;
+  return DIAG_PHASE_NONE;
+}
+
+int8_t compile_source_to_bytecode_diag(const char *source, size_t len, OUTPUT_t **out, CompilerDiagnostic *out_diag){
+ char *errdetail=NULL;
+ int8_t rc = compile_source_to_bytecode(source,len,out,&errdetail);
+ if(out_diag){ compiler_diag_reset(out_diag); if(rc!=ERR_NOERROR){ compiler_diag_set(out_diag,rc,phase_from_detail(errdetail),errdetail?errdetail:""); }}
+ if(errdetail) free(errdetail);
+ return rc;
 }
