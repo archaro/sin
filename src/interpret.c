@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "config.h"
 #include "error.h"
@@ -27,6 +28,41 @@ extern CONFIG_t config;
 #define VM config.vm
 
 static OP_t opcode[256];
+
+
+#define RUNTIME_OPCODE_TABLE(OP) \
+  OP(0, op_nop) \
+  OP('a', op_add) \
+  OP('c', op_savelocal) \
+  OP('d', op_divide) \
+  OP('e', op_getlocal) \
+  OP('f', op_inclocal) \
+  OP('g', op_declocal) \
+  OP('j', op_jump) \
+  OP('k', op_jumpfalse) \
+  OP('l', op_pushstr) \
+  OP('m', op_multiply) \
+  OP('n', op_negate) \
+  OP('o', op_equal) \
+  OP('p', op_pushint) \
+  OP('q', op_notequal) \
+  OP('r', op_lessthan) \
+  OP('s', op_subtract) \
+  OP('t', op_greaterthan) \
+  OP('u', op_lessthanorequal) \
+  OP('v', op_greaterthanorequal) \
+  OP('x', op_logicalnot) \
+  OP('y', op_logicaland) \
+  OP('z', op_logicalor) \
+  OP('A', op_libcall) \
+  OP('B', op_assigncodeitem) \
+  OP('C', op_assignitem) \
+  OP('F', op_fetchitem) \
+  OP('I', op_assembleitem) \
+  OP('W', op_delete) \
+  OP('X', op_exists) \
+  OP('Y', op_nthname) \
+  OP('Z', op_rootname)
 
 uint8_t *op_nop(uint8_t *nextop, ITEM_t *item) {
   return nextop;
@@ -1035,38 +1071,29 @@ void init_interpreter() {
   for (int o=0; o<256; o++) {
     opcode[o] = op_undefined;
   }
-  opcode[0] = op_nop;
-  opcode['a'] = op_add;
-  opcode['c'] = op_savelocal;
-  opcode['d'] = op_divide;
-  opcode['e'] = op_getlocal;
-  opcode['f'] = op_inclocal;
-  opcode['g'] = op_declocal;
-  opcode['j'] = op_jump;
-  opcode['k'] = op_jumpfalse;
-  opcode['l'] = op_pushstr;
-  opcode['m'] = op_multiply;
-  opcode['n'] = op_negate;
-  opcode['o'] = op_equal;
-  opcode['p'] = op_pushint;
-  opcode['q'] = op_notequal;
-  opcode['r'] = op_lessthan;
-  opcode['s'] = op_subtract;
-  opcode['t'] = op_greaterthan;
-  opcode['u'] = op_lessthanorequal;
-  opcode['v'] = op_greaterthanorequal;
-  opcode['x'] = op_logicalnot;
-  opcode['y'] = op_logicaland;
-  opcode['z'] = op_logicalor;
-  opcode['A'] = op_libcall;
-  opcode['B'] = op_assigncodeitem;
-  opcode['C'] = op_assignitem;
-  opcode['F'] = op_fetchitem;
-  opcode['I'] = op_assembleitem;
-  opcode['W'] = op_delete;
-  opcode['X'] = op_exists;
-  opcode['Y'] = op_nthname;
-  opcode['Z'] = op_rootname;
+#define BIND_RUNTIME_OPCODE(opcode_byte, handler_fn) \
+  opcode[(uint8_t)(opcode_byte)] = handler_fn;
+  RUNTIME_OPCODE_TABLE(BIND_RUNTIME_OPCODE)
+#undef BIND_RUNTIME_OPCODE
+
+#ifndef NDEBUG
+  // NDEBUG disables assert(); keep this validation in debug builds so missing
+  // runtime opcode bindings fail fast during development without affecting
+  // optimized/release startup behavior.
+  // Runtime opcodes defined by the IR/bytecode schema that must have handlers.
+  // Keep this list aligned with src/compiler/ir/opcode_schema.def runtime entries.
+  static const uint8_t required_runtime_opcodes[] = {
+      'a', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
+      'q', 'r', 's', 't', 'u', 'v', 'x', 'y', 'z', 'A', 'B', 'C', 'F', 'I',
+      'W', 'X', 'Y', 'Z'};
+  for (size_t i = 0; i < sizeof(required_runtime_opcodes); i++) {
+    uint8_t opbyte = required_runtime_opcodes[i];
+    if (opbyte != 'h') {
+      assert(opcode[opbyte] != op_undefined
+             && "Missing interpreter handler for defined runtime opcode");
+    }
+  }
+#endif
 }
 
 VALUE_t interpret(ITEM_t *item) {
@@ -1100,76 +1127,18 @@ VALUE_t interpret(ITEM_t *item) {
   // init_interpreter() so the computed-goto and portable paths stay aligned.
   static void *jump_table[256] = {
       [0 ... 255] = &&op_undefined_label,
-      [0] = &&op_nop_label,
-      ['a'] = &&op_add_label,
-      ['c'] = &&op_savelocal_label,
-      ['d'] = &&op_divide_label,
-      ['e'] = &&op_getlocal_label,
-      ['f'] = &&op_inclocal_label,
-      ['g'] = &&op_declocal_label,
-      ['j'] = &&op_jump_label,
-      ['k'] = &&op_jumpfalse_label,
-      ['l'] = &&op_pushstr_label,
-      ['m'] = &&op_multiply_label,
-      ['n'] = &&op_negate_label,
-      ['o'] = &&op_equal_label,
-      ['p'] = &&op_pushint_label,
-      ['q'] = &&op_notequal_label,
-      ['r'] = &&op_lessthan_label,
-      ['s'] = &&op_subtract_label,
-      ['t'] = &&op_greaterthan_label,
-      ['u'] = &&op_lessthanorequal_label,
-      ['v'] = &&op_greaterthanorequal_label,
-      ['x'] = &&op_logicalnot_label,
-      ['y'] = &&op_logicaland_label,
-      ['z'] = &&op_logicalor_label,
-      ['A'] = &&op_libcall_label,
-      ['B'] = &&op_assigncodeitem_label,
-      ['C'] = &&op_assignitem_label,
-      ['F'] = &&op_fetchitem_label,
-      ['I'] = &&op_assembleitem_label,
-      ['W'] = &&op_delete_label,
-      ['X'] = &&op_exists_label,
-      ['Y'] = &&op_nthname_label,
-      ['Z'] = &&op_rootname_label,
+#define JUMP_ENTRY(opcode_byte, handler_fn) [opcode_byte] = &&handler_fn##_label,
+      RUNTIME_OPCODE_TABLE(JUMP_ENTRY)
+#undef JUMP_ENTRY
   };
 
 #define DISPATCH() do { if (*op == 'h') goto op_halt_label; goto *jump_table[*op]; } while (0)
 #define OPCASE(label_name, fn)   label_name: {     uint8_t *nextop = op + 1;     op = fn(nextop, item);     DISPATCH();   }
 
   DISPATCH();
-  OPCASE(op_nop_label, op_nop)
-  OPCASE(op_add_label, op_add)
-  OPCASE(op_savelocal_label, op_savelocal)
-  OPCASE(op_divide_label, op_divide)
-  OPCASE(op_getlocal_label, op_getlocal)
-  OPCASE(op_inclocal_label, op_inclocal)
-  OPCASE(op_declocal_label, op_declocal)
-  OPCASE(op_jump_label, op_jump)
-  OPCASE(op_jumpfalse_label, op_jumpfalse)
-  OPCASE(op_pushstr_label, op_pushstr)
-  OPCASE(op_multiply_label, op_multiply)
-  OPCASE(op_negate_label, op_negate)
-  OPCASE(op_equal_label, op_equal)
-  OPCASE(op_pushint_label, op_pushint)
-  OPCASE(op_notequal_label, op_notequal)
-  OPCASE(op_lessthan_label, op_lessthan)
-  OPCASE(op_subtract_label, op_subtract)
-  OPCASE(op_greaterthan_label, op_greaterthan)
-  OPCASE(op_lessthanorequal_label, op_lessthanorequal)
-  OPCASE(op_greaterthanorequal_label, op_greaterthanorequal)
-  OPCASE(op_logicalnot_label, op_logicalnot)
-  OPCASE(op_logicaland_label, op_logicaland)
-  OPCASE(op_logicalor_label, op_logicalor)
-  OPCASE(op_libcall_label, op_libcall)
-  OPCASE(op_assigncodeitem_label, op_assigncodeitem)
-  OPCASE(op_assignitem_label, op_assignitem)
-  OPCASE(op_fetchitem_label, op_fetchitem)
-  OPCASE(op_assembleitem_label, op_assembleitem)
-  OPCASE(op_delete_label, op_delete)
-  OPCASE(op_exists_label, op_exists)
-  OPCASE(op_nthname_label, op_nthname)
-  OPCASE(op_rootname_label, op_rootname)
+#define OPCASE_ENTRY(opcode_byte, handler_fn) OPCASE(handler_fn##_label, handler_fn)
+  RUNTIME_OPCODE_TABLE(OPCASE_ENTRY)
+#undef OPCASE_ENTRY
   OPCASE(op_undefined_label, op_undefined)
 
 op_halt_label:
