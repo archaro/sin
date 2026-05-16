@@ -69,6 +69,38 @@ static void lower_arglist(LOWER_CTX *ctx, AS_NODE *arglist, int32_t *argc);
 
 static void lower_item(LOWER_CTX *ctx, AS_NODE *item);
 static bool lower_build_embedded_payload(LOWER_CTX *ctx, AS_NODE *node, int32_t *payload_index);
+static bool lower_resolve_local_index(LOWER_CTX *ctx, AS_NODE *node, uint8_t *out_index);
+
+static bool lower_resolve_local_index(LOWER_CTX *ctx, AS_NODE *node, uint8_t *out_index) {
+  AS_VALUE *value;
+  const char *name;
+  uint8_t index = 0;
+
+  if (!node || node->nodetype != N_VALUE) {
+    lower_set_unsupported(ctx, node, "local target must be value(V_LOCAL)");
+    return false;
+  }
+
+  value = (AS_VALUE *)node->lhs;
+  if (!value || value->valtype != V_LOCAL) {
+    lower_set_unsupported(ctx, node, "local target must be value(V_LOCAL)");
+    return false;
+  }
+
+  name = value->value.s;
+  if (!name) {
+    lower_set_error(ctx, ERR_COMP_LOCALBEFOREDEF, "<null>");
+    return false;
+  }
+
+  if (!ctx->sem || !sem_get_local_index(ctx->sem, name, &index)) {
+    lower_set_error(ctx, ERR_COMP_LOCALBEFOREDEF, name);
+    return false;
+  }
+
+  if (out_index) *out_index = index;
+  return true;
+}
 
 static void lower_layer_part(LOWER_CTX *ctx, AS_NODE *part) {
   AS_VALUE *value;
@@ -186,10 +218,7 @@ static void lower_value_expr(LOWER_CTX *ctx, AS_NODE *node) {
       return;
     case V_LOCAL: {
       uint8_t index = 0;
-      if (!ctx->sem || !value->value.s ||
-          !sem_get_local_index(ctx->sem, value->value.s, &index)) {
-        lower_set_error(ctx, ERR_COMP_LOCALBEFOREDEF,
-                        value->value.s ? value->value.s : "<null>");
+      if (!lower_resolve_local_index(ctx, node, &index)) {
         return;
       }
       ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = index});
@@ -397,22 +426,8 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
 
     case N_ASSLOCAL: {
       AS_NODE *local = (AS_NODE *)node->lhs;
-      AS_VALUE *value;
       uint8_t index = 0;
-
-      if (!local || local->nodetype != N_VALUE) {
-        lower_set_unsupported(ctx, node, "assignment target is not a local value");
-        return;
-      }
-
-      value = (AS_VALUE *)local->lhs;
-      if (!value || value->valtype != V_LOCAL || !value->value.s) {
-        lower_set_unsupported(ctx, node, "missing local assignment target");
-        return;
-      }
-
-      if (!ctx->sem || !sem_get_local_index(ctx->sem, value->value.s, &index)) {
-        lower_set_error(ctx, ERR_COMP_LOCALBEFOREDEF, value->value.s);
+      if (!lower_resolve_local_index(ctx, local, &index)) {
         return;
       }
 
@@ -425,22 +440,8 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
     case N_INC:
     case N_DEC: {
       AS_NODE *local = (AS_NODE *)node->lhs;
-      AS_VALUE *value;
       uint8_t index = 0;
-
-      if (!local || local->nodetype != N_VALUE) {
-        lower_set_unsupported(ctx, node, "inc/dec target is not a local value");
-        return;
-      }
-
-      value = (AS_VALUE *)local->lhs;
-      if (!value || value->valtype != V_LOCAL || !value->value.s) {
-        lower_set_unsupported(ctx, node, "missing local inc/dec target");
-        return;
-      }
-
-      if (!ctx->sem || !sem_get_local_index(ctx->sem, value->value.s, &index)) {
-        lower_set_error(ctx, ERR_COMP_LOCALBEFOREDEF, value->value.s);
+      if (!lower_resolve_local_index(ctx, local, &index)) {
         return;
       }
 
