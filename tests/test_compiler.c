@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "ir.h"
@@ -68,29 +69,36 @@ static void test_ir_and_emitbc_helpers(void) {
   ir_destroy_unit(unit);
 }
 
+
+
+static void run_test(const char *label, void (*test_fn)(void)) {
+  printf("[test-harness] running %s\n", label);
+  test_fn();
+}
+
 int main(void) {
-  test_absyn_helpers();
-  test_ir_and_emitbc_helpers();
-  test_emitbc_header();
-  test_emitbc_opcode_map();
-  test_emitbc_opcode_map_call_item_deref_alias_layout();
-  test_emitbc_opcode_map_unsupported_ir_op();
-  test_emitbc_jumps();
-  test_emitbc_invariants();
-  test_pipeline_golden();
-  test_pipeline_large_local_lookup_duplicate();
-  test_pipeline_source_golden();
-  test_ir_validate();
-  test_pipeline_negative_matrix();
-  test_absyn_nested_binary_expressions();
-  test_absyn_stmtlist_multiple_statements();
-  test_absyn_if_elsif_else_chain();
-  test_absyn_item_deref_chains();
-  test_sem_check_locals_reusable_context();
-  test_sem_duplicate_local_keeps_original_index();
-  test_sdiss_fixture_basic();
-  test_parser_examples_obj_golden();
-  test_interpret_semantics_golden();
-  test_fixture_policy_declared_goldens_exist();
+  run_test("test_absyn_helpers", test_absyn_helpers);
+  run_test("test_ir_and_emitbc_helpers", test_ir_and_emitbc_helpers);
+  run_test("test_emitbc_header", test_emitbc_header);
+  run_test("test_emitbc_opcode_map", test_emitbc_opcode_map);
+  run_test("test_emitbc_opcode_map_call_item_deref_alias_layout", test_emitbc_opcode_map_call_item_deref_alias_layout);
+  run_test("test_emitbc_opcode_map_unsupported_ir_op", test_emitbc_opcode_map_unsupported_ir_op);
+  run_test("test_emitbc_jumps", test_emitbc_jumps);
+  run_test("test_emitbc_invariants", test_emitbc_invariants);
+  run_test("test_pipeline_golden", test_pipeline_golden);
+  run_test("test_pipeline_large_local_lookup_duplicate", test_pipeline_large_local_lookup_duplicate);
+  run_test("test_pipeline_source_golden", test_pipeline_source_golden);
+  run_test("test_ir_validate", test_ir_validate);
+  run_test("test_pipeline_negative_matrix", test_pipeline_negative_matrix);
+  run_test("test_absyn_nested_binary_expressions", test_absyn_nested_binary_expressions);
+  run_test("test_absyn_stmtlist_multiple_statements", test_absyn_stmtlist_multiple_statements);
+  run_test("test_absyn_if_elsif_else_chain", test_absyn_if_elsif_else_chain);
+  run_test("test_absyn_item_deref_chains", test_absyn_item_deref_chains);
+  run_test("test_sem_check_locals_reusable_context", test_sem_check_locals_reusable_context);
+  run_test("test_sem_duplicate_local_keeps_original_index", test_sem_duplicate_local_keeps_original_index);
+  run_test("test_sdiss_fixture_basic", test_sdiss_fixture_basic);
+  run_test("test_parser_examples_obj_golden", test_parser_examples_obj_golden);
+  run_test("test_interpret_semantics_golden", test_interpret_semantics_golden);
+  run_test("test_fixture_policy_declared_goldens_exist", test_fixture_policy_declared_goldens_exist);
   return 0;
 }
