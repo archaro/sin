@@ -114,7 +114,7 @@ void append_input(LINE_t *line, const char *msg, const ssize_t len) {
     // No point in doing this if there is no connection.
     // If there is a newline in the input, we have received
     // a complete line of input.
-    if (memchr(msg, '\n', len)) {
+    if (memchr(msg, '\n', len) || memchr(msg, '\r', len)) {
       line->status = LINE_data;
     }
     while (line->inbuf->buf.len + len + 1 >= line->inbuf->length) {
@@ -134,19 +134,23 @@ char *get_input(LINE_t *line) {
   // input buffer, set the status to LINE_idle, otherwise leave it
   // unchanged.  The buffer allocated by this function will need to be
   // freed by the calling function when it is no longer needed.
-  // If there isn't a newline in the input buffer, explode messily.
-  char *eol = strchr(line->inbuf->buf.base, '\n');
+  // Find end-of-line marker (LF or CR).
+  char *eol = strpbrk(line->inbuf->buf.base, "\r\n");
+  if (!eol) {
+    // Defensive fallback: no terminator found despite LINE_data.
+    return strdup("");
+  }
   *eol = '\0';
   char *data = strdup(line->inbuf->buf.base);
   // Ok, we have the line of data, now take it out of the input buffer.
-  eol++;
+  while (*eol == '\r' || *eol == '\n') eol++;
   char *newbuffer = malloc(INBUF_LENGTH);
   strcpy(newbuffer, eol);
   free(line->inbuf->buf.base);
   line->inbuf->length = INBUF_LENGTH;
   line->inbuf->buf.base = newbuffer;
   line->inbuf->buf.len = strlen(newbuffer);
-  if (!strchr(line->inbuf->buf.base, '\n')) {
+  if (!strpbrk(line->inbuf->buf.base, "\r\n")) {
     line->status = LINE_idle;
   }
   return data;
