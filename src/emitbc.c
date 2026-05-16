@@ -8,71 +8,113 @@
 #include "error.h"
 #include "memory.h"
 
-static int ensure_out(OUTPUT_t *out, size_t extra) {
-  size_t used = (size_t)(out->nextbyte - out->bytecode);
-  size_t needed = used + extra;
-  if (needed <= out->maxsize) return 1;
-  size_t oldcap = out->maxsize;
+typedef struct {
+  OUTPUT_t *out;
+  size_t used;
+  int failed;
+} BC_Writer;
+
+typedef enum {
+  META_SIZE_FIXED_0,
+  META_SIZE_FIXED_1,
+  META_SIZE_FIXED_3,
+  META_SIZE_PUSH_INT,
+  META_SIZE_PUSH_STRING,
+  META_SIZE_ITEM_SAVE_CODE
+} InstSizePolicy;
+
+typedef struct {
+  InstSizePolicy size_policy;
+  uint8_t opcode;
+} OpMeta;
+
+static int bw_ensure(BC_Writer *w, size_t extra) {
+  if (w->failed) return 0;
+  size_t needed = w->used + extra;
+  if (needed <= w->out->maxsize) return 1;
+  size_t oldcap = w->out->maxsize;
   size_t newcap = GROW_CAPACITY(oldcap);
   while (newcap < needed) newcap = GROW_CAPACITY(newcap);
-  out->bytecode = GROW_ARRAY(unsigned char, out->bytecode, oldcap, newcap);
-  out->nextbyte = out->bytecode + used;
-  out->maxsize = newcap;
+  w->out->bytecode = GROW_ARRAY(unsigned char, w->out->bytecode, oldcap, newcap);
+  if (!w->out->bytecode) {
+    w->failed = 1;
+    return 0;
+  }
+  w->out->maxsize = newcap;
+  w->out->nextbyte = w->out->bytecode + w->used;
   return 1;
 }
 
-static void write_u8(OUTPUT_t *out, uint8_t v) { ensure_out(out, 1); *out->nextbyte++ = v; }
-static void write_u16(OUTPUT_t *out, uint16_t v) { ensure_out(out, 2); memcpy(out->nextbyte, &v, 2); out->nextbyte += 2; }
-static void write_i64(OUTPUT_t *out, int64_t v) { ensure_out(out, 8); memcpy(out->nextbyte, &v, 8); out->nextbyte += 8; }
-
-static int inst_size(const IR_Inst *in) {
-  switch (in->op) {
-    case IR_OP_LABEL: return 0;
-    case IR_OP_PUSH_INT: return 1 + 8;
-    case IR_OP_PUSH_STRING: return 1 + 2 + (int)strlen((const char *)(intptr_t)in->imm);
-    case IR_OP_LOAD_LOCAL:
-    case IR_OP_STORE_LOCAL:
-    case IR_OP_INC_LOCAL:
-    case IR_OP_DEC_LOCAL:
-    case IR_OP_LIBCALL: return 3;
-    case IR_OP_CALL: return 3;
-    case IR_OP_JUMP:
-    case IR_OP_JUMP_IF_FALSE: return 3;
-    case IR_OP_ITEM_SAVE_CODE: return 1 + 2;
-    default: return 1;
-  }
+static int bw_write_u8(BC_Writer *w, uint8_t v) {
+  if (!bw_ensure(w, 1)) return 0;
+  *w->out->nextbyte++ = v;
+  w->used++;
+  return 1;
+}
+static int bw_write_u16(BC_Writer *w, uint16_t v) {
+  if (!bw_ensure(w, 2)) return 0;
+  memcpy(w->out->nextbyte, &v, 2);
+  w->out->nextbyte += 2;
+  w->used += 2;
+  return 1;
+}
+static int bw_write_i64(BC_Writer *w, int64_t v) {
+  if (!bw_ensure(w, 8)) return 0;
+  memcpy(w->out->nextbyte, &v, 8);
+  w->out->nextbyte += 8;
+  w->used += 8;
+  return 1;
+}
+static int bw_write_bytes(BC_Writer *w, const void *src, size_t n) {
+  if (!bw_ensure(w, n)) return 0;
+  memcpy(w->out->nextbyte, src, n);
+  w->out->nextbyte += n;
+  w->used += n;
+  return 1;
 }
 
-static uint8_t map_opcode(IR_Op op) {
-  switch (op) {
-    case IR_OP_HALT: return 'h';
-    case IR_OP_PUSH_INT: return 'p';
-    case IR_OP_PUSH_STRING: return 'l';
-    case IR_OP_ADD: return 'a'; case IR_OP_SUB: return 's'; case IR_OP_MUL: return 'm'; case IR_OP_DIV: return 'd';
-    case IR_OP_NEG: return 'n';
-    case IR_OP_EQ: return 'o'; case IR_OP_NEQ: return 'q'; case IR_OP_LT: return 'r'; case IR_OP_GT: return 't'; case IR_OP_LE: return 'u'; case IR_OP_GE: return 'v';
-    case IR_OP_NOT: return 'x'; case IR_OP_AND: return 'y'; case IR_OP_OR: return 'z';
-    case IR_OP_LOAD_LOCAL: return 'e'; case IR_OP_STORE_LOCAL: return 'c'; case IR_OP_INC_LOCAL: return 'f'; case IR_OP_DEC_LOCAL: return 'g';
-    case IR_OP_JUMP: return 'j'; case IR_OP_JUMP_IF_FALSE: return 'k';
-    case IR_OP_ITEM_BEGIN: return 'I'; case IR_OP_ITEM_PUSH_LAYER: return 'L'; case IR_OP_ITEM_PUSH_DEREF: return 'D'; case IR_OP_ITEM_END: return 'E'; case IR_OP_ITEM_DEREF: return 'F';
-    /*
-     * IR_OP_CALL intentionally aliases IR_OP_ITEM_DEREF to opcode 'F'.
-     * Both operations dispatch to op_fetchitem in the VM: they pop an item
-     * reference from the stack and replace it with the fetched value.
-     *
-     * Safety comes from IR lowering/validation context, not opcode identity:
-     * - ITEM_DEREF appears inside item-assembly flows after IR_OP_ITEM_PUSH_DEREF.
-     * - CALL appears after callee + args have been pushed and carries argc as an
-     *   immediate 16-bit operand, while ITEM_DEREF has no immediate.
-     *
-     * Bytecode format note: CALL widened from 1-byte to 2-byte immediate argc.
-     */
-    case IR_OP_ITEM_SAVE: return 'C'; case IR_OP_EXISTS: return 'X'; case IR_OP_DELETE: return 'W'; case IR_OP_NTHNAME: return 'Y'; case IR_OP_ROOTNAME: return 'Z';
-    case IR_OP_CALL: return 'F';
-    case IR_OP_LIBCALL: return 'A';
-    case IR_OP_ITEM_SAVE_CODE: return 'B';
-    default: return 0;
-  }
+static const OpMeta *op_meta(IR_Op op) {
+  static const OpMeta m[] = {
+      [IR_OP_HALT] = {META_SIZE_FIXED_1, 'h'},
+      [IR_OP_LABEL] = {META_SIZE_FIXED_0, 0},
+      [IR_OP_PUSH_INT] = {META_SIZE_PUSH_INT, 'p'},
+      [IR_OP_PUSH_STRING] = {META_SIZE_PUSH_STRING, 'l'},
+      [IR_OP_ADD] = {META_SIZE_FIXED_1, 'a'},
+      [IR_OP_SUB] = {META_SIZE_FIXED_1, 's'},
+      [IR_OP_MUL] = {META_SIZE_FIXED_1, 'm'},
+      [IR_OP_DIV] = {META_SIZE_FIXED_1, 'd'},
+      [IR_OP_NEG] = {META_SIZE_FIXED_1, 'n'},
+      [IR_OP_EQ] = {META_SIZE_FIXED_1, 'o'},
+      [IR_OP_NEQ] = {META_SIZE_FIXED_1, 'q'},
+      [IR_OP_LT] = {META_SIZE_FIXED_1, 'r'},
+      [IR_OP_GT] = {META_SIZE_FIXED_1, 't'},
+      [IR_OP_LE] = {META_SIZE_FIXED_1, 'u'},
+      [IR_OP_GE] = {META_SIZE_FIXED_1, 'v'},
+      [IR_OP_NOT] = {META_SIZE_FIXED_1, 'x'},
+      [IR_OP_AND] = {META_SIZE_FIXED_1, 'y'},
+      [IR_OP_OR] = {META_SIZE_FIXED_1, 'z'},
+      [IR_OP_LOAD_LOCAL] = {META_SIZE_FIXED_3, 'e'},
+      [IR_OP_STORE_LOCAL] = {META_SIZE_FIXED_3, 'c'},
+      [IR_OP_INC_LOCAL] = {META_SIZE_FIXED_3, 'f'},
+      [IR_OP_DEC_LOCAL] = {META_SIZE_FIXED_3, 'g'},
+      [IR_OP_JUMP] = {META_SIZE_FIXED_3, 'j'},
+      [IR_OP_JUMP_IF_FALSE] = {META_SIZE_FIXED_3, 'k'},
+      [IR_OP_ITEM_BEGIN] = {META_SIZE_FIXED_1, 'I'},
+      [IR_OP_ITEM_PUSH_LAYER] = {META_SIZE_FIXED_1, 'L'},
+      [IR_OP_ITEM_PUSH_DEREF] = {META_SIZE_FIXED_1, 'D'},
+      [IR_OP_ITEM_END] = {META_SIZE_FIXED_1, 'E'},
+      [IR_OP_ITEM_DEREF] = {META_SIZE_FIXED_1, 'F'},
+      [IR_OP_ITEM_SAVE] = {META_SIZE_FIXED_1, 'C'},
+      [IR_OP_EXISTS] = {META_SIZE_FIXED_1, 'X'},
+      [IR_OP_DELETE] = {META_SIZE_FIXED_1, 'W'},
+      [IR_OP_NTHNAME] = {META_SIZE_FIXED_1, 'Y'},
+      [IR_OP_ROOTNAME] = {META_SIZE_FIXED_1, 'Z'},
+      [IR_OP_CALL] = {META_SIZE_FIXED_3, 'F'},
+      [IR_OP_LIBCALL] = {META_SIZE_FIXED_3, 'A'},
+      [IR_OP_ITEM_SAVE_CODE] = {META_SIZE_ITEM_SAVE_CODE, 'B'},
+  };
+  if (op < 0 || op >= (IR_Op)(sizeof(m) / sizeof(m[0]))) return NULL;
+  return &m[op];
 }
 
 int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
@@ -87,29 +129,38 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
   size_t *pos = GROW_ARRAY(size_t, NULL, 0, ir->function.count > 0 ? ir->function.count : 1);
   size_t pc = 2;
   for (size_t i = 0; i < ir->function.count; i++) {
-    int isz;
     const IR_Inst *in = &ir->function.code[i];
+    int isz = 0;
+    const OpMeta *meta = op_meta(in->op);
     pos[i] = pc;
-    isz = inst_size(in);
-    if (in->op == IR_OP_ITEM_SAVE_CODE && in->a >= 0 && (size_t)in->a < ir->embedded_code.count) {
-      const IR_EmbeddedCodePayload *payload = &ir->embedded_code.entries[in->a];
-      if (payload->source != NULL) {
-        isz += (int)strlen(payload->source);
-      }
+    if (!meta) continue;
+    switch (meta->size_policy) {
+      case META_SIZE_FIXED_0: isz = 0; break;
+      case META_SIZE_FIXED_1: isz = 1; break;
+      case META_SIZE_FIXED_3: isz = 3; break;
+      case META_SIZE_PUSH_INT: isz = 1 + 8; break;
+      case META_SIZE_PUSH_STRING: isz = 1 + 2 + (int)strlen((const char *)(intptr_t)in->imm); break;
+      case META_SIZE_ITEM_SAVE_CODE:
+        isz = 1 + 2;
+        if (in->a >= 0 && (size_t)in->a < ir->embedded_code.count) {
+          const IR_EmbeddedCodePayload *payload = &ir->embedded_code.entries[in->a];
+          if (payload->source != NULL) isz += (int)strlen(payload->source);
+        }
+        break;
     }
     pc += (size_t)isz;
   }
 
-  ensure_out(out, 2);
+  BC_Writer w = {.out = out, .used = 0, .failed = 0};
+  if (!bw_ensure(&w, 2)) goto oom;
   out->nextbyte = out->bytecode;
-  write_u8(out, local_count);
-  write_u8(out, param_count);
+  if (!bw_write_u8(&w, local_count) || !bw_write_u8(&w, param_count)) goto oom;
 
   for (size_t i = 0; i < ir->function.count; i++) {
     IR_Inst *in = &ir->function.code[i];
     if (in->op == IR_OP_LABEL) continue;
-    uint8_t op = map_opcode(in->op);
-    if (op == 0) {
+    const OpMeta *meta = op_meta(in->op);
+    if (!meta || meta->opcode == 0) {
       FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
       {
         int8_t errnum = ERR_NOERROR;
@@ -117,9 +168,9 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
         return errnum;
       }
     }
-    write_u8(out, op);
+    if (!bw_write_u8(&w, meta->opcode)) goto oom;
     switch (in->op) {
-      case IR_OP_PUSH_INT: write_i64(out, in->imm); break;
+      case IR_OP_PUSH_INT: if (!bw_write_i64(&w, in->imm)) goto oom; break;
       case IR_OP_PUSH_STRING: {
         const char *s = (const char *)(intptr_t)in->imm;
         size_t len = strlen(s);
@@ -129,24 +180,20 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
           compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "string literal too long: %zu", len);
           return errnum;
         }
-        write_u16(out, (uint16_t)len);
-        ensure_out(out, len);
-        memcpy(out->nextbyte, s, len);
-        out->nextbyte += len;
+        if (!bw_write_u16(&w, (uint16_t)len) || !bw_write_bytes(&w, s, len)) goto oom;
         break;
       }
       case IR_OP_LOAD_LOCAL:
       case IR_OP_STORE_LOCAL:
       case IR_OP_INC_LOCAL:
       case IR_OP_DEC_LOCAL:
-        write_u8(out, (uint8_t)in->a);
+        if (!bw_write_u8(&w, (uint8_t)in->a)) goto oom;
         break;
       case IR_OP_LIBCALL:
-        write_u8(out, (uint8_t)in->a);
-        write_u8(out, (uint8_t)in->b);
+        if (!bw_write_u8(&w, (uint8_t)in->a) || !bw_write_u8(&w, (uint8_t)in->b)) goto oom;
         break;
       case IR_OP_CALL:
-        write_u16(out, (uint16_t)in->a);
+        if (!bw_write_u16(&w, (uint16_t)in->a)) goto oom;
         break;
       case IR_OP_JUMP:
       case IR_OP_JUMP_IF_FALSE: {
@@ -172,7 +219,7 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
           compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "jump offset out of range: %ld", diff);
           return errnum;
         }
-        write_u16(out, (uint16_t)(int16_t)diff);
+        if (!bw_write_u16(&w, (uint16_t)(int16_t)diff)) goto oom;
         break;
       }
       case IR_OP_ITEM_PUSH_LAYER: {
@@ -190,10 +237,7 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
           compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "layer name too long: %zu", len);
           return errnum;
         }
-        write_u8(out, (uint8_t)len);
-        ensure_out(out, len);
-        memcpy(out->nextbyte, s, len);
-        out->nextbyte += len;
+        if (!bw_write_u8(&w, (uint8_t)len) || !bw_write_bytes(&w, s, len)) goto oom;
         break;
       }
       case IR_OP_ITEM_SAVE_CODE: {
@@ -217,10 +261,7 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
           compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "embedded code too long: %zu", len);
           return errnum;
         }
-        write_u16(out, (uint16_t)len);
-        ensure_out(out, len);
-        memcpy(out->nextbyte, payload->source, len);
-        out->nextbyte += len;
+        if (!bw_write_u16(&w, (uint16_t)len) || !bw_write_bytes(&w, payload->source, len)) goto oom;
         break;
       }
       default: break;
@@ -229,4 +270,11 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
 
   FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
   return ERR_NOERROR;
+oom:
+  FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+  {
+    int8_t errnum = ERR_NOERROR;
+    compdiag_set_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "bytecode writer out of memory");
+    return errnum;
+  }
 }
