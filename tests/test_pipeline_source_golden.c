@@ -24,7 +24,8 @@ static void test_source_pipeline_negative_cases(void) {
   char *errdetail = NULL;
 
   const char *bad_char = "^;";
-  int8_t rc = parse_source((char *)bad_char, (int)strlen(bad_char), &absyn, &errdetail);
+  ParseInput input = {bad_char, strlen(bad_char), "<test>"};
+  int8_t rc = parse_source(&input, &absyn, &errdetail);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
   ASSERT_NOT_NULL(errdetail);
   ASSERT_TRUE(strcmp(errdetail, "^") == 0);

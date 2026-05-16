@@ -4,7 +4,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
 
 #include "config.h"
 #include "error.h"
@@ -13,15 +12,16 @@
 #include "memory.h"
 #include "log.h"
 #include "emitbc.h"
+#include "source_io.h"
 
 // Things which need to be known
 CONFIG_t config;
 
 int main(int argc, char **argv) {
   char *source = NULL;
+  size_t source_len = 0;
   CompilerDiagnostic diag;
   compiler_diag_init(&diag);
-  int sourcelen = 0;
   uint8_t result = ERR_NOERROR;
   OUTPUT_t *out = NULL;
   init_errmsg();
@@ -31,41 +31,14 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  FILE *in = fopen(argv[1], "r");
-  if (!in) {
-    printf("Unable to open input file.");
-    return 1;
-  }
-
-  if (fseek(in, 0, SEEK_END) != 0) {    result = ERR_COMP_SYNTAX;
+  if (load_file_buffer(argv[1], &source, &source_len) != 0) {    result = ERR_COMP_SYNTAX;
     compiler_diag_set(&diag, result, DIAG_PHASE_IO, "input file IO failure");
-    fclose(in);
     goto compile_error;
   }
-  long sourcefilelen = ftell(in);
-  if (sourcefilelen < 0 || sourcefilelen > INT_MAX) {    result = ERR_COMP_SYNTAX;
-    compiler_diag_set(&diag, result, DIAG_PHASE_IO, "input file IO failure");
-    fclose(in);
-    goto compile_error;
-  }
-  sourcelen = (int)sourcefilelen;
-  if (fseek(in, 0, SEEK_SET) != 0) {    result = ERR_COMP_SYNTAX;
-    compiler_diag_set(&diag, result, DIAG_PHASE_IO, "input file IO failure");
-    fclose(in);
-    goto compile_error;
-  }
-  source = GROW_ARRAY(char, NULL, 0, sourcelen);
-  size_t bytesread = fread(source, sizeof(char), sourcelen, in);
-  if (bytesread != (size_t)sourcelen) {    result = ERR_COMP_SYNTAX;
-    compiler_diag_set(&diag, result, DIAG_PHASE_IO, "input file IO failure");
-    fclose(in);
-    goto compile_error;
-  }
-  fclose(in);
-  logmsg("Source loaded: %d bytes.\n", sourcelen);
+  logmsg("Source loaded: %zu bytes.\n", source_len);
 
   logmsg("Compiling...\n");
-  result = compile_source_to_bytecode_diag(source, (size_t)sourcelen, &out, &diag);
+  result = compile_source_to_bytecode_diag(source, source_len, &out, &diag);
   if (result != ERR_NOERROR) {
     goto compile_error;
   }
@@ -94,7 +67,7 @@ cleanup:
     FREE_ARRAY(OUTPUT_t, out, 1);
   }
   if (source) {
-    FREE_ARRAY(char, source, sourcelen);
+    FREE_ARRAY(char, source, (int)source_len);
   }
 
   return result == ERR_NOERROR ? 0 : 1;

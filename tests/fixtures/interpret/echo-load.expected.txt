@@ -2,6 +2,6 @@
 Bytecode loaded: 589 bytes.
 Listening on port 4001.
 ===stderr===
-Undefined opcode:
+Library call not found.
 ===exit===
 -1

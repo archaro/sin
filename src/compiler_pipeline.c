@@ -25,7 +25,8 @@ int8_t compile_source_to_bytecode_with_params(const char *source, size_t len,
   }
 
   ctx.sem_ctx = sem_create_ctx();
-  rc = parse_source((char *)ctx.source, (int)ctx.source_len, &ctx.ast_root, errdetail);
+  ParseInput input = {ctx.source, ctx.source_len, "<memory>"};
+  rc = parse_source(&input, &ctx.ast_root, errdetail);
   if (rc != ERR_NOERROR) {
     goto done;
   }
@@ -69,6 +70,11 @@ done:
 
 int8_t compile_source_to_bytecode(const char *source, size_t len, OUTPUT_t **out, char **errdetail) {
   return compile_source_to_bytecode_with_params(source, len, NULL, 0, out, errdetail);
+}
+
+int8_t compile_parse_input_to_bytecode(const ParseInput *input, OUTPUT_t **out, char **errdetail) {
+  if (!input) return ERR_COMP_SYNTAX;
+  return compile_source_to_bytecode(input->data, input->len, out, errdetail);
 }
 
 #include <string.h>

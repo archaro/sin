@@ -14,6 +14,7 @@
   #include <stdint.h>
 
   #include "absyn.h"
+  #include "parse_input.h"
 
   typedef struct {
     unsigned char *bytecode;
@@ -25,13 +26,15 @@
     int8_t errnum;
     char *errdetail;
     AS_NODE *absyn;
+    const char *source_name;
   } SCANNER_STATE_t;
 
-  int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn, char **errdetail);
+  int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail);
 }
 
 %{
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -46,6 +49,9 @@ int yylex_init(yyscan_t* scanner);
 void yyset_in(FILE *_in_str, yyscan_t yyscanner);
 int yylex_destroy(yyscan_t yyscanner);
 int yyparse();
+typedef struct yy_buffer_state *YY_BUFFER_STATE;
+YY_BUFFER_STATE yy_scan_bytes(const char *bytes, int len, yyscan_t yyscanner);
+void yy_delete_buffer(YY_BUFFER_STATE b, yyscan_t yyscanner);
 
 void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
   // yyerror() is called whenever there is a syntax error, so we need to
@@ -55,11 +61,19 @@ void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
     state->errnum = ERR_COMP_SYNTAX;
   }
   if (state->errdetail == NULL) {
-    state->errdetail = strdup(s);
+    if (state->source_name) {
+      size_t n = strlen(state->source_name) + strlen(s) + 3;
+      state->errdetail = malloc(n);
+      if (state->errdetail) {
+        snprintf(state->errdetail, n, "%s: %s", state->source_name, s);
+      }
+    } else {
+      state->errdetail = strdup(s);
+    }
   }
 }
 
-int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn, char **errdetail) {
+int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) {
   // Compile the given string.
   // Returns 0 if successful or > 0 (error number) if not.
   // source holds the source input string
@@ -72,13 +86,16 @@ int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn, char **errdeta
   scanner_state.errnum = ERR_NOERROR;
   scanner_state.errdetail = NULL;
   scanner_state.absyn = NULL;
-  FILE *in = fmemopen(source, sourcelen, "r");
-  yyset_in(in, sc);
+  if (!input || !input->data || !absyn || !errdetail) {
+    return ERR_COMP_SYNTAX;
+  }
+  scanner_state.source_name = input->source_name;
+  YY_BUFFER_STATE in = yy_scan_bytes(input->data, (int)input->len, sc);
 
   bool failed = yyparse(sc, &scanner_state);
 
   // Clean up
-  fclose(in);
+  yy_delete_buffer(in, sc);
   yylex_destroy(sc);
 
   if (failed) {
