@@ -551,14 +551,14 @@ static void lower_node(LOWER_CTX *ctx, AS_NODE *node) {
 
 int8_t lower_ast_to_ir(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **errdetail) {
   LOWER_CTX ctx;
+  int8_t startup_errnum = ERR_NOERROR;
 
   if (!out_ir) {
-    if (errdetail) *errdetail = strdup("lower: out_ir is NULL");
-    return ERR_COMP_SYNTAX;
+    compdiag_set_once(&startup_errnum, errdetail, ERR_COMP_SYNTAX, "lower", "out_ir is NULL");
+    return startup_errnum;
   }
 
   *out_ir = NULL;
-  if (errdetail) *errdetail = NULL;
 
   memset(&ctx, 0, sizeof(ctx));
   ctx.sem = sem;
@@ -566,8 +566,8 @@ int8_t lower_ast_to_ir(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **err
   ctx.errnum = ERR_NOERROR;
 
   if (!ctx.ir) {
-    if (errdetail) *errdetail = strdup("lower: failed to allocate IR unit");
-    return ERR_COMP_INUSE;
+    compdiag_set_once(&startup_errnum, errdetail, ERR_COMP_INUSE, "lower", "failed to allocate IR unit");
+    return startup_errnum;
   }
 
   lower_node(&ctx, root);

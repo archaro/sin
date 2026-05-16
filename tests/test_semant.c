@@ -24,14 +24,14 @@ void test_sem_check_locals_reusable_context(void) {
   rc = sem_check_locals(bad_prog, &errdetail, ctx);
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
   ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail, "missing") == 0);
+  ASSERT_TRUE(strcmp(errdetail, "semant: missing") == 0);
 
   char *first_errdetail = errdetail;
 
   rc = sem_check_locals(bad_prog, &errdetail, ctx);
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
   ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail, "missing") == 0);
+  ASSERT_TRUE(strcmp(errdetail, "semant: missing") == 0);
   ASSERT_TRUE(errdetail != first_errdetail);
   free(first_errdetail);
   free(errdetail);
