@@ -71,6 +71,7 @@ int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn, char **errdeta
   SCANNER_STATE_t scanner_state;
   scanner_state.errnum = ERR_NOERROR;
   scanner_state.errdetail = NULL;
+  scanner_state.absyn = NULL;
   FILE *in = fmemopen(source, sourcelen, "r");
   yyset_in(in, sc);
 
@@ -81,7 +82,10 @@ int8_t parse_source(char *source, int sourcelen, AS_NODE **absyn, char **errdeta
   yylex_destroy(sc);
 
   if (failed) {
-    scanner_state.absyn = NULL;
+    if (scanner_state.absyn != NULL) {
+      as_delete(scanner_state.absyn);
+      scanner_state.absyn = NULL;
+    }
     *errdetail = scanner_state.errdetail;
     return scanner_state.errnum;
   } else {
@@ -138,7 +142,15 @@ input:  stmtlist { state->absyn = $1; }
         ;
 
 stmtlist: /* Nothing */ { $$ = as_new_stmtlist_node(); }
-        | stmtlist stmtsemi { $$ = as_stmtlist_append($1, $2); }
+        | stmtlist stmtsemi {
+            if (!as_stmtlist_append_checked($1, $2)) {
+              $$ = NULL;
+              state->errnum = ERR_COMP_SYNTAX;
+              state->errdetail = strdup("parser: out of memory growing statement list");
+              YYERROR;
+            }
+            $$ = $1;
+          }
         ;
 
 stmtsemi: stmt TSEMI { $$ = $1; }
@@ -242,4 +254,3 @@ deref_content: item { $$ = $1; }
         | TLOCAL { $$ = as_new_valnode(V_LOCAL, $1); }
         ;
 %%
-

@@ -1,10 +1,12 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "compiler_context.h"
 #include "error.h"
 #include "ir.h"
 #include "lower.h"
+#include "memory.h"
 #include "parser.h"
 #include "semant.h"
 #include "test_assert.h"
@@ -85,4 +87,49 @@ void test_compiler_context_failures(void) {
   test_context_semant_failure_cleanup();
   test_context_lower_failure_cleanup();
   test_context_emit_failure_cleanup();
+
+  alloc_test_fail_after(-1);
+  {
+    AS_NODE *list = as_new_stmtlist_node();
+    ASSERT_NOT_NULL(list);
+    for (int i = 0; i < 8; i++) {
+      char buf[8];
+      snprintf(buf, sizeof(buf), "%d", i);
+      ASSERT_TRUE(as_stmtlist_append_checked(list, as_new_valnode(V_INT, strdup(buf))));
+    }
+    AS_NODE *stmt2 = as_new_valnode(V_INT, strdup("9"));
+    alloc_test_fail_after(1);
+    ASSERT_TRUE(!as_stmtlist_append_checked(list, stmt2));
+    as_delete(stmt2);
+    as_delete(list);
+  }
+  alloc_test_fail_after(-1);
+
+  alloc_test_fail_after(1);
+  {
+    IR_Unit *u = ir_create_unit();
+    if (u) {
+      ASSERT_EQ_INT((int)SIZE_MAX, (int)ir_emit(u, (IR_Inst){.op=IR_OP_HALT}));
+      ir_destroy_unit(u);
+    }
+  }
+  alloc_test_fail_after(-1);
+
+  alloc_test_fail_after(3);
+  {
+    OUTPUT_t out = {0};
+    out.maxsize = 1;
+    out.bytecode = malloc(1);
+    out.nextbyte = out.bytecode;
+    IR_Unit *u = ir_create_unit();
+    ASSERT_NOT_NULL(u);
+    ir_emit(u, (IR_Inst){.op=IR_OP_PUSH_INT,.imm=1});
+    char *err = NULL;
+    int8_t rc = emit_bytecode(u, 0, 0, &out, &err);
+    ASSERT_TRUE(rc != ERR_NOERROR);
+    if (err) free(err);
+    ir_destroy_unit(u);
+    free(out.bytecode);
+  }
+  alloc_test_fail_after(-1);
 }

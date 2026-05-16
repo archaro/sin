@@ -52,9 +52,9 @@ int8_t compiler_context_prepare_bytecode_output(CompilerContext *ctx, size_t ini
     return -1;
   }
 
-  ctx->bytecode_out = GROW_ARRAY(OUTPUT_t, NULL, 0, 1);
+  if (!alloc_grow_array((void **)&ctx->bytecode_out, 0, 1, sizeof(OUTPUT_t))) return -1;
   ctx->bytecode_out->maxsize = initial_size;
-  ctx->bytecode_out->bytecode = GROW_ARRAY(unsigned char, NULL, 0, ctx->bytecode_out->maxsize);
+  if (!alloc_grow_array((void **)&ctx->bytecode_out->bytecode, 0, ctx->bytecode_out->maxsize, sizeof(unsigned char))) return -1;
   ctx->bytecode_out->nextbyte = ctx->bytecode_out->bytecode;
   return 0;
 }

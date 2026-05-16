@@ -5,6 +5,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef enum { V_INT, V_STR, V_LOCAL, V_LAYER } ENUM_VALUE;
 struct AS_VALUE_s {
@@ -50,9 +51,9 @@ AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval);
 AS_STMTLIST *as_new_stmtlist(void);
 AS_NODE *as_new_stmtlist_node(void);
 AS_NODE *as_stmtlist_append(AS_NODE *stmtlist_node, AS_NODE *stmt);
+bool as_stmtlist_append_checked(AS_NODE *stmtlist_node, AS_NODE *stmt);
 AS_NODE *as_new_node(ENUM_NODE nodetype, void *lhs, void *rhs);
 AS_IF *as_new_if(AS_NODE *condition, AS_NODE *then, AS_IF *elsif);
 void as_delete(AS_NODE *root);
 void as_delete_if(AS_IF *asif);
 void as_walk(AS_NODE *root);
-

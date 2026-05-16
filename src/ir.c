@@ -13,34 +13,28 @@
 #include "ir.h"
 #include "memory.h"
 
-static void ensure_inst_capacity(IR_Function* function, size_t needed) {
+static bool ensure_inst_capacity(IR_Function* function, size_t needed) {
   if (function->capacity >= needed) {
-    return;
+    return true;
   }
-
   size_t oldcap = function->capacity;
-  size_t newcap = GROW_CAPACITY(oldcap);
-  while (newcap < needed) {
-    newcap = GROW_CAPACITY(newcap);
-  }
-
-  function->code = GROW_ARRAY(IR_Inst, function->code, oldcap, newcap);
+  size_t newcap = 0;
+  if (!alloc_grow_capacity(oldcap, needed, &newcap)) return false;
+  if (!alloc_grow_array((void **)&function->code, oldcap, newcap, sizeof(IR_Inst))) return false;
   function->capacity = newcap;
+  return true;
 }
 
-static void ensure_label_capacity(IR_LabelTable* labels, size_t needed) {
+static bool ensure_label_capacity(IR_LabelTable* labels, size_t needed) {
   if (labels->capacity >= needed) {
-    return;
+    return true;
   }
-
   size_t oldcap = labels->capacity;
-  size_t newcap = GROW_CAPACITY(oldcap);
-  while (newcap < needed) {
-    newcap = GROW_CAPACITY(newcap);
-  }
-
-  labels->entries = GROW_ARRAY(IR_Label, labels->entries, oldcap, newcap);
+  size_t newcap = 0;
+  if (!alloc_grow_capacity(oldcap, needed, &newcap)) return false;
+  if (!alloc_grow_array((void **)&labels->entries, oldcap, newcap, sizeof(IR_Label))) return false;
   labels->capacity = newcap;
+  return true;
 }
 
 IR_Unit* ir_create_unit(void) {
@@ -65,7 +59,7 @@ void ir_destroy_unit(IR_Unit* unit) {
 
 size_t ir_emit(IR_Unit* unit, IR_Inst inst) {
   size_t idx = unit->function.count;
-  ensure_inst_capacity(&unit->function, idx + 1);
+  if (!ensure_inst_capacity(&unit->function, idx + 1)) return SIZE_MAX;
   unit->function.code[idx] = inst;
   unit->function.count++;
   return idx;
@@ -73,7 +67,7 @@ size_t ir_emit(IR_Unit* unit, IR_Inst inst) {
 
 int32_t ir_new_label(IR_Unit* unit) {
   size_t idx = unit->labels.count;
-  ensure_label_capacity(&unit->labels, idx + 1);
+  if (!ensure_label_capacity(&unit->labels, idx + 1)) return -1;
 
   IR_Label* label = &unit->labels.entries[idx];
   label->id = (int32_t)idx;
@@ -96,18 +90,19 @@ bool ir_bind_label(IR_Unit* unit, int32_t label_id) {
   return true;
 }
 
-static void ensure_embedded_capacity(IR_EmbeddedCodeTable* table, size_t needed) {
-  if (table->capacity >= needed) return;
+static bool ensure_embedded_capacity(IR_EmbeddedCodeTable* table, size_t needed) {
+  if (table->capacity >= needed) return true;
   size_t oldcap = table->capacity;
-  size_t newcap = GROW_CAPACITY(oldcap);
-  while (newcap < needed) newcap = GROW_CAPACITY(newcap);
-  table->entries = GROW_ARRAY(IR_EmbeddedCodePayload, table->entries, oldcap, newcap);
+  size_t newcap = 0;
+  if (!alloc_grow_capacity(oldcap, needed, &newcap)) return false;
+  if (!alloc_grow_array((void **)&table->entries, oldcap, newcap, sizeof(IR_EmbeddedCodePayload))) return false;
   table->capacity = newcap;
+  return true;
 }
 
 int32_t ir_add_embedded_code_payload(IR_Unit* unit, IR_EmbeddedCodePayload payload) {
   size_t idx = unit->embedded_code.count;
-  ensure_embedded_capacity(&unit->embedded_code, idx + 1);
+  if (!ensure_embedded_capacity(&unit->embedded_code, idx + 1)) return -1;
   unit->embedded_code.entries[idx] = payload;
   unit->embedded_code.count++;
   return (int32_t)idx;
