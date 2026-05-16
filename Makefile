@@ -13,7 +13,7 @@ LIB_DIR := lib
 # Test runner
 TEST_DIR := tests
 TEST_BIN := $(TEST_DIR)/test-compiler
-TEST_SOURCES := $(TEST_DIR)/test_compiler.c $(TEST_DIR)/test_helpers.c $(TEST_DIR)/test_emitbc_header.c $(TEST_DIR)/test_emitbc_opcode_map.c $(TEST_DIR)/test_emitbc_jumps.c $(TEST_DIR)/test_pipeline_golden.c $(TEST_DIR)/test_pipeline_source_golden.c $(TEST_DIR)/test_scomp_e2e_golden.c $(TEST_DIR)/test_ir_validate.c $(TEST_DIR)/test_absyn_lifecycle.c $(TEST_DIR)/test_semant.c $(TEST_DIR)/test_sdiss_fixtures.c $(TEST_DIR)/test_parser_examples_obj_golden.c
+TEST_SOURCES := $(TEST_DIR)/test_compiler.c $(TEST_DIR)/test_helpers.c $(TEST_DIR)/test_emitbc_header.c $(TEST_DIR)/test_emitbc_opcode_map.c $(TEST_DIR)/test_emitbc_jumps.c $(TEST_DIR)/test_pipeline_golden.c $(TEST_DIR)/test_pipeline_source_golden.c $(TEST_DIR)/test_scomp_e2e_golden.c $(TEST_DIR)/test_ir_validate.c $(TEST_DIR)/test_absyn_lifecycle.c $(TEST_DIR)/test_semant.c $(TEST_DIR)/test_sdiss_fixtures.c $(TEST_DIR)/test_parser_examples_obj_golden.c $(TEST_DIR)/test_interpret_semantics_golden.c
 
 
 # Library of shared functions
@@ -93,7 +93,7 @@ $(OBJ_DIR)/lexer.o: $(SRC_DIR)/lexer.c
 test: $(TEST_BIN)
 	./$(TEST_BIN)
 
-$(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss
+$(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
 	$(CC) $(CFLAGS) $(DEBUG) -Isrc -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
 clean:

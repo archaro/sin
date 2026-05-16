@@ -23,6 +23,7 @@ void test_sem_check_locals_reusable_context(void);
 void test_sem_duplicate_local_keeps_original_index(void);
 void test_sdiss_fixture_basic(void);
 void test_parser_examples_obj_golden(void);
+void test_interpret_semantics_golden(void);
 
 static void test_absyn_helpers(void) {
   AS_NODE *lhs = t_int(1);
@@ -86,5 +87,6 @@ int main(void) {
   test_sem_duplicate_local_keeps_original_index();
   test_sdiss_fixture_basic();
   test_parser_examples_obj_golden();
+  test_interpret_semantics_golden();
   return 0;
 }

@@ -1,0 +1,7 @@
+===stdout===
+Bytecode loaded: 224 bytes.
+Listening on port 4001.
+===stderr===
+Undefined opcode:
+===exit===
+-1
