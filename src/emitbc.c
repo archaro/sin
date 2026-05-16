@@ -1,48 +1,12 @@
 #include "emitbc.h"
 
 #include <limits.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "compdiag.h"
 #include "error.h"
 #include "memory.h"
-
-static int8_t emit_error(char **errdetail, int8_t errnum, const char *fmt, ...) {
-  va_list args;
-  int needed;
-  char *msg;
-
-  if (!errdetail) return errnum;
-
-  va_start(args, fmt);
-  needed = vsnprintf(NULL, 0, fmt, args);
-  va_end(args);
-  if (needed < 0) {
-    int8_t current = ERR_NOERROR;
-    compdiag_set_once(&current, errdetail, errnum, "emitbc", "formatting error");
-    return errnum;
-  }
-
-  msg = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
-  if (!msg) {
-    int8_t current = ERR_NOERROR;
-    compdiag_set_once(&current, errdetail, errnum, "emitbc", "out of memory");
-    return errnum;
-  }
-
-  va_start(args, fmt);
-  vsnprintf(msg, (size_t)needed + 1, fmt, args);
-  va_end(args);
-
-  {
-    int8_t current = ERR_NOERROR;
-    compdiag_set_once(&current, errdetail, errnum, "emitbc", msg);
-  }
-  FREE_ARRAY(char, msg, (size_t)needed + 1);
-  return errnum;
-}
 
 static int ensure_out(OUTPUT_t *out, size_t extra) {
   size_t used = (size_t)(out->nextbyte - out->bytecode);
@@ -114,7 +78,11 @@ static uint8_t map_opcode(IR_Op op) {
 int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
                      OUTPUT_t *out, char **errdetail) {
   if (errdetail) compdiag_reset_detail(errdetail);
-  if (!ir || !out) return emit_error(errdetail, ERR_COMP_SYNTAX, "emit_bytecode: null input");
+  if (!ir || !out) {
+    int8_t errnum = ERR_NOERROR;
+    compdiag_set_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "null input");
+    return errnum;
+  }
 
   size_t *pos = GROW_ARRAY(size_t, NULL, 0, ir->function.count > 0 ? ir->function.count : 1);
   size_t pc = 2;
@@ -143,7 +111,11 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     uint8_t op = map_opcode(in->op);
     if (op == 0) {
       FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
-      return emit_error(errdetail, ERR_COMP_SYNTAX, "unsupported IR op %d", in->op);
+      {
+        int8_t errnum = ERR_NOERROR;
+        compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "unsupported IR op %d", in->op);
+        return errnum;
+      }
     }
     write_u8(out, op);
     switch (in->op) {
@@ -153,7 +125,9 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
         size_t len = strlen(s);
         if (len > UINT16_MAX) {
           FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
-          return emit_error(errdetail, ERR_COMP_SYNTAX, "string literal too long: %zu", len);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "string literal too long: %zu", len);
+          return errnum;
         }
         write_u16(out, (uint16_t)len);
         ensure_out(out, len);
@@ -178,19 +152,25 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case IR_OP_JUMP_IF_FALSE: {
         if (in->a < 0 || (size_t)in->a >= ir->labels.count) {
           FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
-          return emit_error(errdetail, ERR_COMP_SYNTAX, "jump invalid label id %d", in->a);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "jump invalid label id %d", in->a);
+          return errnum;
         }
         IR_Label *label = &ir->labels.entries[in->a];
         if (!label->bound) {
           FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
-          return emit_error(errdetail, ERR_COMP_SYNTAX, "jump unbound label %d", in->a);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "jump unbound label %d", in->a);
+          return errnum;
         }
         size_t from = pos[i] + 1;
         size_t to = pos[label->position];
         long diff = (long)to - (long)from;
         if (diff < INT16_MIN || diff > INT16_MAX) {
           FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
-          return emit_error(errdetail, ERR_COMP_SYNTAX, "jump offset out of range: %ld", diff);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "jump offset out of range: %ld", diff);
+          return errnum;
         }
         write_u16(out, (uint16_t)(int16_t)diff);
         break;
@@ -199,12 +179,16 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
         const char *s = (const char *)(intptr_t)in->imm;
         if (!s) {
           FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
-          return emit_error(errdetail, ERR_COMP_SYNTAX, "null layer name");
+          int8_t errnum = ERR_NOERROR;
+          compdiag_set_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "null layer name");
+          return errnum;
         }
         size_t len = strlen(s);
         if (len > UINT8_MAX) {
           FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
-          return emit_error(errdetail, ERR_COMP_SYNTAX, "layer name too long: %zu", len);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "layer name too long: %zu", len);
+          return errnum;
         }
         write_u8(out, (uint8_t)len);
         ensure_out(out, len);
@@ -215,17 +199,23 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case IR_OP_ITEM_SAVE_CODE: {
         if (in->a < 0 || (size_t)in->a >= ir->embedded_code.count) {
           FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
-          return emit_error(errdetail, ERR_COMP_SYNTAX, "invalid embedded code payload index %d", in->a);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "invalid embedded code payload index %d", in->a);
+          return errnum;
         }
         const IR_EmbeddedCodePayload *payload = &ir->embedded_code.entries[in->a];
         if (!payload->source) {
           FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
-          return emit_error(errdetail, ERR_COMP_SYNTAX, "embedded code payload %d has null source", in->a);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "embedded code payload %d has null source", in->a);
+          return errnum;
         }
         size_t len = strlen(payload->source);
         if (len > UINT16_MAX) {
           FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
-          return emit_error(errdetail, ERR_COMP_SYNTAX, "embedded code too long: %zu", len);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "embedded code too long: %zu", len);
+          return errnum;
         }
         write_u16(out, (uint16_t)len);
         ensure_out(out, len);

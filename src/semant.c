@@ -40,11 +40,9 @@ static void sem_add_local(SEM_CTX *ctx, const char *name) {
 }
 
 static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name) {
-  if (!ctx || ctx->errnum != ERR_NOERROR) return;
-
-  ctx->errnum = errnum;
-  compdiag_reset_detail(&ctx->errdetail);
-  ctx->errdetail = strdup(local_name ? local_name : "<null>");
+  if (!ctx) return;
+  compdiag_set_once(&ctx->errnum, &ctx->errdetail, errnum, "semant",
+                    local_name ? local_name : "<null>");
 }
 
 SEM_CTX *sem_create_ctx() {
