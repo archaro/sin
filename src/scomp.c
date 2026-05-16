@@ -8,7 +8,7 @@
 #include "config.h"
 #include "error.h"
 #include "compiler_pipeline.h"
-#include "compiler_diag.h"
+#include "compdiag.h"
 #include "memory.h"
 #include "log.h"
 #include "emitbc.h"
