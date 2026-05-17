@@ -10,8 +10,9 @@
 #define CALLSTACK_SIZE 1024
 
 typedef struct {
+  // Caller continuation state (the frame to resume after callee HALT).
   ITEM_t *item;
-  uint8_t *nextop;
+  uint8_t *nextop; // Caller instruction pointer to resume at.
   uint8_t *bytecode_start;
   uint8_t *bytecode_end;
   int32_t current_stack;
