@@ -34,3 +34,16 @@ extern VALUE_t VALUE_FALSE;
   }
   
 VALUE_t convert_to_bool(VALUE_t from);
+
+// Truthiness contract for VM values:
+// - nil is false
+// - bool false/true preserve their value
+// - int 0 is false; any non-zero int is true
+// - string "" (empty) is false; any non-empty string is true
+//
+// Ownership contract:
+// - value_is_truthy() is read-only and never frees memory.
+// - value_to_bool_inplace() mutates in place to VALUE_bool and frees string
+//   storage if and only if the input value owns VALUE_str memory.
+int value_is_truthy(const VALUE_t *value);
+void value_to_bool_inplace(VALUE_t *value);
