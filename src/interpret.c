@@ -656,148 +656,147 @@ static void sb_append_intstr(STRBUILDER_t *sb, int64_t val) {
   sb_append_literal(sb, str);
 }
 
-uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
-  // Extract the embedded code from the bytestream, and compile it.
-  // If the compilation is successful, assign its value to the item
-  // on the top of the stack.  Otherwise, assign nil to the item.
+typedef struct {
+  const char **params;
+  uint16_t *param_lens;
+  size_t param_count;
+  size_t total_param_len;
+  char *source;
+  uint16_t source_len;
+} CODEITEM_INPUT_t;
 
-  int param_count = 0;
-  const char **params = NULL;
-  int plen = 0;
+static bool decode_assigncode_params(uint8_t **opcode, CODEITEM_INPUT_t *in) {
+  // Format assumption for params block: <u16 len><bytes> repeated, terminated by <u16 0>.
+  const size_t MAX_ASSIGNCODE_PARAMS = 1024;
+  const size_t MAX_ASSIGNCODE_PARAM_BYTES = 65535;
+  while (1) {
+    REQUIRE_BYTES(*opcode, 2, "OP_ASSIGNCODEITEM param-len");
+    uint16_t param_len = 0;
+    memcpy(&param_len, *opcode, 2);
+    *opcode += 2;
+    if (param_len == 0) break;
+    if (in->param_count >= MAX_ASSIGNCODE_PARAMS) return false;
+    if ((in->total_param_len + param_len) > MAX_ASSIGNCODE_PARAM_BYTES) return false;
+    REQUIRE_BYTES(*opcode, param_len, "OP_ASSIGNCODEITEM param-bytes");
+    char *param = GROW_ARRAY(char, NULL, 0, param_len + 1);
+    memcpy(param, *opcode, param_len);
+    param[param_len] = '\0';
+    *opcode += param_len;
+    in->params = GROW_ARRAY(const char *, (char **)in->params, in->param_count, in->param_count + 1);
+    in->param_lens = GROW_ARRAY(uint16_t, in->param_lens, in->param_count, in->param_count + 1);
+    in->params[in->param_count] = param;
+    in->param_lens[in->param_count] = param_len;
+    in->param_count++;
+    in->total_param_len += param_len;
+  }
+  return true;
+}
+
+static bool decode_assigncode_source(uint8_t **opcode, CODEITEM_INPUT_t *in) {
+  REQUIRE_BYTES(*opcode, 2, "OP_ASSIGNCODEITEM source-len");
+  memcpy(&in->source_len, *opcode, 2);
+  *opcode += 2;
+  REQUIRE_BYTES(*opcode, in->source_len, "OP_ASSIGNCODEITEM source-bytes");
+  in->source = GROW_ARRAY(char, NULL, 0, in->source_len + 1);
+  memcpy(in->source, *opcode, in->source_len);
+  in->source[in->source_len] = '\0';
+  *opcode += in->source_len;
+  return true;
+}
+
+static int8_t compile_and_insert_codeitem(const VALUE_t *itemname, const CODEITEM_INPUT_t *in, char **errdetail) {
+  ITEM_t *testitem = find_item(config.itemroot, itemname->s);
+  if (testitem && testitem->inuse) return ERR_COMP_INUSE;
+  OUTPUT_t *out = NULL;
+  int8_t rc = compile_source_to_bytecode_with_params(in->source, in->source_len, in->params, in->param_count, &out, errdetail);
+  if (rc == 0 && out) {
+    uint32_t len = out->nextbyte - out->bytecode;
+    ITEM_t *inserted = insert_code_item(config.itemroot, itemname->s, len, out->bytecode);
+    if (!inserted) rc = ERR_COMP_INUSE;
+  }
+  if (out) {
+    if (rc != 0 && out->bytecode) FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
+    FREE_ARRAY(OUTPUT_t, out, 1);
+  }
+  return rc;
+}
+
+static void persist_codeitem_source(const VALUE_t *itemname, const CODEITEM_INPUT_t *in) {
+  ITEM_t *code_item = find_item(config.itemroot, itemname->s);
+  STRBUILDER_t sb;
+  sb_init(&sb, in->source_len + in->total_param_len + 16);
+  if (in->param_count > 0) {
+    sb_append_literal(&sb, "code {");
+    for (size_t pc = 0; pc < in->param_count; pc++) {
+      sb_append_literal(&sb, in->params[pc]);
+      if (pc < (in->param_count - 1)) sb_append_literal(&sb, ", ");
+    }
+    sb_append_literal(&sb, "} (");
+  } else {
+    sb_append_literal(&sb, "code (");
+  }
+  sb_append_literal(&sb, in->source);
+  sb_append_literal(&sb, ");\n");
+  if (!save_itemsource(code_item, sb.buf)) {
+    char fullname[MAX_ITEM_NAME];
+    get_itemname(code_item, fullname);
+    logerr("Source was not saved.\nItem: %s\n", fullname);
+    logerr("Source:\n%s\n", sb.buf);
+  }
+  FREE_ARRAY(char, sb.buf, sb.cap);
+}
+
+uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
+  // Bytecode format assumption:
+  //   ['P' <u16 len><bytes>...<u16 0>] optional parameter block,
+  //   followed by mandatory <u16 source_len><source bytes>.
+  CODEITEM_INPUT_t in = {0};
+  VALUE_t itemname = VALUE_NIL;
+  int8_t result = ERR_COMP_UNKNOWN;
+  char *errdetail = NULL;
 
   if (*nextop == 'P') {
-    // Parameters definition follows.  Handle this first.
-    // FIXME: This may be broken.  Examine carefully.
     nextop++;
-    // Each parameter is a 2-byte length followed by a string
-    // After the last string, there is a 2-byte zero.
-    uint16_t param_len;
-    memcpy(&param_len, nextop, 2);
-    nextop += 2;
-    while (param_len > 0) {
-      // Fetch the parameter string, stick it in the local table
-      char *param = GROW_ARRAY(char, NULL, 0, param_len +1);
-      memcpy(param, nextop, param_len);
-      param[param_len] = '\0';
-      nextop += param_len;
-      plen += param_len;
-      param_count++;
-      params = GROW_ARRAY(const char *, params, param_count - 1, param_count);
-      params[param_count - 1] = param;
-      // Get the next one...
-      memcpy(&param_len, nextop, 2);
-      nextop += 2;
+    if (!decode_assigncode_params(&nextop, &in)) {
+      set_error_item(ERR_COMP_UNKNOWN, "Invalid parameter block in code assignment bytecode.");
+      goto cleanup;
     }
-    // All parameters processed.  We need to pass them to the compiler
-    // as the initial contents of the local definitions table.
   }
 
-  // Now we have the parameters (if any), get the source code for this item.
-  VALUE_t itemname = pop_stack(VM->stack);
-  // First, how much code do we have?
-  uint16_t sclen;
-  memcpy(&sclen, nextop, 2);
-  nextop += 2;
-  // Now create a temporary buffer to hold the source code.
-  char *sourcecode = GROW_ARRAY(char, NULL, 0, sclen + 1);
-  memcpy(sourcecode, nextop, sclen);
-  sourcecode[sclen] = '\0';
-  nextop += sclen;
+  itemname = pop_stack(VM->stack);
+  if (!decode_assigncode_source(&nextop, &in)) {
+    set_error_item(ERR_COMP_UNKNOWN, "Invalid source block in code assignment bytecode.");
+    goto cleanup;
+  }
 
-  // We have the source.  Compile it.
-  DISASS_LOG("Source to compile: %s\n", sourcecode);
-  int8_t result;
-  char *errdetail = NULL;
+  DISASS_LOG("Source to compile: %s\n", in.source);
   if (itemname.type != VALUE_str) {
     logerr("Unable to assign code item: invalid name type %d.\n", itemname.type);
     set_error_item(ERR_COMP_UNKNOWN, "Invalid item name type for code assignment.");
-    FREE_ARRAY(char, sourcecode, sclen + 1);
-    for (int pc = 0; pc < param_count; pc++) {
-      FREE_ARRAY(char, (char *)params[pc], strlen(params[pc]) + 1);
-    }
-    FREE_ARRAY(const char *, params, param_count);
-    return nextop;
+    goto cleanup;
   }
 
-  ITEM_t *testitem = find_item(config.itemroot, itemname.s);
-  if (testitem && testitem->inuse) {
-    char name[MAX_ITEM_NAME];
-    get_itemname(testitem, name);
-    result = ERR_COMP_INUSE;
-  } else {
-    OUTPUT_t *out = NULL;
-    result = compile_source_to_bytecode_with_params(sourcecode, sclen,
-                                                    params, (size_t)param_count,
-                                                    &out, &errdetail);
-    // Now we have processed the bytecode and tidied up the stack, check
-    // to see if the item is in use - if it is, we can't overwrite it.
-    if (result == 0) {
-      uint32_t len = out->nextbyte - out->bytecode;
-      ITEM_t *item = insert_code_item(config.itemroot, itemname.s, len,
-                                                              out->bytecode);
-      if (!item) {
-        result = ERR_COMP_INUSE;
-      }
-    }
-    if (out) {
-      if (result != 0 && out->bytecode) {
-        FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
-      }
-      FREE_ARRAY(OUTPUT_t, out, 1);
-    }
-  }
-
+  result = compile_and_insert_codeitem(&itemname, &in, &errdetail);
   if (result == 0) {
-    // Compilation succeeded.  Assign it to the item.
-    // The item type is ITEM_code.
-    // Now reconstruct the source code and save it to srcroot.
-    ITEM_t *item = find_item(config.itemroot, itemname.s);
-    STRBUILDER_t sb;
-    sb_init(&sb, sclen + 16);
-    sb_append_literal(&sb, "code ");
-    if (param_count > 0) {
-      sb_append_literal(&sb, "{");
-      for (int pc = 0; pc < param_count; pc++) {
-        sb_append_literal(&sb, params[pc]);
-        if (pc < (param_count -1)) {
-          sb_append_literal(&sb, ", ");
-        }
-      }
-      sb_append_literal(&sb, "} (");
-      sb_append_literal(&sb, sourcecode);
-      sb_append_literal(&sb, ");\n");
-    } else {
-      sb.len = 0;
-      sb.buf[0] = '\0';
-      sb_append_literal(&sb, "code (");
-      sb_append_literal(&sb, sourcecode);
-      sb_append_literal(&sb, ");\n");
-    }
-    if (!save_itemsource(item, sb.buf)) {
-      char fullname[MAX_ITEM_NAME];
-      get_itemname(item, fullname);
-      logerr("Source was not saved.\nItem: %s\n", fullname);
-      logerr("Source:\n%s\n", sb.buf);
-    }
-    FREE_ARRAY(char, sb.buf, sb.cap);
-    // Set the error item to a nil value.
+    persist_codeitem_source(&itemname, &in);
     set_item(config.itemroot, "error", VALUE_NIL);
     set_item(config.itemroot, "error.msg", VALUE_NIL);
   } else {
-    // Compilation failed.  Don't assign anything.
     logerr("Compilation failed.\n");
-    // Set the error item to the compiler error.
     set_error_item(result, errdetail);
-    if (errdetail) FREE_ARRAY(char, errdetail, strlen(errdetail) + 1);
   }
 
-  // Clean up.
-  FREE_ARRAY(char, sourcecode, sclen + 1);
-  FREE_STR(itemname);
-  for (int pc = 0; pc < param_count; pc++) {
-    FREE_ARRAY(char, (char *)params[pc], strlen(params[pc]) + 1);
+cleanup:
+  if (errdetail) FREE_ARRAY(char, errdetail, strlen(errdetail) + 1);
+  if (in.source) FREE_ARRAY(char, in.source, in.source_len + 1);
+  if (in.params) {
+    for (size_t pc = 0; pc < in.param_count; pc++) {
+      FREE_ARRAY(char, (char *)in.params[pc], in.param_lens[pc] + 1);
+    }
+    FREE_ARRAY(const char *, (char **)in.params, in.param_count);
   }
-  FREE_ARRAY(const char *, params, param_count);
+  if (in.param_lens) FREE_ARRAY(uint16_t, in.param_lens, in.param_count);
+  FREE_STR(itemname);
   return nextop;
 }
 
