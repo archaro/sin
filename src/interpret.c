@@ -26,6 +26,23 @@ extern CONFIG_t config;
 
 static VM_t *current_vm = NULL;
 #define VM current_vm
+static uint8_t *current_frame_start = NULL;
+static uint8_t *current_frame_end = NULL;
+
+static inline bool require_bytes(uint8_t *nextop, size_t bytes, const char *opname) {
+  if (!current_frame_start || !current_frame_end) return true;
+  if (nextop > current_frame_end || (size_t)(current_frame_end - nextop) < bytes) {
+    char detail[128];
+    snprintf(detail, sizeof(detail), "%s truncated bytecode read (%zu bytes)", opname, bytes);
+    logerr("%s.\n", detail);
+    set_error_item(ERR_COMP_UNKNOWN, detail);
+    return false;
+  }
+  return true;
+}
+
+#define REQUIRE_BYTES(nextop, n, opname) \
+  do { if (!require_bytes((nextop), (n), (opname))) return NULL; } while (0)
 
 static OP_t opcode[256];
 
@@ -143,6 +160,7 @@ uint8_t *op_undefined(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_pushint(uint8_t *nextop, ITEM_t *item) {
   // Push an int64 onto the stack.
   // Read the next 8 bytes and make an VALUE_t
+  REQUIRE_BYTES(nextop, 8, "OP_PUSHINT");
   VALUE_t v;
   v.type = VALUE_int;
   v.i = *(int64_t*)nextop;
@@ -180,6 +198,7 @@ uint8_t *op_declocal(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_jump(uint8_t *nextop, ITEM_t *item) {
   // Unconditional jump.  Interpret the next two bytes as a
   // SIGNED int, and then modify the bytecode pointer by that amount.
+  REQUIRE_BYTES(nextop, 2, "OP_JUMP");
   int16_t offset;
   memcpy(&offset, nextop, 2);
   DISASS_LOG("OP_JUMP: offset is  %d.\n", offset);
@@ -192,6 +211,7 @@ uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
   // by that amount.  Alternatively, if true, simply skip the next
   // two bytes and go on to the next instruction.
 
+  REQUIRE_BYTES(nextop, 2, "OP_JUMPFALSE");
   VALUE_t v1;
   v1 = pop_stack(VM->stack);
   // "true" is a true bool value, or an int value != 0, or a string
@@ -264,10 +284,12 @@ uint8_t *op_pushstr(uint8_t *nextop, ITEM_t *item) {
   // Push a string literal onto the stack.
   VALUE_t v;
   v.type = VALUE_str;
+  REQUIRE_BYTES(nextop, 2, "OP_PUSHSTR length");
   uint16_t len;
   // Get the length
   memcpy(&len, nextop, 2);
   nextop += 2;
+  REQUIRE_BYTES(nextop, len, "OP_PUSHSTR payload");
   v.s = GROW_ARRAY(char, NULL, 0, len+1);
   memcpy(v.s, nextop, len);
   v.s[len] = 0;
@@ -737,6 +759,7 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
   // If the item does not exist, nil is pushed onto the stack.
 
   // First, let's get the number of arguments passed to this item
+  REQUIRE_BYTES(nextop, 2, "OP_FETCHITEM arg-count");
   uint16_t arg_count;
   memcpy(&arg_count, nextop, 2);
   nextop += 2;
@@ -778,7 +801,7 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
         // correctly adjusted to account for them at the top of the
         // current stack (they will be at the bottom of the frame for
         // the new item).
-        push_callstack(VM, item, nextop, i->bytecode[1]);
+        push_callstack(VM, item, nextop, i->bytecode[1], current_frame_start, current_frame_end);
         // Execute the item.
         ITEMDEBUG_LOG("Executing item %s\n", i->name);
         VALUE_t value = interpret(i);
@@ -786,6 +809,8 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
         FRAME_t *prev_frame = pop_callstack(VM);
         item = prev_frame->item;
         nextop = prev_frame->nextop;
+        current_frame_start = prev_frame->bytecode_start;
+        current_frame_end = prev_frame->bytecode_end;
         // Having restored the old state, push the result
         // of the executed item.
         push_stack(VM->stack, value);
@@ -823,19 +848,27 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
   STRBUILDER_t sb;
   sb_init(&sb, 130);
 
-  while (*nextop != 'E' && !invalid) {
+  while (!invalid) {
+    REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM layer");
+    if (*nextop == 'E') {
+      break;
+    }
     switch (*nextop++) {
       case 'L': {
         // Simple layer
+        REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM layer length");
         int s = *nextop++; // Length of layer name
+        REQUIRE_BYTES(nextop, s, "OP_ASSEMBLEITEM layer bytes");
         sb_append_substr(&sb, (char *)nextop, (uint32_t)s);
         nextop += s;
         break;
       }
       case 'D': {
         // Deref layer - either a V (localvar) or another I (item)
+        REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM deref type");
         switch (*nextop++) {
           case 'V': {
+            REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM local index");
             int idx = *nextop++ + VM->stack->base; // Local variable index
             switch (VM->stack->stack[idx].type) {
               case VALUE_str: {
@@ -866,6 +899,10 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
             // This is a bit more complicated.  We need to dereference an
             // item, then evaluate it, and use the result as the layer name.
             nextop = assembleitem_helper(nextop, item);
+            if (!nextop) {
+              invalid = true;
+              break;
+            }
             VALUE_t layername = pop_stack(VM->stack);
             if (layername.type == VALUE_str) {
               //  This is basically the same as op_fetchitem
@@ -936,7 +973,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
     push_stack(VM->stack, name);
     ITEMDEBUG_LOG("Item assembled: %s\n", sb.buf);
   }
-
+  REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM terminator");
   return nextop + 1;
 }
 
@@ -1073,6 +1110,8 @@ void init_interpreter() {
 VALUE_t interpret(ITEM_t *item) {
   VM_t *vm = config.vm;
   current_vm = vm;
+  set_item(config.itemroot, "error", VALUE_NIL);
+  set_item(config.itemroot, "error.msg", VALUE_NIL);
   // Given some bytecode, interpret it until the HALT instruction is seen
   // NB: The HALT opcode (currently represented by the character 'h') does
   // not have an associated function.
@@ -1093,6 +1132,8 @@ VALUE_t interpret(ITEM_t *item) {
 
   // The actual bytecode starts at the third byte.
   uint8_t *op = item->bytecode + 2;
+  current_frame_start = op;
+  current_frame_end = item->bytecode + item->bytecode_len;
 
 #if defined(__GNUC__) || defined(__clang__)
   // On compilers that support labels-as-values, use computed-goto dispatch.
@@ -1109,7 +1150,7 @@ VALUE_t interpret(ITEM_t *item) {
   };
 
 #define DISPATCH() do { if (*op == 'h') goto op_halt_label; goto *jump_table[*op]; } while (0)
-#define OPCASE(label_name, fn)   label_name: {     uint8_t *nextop = op + 1;     op = fn(nextop, item);     DISPATCH();   }
+#define OPCASE(label_name, fn)   label_name: {     uint8_t *nextop = op + 1;     op = fn(nextop, item);     if (!op) goto op_error_label; DISPATCH();   }
 
   DISPATCH();
 #define OPCASE_ENTRY(opcode_byte, handler_fn) OPCASE(handler_fn##_label, handler_fn)
@@ -1118,6 +1159,7 @@ VALUE_t interpret(ITEM_t *item) {
   OPCASE(op_undefined_label, op_undefined)
 
 op_halt_label:
+  goto op_done_label;
 #undef OPCASE
 #undef DISPATCH
 #else
@@ -1127,11 +1169,22 @@ op_halt_label:
     // two sequence points:
     uint8_t *nextop = op + 1;
     op = opcode[*op](nextop, item);
+    if (!op) {
+      goto op_error_label;
+    }
   }
 #endif
+op_error_label:
+op_done_label:
 
   // Item is now free to be replaced or deleted
   item->inuse = false;
+  current_frame_start = NULL;
+  current_frame_end = NULL;
+
+  if (!op) {
+    return VALUE_NIL;
+  }
 
   if (size_stack(VM->stack) > 0) {
     return pop_stack(VM->stack);
