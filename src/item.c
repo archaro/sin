@@ -15,6 +15,63 @@
 #include "log.h"
 #include "item.h"
 
+static uint64_t itemstore_generation = 1;
+#define FETCHITEM_CACHE_SIZE 64
+typedef struct {
+  bool valid;
+  bool found;
+  char key[MAX_ITEM_NAME];
+  ITEM_t *item;
+} FETCHITEM_CACHE_ENTRY_t;
+
+static FETCHITEM_CACHE_ENTRY_t fetchitem_cache[FETCHITEM_CACHE_SIZE];
+static uint64_t fetchitem_cache_hits = 0;
+static uint64_t fetchitem_cache_misses = 0;
+
+static void invalidate_fetchitem_cache(void) {
+  memset(fetchitem_cache, 0, sizeof(fetchitem_cache));
+}
+
+static inline void bump_itemstore_generation(void) {
+  itemstore_generation++;
+  invalidate_fetchitem_cache();
+}
+
+uint64_t get_itemstore_generation(void) {
+  return itemstore_generation;
+}
+
+static uint32_t fetchitem_cache_hash(const char *key) {
+  return murmur3_32(key, strlen(key), 0x5EED1234u);
+}
+
+ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
+  uint32_t index = fetchitem_cache_hash(item_name) % FETCHITEM_CACHE_SIZE;
+  FETCHITEM_CACHE_ENTRY_t *entry = &fetchitem_cache[index];
+
+  if (entry->valid && strcmp(entry->key, item_name) == 0) {
+    fetchitem_cache_hits++;
+    if (found) *found = entry->found;
+    DISASS_LOG("itemcache hit: %s (hits=%llu misses=%llu)\n", item_name,
+               (unsigned long long)fetchitem_cache_hits,
+               (unsigned long long)fetchitem_cache_misses);
+    return entry->item;
+  }
+
+  fetchitem_cache_misses++;
+  ITEM_t *item = find_item(root, item_name);
+  entry->valid = true;
+  entry->item = item;
+  entry->found = (item != NULL);
+  strncpy(entry->key, item_name, MAX_ITEM_NAME - 1);
+  entry->key[MAX_ITEM_NAME - 1] = '\0';
+  if (found) *found = entry->found;
+  DISASS_LOG("itemcache miss: %s (hits=%llu misses=%llu)\n", item_name,
+             (unsigned long long)fetchitem_cache_hits,
+             (unsigned long long)fetchitem_cache_misses);
+  return item;
+}
+
 // The configuration object, defined in sin.c
 extern CONFIG_t config;
 
@@ -428,6 +485,7 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
     current_pos = next_dot + 1;
   }
   // Return a pointer to the last-created item
+  bump_itemstore_generation();
   return current_item;
 }
 
@@ -478,6 +536,7 @@ ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
     current_pos = next_dot + 1;
   }
   // Return a pointer to the last-created item
+  bump_itemstore_generation();
   return current_item;
 }
 
@@ -543,6 +602,7 @@ void delete_item(ITEM_t *root, const char *item_name) {
     }
     // Now we have isolated this item, delete it and all its children.
     destroy_item(item);
+    bump_itemstore_generation();
     ITEMDEBUG_LOG("Item %s has been deleted, along with all of its children.\n",
                                                                  item_name);
   }
@@ -837,4 +897,3 @@ void set_error_item(const int errnum, const char *errdetail) {
   }
   set_item(config.itemroot, "error.msg", emsg);
 }
-
