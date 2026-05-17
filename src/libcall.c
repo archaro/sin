@@ -151,7 +151,7 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   // nested interpret() run. This keeps Sys.compile safe when invoked from
   // within an already-active interpreter frame.
   uint32_t len = out->nextbyte - out->bytecode;
-  ITEM_t *tmpitem = insert_code_item(config.itemroot, "__sys_compile_tmp__", len, out->bytecode);
+  ITEM_t *tmpitem = insert_code_item(config.itemroot, tmpname, len, out->bytecode);
 
   if (!tmpitem) {
     // Could not create temp item (likely in-use/name conflict)
