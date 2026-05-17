@@ -38,6 +38,64 @@ static inline int binary_int_operands(VALUE_t v1, VALUE_t v2, const char *opcode
   return valid;
 }
 
+typedef enum {
+  CMP_EQ,
+  CMP_NE,
+  CMP_LT,
+  CMP_LTE,
+  CMP_GT,
+  CMP_GTE,
+} CMP_MODE_t;
+
+static inline int apply_comparison(CMP_MODE_t mode, int64_t left, int64_t right) {
+  switch (mode) {
+    case CMP_EQ:
+      return left == right;
+    case CMP_NE:
+      return left != right;
+    case CMP_LT:
+      return left < right;
+    case CMP_LTE:
+      return left <= right;
+    case CMP_GT:
+      return left > right;
+    case CMP_GTE:
+      return left >= right;
+  }
+  return 0;
+}
+
+static inline int pop_compare_and_push_bool(CMP_MODE_t mode, const char *opcode_tag) {
+  VALUE_t v1 = pop_stack(VM->stack);
+  VALUE_t v2 = pop_stack(VM->stack);
+  VALUE_t result;
+  int comparison_true = 0;
+
+  result.type = VALUE_bool;
+
+  // Intentional quirk preserved: OP_NOTEQUAL treats mismatched types as true,
+  // while the other comparison operators treat unsupported/mismatched operands
+  // as false.
+  if (v1.type == VALUE_int && v2.type == VALUE_int) {
+    comparison_true = apply_comparison(mode, v2.i, v1.i);
+  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool) {
+    comparison_true = apply_comparison(mode, v2.i, v1.i);
+  } else if ((mode == CMP_EQ || mode == CMP_NE)
+             && v1.type == VALUE_str && v2.type == VALUE_str) {
+    int cmp = strcmp(v2.s, v1.s);
+    comparison_true = (mode == CMP_EQ) ? (cmp == 0) : (cmp != 0);
+  } else if (mode == CMP_NE && v1.type != v2.type) {
+    comparison_true = 1;
+  }
+
+  result.i = comparison_true;
+  push_stack(VM->stack, result);
+  if (!comparison_true) {
+    DISASS_LOG("%s: types %d and %d\n", opcode_tag, v1.type, v2.type);
+  }
+  return comparison_true;
+}
+
 
 #define RUNTIME_OPCODE_TABLE(OP) \
   OP(0, op_nop) \
@@ -349,157 +407,32 @@ uint8_t *op_negate(uint8_t *nextop, ITEM_t *item) {
 }
 
 uint8_t *op_equal(uint8_t *nextop, ITEM_t *item) {
-  // Compare the top two items on the stack and push back a VALUE_bool
-  // that is either true or false.  Be sensible about what is equal.
-  // At the moment pairs of bools, ints, or strings are considered.
-  VALUE_t v1, v2, result;
-  v1 = pop_stack(VM->stack);
-  v2 = pop_stack(VM->stack);
-  result.type = VALUE_bool;
-  result.i = 1; // default to true
-  if (v1.type == VALUE_int && v2.type == VALUE_int && v1.i == v2.i) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } else if (v1.type == VALUE_str && v2.type == VALUE_str &&
-                                                strcmp(v1.s, v2.s) == 0) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
-                                                   && v1.i == v2.i) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } 
-  // If we get here, there is no equality
-  result.i = 0;
-  push_stack(VM->stack, result);
-  DISASS_LOG("OP_EQUAL: types %d and %d\n", v1.type, v2.type);
+  pop_compare_and_push_bool(CMP_EQ, "OP_EQUAL");
   return nextop;
 }
 
 uint8_t *op_notequal(uint8_t *nextop, ITEM_t *item) {
-  // The logical reverse of op_equal.
-  // Note that mismatched types are always not equal.
-  VALUE_t v1, v2, result;
-  v1 = pop_stack(VM->stack);
-  v2 = pop_stack(VM->stack);
-  result.type = VALUE_bool;
-  result.i = 1; // default to false
-  if (v1.type == VALUE_int && v2.type == VALUE_int && v1.i != v2.i) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } else if (v1.type == VALUE_str && v2.type == VALUE_str &&
-                                                strcmp(v1.s, v2.s) != 0) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
-                                                   && v1.i != v2.i) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } else if (v1.type != v2.type) {
-    // If the types do not match, there is no equality
-    push_stack(VM->stack, result);
-    return nextop;
-  }
-  // If we get here there is equality, so return false.
-  result.i = 0;
-  push_stack(VM->stack, result);
-  DISASS_LOG("OP_NOTEQUAL: types %d and %d\n", v1.type, v2.type);
+  pop_compare_and_push_bool(CMP_NE, "OP_NOTEQUAL");
   return nextop;
 }
 
 uint8_t *op_lessthan(uint8_t *nextop, ITEM_t *item) {
-  // Compare the top two items on the stack and push back a VALUE_bool
-  // that is either true or false.
-  // At the moment pairs of bools or ints are considered.
-  VALUE_t v1, v2, result;
-  v1 = pop_stack(VM->stack);
-  v2 = pop_stack(VM->stack);
-  result.type = VALUE_bool;
-  result.i = 1; // default to true
-  if (v1.type == VALUE_int && v2.type == VALUE_int && v2.i < v1.i) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
-                                                   && v2.i < v1.i) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } 
-  // If we get here the comparison is false
-  result.i = 0;
-  push_stack(VM->stack, result);
-  DISASS_LOG("OP_LESSTHAN: types %d and %d\n", v1.type, v2.type);
+  pop_compare_and_push_bool(CMP_LT, "OP_LESSTHAN");
   return nextop;
 }
 
 uint8_t *op_lessthanorequal(uint8_t *nextop, ITEM_t *item) {
-  // Compare the top two items on the stack and push back a VALUE_bool
-  // that is either true or false.
-  // At the moment pairs of bools or ints are considered.
-  VALUE_t v1, v2, result;
-  v1 = pop_stack(VM->stack);
-  v2 = pop_stack(VM->stack);
-  result.type = VALUE_bool;
-  result.i = 1; // default to true
-  if (v1.type == VALUE_int && v2.type == VALUE_int && v2.i <= v1.i) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
-                                                   && v2.i <= v1.i) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } 
-  // If we get here the comparison is false
-  result.i = 0;
-  push_stack(VM->stack, result);
-  DISASS_LOG("OP_LTEQ: types %d and %d\n", v1.type, v2.type);
+  pop_compare_and_push_bool(CMP_LTE, "OP_LTEQ");
   return nextop;
 }
 
 uint8_t *op_greaterthan(uint8_t *nextop, ITEM_t *item) {
-  // Compare the top two items on the stack and push back a VALUE_bool
-  // that is either true or false.
-  // At the moment pairs of bools or ints are considered.
-  VALUE_t v1, v2, result;
-  v1 = pop_stack(VM->stack);
-  v2 = pop_stack(VM->stack);
-  result.type = VALUE_bool;
-  result.i = 1; // default to true
-  if (v1.type == VALUE_int && v2.type == VALUE_int && v2.i > v1.i) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
-                                                   && v2.i > v1.i) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } 
-  // If we get here the comparison is false
-  result.i = 0;
-  push_stack(VM->stack, result);
-  DISASS_LOG("OP_GREATERTHAN: types %d and %d\n", v1.type, v2.type);
+  pop_compare_and_push_bool(CMP_GT, "OP_GREATERTHAN");
   return nextop;
 }
 
 uint8_t *op_greaterthanorequal(uint8_t *nextop, ITEM_t *item) {
-  // Compare the top two items on the stack and push back a VALUE_bool
-  // that is either true or false.
-  // At the moment pairs of bools or ints are considered.
-  VALUE_t v1, v2, result;
-  v1 = pop_stack(VM->stack);
-  v2 = pop_stack(VM->stack);
-  result.type = VALUE_bool;
-  result.i = 1; // default to true
-  if (v1.type == VALUE_int && v2.type == VALUE_int && v2.i >= v1.i) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool
-                                                   && v2.i >= v1.i) {
-    push_stack(VM->stack, result);
-    return nextop;
-  } 
-  // If we get here the comparison is false
-  result.i = 0;
-  push_stack(VM->stack, result);
-  DISASS_LOG("OP_GTEQ: types %d and %d\n", v1.type, v2.type);
+  pop_compare_and_push_bool(CMP_GTE, "OP_GTEQ");
   return nextop;
 }
 
