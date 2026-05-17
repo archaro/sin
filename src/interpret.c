@@ -217,10 +217,7 @@ uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
   REQUIRE_BYTES(nextop, 2, "OP_JUMPFALSE");
   VALUE_t v1;
   v1 = pop_stack(VM->stack);
-  // "true" is a true bool value, or an int value != 0, or a string
-  // which is not empty.  Everything else is false.
-  if (((v1.type == VALUE_bool || v1.type == VALUE_int) && v1.i != 0)
-      || (v1.type == VALUE_str && v1.s[0] != '\0')) {
+  if (value_is_truthy(&v1)) {
     // A true value means that we don't branch.  Skip over
     // the next two bytes.
     DISASS_LOG("OP_JUMPFALSE: evaluates to true (no jump).\n");
@@ -463,44 +460,19 @@ uint8_t *op_greaterthanorequal(uint8_t *nextop, ITEM_t *item) {
 
 uint8_t *op_logicalnot(uint8_t *nextop, ITEM_t *item) {
   // Logically negate the value on top of the stack.
-  // Note that this operation CONVERTS the value on top of the stack to a
-  // VALUE_bool if it is not already.
-  switch (VM->stack->stack[VM->stack->current].type) {
-    case VALUE_bool:
-      VM->stack->stack[VM->stack->current].i =
-                                  !(VM->stack->stack[VM->stack->current].i);
-      break;
-    case VALUE_int:
-      // If the int value is nonzero, then false, else true.
-      VM->stack->stack[VM->stack->current].type = VALUE_bool;
-      if (VM->stack->stack[VM->stack->current].i) {
-        VM->stack->stack[VM->stack->current].i = 0;
-      } else {
-        VM->stack->stack[VM->stack->current].i = 1;
-      }
-      break;
-    case VALUE_nil:
-      // A logically-negated nil value is always true
-      VM->stack->stack[VM->stack->current].type = VALUE_bool;
-      VM->stack->stack[VM->stack->current].i = 1;
-      break;
-    case VALUE_str:
-      // A logically-negated string value is always false
-      // Tidy up the old string value
-      FREE_ARRAY(char, VM->stack->stack[VM->stack->current].s,
-                        strlen(VM->stack->stack[VM->stack->current].s) + 1);
-      VM->stack->stack[VM->stack->current].type = VALUE_bool;
-      VM->stack->stack[VM->stack->current].i = 0;
-      break;
-  }
+  VALUE_t *v = &VM->stack->stack[VM->stack->current];
+  value_to_bool_inplace(v);
+  v->i = !v->i;
   return nextop;
 }
 
 uint8_t *op_logicaland(uint8_t *nextop, ITEM_t *item) {
   // Pop two values from the stack, convert to bools
   // AND the result and push it.
-  VALUE_t v1 = convert_to_bool(pop_stack(VM->stack));
-  VALUE_t v2 = convert_to_bool(pop_stack(VM->stack));
+  VALUE_t v1 = pop_stack(VM->stack);
+  VALUE_t v2 = pop_stack(VM->stack);
+  value_to_bool_inplace(&v1);
+  value_to_bool_inplace(&v2);
   // v2 is guaranteed to be boolean now, whatever it was.
   v2.i = v1.i && v2.i; // Logical AND
   push_stack(VM->stack, v2);
@@ -510,8 +482,10 @@ uint8_t *op_logicaland(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_logicalor(uint8_t *nextop, ITEM_t *item) {
   // Pop two values from the stack, convert to bools
   // OR the result and push it.
-  VALUE_t v1 = convert_to_bool(pop_stack(VM->stack));
-  VALUE_t v2 = convert_to_bool(pop_stack(VM->stack));
+  VALUE_t v1 = pop_stack(VM->stack);
+  VALUE_t v2 = pop_stack(VM->stack);
+  value_to_bool_inplace(&v1);
+  value_to_bool_inplace(&v2);
   // v2 is guaranteed to be boolean now, whatever it was.
   v2.i = v1.i || v2.i; // Logical OR
   push_stack(VM->stack, v2);
