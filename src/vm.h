@@ -12,6 +12,8 @@
 typedef struct {
   ITEM_t *item;
   uint8_t *nextop;
+  uint8_t *bytecode_start;
+  uint8_t *bytecode_end;
   int32_t current_stack;
   int32_t current_base;
   uint8_t current_locals;
@@ -34,6 +36,6 @@ VM_t *make_vm();
 void destroy_vm(VM_t *vm);
 CALLSTACK_t *make_callstack();
 void destroy_callstack(CALLSTACK_t *stack);
-void push_callstack(VM_t *vm, ITEM_t *item, uint8_t *nextop, uint8_t args);
+void push_callstack(VM_t *vm, ITEM_t *item, uint8_t *nextop, uint8_t args, uint8_t *bytecode_start, uint8_t *bytecode_end);
 FRAME_t *pop_callstack(VM_t *vm);
 int size_callstack(CALLSTACK_t *stack);

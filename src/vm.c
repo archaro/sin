@@ -38,7 +38,8 @@ void destroy_callstack(CALLSTACK_t *stack) {
   FREE_ARRAY(CALLSTACK_t, stack, 1);
 }
 
-void push_callstack(VM_t *vm, ITEM_t *item, uint8_t *nextop, uint8_t args) {
+void push_callstack(VM_t *vm, ITEM_t *item, uint8_t *nextop, uint8_t args,
+                    uint8_t *bytecode_start, uint8_t *bytecode_end) {
   // Store the currently-executing item on the call stack.
   // If arguments are being passed to the next item, adjust the
   // stack for this item to take into account.
@@ -46,6 +47,8 @@ void push_callstack(VM_t *vm, ITEM_t *item, uint8_t *nextop, uint8_t args) {
     vm->callstack->current++;
     vm->callstack->entry[vm->callstack->current].item = item;
     vm->callstack->entry[vm->callstack->current].nextop = nextop;
+    vm->callstack->entry[vm->callstack->current].bytecode_start = bytecode_start;
+    vm->callstack->entry[vm->callstack->current].bytecode_end = bytecode_end;
     vm->callstack->entry[vm->callstack->current].current_stack =
                                                  vm->stack->current - args;
     vm->callstack->entry[vm->callstack->current].current_base =

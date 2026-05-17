@@ -24,6 +24,7 @@
 #define ERR_RUNTIME_SIGUSR1       20
 #define ERR_RUNTIME_INVALIDARGS   21
 #define ERR_RUNTIME_NOSUCHITEM    22
+#define ERR_RUNTIME_TRUNCATED     23
 
 extern const char *errmsg[];
 
