@@ -16,6 +16,7 @@
 #include "log.h"
 #include "stack.h"
 #include "item.h"
+#include "compiler_pipeline.h"
 #include "interpret.h"
 
 // Configuration object.  Defined in sin.c
@@ -90,6 +91,75 @@ uint8_t *lc_sys_abort(uint8_t *nextop, ITEM_t *item) {
   uv_stop(config.loop);
   // libcalls always return a value.
   push_stack(VM->stack, VALUE_NIL);
+  return nextop;
+}
+
+uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
+  // Compile and execute some Sinistra code.
+  // This call takes one parameter, expected to be a string.
+  VALUE_t val = pop_stack(VM->stack);
+
+  if (val.type != VALUE_str) {
+    logmsg("Sys.compile called with non-string value.\n");
+    FREE_STR(val);
+    set_error_item(ERR_RUNTIME_INVALIDARGS, NULL);
+    push_stack(VM->stack, VALUE_FALSE);
+    return nextop;
+  }
+
+  int8_t result = 0;
+  char *errdetail = NULL;
+  OUTPUT_t *out = NULL;
+
+  // Compile source -> bytecode
+  result = compile_source_to_bytecode(val.s, strlen(val.s), &out, &errdetail);
+
+  if (result != 0 || !out || !out->bytecode) {
+    // Compile failed
+    set_error_item(result != 0 ? result : ERR_COMP_UNKNOWN, errdetail);
+    if (errdetail) {
+      FREE_ARRAY(char, errdetail, strlen(errdetail) + 1);
+    }
+    if (out) {
+      if (out->bytecode) {
+        FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
+      }
+      FREE_ARRAY(OUTPUT_t, out, 1);
+    }
+    FREE_ARRAY(char, val.s, strlen(val.s) + 1);
+    push_stack(VM->stack, VALUE_FALSE);
+    return nextop;
+  }
+
+  // Compile succeeded: execute compiled code in a temporary code item
+  uint32_t len = out->nextbyte - out->bytecode;
+  ITEM_t *tmpitem = insert_code_item(config.itemroot, "__sys_compile_tmp__", len, out->bytecode);
+
+  if (!tmpitem) {
+    // Could not create temp item (likely in-use/name conflict)
+    set_error_item(ERR_COMP_INUSE, NULL);
+    FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
+    FREE_ARRAY(OUTPUT_t, out, 1);
+    FREE_ARRAY(char, val.s, strlen(val.s) + 1);
+    push_stack(VM->stack, VALUE_FALSE);
+    return nextop;
+  }
+
+  // interpret() can push/pop values; we only care about success/fail contract here.
+  (void)interpret(tmpitem);
+  reset_stack(VM->stack);
+
+  // Best-effort cleanup of temp item
+  delete_item(config.itemroot, "__sys_compile_tmp__");
+
+  // clear compiler/runtime error indicators on success
+  set_item(config.itemroot, "error", VALUE_NIL);
+  set_item(config.itemroot, "error.msg", VALUE_NIL);
+
+  FREE_ARRAY(OUTPUT_t, out, 1); // bytecode ownership moved into inserted item
+  FREE_ARRAY(char, val.s, strlen(val.s) + 1);
+
+  push_stack(VM->stack, VALUE_TRUE);
   return nextop;
 }
 
@@ -332,18 +402,19 @@ uint8_t *lc_str_lower(uint8_t *nextop, ITEM_t *item) {
 }
 
 const LIBCALL_t libcalls[] = {
-  {"sys", "backup", 1, 0, 0, lc_sys_backup},
-  {"sys", "log", 1, 1, 1, lc_sys_log},
-  {"sys", "shutdown", 1, 2, 0, lc_sys_shutdown},
-  {"sys", "abort", 1, 3, 0, lc_sys_abort},
-  {"task", "newgametask", 2, 0, 3, lc_task_newgametask},
-  {"task", "killtask", 2, 1, 1, lc_task_killtask},
-  {"net", "input", 3, 0, 0, lc_net_input},
-  {"net", "write", 3, 1, 2, lc_net_write},
-  {"str", "capitalise", 4, 0, 1, lc_str_capitalise},
-  {"str", "upper", 4, 1, 1, lc_str_upper},
-  {"str", "lower", 4, 2, 1, lc_str_lower},
-  {NULL, NULL, -1, -1, 0, NULL}  // End marker
+  {"sys",  "backup",       1, 0, 0, lc_sys_backup},
+  {"sys",  "log",          1, 1, 1, lc_sys_log},
+  {"sys",  "shutdown",     1, 2, 0, lc_sys_shutdown},
+  {"sys",  "abort",        1, 3, 0, lc_sys_abort},
+  {"sys",  "compile",      1, 4, 0, lc_sys_compile},
+  {"task", "newgametask",  2, 0, 3, lc_task_newgametask},
+  {"task", "killtask",     2, 1, 1, lc_task_killtask},
+  {"net",  "input",        3, 0, 0, lc_net_input},
+  {"net",  "write",        3, 1, 2, lc_net_write},
+  {"str",  "capitalise",   4, 0, 1, lc_str_capitalise},
+  {"str",  "upper",        4, 1, 1, lc_str_upper},
+  {"str",  "lower",        4, 2, 1, lc_str_lower},
+  {NULL,   NULL,          -1, -1, 0, NULL}  // End marker
 };
 
 bool libcall_lookup(const char *libname, const char *callname,

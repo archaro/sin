@@ -19,6 +19,7 @@
 #define ERR_COMP_INUSE            8
 #define ERR_COMP_TOOMANYPARAMS    9
 #define ERR_COMP_TOOMANYARGS      10
+#define ERR_COMP_UNKNOWN          11
 
 #define ERR_RUNTIME_SIGUSR1       20
 #define ERR_RUNTIME_INVALIDARGS   21
