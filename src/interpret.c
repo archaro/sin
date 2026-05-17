@@ -590,18 +590,14 @@ void assignitem(VALUE_t *itemname, VALUE_t val) {
     ITEM_t *i = insert_item(config.itemroot, itemname->s, val);
     if (!i) {
       logerr("Unable to create item '%s'.\n", itemname->s);
-      if (val.type == VALUE_str) {
-        FREE_ARRAY(char, val.s, strlen(val.s));
-      }
+      FREE_STR(val);
     }
     ITEMDEBUG_LOG("Saved value of type %d in item %s\n", val.type, itemname->s);
   } else {
     logerr("Unable to create item: invalid name type %d\n", itemname->type);
-    if (val.type == VALUE_str) {
-      FREE_ARRAY(char, val.s, strlen(val.s));
-    }
+    FREE_STR(val);
   }
-  FREE_ARRAY(char, itemname->s, strlen(itemname->s));
+  FREE_STR(*itemname);
 }
 
 uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
@@ -656,6 +652,17 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   DISASS_LOG("Source to compile: %s\n", sourcecode);
   int8_t result;
   char *errdetail = NULL;
+  if (itemname.type != VALUE_str) {
+    logerr("Unable to assign code item: invalid name type %d.\n", itemname.type);
+    set_error_item(ERR_COMP_UNKNOWN, "Invalid item name type for code assignment.");
+    FREE_ARRAY(char, sourcecode, sclen + 1);
+    for (int pc = 0; pc < param_count; pc++) {
+      FREE_ARRAY(char, (char *)params[pc], strlen(params[pc]) + 1);
+    }
+    FREE_ARRAY(const char *, params, param_count);
+    return nextop;
+  }
+
   ITEM_t *testitem = find_item(config.itemroot, itemname.s);
   if (testitem && testitem->inuse) {
     char name[MAX_ITEM_NAME];
@@ -734,7 +741,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
 
   // Clean up.
   FREE_ARRAY(char, sourcecode, sclen + 1);
-  FREE_ARRAY(char, itemname.s, strlen(itemname.s));
+  FREE_STR(itemname);
   for (int pc = 0; pc < param_count; pc++) {
     FREE_ARRAY(char, (char *)params[pc], strlen(params[pc]) + 1);
   }
@@ -822,9 +829,14 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
         }
       push_stack(VM->stack, VALUE_NIL);
     }
-    FREE_ARRAY(char, itemname.s, strlen(itemname.s));
+    FREE_STR(itemname);
   } else {
     logerr("Unable to fetch item: invalid item type for name: %d.\n", itemname.type);
+    while (arg_count > 0) {
+      DEBUG_LOG("Discarding argument for invalid item fetch name type.\n");
+      throwaway_stack(VM->stack);
+      arg_count--;
+    }
     push_stack(VM->stack, VALUE_NIL);
   }
   return nextop;
@@ -942,7 +954,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
                 logerr("Item dereference failed for '%s'.\n", layername.s);
                 invalid = true;
               }
-              FREE_ARRAY(char, layername.s, strlen(layername.s));
+              FREE_STR(layername);
             } else {
               logerr("Invalid item layer type %d.\n", layername.type);
               invalid = true;
@@ -1008,8 +1020,12 @@ uint8_t *op_delete(uint8_t *nextop, ITEM_t *item) {
   // assembled and pushed onto the stack (or nil if the assembly failed).
   // Pop it, delete it, and return nothing.
   VALUE_t val = pop_stack(VM->stack);
-  delete_item(config.itemroot, val.s);
-  FREE_ARRAY(char, val.s, strlen(val.s)+1);
+  if (val.type == VALUE_str) {
+    delete_item(config.itemroot, val.s);
+  } else {
+    logerr("OP_DELETE invalid item name type: %d. No action taken.\n", val.type);
+  }
+  FREE_STR(val);
   DISASS_LOG("OP_DELETE\n");
   return nextop;
 }
@@ -1020,8 +1036,13 @@ uint8_t *op_exists(uint8_t *nextop, ITEM_t *item) {
   // Pop whatever is on the stack and evaluate it.  Push
   // true or false, depending on the result.
   VALUE_t val = pop_stack(VM->stack);
+  if (val.type != VALUE_str) {
+    logerr("OP_EXISTS invalid item name type: %d. Returning false.\n", val.type);
+    push_stack(VM->stack, VALUE_FALSE);
+    return nextop;
+  }
   ITEM_t *i = find_item(config.itemroot, val.s);
-  FREE_ARRAY(char, val.s, strlen(val.s)+1);
+  FREE_STR(val);
   push_stack(VM->stack, i ? VALUE_TRUE : VALUE_FALSE);
   DISASS_LOG("OP_EXISTS\n");
   return nextop;
@@ -1035,7 +1056,7 @@ uint8_t *op_nthname(uint8_t *nextop, ITEM_t *item) {
   VALUE_t index = pop_stack(VM->stack);
   VALUE_t itemname = pop_stack(VM->stack);
   bool found = false;
-  if (index.type == VALUE_int && index.i >= 0) {
+  if (index.type == VALUE_int && index.i >= 0 && itemname.type == VALUE_str) {
     ITEM_t *i = find_item(config.itemroot, itemname.s);
     if (i) {
       ITEM_t *child = find_item_by_index(i, index.i);
