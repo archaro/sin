@@ -16,10 +16,11 @@ void init_errmsg() {
   errmsg[ERR_COMP_UNKNOWNLIB] = "Unknown library call.";
   errmsg[ERR_COMP_WRONGARGS] = "Wrong number of arguments to library call.";
   errmsg[ERR_COMP_INUSE] = "Item in use; cannot replace it.";
+  errmsg[ERR_COMP_TOOMANYPARAMS] = "Too many parameters in item definition.";
+  errmsg[ERR_COMP_TOOMANYARGS] = "Too many arguments passed to item.";
+  errmsg[ERR_COMP_UNKNOWN] = "Unknown compiler error.";
   errmsg[ERR_RUNTIME_SIGUSR1] = "Restarting due to SIGUSR1.";
   errmsg[ERR_RUNTIME_INVALIDARGS] = "Invalid arguments to library call.";
   errmsg[ERR_RUNTIME_NOSUCHITEM] = "Item does not exist.";
   errmsg[ERR_RUNTIME_TRUNCATED] = "Truncated bytecode.";
-  errmsg[ERR_COMP_TOOMANYPARAMS] = "Too many parameters in item definition.";
-  errmsg[ERR_COMP_TOOMANYARGS] = "Too many arguments passed to item.";
 }
