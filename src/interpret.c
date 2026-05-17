@@ -49,6 +49,94 @@ static inline bool require_bytes(uint8_t *nextop, size_t bytes, const char *opna
 static OP_t opcode[256];
 static bool interpreter_initialized = false;
 
+typedef struct strbuf_meta {
+  char *ptr;
+  size_t cap;
+  struct strbuf_meta *next;
+} strbuf_meta_t;
+
+static strbuf_meta_t *strbuf_head = NULL;
+
+static strbuf_meta_t *strbuf_find(char *ptr) {
+  strbuf_meta_t *meta = strbuf_head;
+  while (meta) {
+    if (meta->ptr == ptr) return meta;
+    meta = meta->next;
+  }
+  return NULL;
+}
+
+static void strbuf_forget(char *ptr) {
+  strbuf_meta_t **scan = &strbuf_head;
+  while (*scan) {
+    if ((*scan)->ptr == ptr) {
+      strbuf_meta_t *found = *scan;
+      *scan = found->next;
+      free(found);
+      return;
+    }
+    scan = &((*scan)->next);
+  }
+}
+
+static void strbuf_track(char *ptr, size_t cap) {
+  strbuf_meta_t *meta = strbuf_find(ptr);
+  if (!meta) {
+    meta = malloc(sizeof(strbuf_meta_t));
+    if (!meta) return;
+    meta->next = strbuf_head;
+    strbuf_head = meta;
+  }
+  meta->ptr = ptr;
+  meta->cap = cap;
+}
+
+static void free_runtime_string(char *s) {
+  if (!s) return;
+  strbuf_forget(s);
+  FREE_ARRAY(char, s, strlen(s) + 1);
+}
+
+static size_t strbuf_growth_capacity(size_t needed) {
+  size_t cap = 16;
+  while (cap < needed) {
+    if (cap > SIZE_MAX / 2) return needed;
+    cap *= 2;
+  }
+  return cap;
+}
+
+static VALUE_t concat_two_strings(VALUE_t left, VALUE_t right) {
+  size_t left_len = strlen(left.s);
+  size_t right_len = strlen(right.s);
+  size_t needed = left_len + right_len + 1;
+  strbuf_meta_t *left_meta = strbuf_find(left.s);
+  char *out = NULL;
+  size_t out_cap = needed;
+
+  if (left_meta && left_meta->cap >= needed) {
+    out = left.s;
+    memcpy(out + left_len, right.s, right_len + 1);
+    out_cap = left_meta->cap;
+    strbuf_forget(right.s);
+    FREE_ARRAY(char, right.s, right_len + 1);
+  } else {
+    if (left_meta) {
+      out_cap = strbuf_growth_capacity(needed);
+    }
+    out = GROW_ARRAY(char, NULL, 0, out_cap);
+    memcpy(out, left.s, left_len);
+    memcpy(out + left_len, right.s, right_len + 1);
+    free_runtime_string(left.s);
+    free_runtime_string(right.s);
+  }
+
+  strbuf_track(out, out_cap);
+  left.s = out;
+  left.type = VALUE_str;
+  return left;
+}
+
 static inline int binary_int_operands(VALUE_t v1, VALUE_t v2, const char *opcode_name) {
   int valid = (v1.type == VALUE_int && v2.type == VALUE_int);
   if (!valid) {
@@ -312,20 +400,13 @@ uint8_t *op_add(uint8_t *nextop, ITEM_t *item) {
     v2.type = VALUE_int;
     push_stack(VM->stack, v2);
   } else if (v1.type == VALUE_str && v2.type == VALUE_str) {
-    char *newstring;
-    newstring = GROW_ARRAY(char, NULL, 0, strlen(v1.s) + strlen(v2.s) + 1);
-    memcpy(newstring, v2.s, strlen(v2.s));
-    memcpy(newstring + strlen(v2.s), v1.s, strlen(v1.s) + 1);
-    FREE_ARRAY(char, v1.s, strlen(v1.s) + 1);
-    FREE_ARRAY(char, v2.s, strlen(v2.s) + 1);
-    v2.s = newstring;
-    push_stack(VM->stack, v2);
+    push_stack(VM->stack, concat_two_strings(v2, v1));
   } else {
     if (v1.type == VALUE_str) {
-      free(v1.s);
+      free_runtime_string(v1.s);
     }
     if (v2.type == VALUE_str) {
-      free(v2.s);
+      free_runtime_string(v2.s);
     }
     logerr("OP_ADD invalid operand types: left '%c', right '%c'. Result is NIL.\n",
           v2.type, v1.type);
