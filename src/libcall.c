@@ -145,7 +145,11 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
     return nextop;
   }
 
-  // Compile succeeded: execute compiled code in a temporary code item
+  // Compile succeeded: execute compiled code in a temporary code item.
+  // Contract: Sys.compile must preserve the caller's stack frame below the
+  // pre-call depth while discarding only temporary values produced by the
+  // nested interpret() run. This keeps Sys.compile safe when invoked from
+  // within an already-active interpreter frame.
   uint32_t len = out->nextbyte - out->bytecode;
   ITEM_t *tmpitem = insert_code_item(config.itemroot, "__sys_compile_tmp__", len, out->bytecode);
 
@@ -159,9 +163,11 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
     return nextop;
   }
 
-  // interpret() can push/pop values; we only care about success/fail contract here.
+  int32_t stack_top_before_interpret = VM->stack->current;
   (void)interpret(tmpitem);
-  reset_stack(VM->stack);
+  while (VM->stack->current > stack_top_before_interpret) {
+    FREE_STR(pop_stack(VM->stack));
+  }
 
   // Best-effort cleanup of temp item
   delete_item(config.itemroot, tmpname);
