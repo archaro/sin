@@ -28,6 +28,8 @@ static VM_t *current_vm = NULL;
 #define VM current_vm
 static uint8_t *current_frame_start = NULL;
 static uint8_t *current_frame_end = NULL;
+static ITEM_t *current_item = NULL;
+static ITEM_t *pending_call_item = NULL;
 
 static inline bool require_bytes(uint8_t *nextop, size_t bytes, const char *opname) {
   if (!current_frame_start || !current_frame_end) return true;
@@ -45,6 +47,7 @@ static inline bool require_bytes(uint8_t *nextop, size_t bytes, const char *opna
   do { if (!require_bytes((nextop), (n), (opname))) return NULL; } while (0)
 
 static OP_t opcode[256];
+static bool interpreter_initialized = false;
 
 static inline int binary_int_operands(VALUE_t v1, VALUE_t v2, const char *opcode_name) {
   int valid = (v1.type == VALUE_int && v2.type == VALUE_int);
@@ -796,24 +799,19 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
           push_stack(VM->stack, VALUE_NIL);
           arg_count++;
         }
-        // Save our current state.
+        // Save our current caller continuation state.
         // We pass the number of arguments, so that the stack is
         // correctly adjusted to account for them at the top of the
         // current stack (they will be at the bottom of the frame for
         // the new item).
         push_callstack(VM, item, nextop, i->bytecode[1], current_frame_start, current_frame_end);
-        // Execute the item.
+        // Invariant at call-entry:
+        // - caller VM stack/base/locals/params are captured in callstack.
+        // - caller continuation (item + nextop + bytecode bounds) is captured.
+        // - interpreter loop must transfer control to callee without recursion.
         ITEMDEBUG_LOG("Executing item %s\n", i->name);
-        VALUE_t value = interpret(i);
-        // Now go back to the status quo ante.
-        FRAME_t *prev_frame = pop_callstack(VM);
-        item = prev_frame->item;
-        nextop = prev_frame->nextop;
-        current_frame_start = prev_frame->bytecode_start;
-        current_frame_end = prev_frame->bytecode_end;
-        // Having restored the old state, push the result
-        // of the executed item.
-        push_stack(VM->stack, value);
+        pending_call_item = i;
+        return NULL;
       }
     } else {
       // Item not found.
@@ -1109,6 +1107,10 @@ void init_interpreter() {
 
 VALUE_t interpret(ITEM_t *item) {
   VM_t *vm = config.vm;
+  if (!interpreter_initialized) {
+    init_interpreter();
+    interpreter_initialized = true;
+  }
   current_vm = vm;
   set_item(config.itemroot, "error", VALUE_NIL);
   set_item(config.itemroot, "error.msg", VALUE_NIL);
@@ -1116,80 +1118,64 @@ VALUE_t interpret(ITEM_t *item) {
   // NB: The HALT opcode (currently represented by the character 'h') does
   // not have an associated function.
 
-  // First set up the locals
-  uint8_t numlocals = item->bytecode[0];
-  uint8_t numparams = item->bytecode[1];
+  current_item = item;
+  pending_call_item = NULL;
 
-  // Item is now in use
-  item->inuse = true;
-
-  // Set up the stack before executing it
-  // We have already adjusted the stack to account for the arguments
-  // so don't double-count them here.
-  VM->stack->current += numlocals - numparams;
-  VM->stack->locals = numlocals;
-  VM->stack->params = numparams;
-
-  // The actual bytecode starts at the third byte.
-  uint8_t *op = item->bytecode + 2;
+  // Enter initial frame.
+  current_item->inuse = true;
+  VM->stack->current += current_item->bytecode[0] - current_item->bytecode[1];
+  VM->stack->locals = current_item->bytecode[0];
+  VM->stack->params = current_item->bytecode[1];
+  uint8_t *op = current_item->bytecode + 2;
   current_frame_start = op;
-  current_frame_end = item->bytecode + item->bytecode_len;
+  current_frame_end = current_item->bytecode + current_item->bytecode_len;
 
-#if defined(__GNUC__) || defined(__clang__)
-  // On compilers that support labels-as-values, use computed-goto dispatch.
-  // This avoids the indirect function-pointer call at every opcode dispatch,
-  // while keeping the exact same opcode-to-handler mapping.
-  //
-  // IMPORTANT: when adding/updating opcodes, update both this jump table and
-  // init_interpreter() so the computed-goto and portable paths stay aligned.
-  static void *jump_table[256] = {
-      [0 ... 255] = &&op_undefined_label,
-#define JUMP_ENTRY(opcode_byte, handler_fn) [opcode_byte] = &&handler_fn##_label,
-      RUNTIME_OPCODE_TABLE(JUMP_ENTRY)
-#undef JUMP_ENTRY
-  };
+  while (true) {
+    if (*op == 'h') {
+      VALUE_t return_value = (size_stack(VM->stack) > 0) ? pop_stack(VM->stack) : VALUE_NIL;
+      current_item->inuse = false;
 
-#define DISPATCH() do { if (*op == 'h') goto op_halt_label; goto *jump_table[*op]; } while (0)
-#define OPCASE(label_name, fn)   label_name: {     uint8_t *nextop = op + 1;     op = fn(nextop, item);     if (!op) goto op_error_label; DISPATCH();   }
+      if (size_callstack(VM->callstack) == 0) {
+        current_frame_start = NULL;
+        current_frame_end = NULL;
+        current_item = NULL;
+        return return_value;
+      }
 
-  DISPATCH();
-#define OPCASE_ENTRY(opcode_byte, handler_fn) OPCASE(handler_fn##_label, handler_fn)
-  RUNTIME_OPCODE_TABLE(OPCASE_ENTRY)
-#undef OPCASE_ENTRY
-  OPCASE(op_undefined_label, op_undefined)
-
-op_halt_label:
-  goto op_done_label;
-#undef OPCASE
-#undef DISPATCH
-#else
-  // Portable fallback: indirect function-pointer dispatch table.
-  while (*op != 'h') {
-    // We do it this way to avoid undefined behaviour between
-    // two sequence points:
-    uint8_t *nextop = op + 1;
-    op = opcode[*op](nextop, item);
-    if (!op) {
-      goto op_error_label;
+      FRAME_t *prev_frame = pop_callstack(VM);
+      // Invariant at return:
+      // - pop_callstack restored caller stack/base/locals/params.
+      // - caller continuation state tells us exactly where to resume.
+      current_item = prev_frame->item;
+      current_item->inuse = true;
+      op = prev_frame->nextop;
+      current_frame_start = prev_frame->bytecode_start;
+      current_frame_end = prev_frame->bytecode_end;
+      push_stack(VM->stack, return_value);
+      continue;
     }
-  }
-#endif
-op_error_label:
-op_done_label:
 
-  // Item is now free to be replaced or deleted
-  item->inuse = false;
-  current_frame_start = NULL;
-  current_frame_end = NULL;
-
-  if (!op) {
-    return VALUE_NIL;
-  }
-
-  if (size_stack(VM->stack) > 0) {
-    return pop_stack(VM->stack);
-  } else {
-    // Otherwise return a nil.
-    return VALUE_NIL;
+    uint8_t *nextop = op + 1;
+    uint8_t *newop = opcode[*op](nextop, current_item);
+    if (!newop) {
+      if (pending_call_item) {
+        current_item = pending_call_item;
+        pending_call_item = NULL;
+        current_item->inuse = true;
+        VM->stack->current += current_item->bytecode[0] - current_item->bytecode[1];
+        VM->stack->locals = current_item->bytecode[0];
+        VM->stack->params = current_item->bytecode[1];
+        op = current_item->bytecode + 2;
+        current_frame_start = op;
+        current_frame_end = current_item->bytecode + current_item->bytecode_len;
+        continue;
+      }
+      current_item->inuse = false;
+      current_frame_start = NULL;
+      current_frame_end = NULL;
+      current_item = NULL;
+      return VALUE_NIL;
+    }
+    op = newop;
   }
 }

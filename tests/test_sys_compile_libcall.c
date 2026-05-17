@@ -66,11 +66,13 @@ void test_sys_compile_libcall_runtime(void) {
   ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err_item->value.i);
 
   int32_t baseline = config.vm->stack->current;
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
   for (int i = 0; i < 50; i++) {
     push_stack(config.vm->stack, vstr("sys.log{\"x\\n\"};"));
     (void)lc_sys_compile(NULL, config.itemroot);
     assert_bool(pop_stack(config.vm->stack), 1);
     ASSERT_EQ_INT(baseline, config.vm->stack->current);
+    ASSERT_EQ_INT(-1, config.vm->callstack->current);
     ASSERT_TRUE(find_item(config.itemroot, "__sys_compile_tmp__") == NULL);
     char tmpname[64];
     snprintf(tmpname, sizeof(tmpname), "__sys_compile_tmp__%d", i + 1);
