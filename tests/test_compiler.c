@@ -34,6 +34,8 @@ void test_compiler_context_failures(void);
 void test_compiler_diag_pipeline(void);
 void test_parser_input_api(void);
 void test_sys_compile_libcall_runtime(void);
+void test_find_item_cached_hit_and_negative_cache(void);
+void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
 
 static void test_absyn_helpers(void) {
   AS_NODE *lhs = t_int(1);
@@ -114,5 +116,7 @@ int main(void) {
   run_test("test_compiler_diag_pipeline", test_compiler_diag_pipeline);
   run_test("test_parser_input_api", test_parser_input_api);
   run_test("test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime);
+  run_test("test_find_item_cached_hit_and_negative_cache", test_find_item_cached_hit_and_negative_cache);
+  run_test("test_find_item_cached_invalidation_on_delete_and_reinsert", test_find_item_cached_invalidation_on_delete_and_reinsert);
   return 0;
 }

@@ -91,6 +91,7 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value);
 ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
                                                         uint8_t *bytecode);
 ITEM_t *find_item(ITEM_t *root, const char *item_name);
+ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found);
 ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index);
 void delete_item(ITEM_t *root, const char *item_name);
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value);
@@ -100,6 +101,7 @@ bool save_itemsource(ITEM_t *item, char *source);
 void save_itemstore(const char *filename, ITEM_t *root); 
 ITEM_t *load_itemstore(const char *filename); 
 void dump_item(ITEM_t *item, char *item_name, bool isroot);
+uint64_t get_itemstore_generation(void);
 
 // Other item-related API functions
 bool is_valid_layer(const char *str);

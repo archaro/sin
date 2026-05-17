@@ -13,7 +13,7 @@ LIB_DIR := lib
 # Test runner
 TEST_DIR := tests
 TEST_BIN := $(TEST_DIR)/test-compiler
-TEST_SOURCES := $(TEST_DIR)/test_compiler.c $(TEST_DIR)/test_helpers.c $(TEST_DIR)/test_emitbc_header.c $(TEST_DIR)/test_emitbc_opcode_map.c $(TEST_DIR)/test_emitbc_jumps.c $(TEST_DIR)/test_emitbc_invariants.c $(TEST_DIR)/test_opcode_schema.c $(TEST_DIR)/test_pipeline_golden.c $(TEST_DIR)/test_pipeline_source_golden.c $(TEST_DIR)/test_ir_validate.c $(TEST_DIR)/test_pipeline_negative_matrix.c $(TEST_DIR)/test_absyn_lifecycle.c $(TEST_DIR)/test_semant.c $(TEST_DIR)/test_sdiss_fixtures.c $(TEST_DIR)/test_parser_examples_obj_golden.c $(TEST_DIR)/test_interpret_semantics_golden.c $(TEST_DIR)/test_fixture_policy.c $(TEST_DIR)/test_compiler_context_failures.c $(TEST_DIR)/test_compiler_diag_pipeline.c $(TEST_DIR)/test_parser_input_api.c $(TEST_DIR)/test_sys_compile_libcall.c
+TEST_SOURCES := $(TEST_DIR)/test_compiler.c $(TEST_DIR)/test_helpers.c $(TEST_DIR)/test_emitbc_header.c $(TEST_DIR)/test_emitbc_opcode_map.c $(TEST_DIR)/test_emitbc_jumps.c $(TEST_DIR)/test_emitbc_invariants.c $(TEST_DIR)/test_opcode_schema.c $(TEST_DIR)/test_pipeline_golden.c $(TEST_DIR)/test_pipeline_source_golden.c $(TEST_DIR)/test_ir_validate.c $(TEST_DIR)/test_pipeline_negative_matrix.c $(TEST_DIR)/test_absyn_lifecycle.c $(TEST_DIR)/test_semant.c $(TEST_DIR)/test_sdiss_fixtures.c $(TEST_DIR)/test_parser_examples_obj_golden.c $(TEST_DIR)/test_interpret_semantics_golden.c $(TEST_DIR)/test_fixture_policy.c $(TEST_DIR)/test_compiler_context_failures.c $(TEST_DIR)/test_compiler_diag_pipeline.c $(TEST_DIR)/test_parser_input_api.c $(TEST_DIR)/test_sys_compile_libcall.c $(TEST_DIR)/test_item_cache.c
 
 
 # Library of shared functions

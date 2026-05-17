@@ -769,7 +769,7 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
 
   // First check to see if there is a valid item to look up
   if (itemname.type == VALUE_str) {
-    ITEM_t *i = find_item(config.itemroot, itemname.s);
+    ITEM_t *i = find_item_cached(config.itemroot, itemname.s, NULL);
     if (i) {
       ITEMDEBUG_LOG("Fetched item %s (called with %d arguments).\n", itemname.s, arg_count);
       // Just push the item value onto the stack.
