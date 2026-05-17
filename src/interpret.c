@@ -35,7 +35,7 @@ static inline bool require_bytes(uint8_t *nextop, size_t bytes, const char *opna
     char detail[128];
     snprintf(detail, sizeof(detail), "%s truncated bytecode read (%zu bytes)", opname, bytes);
     logerr("%s.\n", detail);
-    set_error_item(ERR_COMP_UNKNOWN, detail);
+    set_error_item(ERR_RUNTIME_TRUNCATED, detail);
     return false;
   }
   return true;
