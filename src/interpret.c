@@ -29,6 +29,15 @@ extern CONFIG_t config;
 
 static OP_t opcode[256];
 
+static inline int binary_int_operands(VALUE_t v1, VALUE_t v2, const char *opcode_name) {
+  int valid = (v1.type == VALUE_int && v2.type == VALUE_int);
+  if (!valid) {
+    logerr("%s invalid operand types: left '%c', right '%c'.\n",
+          opcode_name, v2.type, v1.type);
+  }
+  return valid;
+}
+
 
 #define RUNTIME_OPCODE_TABLE(OP) \
   OP(0, op_nop) \
@@ -238,7 +247,8 @@ uint8_t *op_add(uint8_t *nextop, ITEM_t *item) {
     if (v2.type == VALUE_str) {
       free(v2.s);
     }
-    logerr("Trying to add mismatched types '%c' and '%c'.  Result is NIL.\n", v1.type, v2.type);
+    logerr("OP_ADD invalid operand types: left '%c', right '%c'. Result is NIL.\n",
+          v2.type, v1.type);
     push_stack(VM->stack, VALUE_NIL);
   }
   DISASS_LOG("OP_ADD: types %d and %d\n", v1.type, v2.type);
@@ -252,12 +262,12 @@ uint8_t *op_subtract(uint8_t *nextop, ITEM_t *item) {
   VALUE_t v1, v2;
   v1 = pop_stack(VM->stack);
   v2 = pop_stack(VM->stack);
-  if (v1.type == VALUE_int && v1.type == VALUE_int) {
+  if (binary_int_operands(v1, v2, "OP_SUB")) {
     v2.i -= v1.i;
     v2.type = VALUE_int;
-    DISASS_LOG("OP_SUB: values %d and %d\n", v1.type, v2.type);
+    DISASS_LOG("OP_SUB: operand types %d and %d\n", v2.type, v1.type);
   } else {
-    DISASS_LOG("OP_SUB: invalid types %d and %d\n", v1.type, v2.type);
+    DISASS_LOG("OP_SUB: invalid operand types %d and %d\n", v2.type, v1.type);
     if (v1.type == VALUE_str) {
       FREE_ARRAY(char, v1.s, strlen(v1.s) + 1);
     }
@@ -278,16 +288,16 @@ uint8_t *op_divide(uint8_t *nextop, ITEM_t *item) {
   VALUE_t v1, v2;
   v1 = pop_stack(VM->stack);
   v2 = pop_stack(VM->stack);
-  if (v1.type == VALUE_int && v1.type == VALUE_int) {
+  if (binary_int_operands(v1, v2, "OP_DIV")) {
     if (v1.i == 0) {
       logerr("Attempt to divide by zero.  Substitute zero as result.\n");
       v2.i = 0;
     } else {
       v2.i /= v1.i;
     }
-    DISASS_LOG("OP_DIV: values %d and %d\n", v1.type, v2.type);
+    DISASS_LOG("OP_DIV: operand types %d and %d\n", v2.type, v1.type);
   } else {
-    DISASS_LOG("OP_DIV: invalid types %d and %d\n", v1.type, v2.type);
+    DISASS_LOG("OP_DIV: invalid operand types %d and %d\n", v2.type, v1.type);
     if (v1.type == VALUE_str) {
       FREE_ARRAY(char, v1.s, strlen(v1.s) + 1);
     }
@@ -307,12 +317,12 @@ uint8_t *op_multiply(uint8_t *nextop, ITEM_t *item) {
   VALUE_t v1, v2;
   v1 = pop_stack(VM->stack);
   v2 = pop_stack(VM->stack);
-  if (v1.type == VALUE_int && v1.type == VALUE_int) {
+  if (binary_int_operands(v1, v2, "OP_MUL")) {
     v2.i *= v1.i;
     v2.type = VALUE_int;
-    DISASS_LOG("OP_MUL: values %d and %d\n", v1.type, v2.type);
+    DISASS_LOG("OP_MUL: operand types %d and %d\n", v2.type, v1.type);
   } else {
-    DISASS_LOG("OP_MUL: invalid types %d and %d\n", v1.type, v2.type);
+    DISASS_LOG("OP_MUL: invalid operand types %d and %d\n", v2.type, v1.type);
     if (v1.type == VALUE_str) {
       FREE_ARRAY(char, v1.s, strlen(v1.s) + 1);
     }
