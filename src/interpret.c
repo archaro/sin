@@ -24,8 +24,8 @@
 // The configuration object, defined in sin.c
 extern CONFIG_t config;
 
-// Some shorthand
-#define VM config.vm
+static VM_t *current_vm = NULL;
+#define VM current_vm
 
 static OP_t opcode[256];
 
@@ -65,7 +65,7 @@ static inline int apply_comparison(CMP_MODE_t mode, int64_t left, int64_t right)
   return 0;
 }
 
-static inline int pop_compare_and_push_bool(CMP_MODE_t mode, const char *opcode_tag) {
+static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const char *opcode_tag) {
   VALUE_t v1 = pop_stack(VM->stack);
   VALUE_t v2 = pop_stack(VM->stack);
   VALUE_t result;
@@ -407,32 +407,32 @@ uint8_t *op_negate(uint8_t *nextop, ITEM_t *item) {
 }
 
 uint8_t *op_equal(uint8_t *nextop, ITEM_t *item) {
-  pop_compare_and_push_bool(CMP_EQ, "OP_EQUAL");
+  pop_compare_and_push_bool(VM, CMP_EQ, "OP_EQUAL");
   return nextop;
 }
 
 uint8_t *op_notequal(uint8_t *nextop, ITEM_t *item) {
-  pop_compare_and_push_bool(CMP_NE, "OP_NOTEQUAL");
+  pop_compare_and_push_bool(VM, CMP_NE, "OP_NOTEQUAL");
   return nextop;
 }
 
 uint8_t *op_lessthan(uint8_t *nextop, ITEM_t *item) {
-  pop_compare_and_push_bool(CMP_LT, "OP_LESSTHAN");
+  pop_compare_and_push_bool(VM, CMP_LT, "OP_LESSTHAN");
   return nextop;
 }
 
 uint8_t *op_lessthanorequal(uint8_t *nextop, ITEM_t *item) {
-  pop_compare_and_push_bool(CMP_LTE, "OP_LTEQ");
+  pop_compare_and_push_bool(VM, CMP_LTE, "OP_LTEQ");
   return nextop;
 }
 
 uint8_t *op_greaterthan(uint8_t *nextop, ITEM_t *item) {
-  pop_compare_and_push_bool(CMP_GT, "OP_GREATERTHAN");
+  pop_compare_and_push_bool(VM, CMP_GT, "OP_GREATERTHAN");
   return nextop;
 }
 
 uint8_t *op_greaterthanorequal(uint8_t *nextop, ITEM_t *item) {
-  pop_compare_and_push_bool(CMP_GTE, "OP_GTEQ");
+  pop_compare_and_push_bool(VM, CMP_GTE, "OP_GTEQ");
   return nextop;
 }
 
@@ -778,12 +778,12 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
         // correctly adjusted to account for them at the top of the
         // current stack (they will be at the bottom of the frame for
         // the new item).
-        push_callstack(item, nextop, i->bytecode[1]);
+        push_callstack(VM, item, nextop, i->bytecode[1]);
         // Execute the item.
         ITEMDEBUG_LOG("Executing item %s\n", i->name);
         VALUE_t value = interpret(i);
         // Now go back to the status quo ante.
-        FRAME_t *prev_frame = pop_callstack();
+        FRAME_t *prev_frame = pop_callstack(VM);
         item = prev_frame->item;
         nextop = prev_frame->nextop;
         // Having restored the old state, push the result
@@ -1071,6 +1071,8 @@ void init_interpreter() {
 }
 
 VALUE_t interpret(ITEM_t *item) {
+  VM_t *vm = config.vm;
+  current_vm = vm;
   // Given some bytecode, interpret it until the HALT instruction is seen
   // NB: The HALT opcode (currently represented by the character 'h') does
   // not have an associated function.
