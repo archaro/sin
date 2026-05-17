@@ -110,6 +110,8 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   int8_t result = 0;
   char *errdetail = NULL;
   OUTPUT_t *out = NULL;
+  char tmpname[MAX_ITEM_NAME];
+  static uint64_t tmpname_counter = 0;
 
   // Compile source -> bytecode
   result = compile_source_to_bytecode(val.s, strlen(val.s), &out, &errdetail);
@@ -126,6 +128,18 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
       }
       FREE_ARRAY(OUTPUT_t, out, 1);
     }
+    FREE_ARRAY(char, val.s, strlen(val.s) + 1);
+    push_stack(VM->stack, VALUE_FALSE);
+    return nextop;
+  }
+
+  int namelen = snprintf(tmpname, sizeof(tmpname),
+      "__sys_compile_tmp__%llu", (unsigned long long)++tmpname_counter);
+  if (namelen < 0 || namelen >= (int)sizeof(tmpname)) {
+    set_error_item(ERR_RUNTIME_INVALIDARGS,
+        "Sys.compile temporary item name generation failed.");
+    FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
+    FREE_ARRAY(OUTPUT_t, out, 1);
     FREE_ARRAY(char, val.s, strlen(val.s) + 1);
     push_stack(VM->stack, VALUE_FALSE);
     return nextop;
@@ -150,7 +164,7 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   reset_stack(VM->stack);
 
   // Best-effort cleanup of temp item
-  delete_item(config.itemroot, "__sys_compile_tmp__");
+  delete_item(config.itemroot, tmpname);
 
   // clear compiler/runtime error indicators on success
   set_item(config.itemroot, "error", VALUE_NIL);
