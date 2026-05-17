@@ -600,6 +600,49 @@ void assignitem(VALUE_t *itemname, VALUE_t val) {
   FREE_STR(*itemname);
 }
 
+typedef struct {
+  char *buf;
+  uint32_t cap;
+  uint32_t len;
+} STRBUILDER_t;
+
+static void sb_init(STRBUILDER_t *sb, uint32_t cap) {
+  sb->buf = GROW_ARRAY(char, NULL, 0, cap);
+  sb->cap = cap;
+  sb->len = 0;
+  sb->buf[0] = '\0';
+}
+
+static void sb_ensure(STRBUILDER_t *sb, uint32_t add_len) {
+  uint32_t need = sb->len + add_len + 1;
+  if (need <= sb->cap) {
+    return;
+  }
+  uint32_t new_cap = sb->cap;
+  while (new_cap < need) {
+    new_cap *= 2;
+  }
+  sb->buf = GROW_ARRAY(char, sb->buf, sb->cap, new_cap);
+  sb->cap = new_cap;
+}
+
+static void sb_append_substr(STRBUILDER_t *sb, const char *src, uint32_t slen) {
+  sb_ensure(sb, slen);
+  memcpy(sb->buf + sb->len, src, slen);
+  sb->len += slen;
+  sb->buf[sb->len] = '\0';
+}
+
+static void sb_append_literal(STRBUILDER_t *sb, const char *literal) {
+  sb_append_substr(sb, literal, (uint32_t)strlen(literal));
+}
+
+static void sb_append_intstr(STRBUILDER_t *sb, int64_t val) {
+  char str[22];
+  itoa(val, str, 10);
+  sb_append_literal(sb, str);
+}
+
 uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   // Extract the embedded code from the bytestream, and compile it.
   // If the compilation is successful, assign its value to the item
@@ -695,39 +738,35 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     // Compilation succeeded.  Assign it to the item.
     // The item type is ITEM_code.
     // Now reconstruct the source code and save it to srcroot.
-    int plen = 0;
-    for (int pc = 0; pc < param_count; pc++) plen += (int)strlen(params[pc]);
-    plen += 2 * (param_count - 1);
     ITEM_t *item = find_item(config.itemroot, itemname.s);
-    uint32_t len = plen + sclen + 13; // Big enough for everything!
-    char *src = GROW_ARRAY(char, NULL, 0, len);
-    src[0] = '\0';
-    strcat(src, "code ");
+    STRBUILDER_t sb;
+    sb_init(&sb, sclen + 16);
+    sb_append_literal(&sb, "code ");
     if (param_count > 0) {
-      strcat(src, "{");
+      sb_append_literal(&sb, "{");
       for (int pc = 0; pc < param_count; pc++) {
-        // Reconstruct the parameter list in source form.
-        strcat(src, params[pc]);
+        sb_append_literal(&sb, params[pc]);
         if (pc < (param_count -1)) {
-          strcat(src, ", ");
+          sb_append_literal(&sb, ", ");
         }
       }
-      strcat(src, "} (");
-      strcat(src, sourcecode);
-      strcat(src, ");\n");
+      sb_append_literal(&sb, "} (");
+      sb_append_literal(&sb, sourcecode);
+      sb_append_literal(&sb, ");\n");
     } else {
-      src[0] = '\0';
-      strcat(src, "code (");
-      strcat(src, sourcecode);
-      strcat(src, ");\n");
+      sb.len = 0;
+      sb.buf[0] = '\0';
+      sb_append_literal(&sb, "code (");
+      sb_append_literal(&sb, sourcecode);
+      sb_append_literal(&sb, ");\n");
     }
-    if (!save_itemsource(item, src)) {
+    if (!save_itemsource(item, sb.buf)) {
       char fullname[MAX_ITEM_NAME];
       get_itemname(item, fullname);
       logerr("Source was not saved.\nItem: %s\n", fullname);
-      logerr("Source:\n%s\n", src);
+      logerr("Source:\n%s\n", sb.buf);
     }
-    FREE_ARRAY(char, src, len);
+    FREE_ARRAY(char, sb.buf, sb.cap);
     // Set the error item to a nil value.
     set_item(config.itemroot, "error", VALUE_NIL);
     set_item(config.itemroot, "error.msg", VALUE_NIL);
@@ -848,20 +887,15 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
   // Return a pointer to the bytecode after the item assembly.
   // May recurse - necessary for the handling of nested derefs.
   bool invalid = false;
-  int size = 128;
-  char *itemname = GROW_ARRAY(char, NULL, 0, size+2);
-  itemname[0] = '\0';
+  STRBUILDER_t sb;
+  sb_init(&sb, 130);
 
   while (*nextop != 'E' && !invalid) {
     switch (*nextop++) {
       case 'L': {
         // Simple layer
         int s = *nextop++; // Length of layer name
-        if (strlen(itemname) + s + 2 >= size) {
-          itemname = GROW_ARRAY(char, itemname, size, (size*2)+2);
-          size = (size * 2) + 2;
-        }
-        strncat(itemname, (char *)nextop, s);
+        sb_append_substr(&sb, (char *)nextop, (uint32_t)s);
         nextop += s;
         break;
       }
@@ -875,12 +909,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
                 // This is easy, just concatenate the context of this local
                 // Assuming it is a valid layer name, anyway.
                 if (is_valid_layer(VM->stack->stack[idx].s)) {
-                  int sl = strlen(VM->stack->stack[idx].s);
-                  if (strlen(itemname) + sl + 2 >= size) {
-                    itemname = GROW_ARRAY(char, itemname, size, (size*2)+2);
-                    size = (size * 2) + 2;
-                  }
-                  strncat(itemname, VM->stack->stack[idx].s, sl);
+                  sb_append_literal(&sb, VM->stack->stack[idx].s);
                 } else {
                   logerr("Invalid layer name '%s'.\n", VM->stack->stack[idx].s);
                   invalid = true;
@@ -889,14 +918,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
               }
               case VALUE_int: {
                 // Slightly more complicated.  Turn the int into a string.
-                char str[22]; // Big enough for MAXINT.
-                itoa(VM->stack->stack[idx].i, str, 10);
-                int sl = strlen(str);
-                if (strlen(itemname) + sl + 2 >= size) {
-                  itemname = GROW_ARRAY(char, itemname, size, (size*2)+2);
-                  size = (size * 2) + 2;
-                }
-                strncat(itemname, str, sl);
+                sb_append_intstr(&sb, VM->stack->stack[idx].i);
                 break;
               }
               default: {
@@ -921,12 +943,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
                   case VALUE_str: {
                     // This is the easiest one
                     if (is_valid_layer(i->value.s)) {
-                      int sl = strlen(i->value.s);
-                      if (strlen(itemname) + sl + 2 >= size) {
-                        itemname = GROW_ARRAY(char, itemname, size, (size*2)+2);
-                        size = (size * 2) + 2;
-                      }
-                      strncat(itemname, i->value.s, sl);
+                      sb_append_literal(&sb, i->value.s);
                     } else {
                       logerr("Invalid layer name '%s'.\n", i->value.s);
                       invalid = true;
@@ -935,14 +952,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
                   }
                   case VALUE_int: {
                     // This needs to be converted to a string.
-                    char str[22]; // Big enough for MAXINT.
-                    itoa(i->value.i, str, 10);
-                    int sl = strlen(str);
-                    if (strlen(itemname) + sl + 2 >= size) {
-                      itemname = GROW_ARRAY(char, itemname, size, (size*2)+2);
-                      size = (size * 2) + 2;
-                    }
-                    strncat(itemname, str, sl);
+                    sb_append_intstr(&sb, i->value.i);
                     break;
                   }
                   default: {
@@ -975,7 +985,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
     }
     if (*nextop != 'E') {
       // Another layer to process, so add a dot separator.
-      strcat(itemname, ".");
+      sb_append_literal(&sb, ".");
     } else {
       // End of item definition.
       break;
@@ -984,14 +994,14 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
 
   if (invalid) {
     // Not a valid item name, so push nil.
-    FREE_ARRAY(char, itemname, size);
+    FREE_ARRAY(char, sb.buf, sb.cap);
     push_stack(VM->stack, VALUE_NIL);
   } else {
     VALUE_t name;
     name.type = VALUE_str;
-    name.s = itemname; // Don't free itemname - it's on the stack!
+    name.s = sb.buf; // Don't free - it's on the stack!
     push_stack(VM->stack, name);
-    ITEMDEBUG_LOG("Item assembled: %s\n", itemname);
+    ITEMDEBUG_LOG("Item assembled: %s\n", sb.buf);
   }
 
   return nextop + 1;
