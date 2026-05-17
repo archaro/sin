@@ -426,7 +426,7 @@ const LIBCALL_t libcalls[] = {
   {"sys",  "log",          1, 1, 1, lc_sys_log},
   {"sys",  "shutdown",     1, 2, 0, lc_sys_shutdown},
   {"sys",  "abort",        1, 3, 0, lc_sys_abort},
-  {"sys",  "compile",      1, 4, 0, lc_sys_compile},
+  {"sys",  "compile",      1, 4, 1, lc_sys_compile},
   {"task", "newgametask",  2, 0, 3, lc_task_newgametask},
   {"task", "killtask",     2, 1, 1, lc_task_killtask},
   {"net",  "input",        3, 0, 0, lc_net_input},
@@ -465,4 +465,3 @@ void *libcall_func(uint8_t lib, uint8_t call) {
   }
   return NULL;
 }
-

@@ -11,42 +11,7 @@
 
 #include "compdiag.h"
 #include "error.h"
-
-typedef struct {
-  const char *lib;
-  const char *func;
-  uint8_t lib_index;
-  uint8_t func_index;
-  uint8_t args;
-} LOWER_LIBCALL;
-
-static const LOWER_LIBCALL k_libcalls[] = {
-  {"sys", "backup", 1, 0, 0},
-  {"sys", "log", 1, 1, 1},
-  {"sys", "shutdown", 1, 2, 0},
-  {"sys", "abort", 1, 3, 0},
-  {"task", "newgametask", 2, 0, 3},
-  {"task", "killtask", 2, 1, 1},
-  {"net", "input", 3, 0, 0},
-  {"net", "write", 3, 1, 2},
-  {"str", "capitalise", 4, 0, 1},
-  {"str", "upper", 4, 1, 1},
-  {"str", "lower", 4, 2, 1},
-  {NULL, NULL, 0, 0, 0},
-};
-
-static bool lower_lookup_libcall(const char *lib, const char *func,
-                                 uint8_t *lib_index, uint8_t *func_index, uint8_t *args) {
-  for (size_t i = 0; k_libcalls[i].lib != NULL; i++) {
-    if (strcmp(k_libcalls[i].lib, lib) == 0 && strcmp(k_libcalls[i].func, func) == 0) {
-      *lib_index = k_libcalls[i].lib_index;
-      *func_index = k_libcalls[i].func_index;
-      *args = k_libcalls[i].args;
-      return true;
-    }
-  }
-  return false;
-}
+#include "libcall.h"
 
 static void lower_set_error(LOWER_CTX *ctx, int8_t errnum, const char *detail) {
   if (!ctx) return;
@@ -323,7 +288,7 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
 
       lower_arglist(ctx, (AS_NODE *)node->rhs, &argc);
       if (ctx->errnum != ERR_NOERROR) return;
-      if (!lower_lookup_libcall(libval->value.s, funcval->value.s, &lib_index, &call_index, &expected_args)) {
+      if (!libcall_lookup(libval->value.s, funcval->value.s, &lib_index, &call_index, &expected_args)) {
         lower_set_unsupported(ctx, node, "unknown libcall target");
         return;
       }
