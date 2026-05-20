@@ -583,7 +583,12 @@ uint8_t *op_libcall(uint8_t *nextop, ITEM_t *item) {
   DISASS_LOG("Calling library %d, function %d.\n", lib, func);
   OP_t libcall = libcall_func(lib, func);
   if (!libcall) {
-    logerr("Library call not found.\n");
+    char detail[64];
+    snprintf(detail, sizeof(detail), "Unknown libcall %u:%u", lib, func);
+    logerr("%s.\n", detail);
+    set_error_item(ERR_RUNTIME_INVLIB, detail);
+    // Preserve the "libcalls return a value" contract even on failure.
+    push_stack(VM->stack, VALUE_NIL);
   } else {
     nextop = libcall(nextop, item);
   }

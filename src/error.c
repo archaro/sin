@@ -23,4 +23,5 @@ void init_errmsg() {
   errmsg[ERR_RUNTIME_INVALIDARGS] = "Invalid arguments to library call.";
   errmsg[ERR_RUNTIME_NOSUCHITEM] = "Item does not exist.";
   errmsg[ERR_RUNTIME_TRUNCATED] = "Truncated bytecode.";
+  errmsg[ERR_RUNTIME_INVLIB] = "Invalid libcall.";
 }
