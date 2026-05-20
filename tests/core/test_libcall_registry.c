@@ -69,6 +69,14 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
   VALUE_t v2 = interpret(code);
   ASSERT_EQ_INT(VALUE_nil, v1.type);
   ASSERT_EQ_INT(VALUE_nil, v2.type);
+  ITEM_t *err_item = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err_item);
+  ASSERT_EQ_INT(VALUE_int, err_item->value.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVLIB, err_item->value.i);
+  ITEM_t *err_msg = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(err_msg);
+  ASSERT_EQ_INT(VALUE_str, err_msg->value.type);
+  ASSERT_TRUE(strstr(err_msg->value.s, "Unknown libcall 99:99") != NULL);
   ASSERT_EQ_INT(-1, config.vm->stack->current);
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
 
