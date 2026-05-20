@@ -1130,6 +1130,7 @@ uint8_t *op_rootname(uint8_t *nextop, ITEM_t *item) {
 }
 
 void init_interpreter() {
+  libcall_registry_self_check(libcalls, true);
   // This function simply sets up the opcode dispatch table.
   for (int o=0; o<256; o++) {
     opcode[o] = op_undefined;

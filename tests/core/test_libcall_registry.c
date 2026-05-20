@@ -11,6 +11,11 @@
 
 extern CONFIG_t config;
 
+static uint8_t *test_noop_libcall(uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  return nextop;
+}
+
 void test_libcall_registry_roundtrip(void) {
   ASSERT_TRUE(libcall_init_registry());
   ASSERT_TRUE(libcall_validate_registry());
@@ -69,4 +74,18 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
 
   destroy_vm(config.vm);
   destroy_item(config.itemroot);
+}
+
+void test_libcall_registry_self_check_invalid_entries(void) {
+  const LIBCALL_t null_name[] = {{NULL, "x", 1, 0, 0, test_noop_libcall}, {NULL,NULL,-1,-1,0,NULL}};
+  ASSERT_TRUE(!libcall_registry_self_check(null_name, false));
+
+  const LIBCALL_t bad_args[] = {{"sys", "x", 1, 0, 255, test_noop_libcall}, {NULL,NULL,-1,-1,0,NULL}};
+  ASSERT_TRUE(!libcall_registry_self_check(bad_args, false));
+
+  const LIBCALL_t dup_num[] = {{"sys","a",1,1,0,test_noop_libcall},{"sys","b",1,1,0,test_noop_libcall},{NULL,NULL,-1,-1,0,NULL}};
+  ASSERT_TRUE(!libcall_registry_self_check(dup_num, false));
+
+  const LIBCALL_t gap_lib[] = {{"sys","a",1,0,0,test_noop_libcall},{"net","b",3,0,0,test_noop_libcall},{NULL,NULL,-1,-1,0,NULL}};
+  ASSERT_TRUE(!libcall_registry_self_check(gap_lib, false));
 }
