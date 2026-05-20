@@ -18,6 +18,7 @@ srcroot
 
 # Object files
 *.o
+*.obj
 *.ko
 *.elf
 
