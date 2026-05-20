@@ -28,6 +28,7 @@ void test_fixture_policy_declared_goldens_exist(void);
 void test_find_item_cached_hit_and_negative_cache(void);
 void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
 void test_libcall_registry_roundtrip(void);
+void test_libcall_name_duplicate_detection(void);
 
 /* Compiler component tests. */
 void test_emitbc_header(void);
@@ -109,6 +110,7 @@ static const test_case_t core_tests[] = {
     {"test_find_item_cached_hit_and_negative_cache", test_find_item_cached_hit_and_negative_cache},
     {"test_find_item_cached_invalidation_on_delete_and_reinsert", test_find_item_cached_invalidation_on_delete_and_reinsert},
     {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},
+    {"test_libcall_name_duplicate_detection", test_libcall_name_duplicate_detection},
 };
 
 static const test_case_t compiler_tests[] = {

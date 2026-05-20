@@ -25,4 +25,5 @@ bool libcall_lookup(const char *libname, const char *callname,
                     uint8_t *lib_index, uint8_t *call_index, uint8_t *args);
 bool libcall_init_registry(void);
 bool libcall_validate_registry(void);
+bool libcall_names_unique(const LIBCALL_t *calls);
 void *libcall_func(uint8_t lib, uint8_t call);
