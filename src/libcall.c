@@ -484,6 +484,23 @@ const LIBCALL_t libcalls[] = {
   {NULL,   NULL,          -1, -1, 0, NULL}  // End marker
 };
 
+#define LIBCALL_FUNC_SIGNATURE_GUARD(name) \
+  _Static_assert(__builtin_types_compatible_p(__typeof__(&(name)), OP_t), \
+                 "libcall function must match OP_t signature")
+
+LIBCALL_FUNC_SIGNATURE_GUARD(lc_sys_backup);
+LIBCALL_FUNC_SIGNATURE_GUARD(lc_sys_log);
+LIBCALL_FUNC_SIGNATURE_GUARD(lc_sys_shutdown);
+LIBCALL_FUNC_SIGNATURE_GUARD(lc_sys_abort);
+LIBCALL_FUNC_SIGNATURE_GUARD(lc_sys_compile);
+LIBCALL_FUNC_SIGNATURE_GUARD(lc_task_newgametask);
+LIBCALL_FUNC_SIGNATURE_GUARD(lc_task_killtask);
+LIBCALL_FUNC_SIGNATURE_GUARD(lc_net_input);
+LIBCALL_FUNC_SIGNATURE_GUARD(lc_net_write);
+LIBCALL_FUNC_SIGNATURE_GUARD(lc_str_capitalise);
+LIBCALL_FUNC_SIGNATURE_GUARD(lc_str_upper);
+LIBCALL_FUNC_SIGNATURE_GUARD(lc_str_lower);
+
 static size_t libcall_registry_index(uint8_t lib_index, uint8_t call_index) {
   return ((size_t)lib_index * libcall_registry_width) + (size_t)call_index;
 }
@@ -620,7 +637,7 @@ bool libcall_names_unique(const LIBCALL_t *calls) {
   return true;
 }
 
-void *libcall_func(uint8_t lib, uint8_t call) {
+OP_t libcall_func(uint8_t lib, uint8_t call) {
   if (!libcall_init_registry()) {
     return NULL;
   }
