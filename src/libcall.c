@@ -5,6 +5,7 @@
 #include <time.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdlib.h>
 
 #include "util.h"
 #include "error.h"
@@ -434,7 +435,31 @@ typedef struct {
   uint8_t lib_index;
   uint8_t call_index;
   uint8_t args;
+  char *lookup_key;
 } LIBCALL_NAME_ENTRY_t;
+
+static int libcall_name_entry_cmp(const void *a, const void *b) {
+  const LIBCALL_NAME_ENTRY_t *ea = (const LIBCALL_NAME_ENTRY_t *)a;
+  const LIBCALL_NAME_ENTRY_t *eb = (const LIBCALL_NAME_ENTRY_t *)b;
+  return strcmp(ea->lookup_key, eb->lookup_key);
+}
+
+static bool libcall_make_key(const char *libname, const char *callname,
+                             char **out_key) {
+  size_t liblen = strlen(libname);
+  size_t calllen = strlen(callname);
+  size_t keylen = liblen + 1 + calllen;
+  char *key = GROW_ARRAY(char, NULL, 0, keylen + 1);
+  if (!key) {
+    return false;
+  }
+  memcpy(key, libname, liblen);
+  key[liblen] = '\x1f';
+  memcpy(key + liblen + 1, callname, calllen);
+  key[keylen] = '\0';
+  *out_key = key;
+  return true;
+}
 
 static LIBCALL_REG_ENTRY_t *libcall_registry = NULL;
 static LIBCALL_NAME_ENTRY_t *libcall_name_registry = NULL;
@@ -511,6 +536,21 @@ bool libcall_init_registry(void) {
     libcall_name_registry[i].lib_index = lib_index;
     libcall_name_registry[i].call_index = call_index;
     libcall_name_registry[i].args = libcalls[i].args;
+    libcall_name_registry[i].lookup_key = NULL;
+    if (!libcall_make_key(libcalls[i].libname, libcalls[i].callname,
+                          &libcall_name_registry[i].lookup_key)) {
+      return false;
+    }
+  }
+
+  qsort(libcall_name_registry, count, sizeof(LIBCALL_NAME_ENTRY_t),
+        libcall_name_entry_cmp);
+
+  for (size_t i = 1; i < count; i++) {
+    if (strcmp(libcall_name_registry[i - 1].lookup_key,
+               libcall_name_registry[i].lookup_key) == 0) {
+      return false;
+    }
   }
 
   libcall_name_registry_count = count;
@@ -547,19 +587,37 @@ bool libcall_lookup(const char *libname, const char *callname,
     return false;
   }
 
-  for (size_t i = 0; i < libcall_name_registry_count; i++) {
-    if (strcmp(libcall_name_registry[i].libname, libname) != 0) {
-      continue;
-    }
-    if (strcmp(libcall_name_registry[i].callname, callname) == 0) {
-      *lib_index = libcall_name_registry[i].lib_index;
-      *call_index = libcall_name_registry[i].call_index;
-      *args = libcall_name_registry[i].args;
-      return true;
-    }
+  char *lookup_key = NULL;
+  if (!libcall_make_key(libname, callname, &lookup_key)) {
+    return false;
   }
 
-  return false;
+  LIBCALL_NAME_ENTRY_t needle = {.lookup_key = lookup_key};
+  LIBCALL_NAME_ENTRY_t *entry = bsearch(&needle, libcall_name_registry,
+      libcall_name_registry_count, sizeof(LIBCALL_NAME_ENTRY_t),
+      libcall_name_entry_cmp);
+  FREE_ARRAY(char, lookup_key, strlen(lookup_key) + 1);
+
+  if (!entry) {
+    return false;
+  }
+
+  *lib_index = entry->lib_index;
+  *call_index = entry->call_index;
+  *args = entry->args;
+  return true;
+}
+
+bool libcall_names_unique(const LIBCALL_t *calls) {
+  for (size_t i = 0; calls[i].libname != NULL; i++) {
+    for (size_t j = i + 1; calls[j].libname != NULL; j++) {
+      if (strcmp(calls[i].libname, calls[j].libname) == 0 &&
+          strcmp(calls[i].callname, calls[j].callname) == 0) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 void *libcall_func(uint8_t lib, uint8_t call) {
