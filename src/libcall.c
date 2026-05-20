@@ -435,6 +435,7 @@ typedef struct {
   uint8_t lib_index;
   uint8_t call_index;
   uint8_t args;
+  uint8_t token;
   char *lookup_key;
 } LIBCALL_NAME_ENTRY_t;
 
@@ -466,6 +467,8 @@ static LIBCALL_NAME_ENTRY_t *libcall_name_registry = NULL;
 static size_t libcall_registry_width = 0;
 static size_t libcall_registry_height = 0;
 static size_t libcall_name_registry_count = 0;
+static OP_t libcall_token_registry[256] = {0};
+static bool libcall_token_present[256] = {0};
 static bool libcall_registry_ready = false;
 
 
@@ -606,11 +609,14 @@ bool libcall_init_registry(void) {
     libcall_name_registry[i].lib_index = lib_index;
     libcall_name_registry[i].call_index = call_index;
     libcall_name_registry[i].args = libcalls[i].args;
+    libcall_name_registry[i].token = (uint8_t)i;
     libcall_name_registry[i].lookup_key = NULL;
     if (!libcall_make_key(libcalls[i].libname, libcalls[i].callname,
                           &libcall_name_registry[i].lookup_key)) {
       return false;
     }
+    libcall_token_registry[(uint8_t)i] = libcalls[i].func;
+    libcall_token_present[(uint8_t)i] = true;
   }
 
   qsort(libcall_name_registry, count, sizeof(LIBCALL_NAME_ENTRY_t),
@@ -651,30 +657,19 @@ bool libcall_validate_registry(void) {
   return true;
 }
 
-bool libcall_lookup(const char *libname, const char *callname,
-                   uint8_t *lib_index, uint8_t *call_index, uint8_t *args) {
-  if (!libcall_init_registry()) {
-    return false;
-  }
 
+bool libcall_lookup_token(const char *libname, const char *callname, uint8_t *token, uint8_t *args) {
+  if (!libcall_init_registry()) return false;
   char *lookup_key = NULL;
-  if (!libcall_make_key(libname, callname, &lookup_key)) {
-    return false;
-  }
-
+  if (!libcall_make_key(libname, callname, &lookup_key)) return false;
   LIBCALL_NAME_ENTRY_t needle = {.lookup_key = lookup_key};
   LIBCALL_NAME_ENTRY_t *entry = bsearch(&needle, libcall_name_registry,
       libcall_name_registry_count, sizeof(LIBCALL_NAME_ENTRY_t),
       libcall_name_entry_cmp);
   FREE_ARRAY(char, lookup_key, strlen(lookup_key) + 1);
-
-  if (!entry) {
-    return false;
-  }
-
-  *lib_index = entry->lib_index;
-  *call_index = entry->call_index;
-  *args = entry->args;
+  if (!entry) return false;
+  if (token) *token = entry->token;
+  if (args) *args = entry->args;
   return true;
 }
 
@@ -690,14 +685,8 @@ bool libcall_names_unique(const LIBCALL_t *calls) {
   return true;
 }
 
-OP_t libcall_func(uint8_t lib, uint8_t call) {
-  if (!libcall_init_registry()) {
-    return NULL;
-  }
-  if (lib >= libcall_registry_height || call >= libcall_registry_width) {
-    return NULL;
-  }
-
-  LIBCALL_REG_ENTRY_t entry = libcall_registry[libcall_registry_index(lib, call)];
-  return entry.present ? entry.func : NULL;
+OP_t libcall_func_token(uint8_t token) {
+  if (!libcall_init_registry()) return NULL;
+  if (!libcall_token_present[token]) return NULL;
+  return libcall_token_registry[token];
 }

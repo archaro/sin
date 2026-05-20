@@ -263,9 +263,8 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
       AS_NODE *funcnode;
       AS_VALUE *libval;
       AS_VALUE *funcval;
-      uint8_t lib_index = 0;
-      uint8_t call_index = 0;
       uint8_t expected_args = 0;
+      uint8_t token = 0;
       int32_t argc = 0;
 
       if (!libitem || libitem->nodetype != N_ITEM || !libitem->rhs) {
@@ -288,7 +287,7 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
 
       lower_arglist(ctx, (AS_NODE *)node->rhs, &argc);
       if (ctx->errnum != ERR_NOERROR) return;
-      if (!libcall_lookup(libval->value.s, funcval->value.s, &lib_index, &call_index, &expected_args)) {
+      if (!libcall_lookup_token(libval->value.s, funcval->value.s, &token, &expected_args)) {
         lower_set_unsupported(ctx, node, "unknown libcall target");
         return;
       }
@@ -296,7 +295,7 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
         lower_set_unsupported(ctx, node, "invalid libcall argument count");
         return;
       }
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LIBCALL, .a = lib_index, .b = call_index});
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LIBCALL_TOKEN, .a = token});
       return;
     }
 

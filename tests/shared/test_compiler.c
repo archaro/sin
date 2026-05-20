@@ -50,6 +50,7 @@ void test_compiler_context_failures(void);
 void test_compiler_diag_pipeline(void);
 void test_sys_compile_libcall_runtime(void);
 void test_libcall_lookup_precomputed(void);
+void test_libcall_dispatch_microbench(void);
 
 /* Interpreter component tests. */
 void test_interpret_semantics_golden(void);
@@ -135,6 +136,7 @@ static const test_case_t compiler_tests[] = {
     {"test_compiler_diag_pipeline", test_compiler_diag_pipeline},
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},
     {"test_libcall_lookup_precomputed", test_libcall_lookup_precomputed},
+    {"test_libcall_dispatch_microbench", test_libcall_dispatch_microbench},
 };
 
 static const test_case_t interpreter_tests[] = {

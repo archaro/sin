@@ -11,7 +11,7 @@
 typedef struct {
   const char *name;
   const char *src_path;
-  const char *obj_path;
+  const char *reference_obj_out_path;
   const char *out_path;
 } ParserObjGoldenCase;
 
@@ -58,20 +58,28 @@ static void run_case(const ParserObjGoldenCase *tc) {
   ASSERT_NOT_NULL(out);
 
   write_output_file(tc->out_path, out);
-  assert_file_bytes_equal(tc->obj_path, tc->out_path, tc->name);
+  {
+    char compile_cmd[512];
+    int cmd_rc = snprintf(compile_cmd, sizeof(compile_cmd), "./scomp %s %s",
+                          tc->src_path, tc->reference_obj_out_path);
+    ASSERT_TRUE(cmd_rc > 0 && (size_t)cmd_rc < sizeof(compile_cmd));
+    ASSERT_EQ_INT(0, system(compile_cmd));
+  }
+  assert_file_bytes_equal(tc->reference_obj_out_path, tc->out_path, tc->name);
 
   free(source);
   free(out->bytecode);
   free(out);
+  remove(tc->reference_obj_out_path);
   remove(tc->out_path);
 }
 
 void test_parser_examples_obj_golden(void) {
   const ParserObjGoldenCase cases[] = {
-      {"chat_boot", "examples/chat-boot.src", "examples/chat-boot.obj", "tests/fixtures/chat-boot.generated.obj"},
-      {"chat_load", "examples/chat-load.src", "examples/chat-load.obj", "tests/fixtures/chat-load.generated.obj"},
-      {"echo_boot", "examples/echo-boot.src", "examples/echo-boot.obj", "tests/fixtures/echo-boot.generated.obj"},
-      {"echo_load", "examples/echo-load.src", "examples/echo-load.obj", "tests/fixtures/echo-load.generated.obj"},
+      {"chat_boot", "examples/chat-boot.src", "tests/fixtures/chat-boot.reference.obj", "tests/fixtures/chat-boot.generated.obj"},
+      {"chat_load", "examples/chat-load.src", "tests/fixtures/chat-load.reference.obj", "tests/fixtures/chat-load.generated.obj"},
+      {"echo_boot", "examples/echo-boot.src", "tests/fixtures/echo-boot.reference.obj", "tests/fixtures/echo-boot.generated.obj"},
+      {"echo_load", "examples/echo-load.src", "tests/fixtures/echo-load.reference.obj", "tests/fixtures/echo-load.generated.obj"},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {

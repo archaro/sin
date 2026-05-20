@@ -1,5 +1,5 @@
 00 00          # header: locals=0 params=0
 6c 05 00       # l: push literal len=5
 68 65 6c 6c 6f # "hello"
-41 01 01       # A: call lib sys.log argc=1
+4d 01          # M: call lib token(sys.log)
 68             # h: halt

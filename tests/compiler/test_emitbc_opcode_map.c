@@ -27,10 +27,8 @@ static void emit_case_inst(IR_Unit *unit, IR_Op op) {
     case IR_OP_INC_LOCAL:
     case IR_OP_DEC_LOCAL:
     case IR_OP_CALL:
+    case IR_OP_LIBCALL_TOKEN:
       t_emit(unit, (IR_Inst){.op = op, .a = 3});
-      break;
-    case IR_OP_LIBCALL:
-      t_emit(unit, (IR_Inst){.op = op, .a = 1, .b = 1});
       break;
     case IR_OP_ITEM_SAVE_CODE: {
       IR_EmbeddedCodePayload payload = {0};
@@ -93,7 +91,7 @@ void test_emitbc_opcode_map(void) {
       {"nthname", IR_OP_NTHNAME, 'Y', 0},
       {"rootname", IR_OP_ROOTNAME, 'Z', 0},
       {"call", IR_OP_CALL, 'F', 0},
-      {"libcall", IR_OP_LIBCALL, 'A', 0},
+      {"libcall_token", IR_OP_LIBCALL_TOKEN, 'M', 0},
       {"item_save_code", IR_OP_ITEM_SAVE_CODE, 'B', 0},
   };
 

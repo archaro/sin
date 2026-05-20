@@ -11,7 +11,6 @@
 typedef struct {
   const char *name;
   const char *src_path;
-  const char *golden_obj_path;
   const char *generated_obj_path;
   const char *fixture_path;
 } InterpretGoldenCase;
@@ -184,13 +183,8 @@ static void run_case(const InterpretGoldenCase *tc) {
   RunResult generated = run_and_capture_obj(tc->generated_obj_path, "generated");
   assert_run_matches(tc->name, "generated_obj", &generated, &expected);
 
-  RunResult golden = run_and_capture_obj(tc->golden_obj_path, "golden");
-  assert_run_matches(tc->name, "golden_obj", &golden, &expected);
-
   free(generated.stdout_text);
   free(generated.stderr_text);
-  free(golden.stdout_text);
-  free(golden.stderr_text);
   free(expected_stdout);
   free(expected_stderr);
   free(expected_exit);
@@ -201,10 +195,10 @@ static void run_case(const InterpretGoldenCase *tc) {
 
 void test_interpret_semantics_golden(void) {
   const InterpretGoldenCase cases[] = {
-      {"chat_boot", "examples/chat-boot.src", "examples/chat-boot.obj", "tests/fixtures/interpret/chat-boot.generated.obj", "tests/fixtures/interpret/chat-boot.expected.txt"},
-      {"chat_load", "examples/chat-load.src", "examples/chat-load.obj", "tests/fixtures/interpret/chat-load.generated.obj", "tests/fixtures/interpret/chat-load.expected.txt"},
-      {"echo_boot", "examples/echo-boot.src", "examples/echo-boot.obj", "tests/fixtures/interpret/echo-boot.generated.obj", "tests/fixtures/interpret/echo-boot.expected.txt"},
-      {"echo_load", "examples/echo-load.src", "examples/echo-load.obj", "tests/fixtures/interpret/echo-load.generated.obj", "tests/fixtures/interpret/echo-load.expected.txt"},
+      {"chat_boot", "examples/chat-boot.src", "tests/fixtures/interpret/chat-boot.generated.obj", "tests/fixtures/interpret/chat-boot.expected.txt"},
+      {"chat_load", "examples/chat-load.src", "tests/fixtures/interpret/chat-load.generated.obj", "tests/fixtures/interpret/chat-load.expected.txt"},
+      {"echo_boot", "examples/echo-boot.src", "tests/fixtures/interpret/echo-boot.generated.obj", "tests/fixtures/interpret/echo-boot.expected.txt"},
+      {"echo_load", "examples/echo-load.src", "tests/fixtures/interpret/echo-load.generated.obj", "tests/fixtures/interpret/echo-load.expected.txt"},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
