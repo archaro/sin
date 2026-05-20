@@ -30,6 +30,7 @@ void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
 void test_libcall_registry_roundtrip(void);
 void test_libcall_name_duplicate_detection(void);
 void test_missing_libcall_is_null_and_interpret_deterministic(void);
+void test_libcall_registry_self_check_invalid_entries(void);
 
 /* Compiler component tests. */
 void test_emitbc_header(void);
@@ -113,6 +114,7 @@ static const test_case_t core_tests[] = {
     {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},
     {"test_libcall_name_duplicate_detection", test_libcall_name_duplicate_detection},
     {"test_missing_libcall_is_null_and_interpret_deterministic", test_missing_libcall_is_null_and_interpret_deterministic},
+    {"test_libcall_registry_self_check_invalid_entries", test_libcall_registry_self_check_invalid_entries},
 };
 
 static const test_case_t compiler_tests[] = {

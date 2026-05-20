@@ -468,6 +468,55 @@ static size_t libcall_registry_height = 0;
 static size_t libcall_name_registry_count = 0;
 static bool libcall_registry_ready = false;
 
+
+static bool libcall_args_in_range(uint8_t args) {
+  return args <= 32;
+}
+
+static bool libcall_registry_fail(const char *msg, const LIBCALL_t *entry, size_t idx, bool fail_fast) {
+  logerr("FATAL: libcall registry self-check failed: %s (entry %zu: %s.%s lib=%d call=%d args=%u)\n",
+         msg, idx,
+         entry && entry->libname ? entry->libname : "<null-lib>",
+         entry && entry->callname ? entry->callname : "<null-call>",
+         entry ? (int)entry->lib_index : -1,
+         entry ? (int)entry->call_index : -1,
+         entry ? (unsigned)entry->args : 0U);
+  if (fail_fast) {
+    abort();
+  }
+  return false;
+}
+
+bool libcall_registry_self_check(const LIBCALL_t *calls, bool fail_fast) {
+  if (!calls) return libcall_registry_fail("registry pointer is null", NULL, 0, fail_fast);
+
+  bool seen_lib[256] = {0};
+  bool seen_pair[256][256] = {{0}};
+  for (size_t i = 0; calls[i].libname != NULL || calls[i].callname != NULL; i++) {
+    const LIBCALL_t *e = &calls[i];
+    if (!e->libname || !e->callname || !e->func) return libcall_registry_fail("entry requires non-null libname/callname/func", e, i, fail_fast);
+    if (e->lib_index < 0 || e->call_index < 0) return libcall_registry_fail("negative lib_index/call_index", e, i, fail_fast);
+    if (!libcall_args_in_range(e->args)) return libcall_registry_fail("args out of acceptable range", e, i, fail_fast);
+
+    for (size_t j = i + 1; calls[j].libname != NULL || calls[j].callname != NULL; j++) {
+      const LIBCALL_t *o = &calls[j];
+      if (o->libname && o->callname && strcmp(e->libname, o->libname) == 0 && strcmp(e->callname, o->callname) == 0)
+        return libcall_registry_fail("duplicate textual key libname.callname", e, i, fail_fast);
+    }
+
+    uint8_t li = (uint8_t)e->lib_index, ci = (uint8_t)e->call_index;
+    if (seen_pair[li][ci]) return libcall_registry_fail("duplicate numeric key (lib_index,call_index)", e, i, fail_fast);
+    seen_pair[li][ci] = true;
+    seen_lib[li] = true;
+  }
+
+  int max_lib = -1;
+  for (int i=0;i<256;i++) if (seen_lib[i]) max_lib = i;
+  for (int i=0;i<=max_lib;i++) if (!seen_lib[i] && i!=0) {
+    return libcall_registry_fail("lib_index values must be contiguous from 1..max", &calls[0], 0, fail_fast);
+  }
+  return true;
+}
 const LIBCALL_t libcalls[] = {
   {"sys",  "backup",       1, 0, 0, lc_sys_backup},
   {"sys",  "log",          1, 1, 1, lc_sys_log},
@@ -508,6 +557,10 @@ static size_t libcall_registry_index(uint8_t lib_index, uint8_t call_index) {
 bool libcall_init_registry(void) {
   if (libcall_registry_ready) {
     return true;
+  }
+
+  if (!libcall_registry_self_check(libcalls, false)) {
+    return false;
   }
 
   int8_t max_lib_index = -1;
