@@ -27,6 +27,7 @@ void test_parser_input_api(void);
 void test_fixture_policy_declared_goldens_exist(void);
 void test_find_item_cached_hit_and_negative_cache(void);
 void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
+void test_libcall_registry_roundtrip(void);
 
 /* Compiler component tests. */
 void test_emitbc_header(void);
@@ -45,6 +46,7 @@ void test_sdiss_reads_compiler_operand_widths(void);
 void test_compiler_context_failures(void);
 void test_compiler_diag_pipeline(void);
 void test_sys_compile_libcall_runtime(void);
+void test_libcall_lookup_precomputed(void);
 
 /* Interpreter component tests. */
 void test_interpret_semantics_golden(void);
@@ -106,6 +108,7 @@ static const test_case_t core_tests[] = {
     {"test_fixture_policy_declared_goldens_exist", test_fixture_policy_declared_goldens_exist},
     {"test_find_item_cached_hit_and_negative_cache", test_find_item_cached_hit_and_negative_cache},
     {"test_find_item_cached_invalidation_on_delete_and_reinsert", test_find_item_cached_invalidation_on_delete_and_reinsert},
+    {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},
 };
 
 static const test_case_t compiler_tests[] = {
@@ -125,6 +128,7 @@ static const test_case_t compiler_tests[] = {
     {"test_compiler_context_failures", test_compiler_context_failures},
     {"test_compiler_diag_pipeline", test_compiler_diag_pipeline},
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},
+    {"test_libcall_lookup_precomputed", test_libcall_lookup_precomputed},
 };
 
 static const test_case_t interpreter_tests[] = {

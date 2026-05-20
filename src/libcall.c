@@ -421,6 +421,28 @@ uint8_t *lc_str_lower(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+
+typedef struct {
+  OP_t func;
+  uint8_t args;
+  bool present;
+} LIBCALL_REG_ENTRY_t;
+
+typedef struct {
+  const char *libname;
+  const char *callname;
+  uint8_t lib_index;
+  uint8_t call_index;
+  uint8_t args;
+} LIBCALL_NAME_ENTRY_t;
+
+static LIBCALL_REG_ENTRY_t *libcall_registry = NULL;
+static LIBCALL_NAME_ENTRY_t *libcall_name_registry = NULL;
+static size_t libcall_registry_width = 0;
+static size_t libcall_registry_height = 0;
+static size_t libcall_name_registry_count = 0;
+static bool libcall_registry_ready = false;
+
 const LIBCALL_t libcalls[] = {
   {"sys",  "backup",       1, 0, 0, lc_sys_backup},
   {"sys",  "log",          1, 1, 1, lc_sys_log},
@@ -437,31 +459,117 @@ const LIBCALL_t libcalls[] = {
   {NULL,   NULL,          -1, -1, 0, NULL}  // End marker
 };
 
-bool libcall_lookup(const char *libname, const char *callname,
-                   uint8_t *lib_index, uint8_t *call_index, uint8_t *args) {
-  // Finds a library call.  Returns true if found, with lib_index and
-  // call_index being updated to the correct indices.
-  for (int i = 0; libcalls[i].libname != NULL; i++) {
-    if (strcmp(libcalls[i].libname, libname) == 0 &&
-        strcmp(libcalls[i].callname, callname) == 0) {
-      *lib_index = libcalls[i].lib_index;
-      *call_index = libcalls[i].call_index;
-      *args = libcalls[i].args;
-      return true;  // Found
+static size_t libcall_registry_index(uint8_t lib_index, uint8_t call_index) {
+  return ((size_t)lib_index * libcall_registry_width) + (size_t)call_index;
+}
+
+bool libcall_init_registry(void) {
+  if (libcall_registry_ready) {
+    return true;
+  }
+
+  int8_t max_lib_index = -1;
+  int8_t max_call_index = -1;
+  size_t count = 0;
+  for (size_t i = 0; libcalls[i].libname != NULL; i++) {
+    if (libcalls[i].lib_index < 0 || libcalls[i].call_index < 0) {
+      return false;
+    }
+    if (libcalls[i].lib_index > max_lib_index) {
+      max_lib_index = libcalls[i].lib_index;
+    }
+    if (libcalls[i].call_index > max_call_index) {
+      max_call_index = libcalls[i].call_index;
+    }
+    count++;
+  }
+
+  libcall_registry_height = (size_t)max_lib_index + 1;
+  libcall_registry_width = (size_t)max_call_index + 1;
+  size_t dense_count = libcall_registry_height * libcall_registry_width;
+
+  libcall_registry = GROW_ARRAY(LIBCALL_REG_ENTRY_t, NULL, 0, dense_count);
+  libcall_name_registry = GROW_ARRAY(LIBCALL_NAME_ENTRY_t, NULL, 0, count);
+  if (!libcall_registry || !libcall_name_registry) {
+    return false;
+  }
+  memset(libcall_registry, 0, sizeof(LIBCALL_REG_ENTRY_t) * dense_count);
+
+  for (size_t i = 0; i < count; i++) {
+    uint8_t lib_index = (uint8_t)libcalls[i].lib_index;
+    uint8_t call_index = (uint8_t)libcalls[i].call_index;
+    size_t dense_index = libcall_registry_index(lib_index, call_index);
+    if (libcall_registry[dense_index].present) {
+      return false;
+    }
+    libcall_registry[dense_index].func = libcalls[i].func;
+    libcall_registry[dense_index].args = libcalls[i].args;
+    libcall_registry[dense_index].present = true;
+
+    libcall_name_registry[i].libname = libcalls[i].libname;
+    libcall_name_registry[i].callname = libcalls[i].callname;
+    libcall_name_registry[i].lib_index = lib_index;
+    libcall_name_registry[i].call_index = call_index;
+    libcall_name_registry[i].args = libcalls[i].args;
+  }
+
+  libcall_name_registry_count = count;
+  libcall_registry_ready = true;
+  return true;
+}
+
+bool libcall_validate_registry(void) {
+  if (!libcall_init_registry()) {
+    return false;
+  }
+
+  for (size_t i = 0; libcalls[i].libname != NULL; i++) {
+    uint8_t lib_index = (uint8_t)libcalls[i].lib_index;
+    uint8_t call_index = (uint8_t)libcalls[i].call_index;
+    if (lib_index >= libcall_registry_height || call_index >= libcall_registry_width) {
+      return false;
+    }
+    size_t dense_index = libcall_registry_index(lib_index, call_index);
+    if (!libcall_registry[dense_index].present) {
+      return false;
+    }
+    if (libcall_registry[dense_index].func != libcalls[i].func ||
+        libcall_registry[dense_index].args != libcalls[i].args) {
+      return false;
     }
   }
-  return false;  // Not found
+  return true;
+}
+
+bool libcall_lookup(const char *libname, const char *callname,
+                   uint8_t *lib_index, uint8_t *call_index, uint8_t *args) {
+  if (!libcall_init_registry()) {
+    return false;
+  }
+
+  for (size_t i = 0; i < libcall_name_registry_count; i++) {
+    if (strcmp(libcall_name_registry[i].libname, libname) != 0) {
+      continue;
+    }
+    if (strcmp(libcall_name_registry[i].callname, callname) == 0) {
+      *lib_index = libcall_name_registry[i].lib_index;
+      *call_index = libcall_name_registry[i].call_index;
+      *args = libcall_name_registry[i].args;
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void *libcall_func(uint8_t lib, uint8_t call) {
-  // Given a library and call index, try to find it in the
-  // libcall table.  Return a pointer to its function if
-  // found, otherwise return NULL.
-  for (int i = 0; libcalls[i].libname != NULL; i++) {
-    if (libcalls[i].lib_index == lib &&
-        libcalls[i].call_index == call) {
-      return libcalls[i].func;
-    }
+  if (!libcall_init_registry()) {
+    return NULL;
   }
-  return NULL;
+  if (lib >= libcall_registry_height || call >= libcall_registry_width) {
+    return NULL;
+  }
+
+  LIBCALL_REG_ENTRY_t entry = libcall_registry[libcall_registry_index(lib, call)];
+  return entry.present ? entry.func : NULL;
 }
