@@ -23,7 +23,8 @@ TEST_CORE_SOURCES := \
 	$(TEST_DIR)/core/test_ir_validate.c \
 	$(TEST_DIR)/core/test_opcode_schema.c \
 	$(TEST_DIR)/core/test_parser_input_api.c \
-	$(TEST_DIR)/core/test_item_cache.c
+	$(TEST_DIR)/core/test_item_cache.c \
+	$(TEST_DIR)/core/test_libcall_registry.c
 TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_emitbc_header.c \
 	$(TEST_DIR)/compiler/test_emitbc_opcode_map.c \
@@ -36,7 +37,8 @@ TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_sdiss_fixtures.c \
 	$(TEST_DIR)/compiler/test_compiler_context_failures.c \
 	$(TEST_DIR)/compiler/test_compiler_diag_pipeline.c \
-	$(TEST_DIR)/compiler/test_sys_compile_libcall.c
+	$(TEST_DIR)/compiler/test_sys_compile_libcall.c \
+	$(TEST_DIR)/compiler/test_libcall_lookup_precomputed.c
 TEST_INTERPRETER_SOURCES := \
 	$(TEST_DIR)/interpreter/test_interpret_semantics_golden.c
 TEST_SOURCES := $(TEST_SHARED_SOURCES) $(TEST_CORE_SOURCES) $(TEST_COMPILER_SOURCES) $(TEST_INTERPRETER_SOURCES)
