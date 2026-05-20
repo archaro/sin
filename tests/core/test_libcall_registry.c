@@ -20,16 +20,13 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_TRUE(libcall_init_registry());
   ASSERT_TRUE(libcall_validate_registry());
 
-  uint8_t lib = 0;
-  uint8_t call = 0;
+  uint8_t token = 0;
   uint8_t args = 0;
-  ASSERT_TRUE(libcall_lookup("sys", "log", &lib, &call, &args));
-  ASSERT_EQ_INT(1, lib);
-  ASSERT_EQ_INT(1, call);
+  ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
   ASSERT_EQ_INT(1, args);
 
-  ASSERT_NOT_NULL(libcall_func(lib, call));
-  ASSERT_TRUE(libcall_func(99, 99) == NULL);
+  ASSERT_NOT_NULL(libcall_func_token(token));
+  ASSERT_TRUE(libcall_func_token(255) == NULL);
 }
 
 void test_libcall_name_duplicate_detection(void) {
@@ -43,7 +40,7 @@ void test_libcall_name_duplicate_detection(void) {
 }
 
 void test_missing_libcall_is_null_and_interpret_deterministic(void) {
-  ASSERT_TRUE(libcall_func(99, 99) == NULL);
+  ASSERT_TRUE(libcall_func_token(255) == NULL);
 
   memset(&config, 0, sizeof(config));
   init_errmsg();
@@ -54,7 +51,7 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
 
   uint8_t template_bytecode[] = {
     0x00, 0x00,
-    'A', 99, 99,
+    'M', 255,
     'h'
   };
   uint8_t *bytecode = malloc(sizeof(template_bytecode));
@@ -76,7 +73,7 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
   ITEM_t *err_msg = find_item(config.itemroot, "error.msg");
   ASSERT_NOT_NULL(err_msg);
   ASSERT_EQ_INT(VALUE_str, err_msg->value.type);
-  ASSERT_TRUE(strstr(err_msg->value.s, "Unknown libcall 99:99") != NULL);
+  ASSERT_TRUE(strstr(err_msg->value.s, "Unknown libcall token 255") != NULL);
   ASSERT_EQ_INT(-1, config.vm->stack->current);
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
 

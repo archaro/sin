@@ -14,20 +14,18 @@ This directory and related `examples/` artifacts define golden fixtures used by 
    - Source of truth: compiler output from the associated source/program builder case.
    - Regeneration: `make regen-fixtures`.
 
-3. **Object fixtures** (`*.obj`)
-   - Purpose: expected object files for parser/e2e/interpreter goldens.
-   - Source of truth: `./scomp` output from the paired `.src` source.
+3. **Generated object artifacts** (`*.generated.obj` / `*.reference.obj`)
+   - Purpose: temporary outputs used by tests to compare compiler/runtime behavior.
+   - Source of truth: `./scomp` output from the paired `.src` source at test time.
    - Regeneration examples:
-     - `./scomp -i examples/chat-boot.src -o examples/chat-boot.obj`
-     - `./scomp -i examples/chat-load.src -o examples/chat-load.obj`
-     - `./scomp -i examples/echo-boot.src -o examples/echo-boot.obj`
-     - `./scomp -i examples/echo-load.src -o examples/echo-load.obj`
+     - `./scomp examples/chat-boot.src tests/fixtures/chat-boot.reference.obj`
+     - `./scomp examples/echo-boot.src tests/fixtures/interpret/echo-boot.generated.obj`
 
 4. **Interpreter output fixtures** (`*.expected.txt`)
    - Purpose: expected stdout/stderr/exit contracts for runtime behavior.
-   - Source of truth: `./sin` output for the paired object fixture, normalized to test format.
+   - Source of truth: `./sin` output for a freshly-compiled object, normalized to test format.
    - Regeneration example:
-     - `./sin -f examples/echo-boot.obj > tests/fixtures/interpret/echo-boot.expected.txt`
+     - `./scomp examples/echo-boot.src tests/fixtures/interpret/echo-boot.generated.obj && ./sin -o tests/fixtures/interpret/echo-boot.generated.obj > tests/fixtures/interpret/echo-boot.expected.txt`
 
 ## Naming conventions
 

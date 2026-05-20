@@ -40,10 +40,6 @@ v - boolean greater than or equal to.
 x - logical not the value on top of the stack.
 y - logical and the two values on the top of the stack.
 z - logical or the two values on the top of the stack.
-A - library call.  Looks like an item, but isn't.  Interpret the first
-    following byte as the library number and the second as the library
-    name, then the third as the number of arguments.  Library calls always
-    push a value onto the stack, even if it is nil.
 B - embedded code.  Interpret the next two bytes as the length of the
     embedded code, then fetch that embedded code from the bytestream.
     Pass the embedded code to the compiler. If the compilation is
@@ -67,6 +63,8 @@ I - begin item definition.  Start interpreting the bytecode as layer names
     proceeds.
 L - start of simple layer name.  Interpret the next byte as an unsigned int
     and then read that number of bytes as the layer name.
+M - library call by token. Interpret the following byte as a prevalidated
+    libcall token (registry ordinal), and dispatch directly via the token.
 P - start of parameters definition.  There follows a series of strings,
     each prefixed by a 2-byte length field.  The last string is indicated
     by two following zero bytes.  Push these strings into the local
@@ -84,4 +82,3 @@ Y - nthname.  The top of the stack contains an index, and immediately below
 Z - rootname.  The top of the stack contains an index.  Return the name of
     the child item of the root item at the given index or nil if there is
     none.  Similar to nthname.
-

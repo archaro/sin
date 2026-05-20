@@ -231,13 +231,11 @@ static uint8_t *h_dec_local(uint8_t *p, uint8_t *e, decode_context_t c) {
   (void) c;
   return h_u8_local("DECREMENT LOCAL", p, e);
 }
-static uint8_t *h_libcall(uint8_t *p, uint8_t *e, decode_context_t c) {
-  (void) c;
-  uint8_t argc;
-  uint8_t id;
-  if (read_u8(&p, e, &argc, "LIBCALL arg count") != PARSE_OK) return p;
-  if (read_u8(&p, e, &id, "LIBCALL id") != PARSE_OK) return p;
-  logmsg("LIBCALL ARGC %u ID %u\n", argc, id);
+static uint8_t *h_libcall_token(uint8_t *p, uint8_t *e, decode_context_t c) {
+  (void)c;
+  uint8_t token;
+  if (read_u8(&p, e, &token, "LIBCALL_TOKEN token") != PARSE_OK) return p;
+  logmsg("LIBCALL_TOKEN %u\n", token);
   return p;
 }
 static uint8_t *h_jump(uint8_t *p, uint8_t *e, decode_context_t c) {
@@ -339,7 +337,7 @@ static const opcode_desc_t OPCODES[] = {
                                                                        "LOGICAL OR",
                                                                        OPERAND_NONE,
                                                                        h_or},
-    {'A', "LIBCALL", OPERAND_U8, h_libcall}, {'B', "ITEM SAVE CODE",
+    {'M', "LIBCALL TOKEN", OPERAND_U8, h_libcall_token}, {'B', "ITEM SAVE CODE",
                                               OPERAND_BLOB_I16, h_emb}, {'C',
                                                                          "SAVE ITEM",
                                                                          OPERAND_NONE,

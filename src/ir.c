@@ -259,19 +259,13 @@ int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
         }
         break;
       }
-      case IR_OP_LIBCALL: {
+      case IR_OP_LIBCALL_TOKEN:
         if (inst->a < 0) {
           return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
-                                   "Instruction %zu (LIBCALL) has negative library index %d.",
+                                   "Instruction %zu (LIBCALL_TOKEN) has negative token %d.",
                                    i, inst->a);
         }
-        if (inst->b < 0) {
-          return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
-                                   "Instruction %zu (LIBCALL) has negative function index %d.",
-                                   i, inst->b);
-        }
         break;
-      }
       default:
         break;
     }

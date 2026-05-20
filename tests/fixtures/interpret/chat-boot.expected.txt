@@ -1,5 +1,5 @@
 ===stdout===
-Bytecode loaded: 46 bytes.
+Bytecode loaded: 45 bytes.
 Starting the chat server...
 ===stderr===
 Input item does not exist!  Cannot continue.

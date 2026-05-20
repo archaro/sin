@@ -54,7 +54,7 @@ void test_sdiss_fixture_basic(void) {
 void test_sdiss_reads_compiler_operand_widths(void) {
   const uint8_t bytes[] = {
       0x00, 0x00, /* locals/params */
-      'A', 0x02, 0x03, /* LIBCALL argc=2 id=3 */
+      'M', 0x09, /* LIBCALL_TOKEN id=9 */
       'F', 0x02, 0x00, /* CALL argc=2 */
       'h'};
 
@@ -74,7 +74,7 @@ void test_sdiss_reads_compiler_operand_widths(void) {
   ASSERT_TRUE(WIFEXITED(rc));
   ASSERT_EQ_INT(0, WEXITSTATUS(rc));
 
-  ASSERT_TRUE(strstr(output, "LIBCALL ARGC 2 ID 3") != NULL);
+  ASSERT_TRUE(strstr(output, "LIBCALL_TOKEN 9") != NULL);
   ASSERT_TRUE(strstr(output, "CALL ARGC 2") != NULL);
   ASSERT_TRUE(strstr(output, "unknown=0") != NULL);
 }

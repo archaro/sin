@@ -229,7 +229,7 @@ static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const cha
   OP('x', op_logicalnot) \
   OP('y', op_logicaland) \
   OP('z', op_logicalor) \
-  OP('A', op_libcall) \
+  OP('M', op_libcall_token) \
   OP('B', op_assigncodeitem) \
   OP('C', op_assignitem) \
   OP('F', op_fetchitem) \
@@ -573,21 +573,15 @@ uint8_t *op_logicalor(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *op_libcall(uint8_t *nextop, ITEM_t *item) {
-  // The next three bytes are the library name, function within it, and
-  // number of arguments on the stack.  Handle them, find the function
-  // for this libcall, and hand over to it.
-  uint8_t lib, func;
-  lib = *nextop++;
-  func = *nextop++;
-  DISASS_LOG("Calling library %d, function %d.\n", lib, func);
-  OP_t libcall = libcall_func(lib, func);
+uint8_t *op_libcall_token(uint8_t *nextop, ITEM_t *item) {
+  uint8_t token = *nextop++;
+  DISASS_LOG("Calling libcall token %d.\n", token);
+  OP_t libcall = libcall_func_token(token);
   if (!libcall) {
     char detail[64];
-    snprintf(detail, sizeof(detail), "Unknown libcall %u:%u", lib, func);
+    snprintf(detail, sizeof(detail), "Unknown libcall token %u", token);
     logerr("%s.\n", detail);
     set_error_item(ERR_RUNTIME_INVLIB, detail);
-    // Preserve the "libcalls return a value" contract even on failure.
     push_stack(VM->stack, VALUE_NIL);
   } else {
     nextop = libcall(nextop, item);
@@ -1153,7 +1147,7 @@ void init_interpreter() {
   // Keep this list aligned with src/compiler/ir/opcode_schema.def runtime entries.
   static const uint8_t required_runtime_opcodes[] = {
       'a', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
-      'q', 'r', 's', 't', 'u', 'v', 'x', 'y', 'z', 'A', 'B', 'C', 'F', 'I',
+      'q', 'r', 's', 't', 'u', 'v', 'x', 'y', 'z', 'B', 'C', 'F', 'I',
       'W', 'X', 'Y', 'Z'};
   for (size_t i = 0; i < sizeof(required_runtime_opcodes); i++) {
     uint8_t opbyte = required_runtime_opcodes[i];

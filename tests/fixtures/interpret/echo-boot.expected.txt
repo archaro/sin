@@ -1,5 +1,5 @@
 ===stdout===
-Bytecode loaded: 37 bytes.
+Bytecode loaded: 36 bytes.
 Starting the echo server...
 ===stderr===
 Input item does not exist!  Cannot continue.
