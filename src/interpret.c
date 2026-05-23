@@ -897,6 +897,11 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
   // Return a pointer to the bytecode after the item assembly.
   // May recurse - necessary for the handling of nested derefs.
   bool invalid = false;
+  bool saw_missing_layer = false;
+  bool saw_non_missing_layer = false;
+  bool missing_layer_is_leading = false;
+  bool missing_layer_possibly_leading = false;
+  bool just_processed_layer = false;
   STRBUILDER_t sb;
   sb_init(&sb, 130);
   if (relative && item && item->name[0] != '\0') {
@@ -917,6 +922,8 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
         REQUIRE_BYTES(nextop, s, "OP_ASSEMBLEITEM layer bytes");
         sb_append_substr(&sb, (char *)nextop, (uint32_t)s);
         nextop += s;
+        saw_non_missing_layer = true;
+        just_processed_layer = true;
         break;
       }
       case 'D': {
@@ -931,17 +938,40 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
               case VALUE_str: {
                 // This is easy, just concatenate the context of this local
                 // Assuming it is a valid layer name, anyway.
-                if (is_valid_layer(VM->stack->stack[idx].s)) {
+                if (VM->stack->stack[idx].s[0] == '\0') {
+                  if (!saw_non_missing_layer && !saw_missing_layer) {
+                    saw_missing_layer = true;
+                    missing_layer_possibly_leading = true;
+                  } else {
+                    logerr("Missing layer name in non-leading position.\n");
+                    invalid = true;
+                  }
+                } else if (is_valid_layer(VM->stack->stack[idx].s)) {
                   sb_append_literal(&sb, VM->stack->stack[idx].s);
+                  saw_non_missing_layer = true;
                 } else {
                   logerr("Invalid layer name '%s'.\n", VM->stack->stack[idx].s);
                   invalid = true;
                 }
+                just_processed_layer = true;
                 break;
               }
               case VALUE_int: {
                 // Slightly more complicated.  Turn the int into a string.
                 sb_append_intstr(&sb, VM->stack->stack[idx].i);
+                saw_non_missing_layer = true;
+                just_processed_layer = true;
+                break;
+              }
+              case VALUE_nil: {
+                if (!saw_non_missing_layer && !saw_missing_layer) {
+                  saw_missing_layer = true;
+                  missing_layer_possibly_leading = true;
+                } else {
+                  logerr("Missing layer name in non-leading position.\n");
+                  invalid = true;
+                }
+                just_processed_layer = true;
                 break;
               }
               default: {
@@ -970,17 +1000,40 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
                 switch (i->value.type) {
                   case VALUE_str: {
                     // This is the easiest one
-                    if (is_valid_layer(i->value.s)) {
+                    if (i->value.s[0] == '\0') {
+                      if (!saw_non_missing_layer && !saw_missing_layer) {
+                        saw_missing_layer = true;
+                        missing_layer_possibly_leading = true;
+                      } else {
+                        logerr("Missing layer name in non-leading position.\n");
+                        invalid = true;
+                      }
+                    } else if (is_valid_layer(i->value.s)) {
                       sb_append_literal(&sb, i->value.s);
+                      saw_non_missing_layer = true;
                     } else {
                       logerr("Invalid layer name '%s'.\n", i->value.s);
                       invalid = true;
                     }
+                    just_processed_layer = true;
                     break;
                   }
                   case VALUE_int: {
                     // This needs to be converted to a string.
                     sb_append_intstr(&sb, i->value.i);
+                    saw_non_missing_layer = true;
+                    just_processed_layer = true;
+                    break;
+                  }
+                  case VALUE_nil: {
+                    if (!saw_non_missing_layer && !saw_missing_layer) {
+                      saw_missing_layer = true;
+                      missing_layer_possibly_leading = true;
+                    } else {
+                      logerr("Missing layer name in non-leading position.\n");
+                      invalid = true;
+                    }
+                    just_processed_layer = true;
                     break;
                   }
                   default: {
@@ -1011,12 +1064,27 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
         invalid = true;
       }
     }
+    if (missing_layer_possibly_leading && saw_non_missing_layer) {
+      missing_layer_is_leading = true;
+      missing_layer_possibly_leading = false;
+    }
     if (*nextop != 'E') {
       // Another layer to process, so add a dot separator.
-      sb_append_literal(&sb, ".");
+      if (just_processed_layer && saw_non_missing_layer) {
+        sb_append_literal(&sb, ".");
+      } else if (just_processed_layer && saw_missing_layer && !saw_non_missing_layer) {
+        // Leading missing layer candidate: don't emit a separator yet.
+      }
     } else {
       // End of item definition.
       break;
+    }
+    just_processed_layer = false;
+  }
+
+  if (!invalid && saw_missing_layer) {
+    if (!missing_layer_is_leading || !saw_non_missing_layer) {
+      invalid = true;
     }
   }
 
