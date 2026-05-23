@@ -29,6 +29,8 @@ void test_find_item_cached_hit_and_negative_cache(void);
 void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
 void test_libcall_registry_roundtrip(void);
 void test_libcall_registry_init_failure_has_no_partial_state(void);
+void test_libcall_registry_lifecycle_reinit_sequence(void);
+void test_libcall_registry_repeated_teardown_is_safe(void);
 void test_libcall_name_duplicate_detection(void);
 void test_missing_libcall_is_null_and_interpret_deterministic(void);
 void test_libcall_registry_self_check_invalid_entries(void);
@@ -123,6 +125,8 @@ static const test_case_t core_tests[] = {
     {"test_find_item_cached_invalidation_on_delete_and_reinsert", test_find_item_cached_invalidation_on_delete_and_reinsert},
     {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},
     {"test_libcall_registry_init_failure_has_no_partial_state", test_libcall_registry_init_failure_has_no_partial_state},
+    {"test_libcall_registry_lifecycle_reinit_sequence", test_libcall_registry_lifecycle_reinit_sequence},
+    {"test_libcall_registry_repeated_teardown_is_safe", test_libcall_registry_repeated_teardown_is_safe},
     {"test_libcall_name_duplicate_detection", test_libcall_name_duplicate_detection},
     {"test_missing_libcall_is_null_and_interpret_deterministic", test_missing_libcall_is_null_and_interpret_deterministic},
     {"test_libcall_registry_self_check_invalid_entries", test_libcall_registry_self_check_invalid_entries},

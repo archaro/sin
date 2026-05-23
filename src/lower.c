@@ -547,6 +547,12 @@ int8_t lower_ast_to_ir(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **err
   ctx.ir = ir_create_unit();
   ctx.errnum = ERR_NOERROR;
 
+  if (!libcall_init_registry()) {
+    compdiag_set_once(&startup_errnum, errdetail, ERR_COMP_INUSE, "lower",
+                      "failed to initialize libcall registry");
+    return startup_errnum;
+  }
+
   if (!ctx.ir) {
     compdiag_set_once(&startup_errnum, errdetail, ERR_COMP_INUSE, "lower", "failed to allocate IR unit");
     return startup_errnum;

@@ -44,7 +44,7 @@ static uint8_t *test_noop_libcall(uint8_t *nextop, ITEM_t *item) {
 }
 
 void test_libcall_registry_roundtrip(void) {
-  libcall_registry_free_all();
+  libcall_reset_registry_for_tests();
   ASSERT_TRUE(libcall_init_registry());
   ASSERT_TRUE(libcall_validate_registry());
 
@@ -58,7 +58,7 @@ void test_libcall_registry_roundtrip(void) {
 }
 
 void test_libcall_registry_init_failure_has_no_partial_state(void) {
-  libcall_registry_free_all();
+  libcall_reset_registry_for_tests();
 
   alloc_test_fail_after(1);
   ASSERT_TRUE(!libcall_init_registry());
@@ -72,6 +72,33 @@ void test_libcall_registry_init_failure_has_no_partial_state(void) {
   ASSERT_TRUE(libcall_init_registry());
   ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
   ASSERT_EQ_INT(1, args);
+}
+
+void test_libcall_registry_lifecycle_reinit_sequence(void) {
+  uint8_t token = 0;
+  uint8_t args = 0;
+
+  libcall_reset_registry_for_tests();
+  ASSERT_TRUE(libcall_init_registry());
+  ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
+  ASSERT_EQ_INT(1, args);
+
+  libcall_free_registry();
+  ASSERT_TRUE(!libcall_lookup_token("doesnot", "exist", &token, &args));
+
+  ASSERT_TRUE(libcall_init_registry());
+  ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
+  ASSERT_EQ_INT(1, args);
+}
+
+void test_libcall_registry_repeated_teardown_is_safe(void) {
+  libcall_reset_registry_for_tests();
+  libcall_free_registry();
+  libcall_free_registry();
+  libcall_free_registry();
+
+  ASSERT_TRUE(libcall_init_registry());
+  ASSERT_TRUE(libcall_validate_registry());
 }
 
 void test_libcall_name_duplicate_detection(void) {
