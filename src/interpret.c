@@ -234,6 +234,7 @@ static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const cha
   OP('C', op_assignitem) \
   OP('F', op_fetchitem) \
   OP('I', op_assembleitem) \
+  OP('R', op_assembleitem_rel) \
   OP('W', op_delete) \
   OP('X', op_exists) \
   OP('Y', op_nthname) \
@@ -890,7 +891,7 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
+uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
   // Interpret the following bytecode as an item.  If an item can be
   // assembled, push the full item name onto the stack as a string.
   // Return a pointer to the bytecode after the item assembly.
@@ -898,6 +899,10 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
   bool invalid = false;
   STRBUILDER_t sb;
   sb_init(&sb, 130);
+  if (relative && item && item->name[0] != '\0') {
+    sb_append_literal(&sb, item->name);
+    sb_append_literal(&sb, ".");
+  }
 
   while (!invalid) {
     REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM layer");
@@ -917,7 +922,8 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
       case 'D': {
         // Deref layer - either a V (localvar) or another I (item)
         REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM deref type");
-        switch (*nextop++) {
+        uint8_t deref_type = *nextop++;
+        switch (deref_type) {
           case 'V': {
             REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM local index");
             int idx = *nextop++ + VM->stack->base; // Local variable index
@@ -946,10 +952,11 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item) {
             }
             break;
           }
-          case 'I': {
+          case 'I':
+          case 'R': {
             // This is a bit more complicated.  We need to dereference an
             // item, then evaluate it, and use the result as the layer name.
-            nextop = assembleitem_helper(nextop, item);
+            nextop = assembleitem_helper(nextop, item, deref_type == 'R');
             if (!nextop) {
               invalid = true;
               break;
@@ -1042,7 +1049,12 @@ uint8_t *op_assembleitem(uint8_t *nextop, ITEM_t *item) {
 
   // To facilitate ease of recusive dereferences, this is just a wrapper
   // to the help function which does all the work.
-  nextop = assembleitem_helper(nextop, item);
+  nextop = assembleitem_helper(nextop, item, false);
+  return nextop;
+}
+
+uint8_t *op_assembleitem_rel(uint8_t *nextop, ITEM_t *item) {
+  nextop = assembleitem_helper(nextop, item, true);
   return nextop;
 }
 
