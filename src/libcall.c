@@ -118,7 +118,7 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   result = compile_source_to_bytecode(val.s, strlen(val.s), &out, &errdetail);
 
   if (result != 0 || !out || !out->bytecode) {
-    // Compile failed
+    // Compile failed; release owned errdetail/out/val.s exactly once.
     set_error_item(result != 0 ? result : ERR_COMP_UNKNOWN, errdetail);
     if (errdetail) {
       FREE_ARRAY(char, errdetail, strlen(errdetail) + 1);
@@ -155,7 +155,8 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   ITEM_t *tmpitem = insert_code_item(config.itemroot, tmpname, len, out->bytecode);
 
   if (!tmpitem) {
-    // Could not create temp item (likely in-use/name conflict)
+    // Could not create temp item (likely in-use/name conflict).
+    // out->bytecode/out and val.s are still owned here and must be freed once.
     set_error_item(ERR_COMP_INUSE, NULL);
     FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
     FREE_ARRAY(OUTPUT_t, out, 1);
@@ -237,6 +238,7 @@ uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
   ITEM_t *taskitem = find_item(config.itemroot, itemname.s);
   if (!taskitem) {
     // If the task item doesn't exist, it can't be run.
+    // Ownership: free itemname once on this error path before returning.
     FREE_STR(itemname);
     push_stack(VM->stack, VALUE_NIL);
     set_error_item(ERR_RUNTIME_NOSUCHITEM, NULL);
@@ -247,6 +249,7 @@ uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
   repeatin.i *= 100;
   startin.i *= 100;
   TASK_t *newtask = make_task(itemname.s, repeatin.i);
+  // Success path: this is the only free on this path (the !taskitem branch returns).
   FREE_STR(itemname);
   // Now add the task to the game loop starting at the correct interval
   uv_timer_init(config.loop, newtask->timer);
@@ -266,6 +269,7 @@ uint8_t *lc_task_killtask(uint8_t *nextop, ITEM_t *item) {
   // First validate the argument
   VALUE_t taskid = pop_stack(VM->stack);
   if (taskid.type != VALUE_int) {
+    // taskid may only own heap memory when it is a string; FREE_STR is a safe no-op otherwise.
     FREE_STR(taskid);
     set_error_item(ERR_RUNTIME_INVALIDARGS, NULL);
     push_stack(VM->stack, VALUE_NIL);
