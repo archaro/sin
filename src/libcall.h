@@ -25,6 +25,7 @@ extern const LIBCALL_t libcalls[];
 
 bool libcall_lookup_token(const char *libname, const char *callname, uint8_t *token, uint8_t *args);
 bool libcall_init_registry(void);
+void libcall_registry_free_all(void);
 bool libcall_validate_registry(void);
 bool libcall_registry_self_check(const LIBCALL_t *calls, bool fail_fast);
 bool libcall_names_unique(const LIBCALL_t *calls);
