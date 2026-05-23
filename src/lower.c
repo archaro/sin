@@ -134,12 +134,14 @@ static void lower_deref_payload(LOWER_CTX *ctx, AS_NODE *payload) {
 
 static void lower_item(LOWER_CTX *ctx, AS_NODE *item) {
   AS_NODE *cursor;
+  bool relative = false;
   if (!item || (item->nodetype != N_ITEM && item->nodetype != N_RELITEM)) {
     lower_set_unsupported(ctx, item, "expected item node");
     return;
   }
 
   if (item->nodetype == N_RELITEM) {
+    relative = true;
     item = (AS_NODE *)item->lhs;
     if (!item || item->nodetype != N_ITEM) {
       lower_set_unsupported(ctx, item, "invalid relative item payload");
@@ -147,7 +149,7 @@ static void lower_item(LOWER_CTX *ctx, AS_NODE *item) {
     }
   }
 
-  ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_BEGIN});
+  ir_emit(ctx->ir, (IR_Inst){.op = relative ? IR_OP_ITEM_BEGIN_REL : IR_OP_ITEM_BEGIN});
   cursor = item;
   while (cursor && ctx->errnum == ERR_NOERROR) {
     AS_NODE *part = (AS_NODE *)cursor->lhs;

@@ -184,6 +184,10 @@ static parse_status_t process_dereference(uint8_t **p, uint8_t *end) {
     logmsg("Byte %05u: ", (unsigned int) (*p - bytecode - 2));
     logmsg("BEGIN ITEM ASSEMBLY\n");
     return process_item(p, end);
+  } else if (t == 'R') {
+    logmsg("Byte %05u: ", (unsigned int) (*p - bytecode - 2));
+    logmsg("BEGIN RELATIVE ITEM ASSEMBLY\n");
+    return process_item(p, end);
   } else {
     logmsg("Byte %05u: ", (unsigned int) (*p - bytecode - 2));
     logmsg("Unknown dereference type: %c (%d)\n", t, t);
@@ -302,6 +306,12 @@ static uint8_t *h_I(uint8_t *p, uint8_t *e, decode_context_t c) {
   process_item(&p, e);
   return p;
 }
+static uint8_t *h_R(uint8_t *p, uint8_t *e, decode_context_t c) {
+  (void) c;
+  logmsg("BEGIN RELATIVE ITEM ASSEMBLY\n");
+  process_item(&p, e);
+  return p;
+}
 
 /* Synchronization points:
  * - Keep opcode values aligned with src/emitbc.c:map_opcode.
@@ -343,7 +353,8 @@ static const opcode_desc_t OPCODES[] = {
                                                                          OPERAND_NONE,
                                                                          h_save_item},
     {'F', "CALL/ITEM DEREF", OPERAND_U8, h_f}, {'I', "BEGIN ITEM",
-                                                OPERAND_NONE, h_I}, {'W',
+                                                OPERAND_NONE, h_I}, {'R', "BEGIN REL ITEM",
+                                                OPERAND_NONE, h_R}, {'W',
                                                                      "DELETE ITEM",
                                                                      OPERAND_NONE,
                                                                      h_delete_item},
