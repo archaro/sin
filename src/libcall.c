@@ -29,6 +29,31 @@ extern LINE_t *line;
 // Some shorthand
 #define VM config.vm
 
+// Popped VALUE_t ownership rules in this file:
+// - Callers own popped values and must free any owned string payload exactly once.
+// - FREE_STR(v) is the canonical cleanup helper; it is a safe no-op for non-string values.
+static inline bool lc_value_is_type(VALUE_t v, VALUE_e type) {
+  return v.type == type;
+}
+
+static inline uint8_t *lc_invalid_args_return(uint8_t *nextop, VALUE_t ret) {
+  set_error_item(ERR_RUNTIME_INVALIDARGS, NULL);
+  push_stack(VM->stack, ret);
+  return nextop;
+}
+
+static inline void lc_cleanup_values(VALUE_t *values, size_t count) {
+  for (size_t i = 0; i < count; i++) {
+    FREE_STR(values[i]);
+  }
+}
+
+static inline void lc_cleanup_cstr(char *s) {
+  if (s) {
+    FREE_ARRAY(char, s, strlen(s) + 1);
+  }
+}
+
 uint8_t *lc_sys_backup(uint8_t *nextop, ITEM_t *item) {
   // Create a backup of the itemstore.
   // All of the following is a long-winded way to get a backup filename.
@@ -100,12 +125,10 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   // This call takes one parameter, expected to be a string.
   VALUE_t val = pop_stack(VM->stack);
 
-  if (val.type != VALUE_str) {
+  if (!lc_value_is_type(val, VALUE_str)) {
     logmsg("Sys.compile called with non-string value.\n");
     FREE_STR(val);
-    set_error_item(ERR_RUNTIME_INVALIDARGS, NULL);
-    push_stack(VM->stack, VALUE_FALSE);
-    return nextop;
+    return lc_invalid_args_return(nextop, VALUE_FALSE);
   }
 
   int8_t result = 0;
@@ -120,16 +143,14 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   if (result != 0 || !out || !out->bytecode) {
     // Compile failed; release owned errdetail/out/val.s exactly once.
     set_error_item(result != 0 ? result : ERR_COMP_UNKNOWN, errdetail);
-    if (errdetail) {
-      FREE_ARRAY(char, errdetail, strlen(errdetail) + 1);
-    }
+    lc_cleanup_cstr(errdetail);
     if (out) {
       if (out->bytecode) {
         FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
       }
       FREE_ARRAY(OUTPUT_t, out, 1);
     }
-    FREE_ARRAY(char, val.s, strlen(val.s) + 1);
+    lc_cleanup_cstr(val.s);
     push_stack(VM->stack, VALUE_FALSE);
     return nextop;
   }
@@ -141,7 +162,7 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
         "Sys.compile temporary item name generation failed.");
     FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
     FREE_ARRAY(OUTPUT_t, out, 1);
-    FREE_ARRAY(char, val.s, strlen(val.s) + 1);
+    lc_cleanup_cstr(val.s);
     push_stack(VM->stack, VALUE_FALSE);
     return nextop;
   }
@@ -160,7 +181,7 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
     set_error_item(ERR_COMP_INUSE, NULL);
     FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
     FREE_ARRAY(OUTPUT_t, out, 1);
-    FREE_ARRAY(char, val.s, strlen(val.s) + 1);
+    lc_cleanup_cstr(val.s);
     push_stack(VM->stack, VALUE_FALSE);
     return nextop;
   }
@@ -179,7 +200,7 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   set_item(config.itemroot, "error.msg", VALUE_NIL);
 
   FREE_ARRAY(OUTPUT_t, out, 1); // bytecode ownership moved into inserted item
-  FREE_ARRAY(char, val.s, strlen(val.s) + 1);
+  lc_cleanup_cstr(val.s);
 
   push_stack(VM->stack, VALUE_TRUE);
   return nextop;
@@ -224,16 +245,14 @@ uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
   VALUE_t repeatin = pop_stack(VM->stack);
   VALUE_t startin = pop_stack(VM->stack);
   VALUE_t itemname = pop_stack(VM->stack);
-  if (repeatin.type != VALUE_int || startin.type != VALUE_int
-                               || itemname.type != VALUE_str) {
+  if (!lc_value_is_type(repeatin, VALUE_int)
+   || !lc_value_is_type(startin, VALUE_int)
+   || !lc_value_is_type(itemname, VALUE_str)) {
     // Invalid parameters.  Clean them up, set the error item,
     // and return.
-    FREE_STR(repeatin);
-    FREE_STR(startin);
-    FREE_STR(itemname);
-    set_error_item(ERR_RUNTIME_INVALIDARGS, NULL);
-    push_stack(VM->stack, VALUE_NIL);
-    return nextop;
+    VALUE_t popped[] = {repeatin, startin, itemname};
+    lc_cleanup_values(popped, 3);
+    return lc_invalid_args_return(nextop, VALUE_NIL);
   }
   ITEM_t *taskitem = find_item(config.itemroot, itemname.s);
   if (!taskitem) {
@@ -268,12 +287,10 @@ uint8_t *lc_task_killtask(uint8_t *nextop, ITEM_t *item) {
   // Given a task id, kill it.
   // First validate the argument
   VALUE_t taskid = pop_stack(VM->stack);
-  if (taskid.type != VALUE_int) {
+  if (!lc_value_is_type(taskid, VALUE_int)) {
     // taskid may only own heap memory when it is a string; FREE_STR is a safe no-op otherwise.
     FREE_STR(taskid);
-    set_error_item(ERR_RUNTIME_INVALIDARGS, NULL);
-    push_stack(VM->stack, VALUE_NIL);
-    return nextop;
+    return lc_invalid_args_return(nextop, VALUE_NIL);
   }
 
   // Does this task even exist?
@@ -345,12 +362,10 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
   VALUE_t out = pop_stack(VM->stack);
   VALUE_t linenum = pop_stack(VM->stack);
 
-  if (linenum.type != VALUE_int || linenum.i < 0 
+  if (!lc_value_is_type(linenum, VALUE_int) || linenum.i < 0 
                                         || linenum.i >= config.maxconns) {
     FREE_STR(out);
-    set_error_item(ERR_RUNTIME_INVALIDARGS, NULL);
-    push_stack(VM->stack, VALUE_NIL);
-    return nextop;
+    return lc_invalid_args_return(nextop, VALUE_NIL);
   } else {
     switch(out.type) {
       case VALUE_str:
