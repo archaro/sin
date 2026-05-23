@@ -174,6 +174,7 @@ void as_delete(AS_NODE *root) {
     case N_NTHNAME:
     case N_ROOTNAME:
     case N_ITEM:
+    case N_RELITEM:
     case N_NOT:
     case N_LIBCALL:
     case N_ARGLIST:
@@ -204,7 +205,7 @@ void as_delete(AS_NODE *root) {
 // Keep this in sync with ENUM_VALUE!
 const char *valname[] = { "V_INT", "V_STR", "V_LOCAL", "V_LAYER" };
 // And keep this in sync with ENUM_NODE!
-const char *nodename[] = { "N_VALUE", "N_ADD", "N_SUB", "N_MUL", "N_DIV", "N_INC", "N_DEC", "N_EQUAL", "N_NOTEQ", "N_OR", "N_AND", "N_LT", "N_LTEQ", "N_GT", "N_GTEQ", "N_DEREF", "N_EXISTS", "N_DELETE", "N_NTHNAME", "N_ROOTNAME", "N_ITEM", "N_NOT", "N_LIBCALL", "N_ARGLIST", "N_CODE", "N_CALL", "N_ASSITEM", "N_ASSLOCAL", "N_EXPRSTMT", "N_RETURN", "N_STMTLIST", "N_STMT", "N_WHILESTMT", "N_IFSTMT" };
+const char *nodename[] = { "N_VALUE", "N_ADD", "N_SUB", "N_MUL", "N_DIV", "N_INC", "N_DEC", "N_EQUAL", "N_NOTEQ", "N_OR", "N_AND", "N_LT", "N_LTEQ", "N_GT", "N_GTEQ", "N_DEREF", "N_EXISTS", "N_DELETE", "N_NTHNAME", "N_ROOTNAME", "N_ITEM", "N_RELITEM", "N_NOT", "N_LIBCALL", "N_ARGLIST", "N_CODE", "N_CALL", "N_ASSITEM", "N_ASSLOCAL", "N_EXPRSTMT", "N_RETURN", "N_STMTLIST", "N_STMT", "N_WHILESTMT", "N_IFSTMT" };
 
 void as_pretty_print(int tree_depth) {
   // Indent to make everything look all neat and professional
@@ -225,6 +226,11 @@ void as_reconstruct_value(AS_NODE *node) {
 
 void as_reconstruct_item(AS_NODE *root) {
   // Given an N_ITEM node, follow it to its end
+  if (root && root->nodetype == N_RELITEM) {
+    logmsg(".");
+    root = (AS_NODE*)root->lhs;
+  }
+
   AS_NODE *node = root->lhs;
   // An item node can only have children of type N_VALUE or N_DEREF
   if (node->nodetype == N_VALUE) {
@@ -362,7 +368,8 @@ static void as_walk_internal(AS_NODE *root, int tree_depth) {
       logmsg("Node type: %s\n", nodename[root->nodetype]);
       break;
     }
-    case N_ITEM: {
+    case N_ITEM:
+    case N_RELITEM: {
       logmsg("Item node: ");
       as_reconstruct_item(root);
       logmsg("\n");

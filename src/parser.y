@@ -249,6 +249,7 @@ item_assignment: expr { $$ = $1; }
         ;
 
 item:     first_layer subsequent_layers { $$ = as_new_node(N_ITEM, $1, $2); }
+        | TLAYERSEP first_layer subsequent_layers { $$ = as_new_node(N_RELITEM, as_new_node(N_ITEM, $2, $3), NULL); }
         ;
 
 first_layer: TLAYER { $$ = as_new_valnode(V_LAYER, $1); }
