@@ -613,6 +613,30 @@ void assignitem(VALUE_t *itemname, VALUE_t val) {
   FREE_STR(*itemname);
 }
 
+static bool canonicalize_itemname(const char *assembled_name, ITEM_t *current_item, char *out_name) {
+  if (!assembled_name || assembled_name[0] == '\0') return false;
+
+  if (assembled_name[0] == '.') {
+    if (!current_item) {
+      logerr("Relative item name '%s' cannot be resolved without current item context.\n", assembled_name);
+      return false;
+    }
+    char parent[MAX_ITEM_NAME];
+    get_itemname(current_item, parent);
+    if (snprintf(out_name, MAX_ITEM_NAME, "%s%s", parent, assembled_name) >= MAX_ITEM_NAME) {
+      logerr("Resolved item name exceeds MAX_ITEM_NAME: %s%s\n", parent, assembled_name);
+      return false;
+    }
+    return true;
+  }
+
+  if (snprintf(out_name, MAX_ITEM_NAME, "%s", assembled_name) >= MAX_ITEM_NAME) {
+    logerr("Item name exceeds MAX_ITEM_NAME: %s\n", assembled_name);
+    return false;
+  }
+  return true;
+}
+
 typedef struct {
   char *buf;
   uint32_t cap;
@@ -776,6 +800,16 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
     goto cleanup;
   }
 
+  if (itemname.type == VALUE_str) {
+    char fullname[MAX_ITEM_NAME];
+    if (!canonicalize_itemname(itemname.s, item, fullname)) {
+      set_error_item(ERR_COMP_UNKNOWN, "Invalid item name for code assignment.");
+      goto cleanup;
+    }
+    FREE_ARRAY(char, itemname.s, strlen(itemname.s) + 1);
+    itemname.s = strdup(fullname);
+  }
+
   result = compile_and_insert_codeitem(&itemname, &in, &errdetail);
   if (result == 0) {
     persist_codeitem_source(&itemname, &in);
@@ -804,6 +838,15 @@ uint8_t *op_assignitem(uint8_t *nextop, ITEM_t *item) {
   // Save a value into an item.
   VALUE_t val = pop_stack(VM->stack); // value to be saved
   VALUE_t itemname = pop_stack(VM->stack); // Name of item to save into
+  if (itemname.type == VALUE_str) {
+    char fullname[MAX_ITEM_NAME];
+    if (canonicalize_itemname(itemname.s, item, fullname)) {
+      FREE_ARRAY(char, itemname.s, strlen(itemname.s) + 1);
+      itemname.s = strdup(fullname);
+    } else {
+      logerr("Unable to create item '%s': failed to resolve canonical name.\n", itemname.s);
+    }
+  }
   assignitem(&itemname, val);
   return nextop;
 }
@@ -826,9 +869,21 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
 
   // First check to see if there is a valid item to look up
   if (itemname.type == VALUE_str) {
-    ITEM_t *i = find_item_cached(config.itemroot, itemname.s, NULL);
+    char fullname[MAX_ITEM_NAME];
+    if (!canonicalize_itemname(itemname.s, item, fullname)) {
+      logerr("Unable to fetch item '%s': failed to resolve canonical name.\n", itemname.s);
+      while (arg_count > 0) {
+        DEBUG_LOG("Discarding argument for invalid canonical fetch name.\n");
+        throwaway_stack(VM->stack);
+        arg_count--;
+      }
+      push_stack(VM->stack, VALUE_NIL);
+      FREE_STR(itemname);
+      return nextop;
+    }
+    ITEM_t *i = find_item_cached(config.itemroot, fullname, NULL);
     if (i) {
-      ITEMDEBUG_LOG("Fetched item %s (called with %d arguments).\n", itemname.s, arg_count);
+      ITEMDEBUG_LOG("Fetched item %s (called with %d arguments).\n", fullname, arg_count);
       // Just push the item value onto the stack.
       if (i->type == ITEM_value) {
         VALUE_t v;
@@ -869,7 +924,7 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
       }
     } else {
       // Item not found.
-      ITEMDEBUG_LOG("Item '%s' not found.\n", itemname.s);
+      ITEMDEBUG_LOG("Item '%s' not found.\n", fullname);
       // We need to lose any values on the stack which were passed as args.
         while (arg_count > 0) {
           DEBUG_LOG("Popping unneeded argument.\n");
@@ -904,9 +959,16 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
   bool just_processed_layer = false;
   STRBUILDER_t sb;
   sb_init(&sb, 130);
-  if (relative && item && item->name[0] != '\0') {
-    sb_append_literal(&sb, item->name);
-    sb_append_literal(&sb, ".");
+  if (relative) {
+    if (!item) {
+      logerr("Relative item assembly requires current item context.\n");
+      invalid = true;
+    } else {
+      char parent[MAX_ITEM_NAME];
+      get_itemname(item, parent);
+      sb_append_literal(&sb, parent);
+      sb_append_literal(&sb, ".");
+    }
   }
 
   while (!invalid) {
@@ -1132,7 +1194,12 @@ uint8_t *op_delete(uint8_t *nextop, ITEM_t *item) {
   // Pop it, delete it, and return nothing.
   VALUE_t val = pop_stack(VM->stack);
   if (val.type == VALUE_str) {
-    delete_item(config.itemroot, val.s);
+    char fullname[MAX_ITEM_NAME];
+    if (canonicalize_itemname(val.s, item, fullname)) {
+      delete_item(config.itemroot, fullname);
+    } else {
+      logerr("OP_DELETE failed to resolve canonical name for '%s'.\n", val.s);
+    }
   } else {
     logerr("OP_DELETE invalid item name type: %d. No action taken.\n", val.type);
   }
@@ -1152,7 +1219,13 @@ uint8_t *op_exists(uint8_t *nextop, ITEM_t *item) {
     push_stack(VM->stack, VALUE_FALSE);
     return nextop;
   }
-  ITEM_t *i = find_item(config.itemroot, val.s);
+  char fullname[MAX_ITEM_NAME];
+  if (!canonicalize_itemname(val.s, item, fullname)) {
+    FREE_STR(val);
+    push_stack(VM->stack, VALUE_FALSE);
+    return nextop;
+  }
+  ITEM_t *i = find_item(config.itemroot, fullname);
   FREE_STR(val);
   push_stack(VM->stack, i ? VALUE_TRUE : VALUE_FALSE);
   DISASS_LOG("OP_EXISTS\n");
