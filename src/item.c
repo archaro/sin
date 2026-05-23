@@ -72,8 +72,38 @@ ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
   return item;
 }
 
+
 // The configuration object, defined in sin.c
 extern CONFIG_t config;
+
+static bool validate_item_name(const char *item_name,
+                                               const char *func_name) {
+  if (!item_name || *item_name == '\0') {
+    logerr("%s called with empty item name.\n", func_name);
+    return false;
+  }
+
+  const char *segment_start = item_name;
+  while (true) {
+    const char *dot = strchr(segment_start, '.');
+    size_t layer_len = (dot != NULL) ? (size_t)(dot - segment_start)
+                                     : strlen(segment_start);
+
+    if (layer_len == 0) {
+      logerr("%s called with malformed item name '%s': empty layer.\n",
+                                                     func_name, item_name);
+      return false;
+    }
+    if (layer_len > 32) {
+      logerr("%s called with malformed item name '%s': layer too long.\n",
+                                                     func_name, item_name);
+      return false;
+    }
+
+    if (dot == NULL) return true;
+    segment_start = dot + 1;
+  }
+}
 
 HASHTABLE_t *create_hashtable(int size) {
   // Create a hashtable with the given number of buckets
@@ -435,6 +465,9 @@ void destroy_item(ITEM_t *item) {
 
 ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
   // Function to insert a new item into the tree at the specified node.
+  if (!validate_item_name(item_name, "insert_item")) {
+    return NULL;
+  }
   // If layers of the item don't exist, they are created with a default
   // value of 0.
   ITEM_t *current_item = root;
@@ -491,6 +524,9 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
 
 ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
                                                       uint8_t *bytecode) {
+  if (!validate_item_name(item_name, "insert_code_item")) {
+    return NULL;
+  }
   // This function is basically the same as insert_item() but creates a
   // code item instead of a value item.
   ITEM_t *current_item = root;
@@ -542,6 +578,9 @@ ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
 
 ITEM_t *find_item(ITEM_t *root, const char *item_name) {
   // Function to dereference an item by a multi-layer item.
+  if (!validate_item_name(item_name, "find_item")) {
+    return NULL;
+  }
   ITEM_t *current_item = root;
   const char *current_pos = item_name;
   char layer[33]; // 32 characters + 1 for null-terminator
@@ -577,6 +616,9 @@ ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index) {
 
 void delete_item(ITEM_t *root, const char *item_name) {
   // Find an item and then delete it and all of its children.
+  if (!validate_item_name(item_name, "delete_item")) {
+    return;
+  }
   ITEM_t *item = find_item(root, item_name);
   if (item) {
     if (item->inuse) {
@@ -610,6 +652,9 @@ void delete_item(ITEM_t *root, const char *item_name) {
 
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value) {
   // Find an item, and set its value.
+  if (!validate_item_name(item_name, "set_item")) {
+    return;
+  }
   // If the item does not exist, it will be created, and then set.
   ITEMDEBUG_LOG("Trying to set item '%s'\n", item_name);
   ITEM_t *item = find_item(root, item_name);
