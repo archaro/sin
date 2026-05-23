@@ -561,7 +561,43 @@ static size_t libcall_registry_index(uint8_t lib_index, uint8_t call_index) {
   return ((size_t)lib_index * libcall_registry_width) + (size_t)call_index;
 }
 
+void libcall_registry_free_all(void) {
+  if (libcall_name_registry) {
+    for (size_t i = 0; i < libcall_name_registry_count; i++) {
+      if (libcall_name_registry[i].lookup_key) {
+        FREE_ARRAY(char, libcall_name_registry[i].lookup_key,
+                   strlen(libcall_name_registry[i].lookup_key) + 1);
+        libcall_name_registry[i].lookup_key = NULL;
+      }
+    }
+    FREE_ARRAY(LIBCALL_NAME_ENTRY_t, libcall_name_registry, libcall_name_registry_count);
+  }
+
+  size_t dense_count = libcall_registry_height * libcall_registry_width;
+  if (libcall_registry) {
+    FREE_ARRAY(LIBCALL_REG_ENTRY_t, libcall_registry, dense_count);
+  }
+
+  libcall_registry = NULL;
+  libcall_name_registry = NULL;
+  libcall_registry_width = 0;
+  libcall_registry_height = 0;
+  libcall_name_registry_count = 0;
+  memset(libcall_token_registry, 0, sizeof(libcall_token_registry));
+  memset(libcall_token_present, 0, sizeof(libcall_token_present));
+  libcall_registry_ready = false;
+}
+
 bool libcall_init_registry(void) {
+  LIBCALL_REG_ENTRY_t *tmp_registry = NULL;
+  LIBCALL_NAME_ENTRY_t *tmp_name_registry = NULL;
+  size_t tmp_registry_width = 0;
+  size_t tmp_registry_height = 0;
+  size_t tmp_count = 0;
+  size_t dense_count = 0;
+  OP_t tmp_token_registry[256] = {0};
+  bool tmp_token_present[256] = {0};
+
   if (libcall_registry_ready) {
     return true;
   }
@@ -586,56 +622,80 @@ bool libcall_init_registry(void) {
     count++;
   }
 
-  libcall_registry_height = (size_t)max_lib_index + 1;
-  libcall_registry_width = (size_t)max_call_index + 1;
-  size_t dense_count = libcall_registry_height * libcall_registry_width;
+  tmp_registry_height = (size_t)max_lib_index + 1;
+  tmp_registry_width = (size_t)max_call_index + 1;
+  tmp_count = count;
+  dense_count = tmp_registry_height * tmp_registry_width;
 
-  libcall_registry = GROW_ARRAY(LIBCALL_REG_ENTRY_t, NULL, 0, dense_count);
-  libcall_name_registry = GROW_ARRAY(LIBCALL_NAME_ENTRY_t, NULL, 0, count);
-  if (!libcall_registry || !libcall_name_registry) {
-    return false;
+  tmp_registry = GROW_ARRAY(LIBCALL_REG_ENTRY_t, NULL, 0, dense_count);
+  tmp_name_registry = GROW_ARRAY(LIBCALL_NAME_ENTRY_t, NULL, 0, tmp_count);
+  if (!tmp_registry || !tmp_name_registry) {
+    goto fail;
   }
-  memset(libcall_registry, 0, sizeof(LIBCALL_REG_ENTRY_t) * dense_count);
+  memset(tmp_registry, 0, sizeof(LIBCALL_REG_ENTRY_t) * dense_count);
+  memset(tmp_name_registry, 0, sizeof(LIBCALL_NAME_ENTRY_t) * tmp_count);
 
-  for (size_t i = 0; i < count; i++) {
+  for (size_t i = 0; i < tmp_count; i++) {
     uint8_t lib_index = (uint8_t)libcalls[i].lib_index;
     uint8_t call_index = (uint8_t)libcalls[i].call_index;
-    size_t dense_index = libcall_registry_index(lib_index, call_index);
-    if (libcall_registry[dense_index].present) {
-      return false;
+    size_t dense_index = ((size_t)lib_index * tmp_registry_width) + (size_t)call_index;
+    if (tmp_registry[dense_index].present) {
+      goto fail;
     }
-    libcall_registry[dense_index].func = libcalls[i].func;
-    libcall_registry[dense_index].args = libcalls[i].args;
-    libcall_registry[dense_index].present = true;
+    tmp_registry[dense_index].func = libcalls[i].func;
+    tmp_registry[dense_index].args = libcalls[i].args;
+    tmp_registry[dense_index].present = true;
 
-    libcall_name_registry[i].libname = libcalls[i].libname;
-    libcall_name_registry[i].callname = libcalls[i].callname;
-    libcall_name_registry[i].lib_index = lib_index;
-    libcall_name_registry[i].call_index = call_index;
-    libcall_name_registry[i].args = libcalls[i].args;
-    libcall_name_registry[i].token = (uint8_t)i;
-    libcall_name_registry[i].lookup_key = NULL;
+    tmp_name_registry[i].libname = libcalls[i].libname;
+    tmp_name_registry[i].callname = libcalls[i].callname;
+    tmp_name_registry[i].lib_index = lib_index;
+    tmp_name_registry[i].call_index = call_index;
+    tmp_name_registry[i].args = libcalls[i].args;
+    tmp_name_registry[i].token = (uint8_t)i;
+    tmp_name_registry[i].lookup_key = NULL;
     if (!libcall_make_key(libcalls[i].libname, libcalls[i].callname,
-                          &libcall_name_registry[i].lookup_key)) {
-      return false;
+                          &tmp_name_registry[i].lookup_key)) {
+      goto fail;
     }
-    libcall_token_registry[(uint8_t)i] = libcalls[i].func;
-    libcall_token_present[(uint8_t)i] = true;
+    tmp_token_registry[(uint8_t)i] = libcalls[i].func;
+    tmp_token_present[(uint8_t)i] = true;
   }
 
-  qsort(libcall_name_registry, count, sizeof(LIBCALL_NAME_ENTRY_t),
+  qsort(tmp_name_registry, tmp_count, sizeof(LIBCALL_NAME_ENTRY_t),
         libcall_name_entry_cmp);
 
-  for (size_t i = 1; i < count; i++) {
-    if (strcmp(libcall_name_registry[i - 1].lookup_key,
-               libcall_name_registry[i].lookup_key) == 0) {
-      return false;
+  for (size_t i = 1; i < tmp_count; i++) {
+    if (strcmp(tmp_name_registry[i - 1].lookup_key,
+               tmp_name_registry[i].lookup_key) == 0) {
+      goto fail;
     }
   }
 
-  libcall_name_registry_count = count;
+  libcall_registry = tmp_registry;
+  libcall_name_registry = tmp_name_registry;
+  libcall_registry_width = tmp_registry_width;
+  libcall_registry_height = tmp_registry_height;
+  libcall_name_registry_count = tmp_count;
+  memcpy(libcall_token_registry, tmp_token_registry, sizeof(libcall_token_registry));
+  memcpy(libcall_token_present, tmp_token_present, sizeof(libcall_token_present));
   libcall_registry_ready = true;
   return true;
+
+fail:
+  for (size_t i = 0; i < tmp_count; i++) {
+    if (tmp_name_registry && tmp_name_registry[i].lookup_key) {
+      FREE_ARRAY(char, tmp_name_registry[i].lookup_key,
+                 strlen(tmp_name_registry[i].lookup_key) + 1);
+      tmp_name_registry[i].lookup_key = NULL;
+    }
+  }
+  if (tmp_name_registry) {
+    FREE_ARRAY(LIBCALL_NAME_ENTRY_t, tmp_name_registry, tmp_count);
+  }
+  if (tmp_registry) {
+    FREE_ARRAY(LIBCALL_REG_ENTRY_t, tmp_registry, dense_count);
+  }
+  return false;
 }
 
 bool libcall_validate_registry(void) {

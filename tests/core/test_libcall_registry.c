@@ -8,6 +8,7 @@
 #include "item.h"
 #include "test_assert.h"
 #include "vm.h"
+#include "memory.h"
 
 extern CONFIG_t config;
 
@@ -17,6 +18,7 @@ static uint8_t *test_noop_libcall(uint8_t *nextop, ITEM_t *item) {
 }
 
 void test_libcall_registry_roundtrip(void) {
+  libcall_registry_free_all();
   ASSERT_TRUE(libcall_init_registry());
   ASSERT_TRUE(libcall_validate_registry());
 
@@ -27,6 +29,23 @@ void test_libcall_registry_roundtrip(void) {
 
   ASSERT_NOT_NULL(libcall_func_token(token));
   ASSERT_TRUE(libcall_func_token(255) == NULL);
+}
+
+void test_libcall_registry_init_failure_has_no_partial_state(void) {
+  libcall_registry_free_all();
+
+  alloc_test_fail_after(1);
+  ASSERT_TRUE(!libcall_init_registry());
+
+  uint8_t token = 0;
+  uint8_t args = 0;
+  ASSERT_TRUE(!libcall_lookup_token("sys", "log", &token, &args));
+  ASSERT_TRUE(libcall_func_token(1) == NULL);
+
+  alloc_test_fail_after(-1);
+  ASSERT_TRUE(libcall_init_registry());
+  ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
+  ASSERT_EQ_INT(1, args);
 }
 
 void test_libcall_name_duplicate_detection(void) {
