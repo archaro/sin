@@ -480,6 +480,36 @@ static bool libcall_args_in_range(uint8_t args) {
   return args <= 32;
 }
 
+typedef struct LIBCALL_KEY_NODE {
+  char *key;
+  struct LIBCALL_KEY_NODE *next;
+} LIBCALL_KEY_NODE_t;
+
+static uint32_t libcall_key_hash(const char *key) {
+  // djb2 hash
+  uint32_t hash = 5381U;
+  for (unsigned char c = (unsigned char)*key; c != '\0'; c = (unsigned char)*++key) {
+    hash = ((hash << 5) + hash) + c;
+  }
+  return hash;
+}
+
+static void libcall_key_set_free(LIBCALL_KEY_NODE_t **buckets, size_t bucket_count) {
+  if (!buckets) return;
+  for (size_t i = 0; i < bucket_count; i++) {
+    LIBCALL_KEY_NODE_t *node = buckets[i];
+    while (node) {
+      LIBCALL_KEY_NODE_t *next = node->next;
+      if (node->key) {
+        FREE_ARRAY(char, node->key, strlen(node->key) + 1);
+      }
+      FREE_ARRAY(LIBCALL_KEY_NODE_t, node, 1);
+      node = next;
+    }
+  }
+  FREE_ARRAY(LIBCALL_KEY_NODE_t *, buckets, bucket_count);
+}
+
 static bool libcall_registry_fail(const char *msg, const LIBCALL_t *entry, size_t idx, bool fail_fast) {
   logerr("FATAL: libcall registry self-check failed: %s (entry %zu: %s.%s lib=%d call=%d args=%u)\n",
          msg, idx,
@@ -499,20 +529,55 @@ bool libcall_registry_self_check(const LIBCALL_t *calls, bool fail_fast) {
 
   bool seen_lib[256] = {0};
   bool seen_pair[256][256] = {{0}};
+  size_t key_bucket_count = 257;
+  LIBCALL_KEY_NODE_t **seen_keys = GROW_ARRAY(LIBCALL_KEY_NODE_t *, NULL, 0, key_bucket_count);
+  if (!seen_keys) {
+    return libcall_registry_fail("failed to allocate textual key set", NULL, 0, fail_fast);
+  }
+  memset(seen_keys, 0, sizeof(*seen_keys) * key_bucket_count);
   for (size_t i = 0; calls[i].libname != NULL || calls[i].callname != NULL; i++) {
     const LIBCALL_t *e = &calls[i];
-    if (!e->libname || !e->callname || !e->func) return libcall_registry_fail("entry requires non-null libname/callname/func", e, i, fail_fast);
-    if (e->lib_index < 0 || e->call_index < 0) return libcall_registry_fail("negative lib_index/call_index", e, i, fail_fast);
-    if (!libcall_args_in_range(e->args)) return libcall_registry_fail("args out of acceptable range", e, i, fail_fast);
-
-    for (size_t j = i + 1; calls[j].libname != NULL || calls[j].callname != NULL; j++) {
-      const LIBCALL_t *o = &calls[j];
-      if (o->libname && o->callname && strcmp(e->libname, o->libname) == 0 && strcmp(e->callname, o->callname) == 0)
-        return libcall_registry_fail("duplicate textual key libname.callname", e, i, fail_fast);
+    if (!e->libname || !e->callname || !e->func) {
+      libcall_key_set_free(seen_keys, key_bucket_count);
+      return libcall_registry_fail("entry requires non-null libname/callname/func", e, i, fail_fast);
+    }
+    if (e->lib_index < 0 || e->call_index < 0) {
+      libcall_key_set_free(seen_keys, key_bucket_count);
+      return libcall_registry_fail("negative lib_index/call_index", e, i, fail_fast);
+    }
+    if (!libcall_args_in_range(e->args)) {
+      libcall_key_set_free(seen_keys, key_bucket_count);
+      return libcall_registry_fail("args out of acceptable range", e, i, fail_fast);
     }
 
+    char *lookup_key = NULL;
+    if (!libcall_make_key(e->libname, e->callname, &lookup_key)) {
+      libcall_key_set_free(seen_keys, key_bucket_count);
+      return libcall_registry_fail("failed to allocate textual key", e, i, fail_fast);
+    }
+    size_t bucket = (size_t)(libcall_key_hash(lookup_key) % key_bucket_count);
+    for (LIBCALL_KEY_NODE_t *node = seen_keys[bucket]; node; node = node->next) {
+      if (strcmp(node->key, lookup_key) == 0) {
+        FREE_ARRAY(char, lookup_key, strlen(lookup_key) + 1);
+        libcall_key_set_free(seen_keys, key_bucket_count);
+        return libcall_registry_fail("duplicate textual key libname.callname", e, i, fail_fast);
+      }
+    }
+    LIBCALL_KEY_NODE_t *new_node = GROW_ARRAY(LIBCALL_KEY_NODE_t, NULL, 0, 1);
+    if (!new_node) {
+      FREE_ARRAY(char, lookup_key, strlen(lookup_key) + 1);
+      libcall_key_set_free(seen_keys, key_bucket_count);
+      return libcall_registry_fail("failed to allocate textual key node", e, i, fail_fast);
+    }
+    new_node->key = lookup_key;
+    new_node->next = seen_keys[bucket];
+    seen_keys[bucket] = new_node;
+
     uint8_t li = (uint8_t)e->lib_index, ci = (uint8_t)e->call_index;
-    if (seen_pair[li][ci]) return libcall_registry_fail("duplicate numeric key (lib_index,call_index)", e, i, fail_fast);
+    if (seen_pair[li][ci]) {
+      libcall_key_set_free(seen_keys, key_bucket_count);
+      return libcall_registry_fail("duplicate numeric key (lib_index,call_index)", e, i, fail_fast);
+    }
     seen_pair[li][ci] = true;
     seen_lib[li] = true;
   }
@@ -520,8 +585,10 @@ bool libcall_registry_self_check(const LIBCALL_t *calls, bool fail_fast) {
   int max_lib = -1;
   for (int i=0;i<256;i++) if (seen_lib[i]) max_lib = i;
   for (int i=0;i<=max_lib;i++) if (!seen_lib[i] && i!=0) {
+    libcall_key_set_free(seen_keys, key_bucket_count);
     return libcall_registry_fail("lib_index values must be contiguous from 1..max", &calls[0], 0, fail_fast);
   }
+  libcall_key_set_free(seen_keys, key_bucket_count);
   return true;
 }
 const LIBCALL_t libcalls[] = {

@@ -110,6 +110,9 @@ void test_libcall_registry_self_check_invalid_entries(void) {
   const LIBCALL_t dup_num[] = {{"sys","a",1,1,0,test_noop_libcall},{"sys","b",1,1,0,test_noop_libcall},{NULL,NULL,-1,-1,0,NULL}};
   ASSERT_TRUE(!libcall_registry_self_check(dup_num, false));
 
+  const LIBCALL_t dup_text[] = {{"sys","a",1,1,0,test_noop_libcall},{"sys","a",1,2,0,test_noop_libcall},{NULL,NULL,-1,-1,0,NULL}};
+  ASSERT_TRUE(!libcall_registry_self_check(dup_text, false));
+
   const LIBCALL_t gap_lib[] = {{"sys","a",1,0,0,test_noop_libcall},{"net","b",3,0,0,test_noop_libcall},{NULL,NULL,-1,-1,0,NULL}};
   ASSERT_TRUE(!libcall_registry_self_check(gap_lib, false));
 }
