@@ -80,6 +80,17 @@ static void sem_add_local(SEM_CTX *ctx, const char *name) {
   ctx->count++;
 }
 
+static uint32_t sem_resolve_local_index(SEM_CTX *ctx, const char *name) {
+  uint8_t index = 0;
+  if (!sem_get_local_index(ctx, name, &index)) {
+    sem_add_local(ctx, name);
+    if (!sem_get_local_index(ctx, name, &index)) {
+      return ctx->count > 0 ? ctx->count - 1 : 0;
+    }
+  }
+  return index;
+}
+
 static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name) {
   if (!ctx) return;
   compdiag_set_once(&ctx->errnum, &ctx->errdetail, errnum, "semant",
@@ -123,8 +134,8 @@ static void sem_seed_code_params(SEM_CTX *ctx, AS_NODE *params) {
     if (param && param->nodetype == N_VALUE) {
       AS_VALUE *value = (AS_VALUE *)param->lhs;
       if (value && value->valtype == V_LOCAL && value->value.s) {
-        sem_add_local(ctx, value->value.s);
-        ctx->locals[ctx->count - 1].param = true;
+        uint32_t index = sem_resolve_local_index(ctx, value->value.s);
+        ctx->locals[index].param = true;
       }
     }
 
@@ -244,7 +255,7 @@ void sem_seed_params(SEM_CTX *ctx, const char **params, size_t count) {
   if (!ctx || !params) return;
   for (size_t i = 0; i < count; i++) {
     if (!params[i]) continue;
-    sem_add_local(ctx, params[i]);
-    ctx->locals[ctx->count - 1].param = true;
+    uint32_t index = sem_resolve_local_index(ctx, params[i]);
+    ctx->locals[index].param = true;
   }
 }
