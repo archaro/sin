@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -Wall -MMD -MP
+CFLAGS = -g -Wall -MMD -MP -Isrc -Isrc/compiler
 LDFLAGS = -g
 LIBS = -luv
 YACC = bison
@@ -53,9 +53,9 @@ TEST_SOURCES := $(TEST_SHARED_SOURCES) $(TEST_CORE_SOURCES) $(TEST_COMPILER_SOUR
 # Library of shared functions
 LIB := $(LIB_DIR)/libsinshared.a
 LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/parser.o \
-               $(OBJ_DIR)/lexer.o $(OBJ_DIR)/absyn.o $(OBJ_DIR)/semant.o \
-               $(OBJ_DIR)/ir.o $(OBJ_DIR)/lower.o $(OBJ_DIR)/compiler_context.o $(OBJ_DIR)/compiler_pipeline.o $(OBJ_DIR)/emitbc.o \
-               $(OBJ_DIR)/compdiag.o $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcall.o \
+               $(OBJ_DIR)/lexer.o $(OBJ_DIR)/compiler/absyn.o $(OBJ_DIR)/compiler/semant.o \
+               $(OBJ_DIR)/compiler/ir.o $(OBJ_DIR)/compiler/lower.o $(OBJ_DIR)/compiler/compiler_context.o $(OBJ_DIR)/compiler/compiler_pipeline.o $(OBJ_DIR)/compiler/emitbc.o \
+               $(OBJ_DIR)/compiler/compdiag.o $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcall.o \
                $(OBJ_DIR)/stack.o $(OBJ_DIR)/value.o $(OBJ_DIR)/item.o \
                $(OBJ_DIR)/vm.o $(OBJ_DIR)/task.o $(OBJ_DIR)/interpret.o \
                $(OBJ_DIR)/network.o $(OBJ_DIR)/libtelnet.o
