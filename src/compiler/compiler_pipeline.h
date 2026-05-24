@@ -1,0 +1,18 @@
+// Compiler pipeline API
+
+// Licensed under the MIT License - see LICENSE file for details.
+
+#pragma once
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "compdiag.h"
+#include "emitbc.h"
+#include "parse_input.h"
+
+int8_t compile_source_to_bytecode(const char *source, size_t len, OUTPUT_t **out, char **errdetail);
+int8_t compile_parse_input_to_bytecode(const ParseInput *input, OUTPUT_t **out, char **errdetail);
+int8_t compile_source_to_bytecode_with_params(const char *source, size_t len, const char **params, size_t param_count, OUTPUT_t **out, char **errdetail);
+int8_t compile_source_to_bytecode_diag(const char *source, size_t len, OUTPUT_t **out, CompilerDiagnostic *out_diag);
+
