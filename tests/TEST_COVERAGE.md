@@ -1,6 +1,6 @@
 # Test Coverage Map
 
-This document maps major subsystems to concrete test entry points so reviewers can quickly verify what is covered, what is intentionally not covered yet, and what is planned next.
+This document maps major subsystems to concrete test entry points so reviewers can quickly verify what is covered and what remains intentionally out of scope.
 
 ## core
 
@@ -15,17 +15,19 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_fixture_policy_registry_integrity`
     - `test_fixture_policy_files_present`
     - `test_fixture_policy_no_generated_obj_tracked`
-- **Parser / AST / semantic edge behavior (core correctness slices)**
+- **Parser / AST / semantic edge behavior**
+  - `tests/core/test_absyn_lifecycle.c`
+  - `tests/core/test_semant.c`
+  - `tests/core/test_parser_input_api.c`
   - `tests/core/test_relative_item_leading_dot.c`
-    - `test_relative_item_leading_dot` (compile success + runtime contract on missing leading layer)
+- **IR/core metadata and cache behavior**
+  - `tests/core/test_ir_validate.c`
+  - `tests/core/test_opcode_schema.c`
+  - `tests/core/test_item_cache.c`
 
 ### Known gaps
-- No single consolidated "core smoke" test that exercises parser + symbol resolution + error diagnostics in one pass across a matrix of malformed programs.
-- No fuzz/property-style core parser tests in-tree (determinism/robustness under randomized token streams is not directly validated here).
-
-### Planned tests
-- Add `test_core_negative_matrix` (new file under `tests/core/`) to centralize malformed-source diagnostics that are currently scattered.
-- Add a deterministic parser fuzz harness (seeded corpus replay) to improve confidence in error-recovery paths.
+- No property/fuzz-style parser robustness test in-tree (seeded random corpus/replay).
+- No dedicated "core malformed-source matrix" test file; malformed-source cases are still distributed across compiler pipeline tests.
 
 ## compiler
 
@@ -39,17 +41,10 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_emitbc_opcode_map_unsupported_ir_op`
   - `tests/compiler/test_emitbc_jumps.c`
     - `test_emitbc_jumps`
-    - internal jump-path checks:
-      - `test_emitbc_jump_forward_offsets`
-      - `test_emitbc_jump_backward_offset_negative`
-      - `test_emitbc_jump_label_errors`
-      - `test_emitbc_jump_offset_out_of_range`
   - `tests/compiler/test_emitbc_invariants.c`
     - `test_emitbc_invariants`
-    - internal invariant checks:
-      - `test_emitbc_op_class_invariants`
-      - `test_emitbc_determinism_fixed_seed`
-      - `test_emitbc_label_heavy_jump_targets_in_bounds`
+  - `tests/compiler/test_emitbc_all_ir_ops_accounted_for.c`
+    - `test_emitbc_all_ir_ops_accounted_for` (inventory guard for IR-op/schema coverage drift)
 - **Pipeline / golden outputs**
   - `tests/compiler/test_pipeline_golden.c`
     - `test_pipeline_golden`
@@ -57,20 +52,20 @@ This document maps major subsystems to concrete test entry points so reviewers c
   - `tests/compiler/test_pipeline_source_golden.c`
     - `test_pipeline_source_golden`
   - `tests/compiler/test_pipeline_negative_matrix.c`
-    - `test_pipeline_negative_matrix`
-- **Compiler-facing libcall lookup/dispatch utilities**
-  - `tests/compiler/test_libcall_lookup_precomputed.c`
-    - `test_libcall_lookup_precomputed`
-  - `tests/compiler/test_libcall_dispatch_microbench.c`
-    - `test_libcall_dispatch_microbench`
+    - `test_pipeline_negative_matrix` (parser, semantic, IR-validate, emitter negative-stage checks)
+- **Compiler context/diagnostics and tool parity**
+  - `tests/compiler/test_compiler_context_failures.c`
+    - `test_compiler_context_failures`
+  - `tests/compiler/test_compiler_diag_pipeline.c`
+    - `test_compiler_diag_pipeline`
+  - `tests/compiler/test_parser_examples_obj_golden.c`
+    - `test_parser_examples_obj_golden`
+  - `tests/compiler/test_sdiss_fixtures.c`
+    - `test_sdiss_fixture_basic`
+    - `test_sdiss_reads_compiler_operand_widths`
 
 ### Known gaps
-- Opcode coverage is strong for mapped ops and jump mechanics, but there is no explicit per-opcode mutation test that auto-fails when new IR ops are introduced without matching coverage updates.
-- Negative pipeline matrix does not yet appear to encode every combinatorial interaction of nested control-flow + libcall argument typing failures.
-
-### Planned tests
-- Add generated opcode inventory test (e.g., `test_emitbc_all_ir_ops_accounted_for`) that compares IR enum inventory with opcode-map expectations.
-- Expand negative pipeline matrix with multi-fault programs (type + control-flow + symbol issues) and assert stable diagnostic ordering.
+- The negative matrix now includes representative multi-fault priority checks, but does not exhaustively enumerate all nested control-flow/libcall-typing combinations.
 
 ## runtime
 
@@ -78,6 +73,9 @@ This document maps major subsystems to concrete test entry points so reviewers c
 - **Interpreter semantics golden contracts**
   - `tests/interpreter/test_interpret_semantics_golden.c`
     - `test_interpret_semantics_golden`
+- **Interpreter stress / determinism under repeated runs**
+  - `tests/interpreter/test_interpret_stress.c`
+    - `test_interpret_stress`
 - **Libcall registry lifecycle and safety contracts**
   - `tests/core/test_libcall_registry.c`
     - `test_libcall_registry_roundtrip`
@@ -88,14 +86,16 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_missing_libcall_is_null_and_interpret_deterministic`
     - `test_libcall_registry_self_check_invalid_entries`
     - `test_libcall_invalid_arg_branches_return_contracts`
+    - `test_net_write_ignores_disconnected_lines`
+    - `test_net_write_ignores_non_writable_line_states`
 - **Compiler/runtime integration for system libcall execution**
   - `tests/compiler/test_sys_compile_libcall.c`
     - `test_sys_compile_libcall_runtime`
+- **Runtime performance guard (opt-in strict mode)**
+  - `tests/interpreter/test_runtime_benchmark_optin.c`
+    - `test_runtime_benchmark_optin`
+    - strict thresholds enabled with `SIN_STRICT_BENCH=1`
 
 ### Known gaps
-- Golden semantics primarily target curated example programs; coverage of long-running stateful runtime sessions and stress-level resource churn is limited.
-- Runtime/libcall tests focus on correctness and contract checks, but there is minimal regression guarding around performance envelopes beyond microbench printouts.
-
-### Planned tests
-- Add runtime stress test that repeatedly boots/interprets fixture programs in one process and asserts stable memory/resource behavior.
-- Add assertions-backed performance budget test (opt-in / non-CI-strict mode) for selected libcall dispatch and interpreter hot paths.
+- Runtime stress currently covers selected fixtures (`chat_boot`, `echo_boot`) and validates deterministic outputs across repeated runs; broader fixture/session diversity can still be expanded.
+- Performance guard is intentionally opt-in and environment-sensitive; threshold stability across heterogeneous CI hardware is not guaranteed.
