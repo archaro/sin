@@ -103,7 +103,7 @@ sdiss: $(SDISS_OBJECTS) $(LIB)
 sin: $(SIN_OBJECTS) $(LIB)
 	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS)
 
-$(PARSER_GENERATED): $(PARSER_SOURCES)
+$(PARSER_GENERATED) &: $(PARSER_SOURCES)
 	$(YACC) -o $(SRC_DIR)/parser.c --defines=$(SRC_DIR)/parser.h $<
 
 $(LEXER_GENERATED): $(LEXER_SOURCES) $(PARSER_GENERATED)
