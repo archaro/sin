@@ -45,7 +45,8 @@ TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_libcall_dispatch_microbench.c
 TEST_INTERPRETER_SOURCES := \
 	$(TEST_DIR)/interpreter/test_interpret_semantics_golden.c \
-	$(TEST_DIR)/interpreter/test_interpret_stress.c
+	$(TEST_DIR)/interpreter/test_interpret_stress.c \
+	$(TEST_DIR)/interpreter/test_runtime_benchmark_optin.c
 TEST_SOURCES := $(TEST_SHARED_SOURCES) $(TEST_CORE_SOURCES) $(TEST_COMPILER_SOURCES) $(TEST_INTERPRETER_SOURCES)
 
 
@@ -87,7 +88,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
-.PHONY: all clean lib test
+.PHONY: all clean lib test teststrict
 
 all: $(LIB) scomp sdiss sin
 
@@ -125,6 +126,9 @@ $(OBJ_DIR)/lexer.o: $(SRC_DIR)/lexer.c
 
 test: $(TEST_BIN)
 	./$(TEST_BIN)
+
+teststrict: $(TEST_BIN)
+	SIN_STRICT_BENCH=1 ./$(TEST_BIN)
 
 $(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
 	$(CC) $(CFLAGS) $(DEBUG) -Isrc -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
