@@ -97,6 +97,14 @@ static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name) {
                     local_name ? local_name : "<null>");
 }
 
+static void sem_set_embedded_error(SEM_CTX *ctx, int8_t errnum,
+                                   const char *embedded_detail) {
+  if (!ctx) return;
+  compdiag_setf_once(&ctx->errnum, &ctx->errdetail, errnum, "semant",
+                     "embedded code: %s",
+                     embedded_detail ? embedded_detail : "<null>");
+}
+
 SEM_CTX *sem_create_ctx() {
   SEM_CTX *ctx = NULL;
   ctx = GROW_ARRAY(SEM_CTX, ctx, 0, 1);
@@ -199,7 +207,9 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       sem_walk(embedded, (AS_NODE *)node->rhs);
 
       if (embedded->errnum != ERR_NOERROR) {
-        sem_set_error(ctx, embedded->errnum, embedded->errdetail);
+        // Preserve embedded scope provenance in the final semantic error:
+        // semant: embedded code: semant: <detail>
+        sem_set_embedded_error(ctx, embedded->errnum, embedded->errdetail);
       }
 
       sem_delete_ctx(embedded);
@@ -223,6 +233,14 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
 int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx) {
   // sem_check_locals is reusable per SEM_CTX. It preserves discovered locals
   // across calls, but resets and re-computes per-call error state.
+  //
+  // Error detail text is stable and phase-qualified. Parent scope errors use:
+  //   semant: <detail>
+  // Embedded N_CODE errors use:
+  //   semant: embedded code: semant: <detail>
+  //
+  // When an output buffer is requested, the detail is copied exactly once and
+  // owned by the caller.
   compdiag_reset_detail(&ctx->errdetail);
   ctx->errnum = ERR_NOERROR;
 
