@@ -30,6 +30,7 @@ TEST_CORE_SOURCES := \
 TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_emitbc_header.c \
 	$(TEST_DIR)/compiler/test_emitbc_opcode_map.c \
+	$(TEST_DIR)/compiler/test_emitbc_all_ir_ops_accounted_for.c \
 	$(TEST_DIR)/compiler/test_emitbc_jumps.c \
 	$(TEST_DIR)/compiler/test_emitbc_invariants.c \
 	$(TEST_DIR)/compiler/test_pipeline_golden.c \

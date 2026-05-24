@@ -55,6 +55,7 @@ void test_emitbc_header(void);
 void test_emitbc_opcode_map(void);
 void test_emitbc_opcode_map_unsupported_ir_op(void);
 void test_emitbc_opcode_map_call_item_deref_alias_layout(void);
+void test_emitbc_all_ir_ops_accounted_for(void);
 void test_emitbc_jumps(void);
 void test_emitbc_invariants(void);
 void test_pipeline_golden(void);
@@ -147,6 +148,7 @@ static const test_case_t core_tests[] = {
 static const test_case_t compiler_tests[] = {
     {"test_emitbc_header", test_emitbc_header},
     {"test_emitbc_opcode_map", test_emitbc_opcode_map},
+    {"test_emitbc_all_ir_ops_accounted_for", test_emitbc_all_ir_ops_accounted_for},
     {"test_emitbc_opcode_map_call_item_deref_alias_layout", test_emitbc_opcode_map_call_item_deref_alias_layout},
     {"test_emitbc_opcode_map_unsupported_ir_op", test_emitbc_opcode_map_unsupported_ir_op},
     {"test_emitbc_jumps", test_emitbc_jumps},
