@@ -277,6 +277,13 @@ static uint8_t *h_int(uint8_t *p, uint8_t *e, decode_context_t c) {
   logmsg("INTEGER %ld\n", v);
   return p;
 }
+static uint8_t *h_bool(uint8_t *p, uint8_t *e, decode_context_t c) {
+  (void) c;
+  uint8_t v;
+  if (read_u8(&p, e, &v, "BOOLEAN literal") != PARSE_OK) return p;
+  logmsg("BOOLEAN %u\n", (unsigned int)(v ? 1 : 0));
+  return p;
+}
 static uint8_t *h_emb(uint8_t *p, uint8_t *e, decode_context_t c) {
   (void) c;
   int16_t len;
@@ -320,6 +327,7 @@ static const opcode_desc_t OPCODES[] = {
   {'a', "ADD", OPERAND_NONE, h_add}, {'c', "SAVE LOCAL", OPERAND_U8,
                                       h_store_local}, {'d', "DIVIDE",
                                                        OPERAND_NONE, h_div},
+    {'b', "BOOLEAN", OPERAND_U8, h_bool},
     {'e', "RETRIEVE LOCAL", OPERAND_U8, h_load_local}, {'f',
                                                         "INCREMENT LOCAL",
                                                         OPERAND_U8,

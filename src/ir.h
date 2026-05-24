@@ -16,6 +16,7 @@ typedef enum {
   IR_OP_HALT = 0,
 
   IR_OP_PUSH_INT,
+  IR_OP_PUSH_BOOL,
   IR_OP_PUSH_STRING,
 
   IR_OP_ADD,
