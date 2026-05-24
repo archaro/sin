@@ -31,16 +31,16 @@ void test_fixture_policy_declared_goldens_exist(void) {
 
   static const FixtureEntry bytecode_hex_fixtures[] = {
       {"int_literal_hex", "tests/fixtures/int_literal.hex", "SOT: pipeline output for tests/fixtures/int_literal.src | regen: make regen-fixtures"},
-      {"string_literal_hex", "tests/fixtures/string_literal.hex", "SOT: AST builder in tests/test_pipeline_golden.c | regen: make regen-fixtures"},
+      {"string_literal_hex", "tests/fixtures/string_literal.hex", "SOT: AST builder in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
       {"locals_store_load_hex", "tests/fixtures/locals_store_load.hex", "SOT: pipeline/source golden tables | regen: make regen-fixtures"},
       {"arithmetic_add_hex", "tests/fixtures/arithmetic_add.hex", "SOT: pipeline/source golden tables | regen: make regen-fixtures"},
-      {"boolean_compare_hex", "tests/fixtures/boolean_compare.hex", "SOT: AST builder in tests/test_pipeline_golden.c | regen: make regen-fixtures"},
-      {"simple_if_hex", "tests/fixtures/simple_if.hex", "SOT: AST builder in tests/test_pipeline_golden.c | regen: make regen-fixtures"},
-      {"if_elsif_else_hex", "tests/fixtures/if_elsif_else.hex", "SOT: inline source in tests/test_pipeline_source_golden.c | regen: make regen-fixtures"},
-      {"locals_inc_hex", "tests/fixtures/locals_inc.hex", "SOT: inline source in tests/test_pipeline_source_golden.c | regen: make regen-fixtures"},
-      {"locals_dec_hex", "tests/fixtures/locals_dec.hex", "SOT: inline source in tests/test_pipeline_source_golden.c | regen: make regen-fixtures"},
-      {"libcall_exprstmt_hex", "tests/fixtures/libcall_exprstmt.hex", "SOT: inline source in tests/test_pipeline_source_golden.c | regen: make regen-fixtures"},
-      {"item_numeric_layer_hex", "tests/fixtures/item_numeric_layer.hex", "SOT: inline source in tests/test_pipeline_source_golden.c | regen: make regen-fixtures"},
+      {"boolean_compare_hex", "tests/fixtures/boolean_compare.hex", "SOT: AST builder in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
+      {"simple_if_hex", "tests/fixtures/simple_if.hex", "SOT: AST builder in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
+      {"if_elsif_else_hex", "tests/fixtures/if_elsif_else.hex", "SOT: source case in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
+      {"locals_inc_hex", "tests/fixtures/locals_inc.hex", "SOT: source case in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
+      {"locals_dec_hex", "tests/fixtures/locals_dec.hex", "SOT: source case in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
+      {"libcall_exprstmt_hex", "tests/fixtures/libcall_exprstmt.hex", "SOT: source case in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
+      {"item_numeric_layer_hex", "tests/fixtures/item_numeric_layer.hex", "SOT: source case in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
       {"sdiss_basic_hex", "tests/fixtures/sdiss/basic.hex", "SOT: hand-authored disassembly sample | regen: manual update plus expected sync"},
   };
 

@@ -8,20 +8,11 @@
 #include "semant.h"
 #include "test_assert.h"
 #include "test_helpers.h"
+#include "shared/test_pipeline_cases.h"
 
-typedef AS_NODE *(*AstBuilder)(void);
-
-typedef struct {
-  const char *name;
-  AstBuilder build;
-  const char *fixture_path;
-} GoldenCase;
-
-static AS_NODE *v_int(int64_t n) { return t_int(n); }
-static AS_NODE *v_str(const char *s) { return as_new_valnode(V_STR, strdup(s)); }
-
-static void run_case(const GoldenCase *tc) {
-  AS_NODE *root = tc->build();
+static void run_ast_case(const PipelineGoldenCase *tc) {
+  ASSERT_NOT_NULL(tc->build_ast);
+  AS_NODE *root = tc->build_ast();
   ASSERT_NOT_NULL(root);
 
   SEM_CTX *sem = sem_create_ctx();
@@ -59,71 +50,27 @@ static void run_case(const GoldenCase *tc) {
   as_delete(root);
 }
 
-static AS_NODE *build_int_literal_program(void) {
-  AS_NODE *stmt = t_node(N_EXPRSTMT, v_int(42), NULL);
-  return t_stmtlist_with_one(stmt);
-}
-
-static AS_NODE *build_string_literal_program(void) {
-  AS_NODE *stmt = t_node(N_EXPRSTMT, v_str("hi"), NULL);
-  return t_stmtlist_with_one(stmt);
-}
-
-static AS_NODE *build_locals_store_load_program(void) {
-  AS_NODE *list = as_new_stmtlist_node();
-  list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local("x"), v_int(7)));
-  list = as_stmtlist_append(list, t_node(N_EXPRSTMT, t_local("x"), NULL));
-  return list;
-}
-
-static AS_NODE *build_arithmetic_program(void) {
-  AS_NODE *add = t_node(N_ADD, v_int(2), v_int(3));
-  AS_NODE *stmt = t_node(N_EXPRSTMT, add, NULL);
-  return t_stmtlist_with_one(stmt);
-}
-
-static AS_NODE *build_boolean_compare_program(void) {
-  AS_NODE *cmp = t_node(N_LT, v_int(1), v_int(2));
-  AS_NODE *stmt = t_node(N_EXPRSTMT, cmp, NULL);
-  return t_stmtlist_with_one(stmt);
-}
-
-static AS_NODE *build_simple_if_program(void) {
-  AS_NODE *then_list = as_new_stmtlist_node();
-  then_list = as_stmtlist_append(then_list, t_node(N_EXPRSTMT, v_int(9), NULL));
-  AS_IF *branch = as_new_if(t_node(N_LT, v_int(1), v_int(2)), then_list, NULL);
-  AS_NODE *ifstmt = t_node(N_IFSTMT, branch, NULL);
-  AS_NODE *list = as_new_stmtlist_node();
-  return as_stmtlist_append(list, ifstmt);
-}
-
 static AS_NODE *build_many_locals_with_duplicate_program(void) {
   AS_NODE *list = as_new_stmtlist_node();
   char name[32];
 
   for (int i = 0; i < 120; i++) {
     snprintf(name, sizeof(name), "local_%03d", i);
-    list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local(name), v_int(i)));
+    list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local(name), t_int(i)));
   }
 
-  list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local("local_057"), v_int(999)));
+  list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local("local_057"), t_int(999)));
   list = as_stmtlist_append(list, t_node(N_EXPRSTMT, t_local("local_057"), NULL));
   list = as_stmtlist_append(list, t_node(N_EXPRSTMT, t_local("local_119"), NULL));
   return list;
 }
 
 void test_pipeline_golden(void) {
-  const GoldenCase cases[] = {
-      {"int_literal", build_int_literal_program, "tests/fixtures/int_literal.hex"},
-      {"string_literal", build_string_literal_program, "tests/fixtures/string_literal.hex"},
-      {"locals_store_load", build_locals_store_load_program, "tests/fixtures/locals_store_load.hex"},
-      {"arithmetic_add", build_arithmetic_program, "tests/fixtures/arithmetic_add.hex"},
-      {"boolean_compare", build_boolean_compare_program, "tests/fixtures/boolean_compare.hex"},
-      {"simple_if", build_simple_if_program, "tests/fixtures/simple_if.hex"},
-  };
+  size_t case_count = 0;
+  const PipelineGoldenCase *cases = pipeline_cases_for_layers(PIPELINE_LAYER_AST, &case_count);
 
-  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
-    run_case(&cases[i]);
+  for (size_t i = 0; i < case_count; i++) {
+    run_ast_case(&cases[i]);
   }
 }
 
