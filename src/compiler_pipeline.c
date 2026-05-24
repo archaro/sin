@@ -4,6 +4,7 @@
 #include "compiler_pipeline.h"
 
 #include "compiler_context.h"
+#include "compdiag.h"
 #include "error.h"
 #include "lower.h"
 #include "parser.h"
@@ -51,14 +52,26 @@ int8_t compile_source_to_bytecode_with_params(const char *source, size_t len,
     goto done;
   }
 
-  uint8_t emitted_param_count = 0;
+  uint32_t emitted_param_count = 0;
   for (uint32_t i = 0; i < ctx.sem_ctx->count; i++) {
     if (ctx.sem_ctx->locals[i].param) {
       emitted_param_count++;
     }
   }
 
-  rc = emit_bytecode(ctx.ir_unit, (uint8_t)ctx.sem_ctx->count, emitted_param_count, ctx.bytecode_out, errdetail);
+  if (ctx.sem_ctx->count > UINT8_MAX) {
+    compdiag_setf_once(&rc, errdetail, ERR_COMP_TOOMANYLOCALS, "compile",
+                       "locals+params exceeds u8 max: %u", ctx.sem_ctx->count);
+    goto done;
+  }
+
+  if (emitted_param_count > UINT8_MAX) {
+    compdiag_setf_once(&rc, errdetail, ERR_COMP_TOOMANYPARAMS, "compile",
+                       "param count exceeds u8 max: %u", emitted_param_count);
+    goto done;
+  }
+
+  rc = emit_bytecode(ctx.ir_unit, (uint8_t)ctx.sem_ctx->count, (uint8_t)emitted_param_count, ctx.bytecode_out, errdetail);
   if (rc != ERR_NOERROR) {
     goto done;
   }
