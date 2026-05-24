@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -87,6 +88,28 @@ static int8_t run_ir_case_bad_arity(char **errdetail) {
   return rc;
 }
 
+static int8_t run_compile_case_too_many_params(char **errdetail) {
+  const size_t param_count = UINT8_MAX + 1u;
+  const char **params = calloc(param_count, sizeof(char *));
+  char **owned = calloc(param_count, sizeof(char *));
+  ASSERT_NOT_NULL(params);
+  ASSERT_NOT_NULL(owned);
+  for (size_t i = 0; i < param_count; i++) {
+    owned[i] = malloc(16);
+    ASSERT_NOT_NULL(owned[i]);
+    snprintf(owned[i], 16, "p%zu", i);
+    params[i] = owned[i];
+  }
+
+  OUTPUT_t *out = NULL;
+  int8_t rc = compile_source_to_bytecode_with_params("1;", 2, params, param_count, &out, errdetail);
+  ASSERT_TRUE(out == NULL);
+  for (size_t i = 0; i < param_count; i++) free(owned[i]);
+  free(owned);
+  free(params);
+  return rc;
+}
+
 void test_pipeline_negative_matrix(void) {
   static const NEG_CASE cases[] = {
       {"parser_unknown_char", CASE_SOURCE, "^;", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "^", 1},
@@ -111,6 +134,7 @@ void test_pipeline_negative_matrix(void) {
 
       {"emitter_invalid_label", CASE_BUILDER, NULL, run_emit_case_invalid_label, ERR_COMP_SYNTAX, STAGE_EMITTER, "emitbc: jump invalid label id", 1},
       {"emitter_unsupported_op", CASE_BUILDER, NULL, run_emit_case_unsupported_op, ERR_COMP_SYNTAX, STAGE_EMITTER, "emitbc: unsupported IR op", 1},
+      {"semantic_compile_param_count_guard", CASE_BUILDER, NULL, run_compile_case_too_many_params, ERR_COMP_TOOMANYLOCALS, STAGE_SEMANTIC, "", 1},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
