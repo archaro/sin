@@ -195,9 +195,9 @@ int main(void) {
   run_suite("core", core_tests, sizeof(core_tests) / sizeof(core_tests[0]), &total_ran);
   run_suite("compiler", compiler_tests,
             sizeof(compiler_tests) / sizeof(compiler_tests[0]), &total_ran);
-  run_suite("interpreter", interpreter_tests,
+  run_suite("runtime", interpreter_tests,
             sizeof(interpreter_tests) / sizeof(interpreter_tests[0]), &total_ran);
 
-  printf("\n[test-harness] completed: %zu tests across 3 suites\n", total_ran);
+  printf("\n[test-harness] completed: %zu tests across 3 suites (core, compiler, runtime)\n", total_ran);
   return 0;
 }
