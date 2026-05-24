@@ -74,6 +74,7 @@ void test_libcall_dispatch_microbench(void);
 /* Runtime component tests. */
 void test_interpret_semantics_golden(void);
 void test_interpret_stress(void);
+void test_runtime_benchmark_optin(void);
 
 static void test_absyn_helpers(void) {
   AS_NODE *lhs = t_int(1);
@@ -181,6 +182,7 @@ static const test_case_t runtime_tests[] = {
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},
     {"test_libcall_lookup_precomputed", test_libcall_lookup_precomputed},
     {"test_libcall_dispatch_microbench", test_libcall_dispatch_microbench},
+    {"test_runtime_benchmark_optin", test_runtime_benchmark_optin},
 };
 
 static void run_suite(const char *suite_name, const test_case_t *cases, size_t count,

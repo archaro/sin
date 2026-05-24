@@ -45,7 +45,8 @@ TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_libcall_dispatch_microbench.c
 TEST_INTERPRETER_SOURCES := \
 	$(TEST_DIR)/interpreter/test_interpret_semantics_golden.c \
-	$(TEST_DIR)/interpreter/test_interpret_stress.c
+	$(TEST_DIR)/interpreter/test_interpret_stress.c \
+	$(TEST_DIR)/interpreter/test_runtime_benchmark_optin.c
 TEST_SOURCES := $(TEST_SHARED_SOURCES) $(TEST_CORE_SOURCES) $(TEST_COMPILER_SOURCES) $(TEST_INTERPRETER_SOURCES)
 
 
