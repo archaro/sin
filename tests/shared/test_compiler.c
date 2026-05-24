@@ -23,6 +23,8 @@ void test_sem_duplicate_local_keeps_original_index(void);
 void test_sem_code_params_are_treated_as_defined_locals(void);
 void test_sem_seed_params_duplicate_name_only_marks_target_symbol(void);
 void test_sem_code_params_duplicate_after_unrelated_locals_no_param_corruption(void);
+void test_sem_parent_scope_error_detail_format(void);
+void test_sem_embedded_scope_error_detail_includes_provenance(void);
 void test_ir_validate(void);
 void test_opcode_schema_consistency(void);
 void test_parser_input_api(void);
@@ -123,6 +125,8 @@ static const test_case_t core_tests[] = {
     {"test_sem_code_params_are_treated_as_defined_locals", test_sem_code_params_are_treated_as_defined_locals},
     {"test_sem_seed_params_duplicate_name_only_marks_target_symbol", test_sem_seed_params_duplicate_name_only_marks_target_symbol},
     {"test_sem_code_params_duplicate_after_unrelated_locals_no_param_corruption", test_sem_code_params_duplicate_after_unrelated_locals_no_param_corruption},
+    {"test_sem_parent_scope_error_detail_format", test_sem_parent_scope_error_detail_format},
+    {"test_sem_embedded_scope_error_detail_includes_provenance", test_sem_embedded_scope_error_detail_includes_provenance},
     {"test_ir_validate", test_ir_validate},
     {"test_opcode_schema_consistency", test_opcode_schema_consistency},
     {"test_parser_input_api", test_parser_input_api},
