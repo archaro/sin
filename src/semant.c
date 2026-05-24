@@ -18,6 +18,19 @@ static bool sem_has_local(SEM_CTX *ctx, const char *name) {
   return sem_get_local_index(ctx, name, NULL);
 }
 
+static int sem_local_index_cmp(const void *a, const void *b) {
+  const SEM_LOCAL_INDEX *lhs = (const SEM_LOCAL_INDEX *)a;
+  const SEM_LOCAL_INDEX *rhs = (const SEM_LOCAL_INDEX *)b;
+  return strcmp(lhs->name, rhs->name);
+}
+
+static void sem_sort_local_index_if_needed(SEM_CTX *ctx) {
+  if (!ctx || ctx->local_index_sorted || ctx->count < 2) return;
+  qsort(ctx->local_index, ctx->count, sizeof(SEM_LOCAL_INDEX),
+        sem_local_index_cmp);
+  ctx->local_index_sorted = true;
+}
+
 static bool sem_find_local_index_slot(SEM_CTX *ctx, const char *name,
                                       uint32_t *pos_out, bool *found_out) {
   uint32_t lo = 0;
@@ -44,11 +57,7 @@ static bool sem_find_local_index_slot(SEM_CTX *ctx, const char *name,
 }
 
 static void sem_add_local(SEM_CTX *ctx, const char *name) {
-  uint32_t slot = 0;
-  bool found = false;
-
-  sem_find_local_index_slot(ctx, name, &slot, &found);
-  if (found) {
+  if (sem_get_local_index(ctx, name, NULL)) {
     return;
   }
 
@@ -70,14 +79,11 @@ static void sem_add_local(SEM_CTX *ctx, const char *name) {
   local->index = ctx->count;
   local->param = false;
 
-  if (slot < ctx->count) {
-    memmove(&ctx->local_index[slot + 1], &ctx->local_index[slot],
-            (ctx->count - slot) * sizeof(SEM_LOCAL_INDEX));
-  }
-  ctx->local_index[slot].name = local->name;
-  ctx->local_index[slot].index = local->index;
+  ctx->local_index[ctx->count].name = local->name;
+  ctx->local_index[ctx->count].index = local->index;
 
   ctx->count++;
+  ctx->local_index_sorted = false;
 }
 
 static uint32_t sem_resolve_local_index(SEM_CTX *ctx, const char *name) {
@@ -113,6 +119,7 @@ SEM_CTX *sem_create_ctx() {
   (*ctx).count = 0;
   (*ctx).capacity = 0;
   (*ctx).index_capacity = 0;
+  (*ctx).local_index_sorted = true;
   (*ctx).errnum = ERR_NOERROR;
   (*ctx).errdetail = NULL;
 
@@ -263,6 +270,7 @@ bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out) {
   uint32_t slot = 0;
   bool found = false;
 
+  sem_sort_local_index_if_needed(ctx);
   sem_find_local_index_slot(ctx, name, &slot, &found);
   if (!found) return false;
   if (index_out) *index_out = ctx->local_index[slot].index;
