@@ -89,6 +89,8 @@ integer     [0-9]+
   "sys"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "task"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "then"        { return TTHEN; }
+  "true"        { return TTRUE; }
+  "false"       { return TFALSE; }
   "while"       { return TWHILE; }
   "="           { return TASSIGN; }
   "=="          { return TEQUAL; }

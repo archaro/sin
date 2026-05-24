@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-typedef enum { V_INT, V_STR, V_LOCAL, V_LAYER } ENUM_VALUE;
+typedef enum { V_INT, V_STR, V_LOCAL, V_LAYER, V_BOOLTRUE, V_BOOLFALSE } ENUM_VALUE;
 struct AS_VALUE_s {
   ENUM_VALUE valtype;
   union {
