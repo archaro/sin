@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "error.h"
 #include "semant.h"
@@ -170,5 +171,41 @@ void test_sem_embedded_scope_error_detail_includes_provenance(void) {
 
   free(errdetail);
   as_delete(program);
+  sem_delete_ctx(ctx);
+}
+
+
+void test_sem_many_locals_deterministic_indices(void) {
+  SEM_CTX *ctx = sem_create_ctx();
+  ASSERT_NOT_NULL(ctx);
+
+  AS_NODE *list = as_new_stmtlist_node();
+  for (int i = 0; i < 220; i++) {
+    char name[32];
+    snprintf(name, sizeof(name), "local_%03d", i);
+    list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local(name), t_int(i)));
+  }
+
+  char *errdetail = NULL;
+  int8_t rc = sem_check_locals(list, &errdetail, ctx);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(220, (int)ctx->count);
+
+  uint8_t idx = 255;
+  ASSERT_TRUE(sem_get_local_index(ctx, "local_000", &idx));
+  ASSERT_EQ_INT(0, (int)idx);
+  ASSERT_TRUE(sem_get_local_index(ctx, "local_099", &idx));
+  ASSERT_EQ_INT(99, (int)idx);
+  ASSERT_TRUE(sem_get_local_index(ctx, "local_219", &idx));
+  ASSERT_EQ_INT(219, (int)idx);
+
+  rc = sem_check_locals(list, &errdetail, ctx);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(sem_get_local_index(ctx, "local_099", &idx));
+  ASSERT_EQ_INT(99, (int)idx);
+
+  as_delete(list);
   sem_delete_ctx(ctx);
 }

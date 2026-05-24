@@ -22,11 +22,16 @@ typedef struct {
 } SEM_LOCAL_INDEX;
 
 typedef struct {
+  // Locals in first-seen append order; semantic local indices are stable and
+  // match positions in this array.
   SEM_LOCAL *locals;
+  // Name->index table built in append order and batch-sorted on demand before
+  // lookups, trading O(n) insertion shifts for amortized O(1) appends.
   SEM_LOCAL_INDEX *local_index;
   uint32_t count;
   uint32_t capacity;
   uint32_t index_capacity;
+  bool local_index_sorted;
   int8_t errnum;
   char *errdetail;
 } SEM_CTX;
