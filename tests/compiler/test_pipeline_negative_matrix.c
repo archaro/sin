@@ -31,6 +31,7 @@ typedef struct {
   int8_t expected_code;
   NEG_STAGE expected_stage;
   const char *expected_substring;
+  uint8_t deterministic_runs;
 } NEG_CASE;
 
 static int8_t run_emit_case_invalid_label(char **errdetail) {
@@ -88,25 +89,28 @@ static int8_t run_ir_case_bad_arity(char **errdetail) {
 
 void test_pipeline_negative_matrix(void) {
   static const NEG_CASE cases[] = {
-      {"parser_unknown_char", CASE_SOURCE, "^;", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "^"},
-      {"parser_malformed_item_syntax", CASE_SOURCE, "foo..bar;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error"},
-      {"parser_unterminated_string", CASE_SOURCE, "\"unterminated;", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "Unterminated string literal."},
-      {"parser_bad_if_endif_pairing", CASE_SOURCE, "endif;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error"},
-      {"parser_return_keyword_edge", CASE_SOURCE, "return @l == false;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error"},
+      {"parser_unknown_char", CASE_SOURCE, "^;", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "^", 1},
+      {"parser_malformed_item_syntax", CASE_SOURCE, "foo..bar;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
+      {"parser_unterminated_string", CASE_SOURCE, "\"unterminated;", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "Unterminated string literal.", 1},
+      {"parser_bad_if_endif_pairing", CASE_SOURCE, "endif;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
+      {"parser_return_keyword_edge", CASE_SOURCE, "return @l == false;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
 
-      {"semantic_use_before_def", CASE_SOURCE, "@x;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @x"},
-      {"semantic_invalid_increment_target", CASE_SOURCE, "@x = 1; @y++;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @y"},
+      {"semantic_use_before_def", CASE_SOURCE, "@x;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @x", 1},
+      {"semantic_invalid_increment_target", CASE_SOURCE, "@x = 1; @y++;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @y", 1},
 
-      {"semantic_boolean_local_roundtrip", CASE_SOURCE, "@l = true; @l == false;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL},
-      {"semantic_boolean_if_clause", CASE_SOURCE, "@l = false; if @l == false then sys.log{\"False\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL},
-      {"semantic_truthiness_int_unchanged", CASE_SOURCE, "if 1 then sys.log{\"t\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL},
-      {"semantic_truthiness_empty_string_unchanged", CASE_SOURCE, "if \"\" then sys.log{\"t\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL},
+      {"parser_combo_priority_over_semantic", CASE_SOURCE, "@x; endif;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 3},
+      {"semantic_combo_first_undefined_local", CASE_SOURCE, "@b; @a++;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @b", 3},
 
-      {"ir_validate_local_index_bounds", CASE_BUILDER, NULL, run_ir_case_bad_local_index, ERR_COMP_LOCALBEFOREDEF, STAGE_LOWER_IR_VALIDATE, "ir: Instruction 0 (INC_LOCAL) has out-of-range local index"},
-      {"ir_validate_arity_constraint", CASE_BUILDER, NULL, run_ir_case_bad_arity, ERR_COMP_TOOMANYARGS, STAGE_LOWER_IR_VALIDATE, "ir: Instruction 0 (CALL) has negative arity"},
+      {"semantic_boolean_local_roundtrip", CASE_SOURCE, "@l = true; @l == false;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL, 1},
+      {"semantic_boolean_if_clause", CASE_SOURCE, "@l = false; if @l == false then sys.log{\"False\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL, 1},
+      {"semantic_truthiness_int_unchanged", CASE_SOURCE, "if 1 then sys.log{\"t\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL, 1},
+      {"semantic_truthiness_empty_string_unchanged", CASE_SOURCE, "if \"\" then sys.log{\"t\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL, 1},
 
-      {"emitter_invalid_label", CASE_BUILDER, NULL, run_emit_case_invalid_label, ERR_COMP_SYNTAX, STAGE_EMITTER, "emitbc: jump invalid label id"},
-      {"emitter_unsupported_op", CASE_BUILDER, NULL, run_emit_case_unsupported_op, ERR_COMP_SYNTAX, STAGE_EMITTER, "emitbc: unsupported IR op"},
+      {"ir_validate_local_index_bounds", CASE_BUILDER, NULL, run_ir_case_bad_local_index, ERR_COMP_LOCALBEFOREDEF, STAGE_LOWER_IR_VALIDATE, "ir: Instruction 0 (INC_LOCAL) has out-of-range local index", 1},
+      {"ir_validate_arity_constraint", CASE_BUILDER, NULL, run_ir_case_bad_arity, ERR_COMP_TOOMANYARGS, STAGE_LOWER_IR_VALIDATE, "ir: Instruction 0 (CALL) has negative arity", 1},
+
+      {"emitter_invalid_label", CASE_BUILDER, NULL, run_emit_case_invalid_label, ERR_COMP_SYNTAX, STAGE_EMITTER, "emitbc: jump invalid label id", 1},
+      {"emitter_unsupported_op", CASE_BUILDER, NULL, run_emit_case_unsupported_op, ERR_COMP_SYNTAX, STAGE_EMITTER, "emitbc: unsupported IR op", 1},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
@@ -115,24 +119,45 @@ void test_pipeline_negative_matrix(void) {
     OUTPUT_t *out = NULL;
     int8_t rc = ERR_NOERROR;
 
-    if (tc->source_or_builder == CASE_SOURCE) {
-      rc = compile_source_to_bytecode(tc->source, strlen(tc->source), &out, &errdetail);
-      if (tc->expected_code == ERR_NOERROR) {
-        ASSERT_NOT_NULL(out);
+    uint8_t runs = tc->deterministic_runs ? tc->deterministic_runs : 1;
+    char *baseline_errdetail = NULL;
+    for (uint8_t run = 0; run < runs; run++) {
+      if (tc->source_or_builder == CASE_SOURCE) {
+        rc = compile_source_to_bytecode(tc->source, strlen(tc->source), &out, &errdetail);
+        if (tc->expected_code == ERR_NOERROR) {
+          ASSERT_NOT_NULL(out);
+        } else {
+          ASSERT_TRUE(out == NULL);
+        }
       } else {
-        ASSERT_TRUE(out == NULL);
+        rc = tc->builder(&errdetail);
       }
-    } else {
-      rc = tc->builder(&errdetail);
-    }
 
-    ASSERT_EQ_INT(tc->expected_code, rc);
-    if (tc->expected_code == ERR_NOERROR) {
-      ASSERT_TRUE(errdetail == NULL);
-    } else {
-      ASSERT_NOT_NULL(errdetail);
-      ASSERT_TRUE(strstr(errdetail, tc->expected_substring) != NULL);
+      ASSERT_EQ_INT(tc->expected_code, rc);
+      if (tc->expected_code == ERR_NOERROR) {
+        ASSERT_TRUE(errdetail == NULL);
+      } else {
+        ASSERT_NOT_NULL(errdetail);
+        ASSERT_TRUE(strstr(errdetail, tc->expected_substring) != NULL);
+        if (baseline_errdetail == NULL) {
+          baseline_errdetail = strdup(errdetail);
+          ASSERT_NOT_NULL(baseline_errdetail);
+        } else {
+          ASSERT_TRUE(strcmp(baseline_errdetail, errdetail) == 0);
+        }
+      }
+
+      if (out) {
+        free(out->bytecode);
+        free(out);
+        out = NULL;
+      }
+      if (errdetail) {
+        free(errdetail);
+        errdetail = NULL;
+      }
     }
+    if (baseline_errdetail) free(baseline_errdetail);
 
     switch (tc->expected_stage) {
       case STAGE_PARSER:
@@ -149,10 +174,5 @@ void test_pipeline_negative_matrix(void) {
         break;
     }
 
-    if (out) {
-      free(out->bytecode);
-      free(out);
-    }
-    if (errdetail) free(errdetail);
   }
 }
