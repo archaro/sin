@@ -123,6 +123,7 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 %token <char *> TLIBNAME
 %token <char *> TCODEBODY
 %token <char *> TUNKNOWNCHAR
+%token TTRUE TFALSE
 %nonassoc TSEMI TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF TRETURN
 
 %type <AS_NODE*> deref_content dereference first_layer subsequent_layers layer
@@ -186,6 +187,8 @@ stmt:   TWHILE expr TDO stmtlist TENDWHILE { $$ = as_new_node(N_WHILESTMT, $2, $
 expr:     TLOCAL { $$ = as_new_valnode(V_LOCAL, $1); }
         |	TINTEGER { $$ = as_new_valnode(V_INT, $1); }
         |	TSTRINGLIT { $$ = as_new_valnode(V_STR, $1); }
+        | TTRUE { $$ = as_new_valnode(V_BOOLTRUE, NULL); }
+        | TFALSE { $$ = as_new_valnode(V_BOOLFALSE, NULL); }
         |	item args { $$ = as_new_node(N_CALL, $1, $2); }
         | expr TEQUAL expr { $$ = as_new_node(N_EQUAL, $1, $3); }
         | expr TNOTEQUAL expr { $$ = as_new_node(N_NOTEQ, $1, $3); }
