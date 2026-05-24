@@ -1,9 +1,48 @@
-  /* The input item - executed by the run-loop */
-  input = code (
-  @a = net.input;
-  if @a == 1 then
-    /* Send a cheery greeting to the new connection */
-    net.write{input.line, "Hello!\n"};
-  endif;
-  /* That's it.  No loops, because the run-loop sorts that out. */
-  );
+/* The input item - executed by the run-loop */
+input = code (
+@a = net.input;
+if @a == 1 then
+  /* Send a cheery greeting to the new connection */
+  net.write{input.line, "Hello!  You are on line "};
+  net.write{input.line, input.line};
+  net.write{input.line, "\n"};
+  /* Tell everyone else about the new connection */
+  @l = 0;
+  /* Hardcoded to 8 lines, because I'm lazy */
+  while @l < 8 do
+    if @l != input.line then
+      net.write{@l, "Line "};
+      net.write{@l, input.line};
+      net.write{@l, " has connected.\n"};
+    endif;
+    @l++;
+  endwhile;
+elsif @a == 3 then
+  /* Tell every other line what was said. */
+  @l = 0;
+  /* Hardcoded to 8 lines, because I'm lazy */
+  while @l < 8 do
+    if @l != input.line then
+      net.write{@l, "Line "};
+      net.write{@l, input.line};
+      net.write{@l, ": "};
+      net.write{@l, input.text};
+      net.write{@l, "\n"};
+    endif;
+    @l++;
+  endwhile;
+elsif @a == 2 then
+  /* Tell every other line that there has been a disconnection. */
+  @l = 0;
+  /* Hardcoded to 8 lines, because I'm lazy */
+  while @l < 8 do
+    if @l != input.line then
+      net.write{@l, "Line "};
+      net.write{@l, input.line};
+      net.write{@l, " has disconnected.\n"};
+    endif;
+    @l++;
+  endwhile;
+endif;
+/* That's it.  No loops, because the run-loop sorts that out. */
+);
