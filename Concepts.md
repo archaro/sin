@@ -69,7 +69,15 @@ Arithmetic: `+`, `-`, `*`, `/` (all integer arithmetic).  The unary postfix oper
 
 The usual boolean comparison operators are present, and work in the same way as C.  The `||` and `&&` operators are not present: instead, use `or` and `and`.
 
-True values are: true outcomes of boolean operations, integer values which are not `0`, and empty strings (`""`).  Everything else is false.
+Boolean literals are `true` and `false`.
+
+True values are: `true`, true outcomes of boolean operations, integer values which are not `0`, and non-empty strings.  False values are: `false`, `nil`, integer `0`, and the empty string (`""`).
+
+Examples:
+`is_wizard = true;`
+`is_guest = false;`
+`if is_wizard == true then ...; endif;`
+`if is_guest == false then ...; endif;`
 
 Strings may be concatenated with `+` but do not respond to other attempts to arithmetise them.
 
@@ -121,4 +129,3 @@ When adding a new opcode, update exactly one schema row (`OP(...)`) with:
 `ir.c` materializes the schema into `g_ir_opcode_schema` and `emitbc.c` consumes it for encoding, size accounting, and validator dispatch. Add any truly custom payload writing logic in `emitbc.c` only when the schema policy requires variable-length handling.
 
 Run `make test` to validate schema consistency checks and emitter behavior.
-
