@@ -18,6 +18,8 @@ static bool sem_has_local(SEM_CTX *ctx, const char *name) {
   return sem_get_local_index(ctx, name, NULL);
 }
 
+static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name);
+
 static int sem_local_index_cmp(const void *a, const void *b) {
   const SEM_LOCAL_INDEX *lhs = (const SEM_LOCAL_INDEX *)a;
   const SEM_LOCAL_INDEX *rhs = (const SEM_LOCAL_INDEX *)b;
@@ -57,7 +59,14 @@ static bool sem_find_local_index_slot(SEM_CTX *ctx, const char *name,
 }
 
 static void sem_add_local(SEM_CTX *ctx, const char *name) {
+  if (!ctx || !name || ctx->errnum != ERR_NOERROR) return;
+
   if (sem_get_local_index(ctx, name, NULL)) {
+    return;
+  }
+
+  if (ctx->count > UINT8_MAX) {
+    sem_set_error(ctx, ERR_COMP_TOOMANYLOCALS, name);
     return;
   }
 
@@ -87,13 +96,23 @@ static void sem_add_local(SEM_CTX *ctx, const char *name) {
 }
 
 static uint32_t sem_resolve_local_index(SEM_CTX *ctx, const char *name) {
-  uint8_t index = 0;
-  if (!sem_get_local_index(ctx, name, &index)) {
+  uint32_t index = 0;
+  uint8_t narrowed = 0;
+
+  if (!ctx || !name) return 0;
+  if (ctx->errnum != ERR_NOERROR) return ctx->count > 0 ? ctx->count - 1 : 0;
+
+  if (!sem_get_local_index(ctx, name, &narrowed)) {
     sem_add_local(ctx, name);
-    if (!sem_get_local_index(ctx, name, &index)) {
+    if (ctx->errnum != ERR_NOERROR) {
+      return ctx->count > 0 ? ctx->count - 1 : 0;
+    }
+    if (!sem_get_local_index(ctx, name, &narrowed)) {
       return ctx->count > 0 ? ctx->count - 1 : 0;
     }
   }
+  index = (uint32_t)narrowed;
+
   return index;
 }
 
@@ -273,6 +292,12 @@ bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out) {
   sem_sort_local_index_if_needed(ctx);
   sem_find_local_index_slot(ctx, name, &slot, &found);
   if (!found) return false;
+
+  if (ctx->local_index[slot].index > UINT8_MAX) {
+    sem_set_error(ctx, ERR_COMP_TOOMANYLOCALS, name);
+    return false;
+  }
+
   if (index_out) *index_out = ctx->local_index[slot].index;
   return true;
 }

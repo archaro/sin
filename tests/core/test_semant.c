@@ -209,3 +209,51 @@ void test_sem_many_locals_deterministic_indices(void) {
   as_delete(list);
   sem_delete_ctx(ctx);
 }
+
+void test_sem_local_limit_255_is_accepted(void) {
+  SEM_CTX *ctx = sem_create_ctx();
+  ASSERT_NOT_NULL(ctx);
+
+  AS_NODE *list = as_new_stmtlist_node();
+  for (int i = 0; i < 256; i++) {
+    char name[32];
+    snprintf(name, sizeof(name), "local_%03d", i);
+    list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local(name), t_int(i)));
+  }
+
+  char *errdetail = NULL;
+  int8_t rc = sem_check_locals(list, &errdetail, ctx);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(256, (int)ctx->count);
+
+  uint8_t idx = 0;
+  ASSERT_TRUE(sem_get_local_index(ctx, "local_255", &idx));
+  ASSERT_EQ_INT(255, (int)idx);
+
+  as_delete(list);
+  sem_delete_ctx(ctx);
+}
+
+void test_sem_local_limit_over_255_fails_deterministically(void) {
+  SEM_CTX *ctx = sem_create_ctx();
+  ASSERT_NOT_NULL(ctx);
+
+  AS_NODE *list = as_new_stmtlist_node();
+  for (int i = 0; i < 257; i++) {
+    char name[32];
+    snprintf(name, sizeof(name), "local_%03d", i);
+    list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local(name), t_int(i)));
+  }
+
+  char *errdetail = NULL;
+  int8_t rc = sem_check_locals(list, &errdetail, ctx);
+  ASSERT_EQ_INT(ERR_COMP_TOOMANYLOCALS, rc);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strstr(errdetail, "local_256") != NULL);
+  ASSERT_EQ_INT(256, (int)ctx->count);
+
+  free(errdetail);
+  as_delete(list);
+  sem_delete_ctx(ctx);
+}
