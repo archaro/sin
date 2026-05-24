@@ -181,12 +181,18 @@ static const test_case_t runtime_tests[] = {
 
 static void run_suite(const char *suite_name, const test_case_t *cases, size_t count,
                       size_t *ran_count) {
-  printf("\n[test-harness] === %s (%zu tests) ===\n", suite_name, count);
+  size_t suite_ran = 0;
+  printf("\n[test-harness][%s][START] total=%zu\n", suite_name, count);
   for (size_t i = 0; i < count; ++i) {
-    printf("[test-harness][%s][%zu/%zu] %s\n", suite_name, i + 1, count, cases[i].name);
+    printf("[test-harness][%s][START] index=%zu/%zu test=%s\n", suite_name, i + 1, count,
+           cases[i].name);
     cases[i].fn();
+    printf("[test-harness][%s][PASS] index=%zu/%zu test=%s\n", suite_name, i + 1, count,
+           cases[i].name);
     (*ran_count)++;
+    suite_ran++;
   }
+  printf("[test-harness][%s][COMPLETE] executed=%zu status=PASS\n", suite_name, suite_ran);
 }
 
 int main(void) {
