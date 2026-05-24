@@ -37,12 +37,22 @@ static void assert_bool(VALUE_t v, int expected) {
   ASSERT_EQ_INT(expected, v.i);
 }
 
+static void assert_compile_success_bool(const char *source) {
+  push_stack(config.vm->stack, vstr(source));
+  (void)lc_sys_compile(NULL, config.itemroot);
+  assert_bool(pop_stack(config.vm->stack), 1);
+}
+
 void test_sys_compile_libcall_runtime(void) {
   setup_runtime();
 
-  push_stack(config.vm->stack, vstr("sys.log{\"ok\\n\"};"));
-  (void)lc_sys_compile(NULL, config.itemroot);
-  assert_bool(pop_stack(config.vm->stack), 1);
+  assert_compile_success_bool("sys.log{\"ok\\n\"};");
+  assert_compile_success_bool("@l = true;");
+  assert_compile_success_bool("foo.bar = false;");
+  assert_compile_success_bool("@l = false; @l == false;");
+  assert_compile_success_bool("@l = false; if @l == false then sys.log{\"False\"}; endif;");
+  assert_compile_success_bool("if 1 then sys.log{\"int truthy\"}; endif;");
+  assert_compile_success_bool("if \"\" then sys.log{\"empty string truthy\"}; endif;");
 
   push_stack(config.vm->stack, vstr("sys.log{;"));
   (void)lc_sys_compile(NULL, config.itemroot);

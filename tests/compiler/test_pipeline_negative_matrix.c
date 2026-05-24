@@ -92,9 +92,15 @@ void test_pipeline_negative_matrix(void) {
       {"parser_malformed_item_syntax", CASE_SOURCE, "foo..bar;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error"},
       {"parser_unterminated_string", CASE_SOURCE, "\"unterminated;", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "Unterminated string literal."},
       {"parser_bad_if_endif_pairing", CASE_SOURCE, "endif;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error"},
+      {"parser_return_keyword_edge", CASE_SOURCE, "return @l == false;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error"},
 
       {"semantic_use_before_def", CASE_SOURCE, "@x;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @x"},
       {"semantic_invalid_increment_target", CASE_SOURCE, "@x = 1; @y++;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @y"},
+
+      {"semantic_boolean_local_roundtrip", CASE_SOURCE, "@l = true; @l == false;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL},
+      {"semantic_boolean_if_clause", CASE_SOURCE, "@l = false; if @l == false then sys.log{\"False\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL},
+      {"semantic_truthiness_int_unchanged", CASE_SOURCE, "if 1 then sys.log{\"t\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL},
+      {"semantic_truthiness_empty_string_unchanged", CASE_SOURCE, "if \"\" then sys.log{\"t\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL},
 
       {"ir_validate_local_index_bounds", CASE_BUILDER, NULL, run_ir_case_bad_local_index, ERR_COMP_LOCALBEFOREDEF, STAGE_LOWER_IR_VALIDATE, "ir: Instruction 0 (INC_LOCAL) has out-of-range local index"},
       {"ir_validate_arity_constraint", CASE_BUILDER, NULL, run_ir_case_bad_arity, ERR_COMP_TOOMANYARGS, STAGE_LOWER_IR_VALIDATE, "ir: Instruction 0 (CALL) has negative arity"},
@@ -106,19 +112,27 @@ void test_pipeline_negative_matrix(void) {
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
     const NEG_CASE *tc = &cases[i];
     char *errdetail = NULL;
+    OUTPUT_t *out = NULL;
     int8_t rc = ERR_NOERROR;
 
     if (tc->source_or_builder == CASE_SOURCE) {
-      OUTPUT_t *out = NULL;
       rc = compile_source_to_bytecode(tc->source, strlen(tc->source), &out, &errdetail);
-      ASSERT_TRUE(out == NULL);
+      if (tc->expected_code == ERR_NOERROR) {
+        ASSERT_NOT_NULL(out);
+      } else {
+        ASSERT_TRUE(out == NULL);
+      }
     } else {
       rc = tc->builder(&errdetail);
     }
 
     ASSERT_EQ_INT(tc->expected_code, rc);
-    ASSERT_NOT_NULL(errdetail);
-    ASSERT_TRUE(strstr(errdetail, tc->expected_substring) != NULL);
+    if (tc->expected_code == ERR_NOERROR) {
+      ASSERT_TRUE(errdetail == NULL);
+    } else {
+      ASSERT_NOT_NULL(errdetail);
+      ASSERT_TRUE(strstr(errdetail, tc->expected_substring) != NULL);
+    }
 
     switch (tc->expected_stage) {
       case STAGE_PARSER:
@@ -135,6 +149,10 @@ void test_pipeline_negative_matrix(void) {
         break;
     }
 
-    free(errdetail);
+    if (out) {
+      free(out->bytecode);
+      free(out);
+    }
+    if (errdetail) free(errdetail);
   }
 }

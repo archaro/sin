@@ -48,6 +48,28 @@ static void test_source_pipeline_negative_cases(void) {
   free(errdetail);
 }
 
+static void test_source_pipeline_bool_and_truthiness_nonregression(void) {
+  const char *ok_cases[] = {
+      "@l = true;",
+      "foo.bar = false;",
+      "@l = false; @l == false;",
+      "@l = false; if @l == false then sys.log{\"False\"}; endif;",
+      "if 1 then sys.log{\"int truthy\"}; endif;",
+      "if \"\" then sys.log{\"empty string truthy\"}; endif;",
+  };
+
+  for (size_t i = 0; i < sizeof(ok_cases) / sizeof(ok_cases[0]); i++) {
+    OUTPUT_t *out = NULL;
+    char *errdetail = NULL;
+    int8_t rc = compile_source_to_bytecode(ok_cases[i], strlen(ok_cases[i]), &out, &errdetail);
+    ASSERT_EQ_INT(ERR_NOERROR, rc);
+    ASSERT_TRUE(errdetail == NULL);
+    ASSERT_NOT_NULL(out);
+    free(out->bytecode);
+    free(out);
+  }
+}
+
 void test_pipeline_source_golden(void) {
   const SourceGoldenCase cases[] = {
       {"int_literal", "42;", "tests/fixtures/int_literal.hex"},
@@ -65,4 +87,5 @@ void test_pipeline_source_golden(void) {
   }
 
   test_source_pipeline_negative_cases();
+  test_source_pipeline_bool_and_truthiness_nonregression();
 }
