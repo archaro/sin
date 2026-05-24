@@ -73,6 +73,7 @@ void test_libcall_dispatch_microbench(void);
 
 /* Runtime component tests. */
 void test_interpret_semantics_golden(void);
+void test_interpret_stress(void);
 
 static void test_absyn_helpers(void) {
   AS_NODE *lhs = t_int(1);
@@ -166,6 +167,7 @@ static const test_case_t compiler_tests[] = {
 
 static const test_case_t runtime_tests[] = {
     {"test_interpret_semantics_golden", test_interpret_semantics_golden},
+    {"test_interpret_stress", test_interpret_stress},
     {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},
     {"test_libcall_registry_init_failure_has_no_partial_state", test_libcall_registry_init_failure_has_no_partial_state},
     {"test_libcall_registry_lifecycle_reinit_sequence", test_libcall_registry_lifecycle_reinit_sequence},
