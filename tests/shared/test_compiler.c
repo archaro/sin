@@ -70,7 +70,7 @@ void test_sys_compile_libcall_runtime(void);
 void test_libcall_lookup_precomputed(void);
 void test_libcall_dispatch_microbench(void);
 
-/* Interpreter component tests. */
+/* Runtime component tests. */
 void test_interpret_semantics_golden(void);
 
 static void test_absyn_helpers(void) {
@@ -135,16 +135,6 @@ static const test_case_t core_tests[] = {
     {"test_fixture_policy_declared_goldens_exist", test_fixture_policy_declared_goldens_exist},
     {"test_find_item_cached_hit_and_negative_cache", test_find_item_cached_hit_and_negative_cache},
     {"test_find_item_cached_invalidation_on_delete_and_reinsert", test_find_item_cached_invalidation_on_delete_and_reinsert},
-    {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},
-    {"test_libcall_registry_init_failure_has_no_partial_state", test_libcall_registry_init_failure_has_no_partial_state},
-    {"test_libcall_registry_lifecycle_reinit_sequence", test_libcall_registry_lifecycle_reinit_sequence},
-    {"test_libcall_registry_repeated_teardown_is_safe", test_libcall_registry_repeated_teardown_is_safe},
-    {"test_libcall_name_duplicate_detection", test_libcall_name_duplicate_detection},
-    {"test_missing_libcall_is_null_and_interpret_deterministic", test_missing_libcall_is_null_and_interpret_deterministic},
-    {"test_libcall_registry_self_check_invalid_entries", test_libcall_registry_self_check_invalid_entries},
-    {"test_libcall_invalid_arg_branches_return_contracts", test_libcall_invalid_arg_branches_return_contracts},
-    {"test_net_write_ignores_disconnected_lines", test_net_write_ignores_disconnected_lines},
-    {"test_net_write_ignores_non_writable_line_states", test_net_write_ignores_non_writable_line_states},
     {"test_relative_item_leading_dot_parse_accepts_deref_chain", test_relative_item_leading_dot_parse_accepts_deref_chain},
     {"test_relative_item_leading_dot_nested_relative_deref_layers", test_relative_item_leading_dot_nested_relative_deref_layers},
     {"test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed", test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed},
@@ -170,13 +160,23 @@ static const test_case_t compiler_tests[] = {
     {"test_sdiss_reads_compiler_operand_widths", test_sdiss_reads_compiler_operand_widths},
     {"test_compiler_context_failures", test_compiler_context_failures},
     {"test_compiler_diag_pipeline", test_compiler_diag_pipeline},
+};
+
+static const test_case_t runtime_tests[] = {
+    {"test_interpret_semantics_golden", test_interpret_semantics_golden},
+    {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},
+    {"test_libcall_registry_init_failure_has_no_partial_state", test_libcall_registry_init_failure_has_no_partial_state},
+    {"test_libcall_registry_lifecycle_reinit_sequence", test_libcall_registry_lifecycle_reinit_sequence},
+    {"test_libcall_registry_repeated_teardown_is_safe", test_libcall_registry_repeated_teardown_is_safe},
+    {"test_libcall_name_duplicate_detection", test_libcall_name_duplicate_detection},
+    {"test_missing_libcall_is_null_and_interpret_deterministic", test_missing_libcall_is_null_and_interpret_deterministic},
+    {"test_libcall_registry_self_check_invalid_entries", test_libcall_registry_self_check_invalid_entries},
+    {"test_libcall_invalid_arg_branches_return_contracts", test_libcall_invalid_arg_branches_return_contracts},
+    {"test_net_write_ignores_disconnected_lines", test_net_write_ignores_disconnected_lines},
+    {"test_net_write_ignores_non_writable_line_states", test_net_write_ignores_non_writable_line_states},
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},
     {"test_libcall_lookup_precomputed", test_libcall_lookup_precomputed},
     {"test_libcall_dispatch_microbench", test_libcall_dispatch_microbench},
-};
-
-static const test_case_t interpreter_tests[] = {
-    {"test_interpret_semantics_golden", test_interpret_semantics_golden},
 };
 
 static void run_suite(const char *suite_name, const test_case_t *cases, size_t count,
@@ -195,8 +195,8 @@ int main(void) {
   run_suite("core", core_tests, sizeof(core_tests) / sizeof(core_tests[0]), &total_ran);
   run_suite("compiler", compiler_tests,
             sizeof(compiler_tests) / sizeof(compiler_tests[0]), &total_ran);
-  run_suite("runtime", interpreter_tests,
-            sizeof(interpreter_tests) / sizeof(interpreter_tests[0]), &total_ran);
+  run_suite("runtime", runtime_tests,
+            sizeof(runtime_tests) / sizeof(runtime_tests[0]), &total_ran);
 
   printf("\n[test-harness] completed: %zu tests across 3 suites (core, compiler, runtime)\n", total_ran);
   return 0;
