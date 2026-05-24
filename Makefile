@@ -88,7 +88,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
-.PHONY: all clean lib test
+.PHONY: all clean lib test teststrict
 
 all: $(LIB) scomp sdiss sin
 
@@ -126,6 +126,9 @@ $(OBJ_DIR)/lexer.o: $(SRC_DIR)/lexer.c
 
 test: $(TEST_BIN)
 	./$(TEST_BIN)
+
+teststrict: $(TEST_BIN)
+	SIN_STRICT_BENCH=1 ./$(TEST_BIN)
 
 $(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
 	$(CC) $(CFLAGS) $(DEBUG) -Isrc -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
