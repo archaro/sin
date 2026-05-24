@@ -167,6 +167,9 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     }
     switch (in->op) {
       case IR_OP_PUSH_INT: if (!bw_write_i64(&w, in->imm)) goto oom; break;
+      case IR_OP_PUSH_BOOL:
+        if (!bw_write_u8(&w, (uint8_t)in->a)) goto oom;
+        break;
       case IR_OP_PUSH_STRING: {
         const char *s = (const char *)(intptr_t)in->imm;
         size_t len = strlen(s);

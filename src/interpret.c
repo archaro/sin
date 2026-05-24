@@ -208,6 +208,7 @@ static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const cha
 #define RUNTIME_OPCODE_TABLE(OP) \
   OP(0, op_nop) \
   OP('a', op_add) \
+  OP('b', op_pushbool) \
   OP('c', op_savelocal) \
   OP('d', op_divide) \
   OP('e', op_getlocal) \
@@ -259,6 +260,16 @@ uint8_t *op_pushint(uint8_t *nextop, ITEM_t *item) {
   push_stack(VM->stack, v);
   DISASS_LOG("OP_PUSHINT: %ld\n", v.i);
   return nextop+8;
+}
+
+uint8_t *op_pushbool(uint8_t *nextop, ITEM_t *item) {
+  REQUIRE_BYTES(nextop, 1, "OP_PUSHBOOL");
+  VALUE_t v;
+  v.type = VALUE_bool;
+  v.i = (*nextop != 0) ? 1 : 0;
+  push_stack(VM->stack, v);
+  DISASS_LOG("OP_PUSHBOOL: %ld\n", v.i);
+  return nextop + 1;
 }
 
 uint8_t *op_inclocal(uint8_t *nextop, ITEM_t *item) {
