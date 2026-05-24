@@ -16,6 +16,7 @@
 #include "memory.h"
 #include "parser.h"
 #include "compiler_pipeline.h"
+#include "compiler/ir/opcode_schema.h"
 #include "absyn.h"
 #include "value.h"
 #include "stack.h"
@@ -48,6 +49,19 @@ static inline bool require_bytes(uint8_t *nextop, size_t bytes, const char *opna
 
 static OP_t opcode[256];
 static bool interpreter_initialized = false;
+uint8_t *op_undefined(uint8_t *nextop, ITEM_t *item);
+typedef struct {
+  OP_t *table;
+} RuntimeBindingCheckCtx;
+
+static bool assert_runtime_binding(uint8_t opbyte, IR_Op op, const IR_OpSchema *schema, void *raw_ctx) {
+  (void)op;
+  (void)schema;
+  RuntimeBindingCheckCtx *check_ctx = (RuntimeBindingCheckCtx *)raw_ctx;
+  assert(check_ctx->table[opbyte] != op_undefined
+         && "Missing interpreter handler for schema-defined runtime opcode");
+  return true;
+}
 
 typedef struct strbuf_meta {
   char *ptr;
@@ -1307,22 +1321,11 @@ void init_interpreter() {
 #undef BIND_RUNTIME_OPCODE
 
 #ifndef NDEBUG
+  RuntimeBindingCheckCtx ctx = {opcode};
   // NDEBUG disables assert(); keep this validation in debug builds so missing
   // runtime opcode bindings fail fast during development without affecting
   // optimized/release startup behavior.
-  // Runtime opcodes defined by the IR/bytecode schema that must have handlers.
-  // Keep this list aligned with src/compiler/ir/opcode_schema.def runtime entries.
-  static const uint8_t required_runtime_opcodes[] = {
-      'a', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
-      'q', 'r', 's', 't', 'u', 'v', 'x', 'y', 'z', 'B', 'C', 'F', 'I',
-      'W', 'X', 'Y', 'Z'};
-  for (size_t i = 0; i < sizeof(required_runtime_opcodes); i++) {
-    uint8_t opbyte = required_runtime_opcodes[i];
-    if (opbyte != 'h') {
-      assert(opcode[opbyte] != op_undefined
-             && "Missing interpreter handler for defined runtime opcode");
-    }
-  }
+  ir_opcode_schema_for_each_runtime_opcode(assert_runtime_binding, &ctx);
 #endif
 }
 
