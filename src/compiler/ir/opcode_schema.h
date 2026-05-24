@@ -42,6 +42,7 @@ typedef struct {
   IR_Op op;
   const char *name;
   uint8_t encoded_symbol;
+  bool requires_runtime_handler;
   IR_OperandKind operand_kind;
   IR_SizePolicy size_policy;
   IR_Validator validator;
@@ -51,4 +52,6 @@ extern const IR_OpSchema g_ir_opcode_schema[];
 extern const size_t g_ir_opcode_schema_count;
 
 const IR_OpSchema *ir_opcode_schema(IR_Op op);
+typedef bool (*IR_RuntimeOpcodeVisitor)(uint8_t opcode_byte, IR_Op op, const IR_OpSchema *schema, void *ctx);
+void ir_opcode_schema_for_each_runtime_opcode(IR_RuntimeOpcodeVisitor visitor, void *ctx);
 int8_t ir_opcode_schema_validate_unique(char **errdetail);
