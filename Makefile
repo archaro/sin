@@ -16,7 +16,8 @@ TEST_BIN := $(TEST_DIR)/test-compiler
 TEST_SHARED_SOURCES := \
 	$(TEST_DIR)/shared/test_compiler.c \
 	$(TEST_DIR)/shared/test_helpers.c \
-	$(TEST_DIR)/shared/test_fixture_policy.c
+	$(TEST_DIR)/shared/test_fixture_policy.c \
+	$(TEST_DIR)/shared/test_pipeline_cases.c
 TEST_CORE_SOURCES := \
 	$(TEST_DIR)/core/test_absyn_lifecycle.c \
 	$(TEST_DIR)/core/test_semant.c \

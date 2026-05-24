@@ -7,15 +7,10 @@
 #include "parser.h"
 #include "test_assert.h"
 #include "test_helpers.h"
+#include "shared/test_pipeline_cases.h"
 
-typedef struct {
-  const char *name;
-  const char *source;
-  const char *fixture_path;
-} SourceGoldenCase;
-
-static void run_source_case(const SourceGoldenCase *tc) {
-  (void)tc->name;
+static void run_source_case(const PipelineGoldenCase *tc) {
+  ASSERT_NOT_NULL(tc->source);
   compile_source_and_assert_hex(tc->source, tc->fixture_path);
 }
 
@@ -71,18 +66,10 @@ static void test_source_pipeline_bool_and_truthiness_nonregression(void) {
 }
 
 void test_pipeline_source_golden(void) {
-  const SourceGoldenCase cases[] = {
-      {"int_literal", "42;", "tests/fixtures/int_literal.hex"},
-      {"locals_store_load", "@x = 7; @x;", "tests/fixtures/locals_store_load.hex"},
-      {"arithmetic_add", "2 + 3;", "tests/fixtures/arithmetic_add.hex"},
-      {"if_elsif_else", "if 1 < 2 then 9; elsif 0 < 1 then 8; else 7; endif;", "tests/fixtures/if_elsif_else.hex"},
-      {"locals_inc", "@x = 1; @x++; @x;", "tests/fixtures/locals_inc.hex"},
-      {"locals_dec", "@x = 2; @x--; @x;", "tests/fixtures/locals_dec.hex"},
-      {"libcall_exprstmt", "sys.log{\"hello\"};", "tests/fixtures/libcall_exprstmt.hex"},
-      {"item_numeric_layer", "foo.12;", "tests/fixtures/item_numeric_layer.hex"},
-  };
+  size_t case_count = 0;
+  const PipelineGoldenCase *cases = pipeline_cases_for_layers(PIPELINE_LAYER_SOURCE, &case_count);
 
-  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+  for (size_t i = 0; i < case_count; i++) {
     run_source_case(&cases[i]);
   }
 
