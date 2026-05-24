@@ -367,6 +367,13 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
     FREE_STR(out);
     return lc_invalid_args_return(nextop, VALUE_NIL);
   } else {
+    if ((line[linenum.i].status != LINE_data
+        && line[linenum.i].status != LINE_idle)
+        || line[linenum.i].telnet == NULL) {
+      FREE_STR(out);
+      push_stack(VM->stack, VALUE_NIL);
+      return nextop;
+    }
     switch(out.type) {
       case VALUE_str:
         telnet_send_text(line[linenum.i].telnet, out.s, strlen(out.s));

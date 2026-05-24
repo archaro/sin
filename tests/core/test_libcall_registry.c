@@ -211,3 +211,45 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
 
   teardown_libcall_runtime();
 }
+
+void test_net_write_ignores_disconnected_lines(void) {
+  setup_libcall_runtime();
+
+  config.maxconns = 2;
+  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+  line[1].status = LINE_empty;
+  line[1].telnet = NULL;
+
+  VALUE_t target_line = {VALUE_int, {.i = 1}};
+  VALUE_t out = {VALUE_str, {.s = strdup("hello")}};
+  push_stack(config.vm->stack, target_line);
+  push_stack(config.vm->stack, out);
+
+  (void)lc_net_write(NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+
+  teardown_libcall_runtime();
+}
+
+void test_net_write_ignores_non_writable_line_states(void) {
+  setup_libcall_runtime();
+
+  config.maxconns = 1;
+  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+  line[0].status = LINE_connecting;
+  line[0].telnet = NULL;
+
+  VALUE_t target_line = {VALUE_int, {.i = 0}};
+  VALUE_t out = {VALUE_str, {.s = strdup("hello")}};
+  push_stack(config.vm->stack, target_line);
+  push_stack(config.vm->stack, out);
+
+  (void)lc_net_write(NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+
+  teardown_libcall_runtime();
+}

@@ -35,6 +35,8 @@ void test_libcall_name_duplicate_detection(void);
 void test_missing_libcall_is_null_and_interpret_deterministic(void);
 void test_libcall_registry_self_check_invalid_entries(void);
 void test_libcall_invalid_arg_branches_return_contracts(void);
+void test_net_write_ignores_disconnected_lines(void);
+void test_net_write_ignores_non_writable_line_states(void);
 void test_relative_item_leading_dot_parse_accepts_deref_chain(void);
 void test_relative_item_leading_dot_nested_relative_deref_layers(void);
 void test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed(void);
@@ -131,6 +133,8 @@ static const test_case_t core_tests[] = {
     {"test_missing_libcall_is_null_and_interpret_deterministic", test_missing_libcall_is_null_and_interpret_deterministic},
     {"test_libcall_registry_self_check_invalid_entries", test_libcall_registry_self_check_invalid_entries},
     {"test_libcall_invalid_arg_branches_return_contracts", test_libcall_invalid_arg_branches_return_contracts},
+    {"test_net_write_ignores_disconnected_lines", test_net_write_ignores_disconnected_lines},
+    {"test_net_write_ignores_non_writable_line_states", test_net_write_ignores_non_writable_line_states},
     {"test_relative_item_leading_dot_parse_accepts_deref_chain", test_relative_item_leading_dot_parse_accepts_deref_chain},
     {"test_relative_item_leading_dot_nested_relative_deref_layers", test_relative_item_leading_dot_nested_relative_deref_layers},
     {"test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed", test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed},
