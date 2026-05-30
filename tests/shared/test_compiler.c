@@ -1,6 +1,8 @@
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "ir.h"
 #include "test_assert.h"
@@ -12,6 +14,11 @@ typedef struct {
   const char *name;
   test_fn_t fn;
 } test_case_t;
+
+typedef struct {
+  const char *name;
+  size_t count;
+} test_suite_summary_t;
 
 /* Shared/core component tests. */
 void test_absyn_nested_binary_expressions(void);
@@ -189,31 +196,76 @@ static const test_case_t runtime_tests[] = {
     {"test_runtime_benchmark_optin", test_runtime_benchmark_optin},
 };
 
-static void run_suite(const char *suite_name, const test_case_t *cases, size_t count,
-                      size_t *ran_count) {
+static void harness_printf(const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  vprintf(fmt, args);
+  va_end(args);
+  fflush(stdout);
+}
+
+static int env_flag_enabled(const char *name) {
+  const char *value = getenv(name);
+  if (value == NULL) {
+    return 0;
+  }
+  return strcmp(value, "1") == 0 || strcmp(value, "true") == 0 || strcmp(value, "TRUE") == 0;
+}
+
+static size_t run_suite(const char *suite_name, const test_case_t *cases, size_t count) {
   size_t suite_ran = 0;
-  printf("\n[test-harness][%s][START] total=%zu\n", suite_name, count);
+  harness_printf("\n[test-harness][%s][START] total=%zu\n", suite_name, count);
   for (size_t i = 0; i < count; ++i) {
-    printf("[test-harness][%s][START] index=%zu/%zu test=%s\n", suite_name, i + 1, count,
-           cases[i].name);
+    harness_printf("[test-harness][%s][START] index=%zu/%zu test=%s\n", suite_name, i + 1,
+                   count, cases[i].name);
     cases[i].fn();
-    printf("[test-harness][%s][PASS] index=%zu/%zu test=%s\n", suite_name, i + 1, count,
-           cases[i].name);
-    (*ran_count)++;
+    harness_printf("[test-harness][%s][PASS] index=%zu/%zu test=%s\n", suite_name, i + 1,
+                   count, cases[i].name);
     suite_ran++;
   }
-  printf("[test-harness][%s][COMPLETE] executed=%zu status=PASS\n", suite_name, suite_ran);
+  harness_printf("[test-harness][%s][COMPLETE] executed=%zu expected=%zu status=PASS\n",
+                 suite_name, suite_ran, count);
+  return suite_ran;
 }
 
 int main(void) {
+  test_suite_summary_t suites[] = {
+      {"core", sizeof(core_tests) / sizeof(core_tests[0])},
+      {"compiler", sizeof(compiler_tests) / sizeof(compiler_tests[0])},
+      {"runtime", sizeof(runtime_tests) / sizeof(runtime_tests[0])},
+  };
+  const size_t suite_count = sizeof(suites) / sizeof(suites[0]);
+  const int strict_bench = env_flag_enabled("SIN_STRICT_BENCH");
+
+  size_t total_expected = 0;
+  for (size_t i = 0; i < suite_count; ++i) {
+    total_expected += suites[i].count;
+  }
+
+  harness_printf("[test-harness] mode=%s strict_bench=%s suites=%zu expected_tests=%zu\n",
+                 strict_bench ? "strict" : "standard",
+                 strict_bench ? "enabled" : "disabled", suite_count, total_expected);
+
+  suites[0].count = run_suite("core", core_tests, sizeof(core_tests) / sizeof(core_tests[0]));
+  suites[1].count = run_suite("compiler", compiler_tests,
+                              sizeof(compiler_tests) / sizeof(compiler_tests[0]));
+  suites[2].count = run_suite("runtime", runtime_tests,
+                              sizeof(runtime_tests) / sizeof(runtime_tests[0]));
+
   size_t total_ran = 0;
+  for (size_t i = 0; i < suite_count; ++i) {
+    total_ran += suites[i].count;
+  }
 
-  run_suite("core", core_tests, sizeof(core_tests) / sizeof(core_tests[0]), &total_ran);
-  run_suite("compiler", compiler_tests,
-            sizeof(compiler_tests) / sizeof(compiler_tests[0]), &total_ran);
-  run_suite("runtime", runtime_tests,
-            sizeof(runtime_tests) / sizeof(runtime_tests[0]), &total_ran);
-
-  printf("\n[test-harness] completed: %zu tests across 3 suites (core, compiler, runtime)\n", total_ran);
+  harness_printf("\n[test-harness] summary: mode=%s strict_bench=%s status=PASS suites=%zu "
+                 "tests=%zu/%zu\n",
+                 strict_bench ? "strict" : "standard",
+                 strict_bench ? "enabled" : "disabled", suite_count, total_ran,
+                 total_expected);
+  harness_printf("[test-harness] suite summary:");
+  for (size_t i = 0; i < suite_count; ++i) {
+    harness_printf(" %s=%zu", suites[i].name, suites[i].count);
+  }
+  harness_printf("\n");
   return 0;
 }
