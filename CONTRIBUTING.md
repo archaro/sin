@@ -31,5 +31,5 @@ Fixture conventions and regeneration guidance are documented in:
 ## PR checklist
 
 - Any new or changed language components must include validator, emitter mapping, opcode-spec update, and positive/negative tests.
-- Any bytecode format change updates should update `bytecode.txt` and related encoding/header tests.
+- Any bytecode format change updates should update `docs/bytecode.md` and related encoding/header tests.
 
