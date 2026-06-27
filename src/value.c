@@ -169,6 +169,8 @@ VALUE_numeric_kind_e value_numeric_kind(const VALUE_t *value) {
   switch (value->type) {
     case VALUE_int:
       return VALUE_NUMERIC_INT;
+    case VALUE_float:
+      return VALUE_NUMERIC_FLOAT;
     default:
       return VALUE_NUMERIC_NONE;
   }
@@ -187,68 +189,107 @@ static bool value_as_add_int_operand(const VALUE_t *value, int64_t *out) {
   return false;
 }
 
+static bool value_as_numeric_operand(const VALUE_t *value, double *out) {
+  if (!value || !out) return false;
+  if (value->type == VALUE_int) {
+    *out = (double)value->i;
+    return true;
+  }
+  if (value->type == VALUE_float) {
+    *out = value->f;
+    return true;
+  }
+  return false;
+}
+
 static bool value_as_int_operand(const VALUE_t *value, int64_t *out) {
   if (!value || !out || value->type != VALUE_int) return false;
   *out = value->i;
   return true;
 }
 
-bool value_add(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
-  int64_t lhs;
-  int64_t rhs;
-  if (!result || !value_as_add_int_operand(left, &lhs) ||
-      !value_as_add_int_operand(right, &rhs)) {
+static bool value_arith_float(const VALUE_t *left, const VALUE_t *right,
+                              VALUE_t *result, double (*op)(double, double)) {
+  double lhs;
+  double rhs;
+  if (!result || !op || !value_as_numeric_operand(left, &lhs) ||
+      !value_as_numeric_operand(right, &rhs)) {
     if (result) *result = VALUE_NIL;
     return false;
   }
-  result->type = VALUE_int;
-  result->i = lhs + rhs;
+  result->type = VALUE_float;
+  result->f = op(lhs, rhs);
   return true;
+}
+
+static double float_add(double lhs, double rhs) { return lhs + rhs; }
+static double float_sub(double lhs, double rhs) { return lhs - rhs; }
+static double float_mul(double lhs, double rhs) { return lhs * rhs; }
+static double float_div(double lhs, double rhs) { return lhs / rhs; }
+
+bool value_add(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
+  int64_t lhs;
+  int64_t rhs;
+  if (!result) return false;
+  if (value_as_add_int_operand(left, &lhs) && value_as_add_int_operand(right, &rhs)) {
+    result->type = VALUE_int;
+    result->i = lhs + rhs;
+    return true;
+  }
+  return value_arith_float(left, right, result, float_add);
 }
 
 bool value_sub(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
   int64_t lhs;
   int64_t rhs;
-  if (!result || !value_as_int_operand(left, &lhs) ||
-      !value_as_int_operand(right, &rhs)) {
-    if (result) *result = VALUE_NIL;
-    return false;
+  if (!result) return false;
+  if (value_as_int_operand(left, &lhs) && value_as_int_operand(right, &rhs)) {
+    result->type = VALUE_int;
+    result->i = lhs - rhs;
+    return true;
   }
-  result->type = VALUE_int;
-  result->i = lhs - rhs;
-  return true;
+  return value_arith_float(left, right, result, float_sub);
 }
 
 bool value_mul(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
   int64_t lhs;
   int64_t rhs;
-  if (!result || !value_as_int_operand(left, &lhs) ||
-      !value_as_int_operand(right, &rhs)) {
-    if (result) *result = VALUE_NIL;
-    return false;
+  if (!result) return false;
+  if (value_as_int_operand(left, &lhs) && value_as_int_operand(right, &rhs)) {
+    result->type = VALUE_int;
+    result->i = lhs * rhs;
+    return true;
   }
-  result->type = VALUE_int;
-  result->i = lhs * rhs;
-  return true;
+  return value_arith_float(left, right, result, float_mul);
 }
 
 bool value_div(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
   int64_t lhs;
   int64_t rhs;
   if (!result) return false;
-  if (!value_as_int_operand(left, &lhs) || !value_as_int_operand(right, &rhs)) {
-    *result = VALUE_ZERO;
-    return false;
+  if (value_as_int_operand(left, &lhs) && value_as_int_operand(right, &rhs)) {
+    result->type = VALUE_int;
+    result->i = rhs == 0 ? 0 : lhs / rhs;
+    return true;
   }
-  result->type = VALUE_int;
-  result->i = rhs == 0 ? 0 : lhs / rhs;
-  return true;
+  if ((left && left->type == VALUE_float) || (right && right->type == VALUE_float)) {
+    return value_arith_float(left, right, result, float_div);
+  }
+  *result = VALUE_ZERO;
+  return false;
 }
 
 bool value_neg(VALUE_t *value) {
-  if (!value || value->type != VALUE_int) return false;
-  value->i = -value->i;
-  return true;
+  if (!value) return false;
+  if (value->type == VALUE_int) {
+    value->i = -value->i;
+    return true;
+  }
+  if (value->type == VALUE_float) {
+    value->f = -value->f;
+    return true;
+  }
+  return false;
 }
 
 bool value_order(const VALUE_t *left, const VALUE_t *right, int *comparison) {

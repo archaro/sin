@@ -141,6 +141,98 @@ void test_value_push_float_interprets_binary64_payloads(void) {
   teardown_runtime();
 }
 
+
+void test_value_float_arithmetic_helpers(void) {
+  VALUE_t int_value = {VALUE_int, {.i = 2}};
+  VALUE_t float_value = {VALUE_float, {.f = 0.5}};
+  VALUE_t huge = {VALUE_float, {.f = value_float_from_bits(UINT64_C(0x7fefffffffffffff))}};
+  VALUE_t tiny = {VALUE_float, {.f = value_float_from_bits(UINT64_C(0x0010000000000000))}};
+  VALUE_t nan = {VALUE_float, {.f = value_float_from_bits(UINT64_C(0x7ff8000000000042))}};
+  VALUE_t one = {VALUE_float, {.f = 1.0}};
+  VALUE_t zero = {VALUE_float, {.f = 0.0}};
+  VALUE_t negative_zero = {VALUE_float, {.f = -0.0}};
+  VALUE_t result = VALUE_NIL;
+
+  ASSERT_TRUE(value_is_numeric(&float_value));
+  ASSERT_EQ_INT(VALUE_NUMERIC_FLOAT, value_numeric_kind(&float_value));
+
+  ASSERT_TRUE(value_add(&int_value, &float_value, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 2.5);
+  ASSERT_TRUE(value_add(&float_value, &int_value, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 2.5);
+  ASSERT_TRUE(value_sub(&float_value, &int_value, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == -1.5);
+  ASSERT_TRUE(value_mul(&int_value, &float_value, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 1.0);
+
+  ASSERT_TRUE(value_div(&one, &zero, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(value_float_to_bits(result.f) == UINT64_C(0x7ff0000000000000));
+  ASSERT_TRUE(value_div(&one, &negative_zero, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(value_float_to_bits(result.f) == UINT64_C(0xfff0000000000000));
+  ASSERT_TRUE(value_div(&zero, &zero, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE((value_float_to_bits(result.f) & UINT64_C(0x7ff0000000000000)) == UINT64_C(0x7ff0000000000000));
+  ASSERT_TRUE((value_float_to_bits(result.f) & UINT64_C(0x000fffffffffffff)) != 0);
+  ASSERT_TRUE(value_add(&huge, &huge, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(value_float_to_bits(result.f) == UINT64_C(0x7ff0000000000000));
+  ASSERT_TRUE(value_mul(&tiny, &tiny, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(value_float_to_bits(result.f) == UINT64_C(0x0000000000000000));
+  ASSERT_TRUE(value_add(&nan, &one, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE((value_float_to_bits(result.f) & UINT64_C(0x7ff0000000000000)) == UINT64_C(0x7ff0000000000000));
+  ASSERT_TRUE((value_float_to_bits(result.f) & UINT64_C(0x000fffffffffffff)) != 0);
+
+  ASSERT_TRUE(value_neg(&zero));
+  ASSERT_EQ_INT(VALUE_float, zero.type);
+  ASSERT_TRUE(value_float_to_bits(zero.f) == UINT64_C(0x8000000000000000));
+}
+
+void test_value_float_arithmetic_interpreter_bytecode(void) {
+  setup_runtime();
+
+  uint8_t code[96] = {0};
+  size_t pos = 0;
+  code[pos++] = 0;
+  code[pos++] = 0;
+  code[pos++] = 'p'; emit_i64(code, &pos, 2);
+  code[pos++] = 'P'; emit_u64(code, &pos, UINT64_C(0x3fe0000000000000)); /* 0.5 */
+  code[pos++] = 'a';
+  code[pos++] = 'P'; emit_u64(code, &pos, UINT64_C(0x4008000000000000)); /* 3.0 */
+  code[pos++] = 'm';
+  code[pos++] = 'P'; emit_u64(code, &pos, UINT64_C(0x3ff0000000000000)); /* 1.0 */
+  code[pos++] = 's';
+  code[pos++] = 'P'; emit_u64(code, &pos, UINT64_C(0x0000000000000000)); /* +0.0 */
+  code[pos++] = 'd';
+  code[pos++] = 'h';
+
+  VALUE_t result = run_code("test.value_float_arithmetic_bytecode", code, pos);
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(value_float_to_bits(result.f) == UINT64_C(0x7ff0000000000000));
+  value_free(&result);
+
+  pos = 0;
+  code[pos++] = 0;
+  code[pos++] = 0;
+  code[pos++] = 'P'; emit_u64(code, &pos, UINT64_C(0x0000000000000000)); /* +0.0 */
+  code[pos++] = 'n';
+  code[pos++] = 'h';
+
+  result = run_code("test.value_float_neg_zero_bytecode", code, pos);
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(value_float_to_bits(result.f) == UINT64_C(0x8000000000000000));
+  value_free(&result);
+
+  teardown_runtime();
+}
+
 void test_value_arithmetic_invalid_and_nil_operands(void) {
   VALUE_t int_value = {VALUE_int, {.i = 7}};
   VALUE_t nil_value = VALUE_NIL;
