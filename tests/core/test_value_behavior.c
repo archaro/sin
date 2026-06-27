@@ -371,6 +371,41 @@ void test_value_comparison_int_helpers(void) {
   ASSERT_TRUE(!value_less_than(&nine, &four));
 }
 
+
+void test_value_comparison_float_ieee754_helpers(void) {
+  VALUE_t one = {VALUE_int, {.i = 1}};
+  VALUE_t one_point_zero = {VALUE_float, {.f = value_float_from_bits(UINT64_C(0x3ff0000000000000))}};
+  VALUE_t one_point_five = {VALUE_float, {.f = value_float_from_bits(UINT64_C(0x3ff8000000000000))}};
+  VALUE_t positive_zero = {VALUE_float, {.f = value_float_from_bits(UINT64_C(0x0000000000000000))}};
+  VALUE_t negative_zero = {VALUE_float, {.f = value_float_from_bits(UINT64_C(0x8000000000000000))}};
+  VALUE_t quiet_nan = {VALUE_float, {.f = value_float_from_bits(UINT64_C(0x7ff8000000000042))}};
+  VALUE_t negative_nan = {VALUE_float, {.f = value_float_from_bits(UINT64_C(0xfff8000000000042))}};
+
+  ASSERT_TRUE(value_equal(&one, &one_point_zero));
+  ASSERT_TRUE(!value_not_equal(&one, &one_point_zero));
+  ASSERT_TRUE(value_less_than(&one, &one_point_five));
+  ASSERT_TRUE(value_less_equal(&one, &one_point_zero));
+  ASSERT_TRUE(value_greater_than(&one_point_five, &one));
+  ASSERT_TRUE(value_greater_equal(&one_point_zero, &one));
+
+  ASSERT_TRUE(value_equal(&positive_zero, &negative_zero));
+  ASSERT_TRUE(value_less_equal(&positive_zero, &negative_zero));
+  ASSERT_TRUE(value_greater_equal(&positive_zero, &negative_zero));
+  ASSERT_TRUE(value_float_to_bits(positive_zero.f) == UINT64_C(0x0000000000000000));
+  ASSERT_TRUE(value_float_to_bits(negative_zero.f) == UINT64_C(0x8000000000000000));
+
+  ASSERT_TRUE(!value_equal(&quiet_nan, &quiet_nan));
+  ASSERT_TRUE(!value_equal(&quiet_nan, &negative_nan));
+  ASSERT_TRUE(!value_equal(&quiet_nan, &one));
+  ASSERT_TRUE(value_not_equal(&quiet_nan, &quiet_nan));
+  ASSERT_TRUE(value_not_equal(&quiet_nan, &negative_nan));
+  ASSERT_TRUE(value_not_equal(&quiet_nan, &one));
+  ASSERT_TRUE(!value_less_than(&quiet_nan, &one));
+  ASSERT_TRUE(!value_less_equal(&quiet_nan, &quiet_nan));
+  ASSERT_TRUE(!value_greater_than(&one, &quiet_nan));
+  ASSERT_TRUE(!value_greater_equal(&quiet_nan, &negative_nan));
+}
+
 void test_value_comparison_bool_helpers(void) {
   VALUE_t false_value = VALUE_FALSE;
   VALUE_t true_value = VALUE_TRUE;

@@ -3,6 +3,7 @@
 // Licensed under the MIT License - see LICENSE file for details.
 
 #include <float.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -111,18 +112,38 @@ VALUE_t convert_to_bool(VALUE_t from) {
   return from;
 }
 
+static bool value_as_comparison_float(const VALUE_t *value, double *out) {
+  if (!value || !out) return false;
+  if (value->type == VALUE_int) {
+    *out = (double)value->i;
+    return true;
+  }
+  if (value->type == VALUE_float) {
+    *out = value->f;
+    return true;
+  }
+  return false;
+}
+
 bool value_equal(const VALUE_t *left, const VALUE_t *right) {
-  if (!left || !right || left->type != right->type) return false;
+  if (!left || !right) return false;
+  if (left->type == VALUE_float || right->type == VALUE_float) {
+    double lhs;
+    double rhs;
+    return value_as_comparison_float(left, &lhs) &&
+           value_as_comparison_float(right, &rhs) && lhs == rhs;
+  }
+  if (left->type != right->type) return false;
   switch (left->type) {
     case VALUE_int:
     case VALUE_bool:
       return left->i == right->i;
-    case VALUE_float:
-      return left->f == right->f;
     case VALUE_str:
       return strcmp(left->s ? left->s : "", right->s ? right->s : "") == 0;
     case VALUE_nil:
       return true;
+    case VALUE_float:
+      return false;
   }
   return false;
 }
@@ -293,7 +314,18 @@ bool value_neg(VALUE_t *value) {
 }
 
 bool value_order(const VALUE_t *left, const VALUE_t *right, int *comparison) {
-  if (!left || !right || left->type != right->type) return false;
+  if (!left || !right || !comparison) return false;
+  if (left->type == VALUE_float || right->type == VALUE_float) {
+    double lhs;
+    double rhs;
+    if (!value_as_comparison_float(left, &lhs) ||
+        !value_as_comparison_float(right, &rhs) || isnan(lhs) || isnan(rhs)) {
+      return false;
+    }
+    *comparison = (lhs > rhs) - (lhs < rhs);
+    return true;
+  }
+  if (left->type != right->type) return false;
   switch (left->type) {
     case VALUE_int:
     case VALUE_bool:
