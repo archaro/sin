@@ -179,53 +179,43 @@ typedef enum {
   CMP_GTE,
 } CMP_MODE_t;
 
-static inline int apply_comparison(CMP_MODE_t mode, int64_t left, int64_t right) {
-  switch (mode) {
-    case CMP_EQ:
-      return left == right;
-    case CMP_NE:
-      return left != right;
-    case CMP_LT:
-      return left < right;
-    case CMP_LTE:
-      return left <= right;
-    case CMP_GT:
-      return left > right;
-    case CMP_GTE:
-      return left >= right;
-  }
-  return 0;
-}
-
 static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const char *opcode_tag) {
   VALUE_t v1 = pop_stack(VM->stack);
   VALUE_t v2 = pop_stack(VM->stack);
-  VALUE_t result;
-  int comparison_true = 0;
+  VALUE_t result = {VALUE_bool, {.i = 0}};
+  VALUE_e v1_type = v1.type;
+  VALUE_e v2_type = v2.type;
+  (void)v1_type;
+  (void)v2_type;
 
-  result.type = VALUE_bool;
-
-  // Intentional quirk preserved: OP_NOTEQUAL treats mismatched types as true,
-  // while the other comparison operators treat unsupported/mismatched operands
-  // as false.
-  if (mode == CMP_EQ || mode == CMP_NE) {
-    comparison_true = value_equal(&v2, &v1);
-    if (mode == CMP_NE) comparison_true = !comparison_true;
-  } else {
-    int cmp = 0;
-    if (value_order(&v2, &v1, &cmp)) {
-      comparison_true = apply_comparison(mode, cmp, 0);
-    }
+  switch (mode) {
+    case CMP_EQ:
+      result.i = value_equal(&v2, &v1);
+      break;
+    case CMP_NE:
+      result.i = value_not_equal(&v2, &v1);
+      break;
+    case CMP_LT:
+      result.i = value_less_than(&v2, &v1);
+      break;
+    case CMP_LTE:
+      result.i = value_less_equal(&v2, &v1);
+      break;
+    case CMP_GT:
+      result.i = value_greater_than(&v2, &v1);
+      break;
+    case CMP_GTE:
+      result.i = value_greater_equal(&v2, &v1);
+      break;
   }
 
-  result.i = comparison_true;
   value_free_runtime(&v1);
   value_free_runtime(&v2);
   push_stack(VM->stack, result);
-  if (!comparison_true) {
-    DISASS_LOG("%s: types %d and %d\n", opcode_tag, v1.type, v2.type);
+  if (!result.i) {
+    DISASS_LOG("%s: types %d and %d\n", opcode_tag, v1_type, v2_type);
   }
-  return comparison_true;
+  return result.i;
 }
 
 

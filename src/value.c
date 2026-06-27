@@ -104,6 +104,39 @@ bool value_equal(const VALUE_t *left, const VALUE_t *right) {
   return false;
 }
 
+bool value_not_equal(const VALUE_t *left, const VALUE_t *right) {
+  // Preserve the VM quirk: mismatched types are not equal, so != is true.
+  return !value_equal(left, right);
+}
+
+static bool value_order_matches(const VALUE_t *left, const VALUE_t *right,
+                                bool (*predicate)(int comparison)) {
+  int comparison = 0;
+  if (!predicate || !value_order(left, right, &comparison)) return false;
+  return predicate(comparison);
+}
+
+static bool comparison_lt(int comparison) { return comparison < 0; }
+static bool comparison_lte(int comparison) { return comparison <= 0; }
+static bool comparison_gt(int comparison) { return comparison > 0; }
+static bool comparison_gte(int comparison) { return comparison >= 0; }
+
+bool value_less_than(const VALUE_t *left, const VALUE_t *right) {
+  return value_order_matches(left, right, comparison_lt);
+}
+
+bool value_less_equal(const VALUE_t *left, const VALUE_t *right) {
+  return value_order_matches(left, right, comparison_lte);
+}
+
+bool value_greater_than(const VALUE_t *left, const VALUE_t *right) {
+  return value_order_matches(left, right, comparison_gt);
+}
+
+bool value_greater_equal(const VALUE_t *left, const VALUE_t *right) {
+  return value_order_matches(left, right, comparison_gte);
+}
+
 bool value_is_numeric(const VALUE_t *value) {
   return value_numeric_kind(value) != VALUE_NUMERIC_NONE;
 }

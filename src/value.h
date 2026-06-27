@@ -59,6 +59,11 @@ VALUE_t value_clone(const VALUE_t *value);
 void value_move(VALUE_t *dst, VALUE_t *src);
 void value_replace(VALUE_t *dst, VALUE_t src);
 bool value_equal(const VALUE_t *left, const VALUE_t *right);
+bool value_not_equal(const VALUE_t *left, const VALUE_t *right);
+bool value_less_than(const VALUE_t *left, const VALUE_t *right);
+bool value_less_equal(const VALUE_t *left, const VALUE_t *right);
+bool value_greater_than(const VALUE_t *left, const VALUE_t *right);
+bool value_greater_equal(const VALUE_t *left, const VALUE_t *right);
 bool value_is_numeric(const VALUE_t *value);
 VALUE_numeric_kind_e value_numeric_kind(const VALUE_t *value);
 // Arithmetic helpers currently support integer arithmetic only. OP_ADD
