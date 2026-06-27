@@ -18,6 +18,7 @@ const VALUE_t VALUE_ZERO = {VALUE_int, {0}};
 const char *value_type_name(VALUE_e type) {
   switch (type) {
     case VALUE_int: return "int";
+    case VALUE_float: return "float";
     case VALUE_str: return "str";
     case VALUE_nil: return "nil";
     case VALUE_bool: return "bool";
@@ -70,6 +71,8 @@ int value_is_truthy(const VALUE_t *value) {
     case VALUE_bool:
     case VALUE_int:
       return value->i != 0;
+    case VALUE_float:
+      return value->f_bits != 0;
     case VALUE_str:
       return value->s && value->s[0] != '\0';
     case VALUE_nil:
@@ -96,6 +99,8 @@ bool value_equal(const VALUE_t *left, const VALUE_t *right) {
     case VALUE_int:
     case VALUE_bool:
       return left->i == right->i;
+    case VALUE_float:
+      return left->f_bits == right->f_bits;
     case VALUE_str:
       return strcmp(left->s ? left->s : "", right->s ? right->s : "") == 0;
     case VALUE_nil:
@@ -252,6 +257,9 @@ const char *value_debug_string(const VALUE_t *value, char *buffer, size_t buffer
       break;
     case VALUE_bool:
       snprintf(buffer, buffer_size, "%s", value->i ? "true" : "false");
+      break;
+    case VALUE_float:
+      snprintf(buffer, buffer_size, "0x%016llx", (unsigned long long)value->f_bits);
       break;
     case VALUE_str:
       snprintf(buffer, buffer_size, "'%s'", value->s ? value->s : "");

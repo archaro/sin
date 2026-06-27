@@ -108,6 +108,7 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case SIZE_FIXED_2: isz = 2; break;
       case SIZE_FIXED_3: isz = 3; break;
       case SIZE_PUSH_INT: isz = 1 + 8; break;
+      case SIZE_PUSH_FLOAT: isz = 1 + 8; break;
       case SIZE_PUSH_STRING: isz = 1 + 2 + (int)strlen((const char *)(intptr_t)in->imm); break;
       case SIZE_ITEM_PUSH_LAYER: isz = 1 + 1 + (int)strlen((const char *)(intptr_t)in->imm); break;
       case SIZE_ITEM_SAVE_CODE:
@@ -179,6 +180,7 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     }
     switch (in->op) {
       case IR_OP_PUSH_INT: if (!bw_write_i64(&w, in->imm)) goto oom; break;
+      case IR_OP_PUSH_FLOAT: if (!bw_write_i64(&w, in->imm)) goto oom; break;
       case IR_OP_PUSH_BOOL:
         if (!bw_write_u8(&w, (uint8_t)in->a)) goto oom;
         break;

@@ -385,6 +385,11 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
         itoa(out.i, buffer, 10);
         telnet_send_text(line[linenum.i].telnet, buffer, strlen(buffer));
         break;
+      case VALUE_float:
+        char fbuffer[19];
+        snprintf(fbuffer, sizeof(fbuffer), "0x%016llx", (unsigned long long)out.f_bits);
+        telnet_send_text(line[linenum.i].telnet, fbuffer, strlen(fbuffer));
+        break;
       case VALUE_nil:
         // Nothing to output
         break;

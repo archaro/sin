@@ -9,6 +9,7 @@
 #include <stddef.h>
 
 typedef enum { VALUE_int,
+               VALUE_float,
                VALUE_str,
                VALUE_nil,
                VALUE_bool
@@ -22,6 +23,7 @@ typedef struct {
   VALUE_e type; // What sort of value am I?
   union {
     int64_t i;  // This is an integer value
+    uint64_t f_bits; // This is an IEEE 754 binary64 payload
     char *s; // This is a string value
   };
 } VALUE_t;

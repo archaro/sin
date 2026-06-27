@@ -277,6 +277,15 @@ static uint8_t *h_int(uint8_t *p, uint8_t *e, decode_context_t c) {
   logmsg("INTEGER %ld\n", v);
   return p;
 }
+static uint8_t *h_float(uint8_t *p, uint8_t *e, decode_context_t c) {
+  (void) c;
+  int64_t raw;
+  uint64_t bits;
+  if (read_i64(&p, e, &raw, "FLOAT literal") != PARSE_OK) return p;
+  memcpy(&bits, &raw, sizeof(bits));
+  logmsg("FLOAT 0x%016llx\n", (unsigned long long)bits);
+  return p;
+}
 static uint8_t *h_bool(uint8_t *p, uint8_t *e, decode_context_t c) {
   (void) c;
   uint8_t v;
@@ -341,7 +350,7 @@ static const opcode_desc_t OPCODES[] = {
     {'m', "MULTIPLY", OPERAND_NONE, h_mul}, {'n', "NEGATE", OPERAND_NONE,
                                              h_neg}, {'o', "BOOL EQ",
                                                       OPERAND_NONE, h_eq},
-    {'p', "INTEGER", OPERAND_I64, h_int}, {'q', "BOOL NOTEQ", OPERAND_NONE,
+    {'p', "INTEGER", OPERAND_I64, h_int}, {'P', "FLOAT", OPERAND_I64, h_float}, {'q', "BOOL NOTEQ", OPERAND_NONE,
                                            h_neq}, {'r', "BOOL LT",
                                                     OPERAND_NONE, h_lt}, {'s',
                                                                           "SUBTRACT",

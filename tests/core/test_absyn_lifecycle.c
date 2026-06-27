@@ -93,3 +93,15 @@ void test_absyn_item_deref_chains(void) {
   as_delete(chain);
 }
 
+
+
+void test_absyn_float_value_preserves_bits(void) {
+  const uint64_t bits = UINT64_C(0x7ff8000000000042);
+  AS_NODE *node = t_node(N_VALUE, as_new_value(V_FLOAT, bits, NULL), NULL);
+  AS_VALUE *value = (AS_VALUE *)node->lhs;
+
+  ASSERT_EQ_INT(V_FLOAT, value->valtype);
+  ASSERT_EQ_INT((int64_t)bits, (int64_t)value->value.f_bits);
+
+  as_delete(node);
+}

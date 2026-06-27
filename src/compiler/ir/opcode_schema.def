@@ -4,6 +4,7 @@
  */
 OP(HALT,           'h', false, OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE)
 OP(PUSH_INT,       'p', true,  OPERAND_IMM_I64,    SIZE_PUSH_INT,        VALIDATE_NONE)
+OP(PUSH_FLOAT,     'P', true,  OPERAND_IMM_F64_BITS,SIZE_PUSH_FLOAT,      VALIDATE_NONE)
 OP(PUSH_BOOL,      'b', true,  OPERAND_A_U8,       SIZE_FIXED_2,         VALIDATE_A_U8)
 OP(PUSH_STRING,    'l', true,  OPERAND_IMM_CSTR,   SIZE_PUSH_STRING,     VALIDATE_NON_NULL_IMM)
 OP(ADD,            'a', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE)

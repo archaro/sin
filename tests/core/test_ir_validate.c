@@ -94,6 +94,25 @@ static void assert_lower_local_error(AS_NODE *root, const char *expected_name) {
   free(errdetail);
 }
 
+static void test_lower_float_value_emits_push_float(void) {
+  const uint64_t bits = UINT64_C(0x7ff8000000000042);
+  AS_NODE *root = t_node(N_EXPRSTMT, t_node(N_VALUE, as_new_value(V_FLOAT, bits, NULL), NULL), NULL);
+  IR_Unit *ir = NULL;
+  char *errdetail = NULL;
+
+  int8_t rc = lower_ast_to_ir(root, NULL, &ir, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(ir);
+  ASSERT_EQ_INT(2, (int)ir->function.count);
+  ASSERT_EQ_INT(IR_OP_PUSH_FLOAT, ir->function.code[0].op);
+  ASSERT_EQ_INT((int64_t)bits, ir->function.code[0].imm);
+  ASSERT_EQ_INT(IR_OP_HALT, ir->function.code[1].op);
+
+  ir_destroy_unit(ir);
+  as_delete(root);
+}
+
 static void test_lower_local_resolution_errors_consistent(void) {
   AS_NODE *expr_stmt = t_node(N_EXPRSTMT, t_local("x"), NULL);
   AS_NODE *asslocal = t_node(N_ASSLOCAL, t_local("x"), t_int(1));
@@ -121,5 +140,6 @@ void test_ir_validate(void) {
   test_ir_validate_invalid_label_ids_rejected();
   test_ir_validate_local_index_out_of_range_rejected();
   test_ir_validate_negative_arity_rejected();
+  test_lower_float_value_emits_push_float();
   test_lower_local_resolution_errors_consistent();
 }

@@ -267,6 +267,7 @@ static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const cha
   OP('n', op_negate) \
   OP('o', op_equal) \
   OP('p', op_pushint) \
+  OP('P', op_pushfloat) \
   OP('q', op_notequal) \
   OP('r', op_lessthan) \
   OP('s', op_subtract) \
@@ -305,6 +306,16 @@ uint8_t *op_pushint(uint8_t *nextop, ITEM_t *item) {
   if (!nextop) return NULL;
   push_stack(VM->stack, v);
   DISASS_LOG("OP_PUSHINT: %ld\n", v.i);
+  return nextop;
+}
+
+uint8_t *op_pushfloat(uint8_t *nextop, ITEM_t *item) {
+  VALUE_t v;
+  v.type = VALUE_float;
+  nextop = bc_read_u64_payload(nextop, &v.f_bits, "OP_PUSHFLOAT");
+  if (!nextop) return NULL;
+  push_stack(VM->stack, v);
+  DISASS_LOG("OP_PUSHFLOAT: 0x%016llx\n", (unsigned long long)v.f_bits);
   return nextop;
 }
 

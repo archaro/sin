@@ -19,6 +19,9 @@ static void emit_case_inst(IR_Unit *unit, IR_Op op) {
     case IR_OP_PUSH_INT:
       t_emit(unit, (IR_Inst){.op = op, .imm = 42});
       break;
+    case IR_OP_PUSH_FLOAT:
+      t_emit(unit, (IR_Inst){.op = op, .imm = (int64_t)UINT64_C(0x400921fb54442d18)});
+      break;
     case IR_OP_PUSH_STRING:
       t_emit(unit, (IR_Inst){.op = op, .imm = (int64_t)(intptr_t)"x"});
       break;
@@ -59,6 +62,7 @@ void test_emitbc_opcode_map(void) {
   const OpcodeCase cases[] = {
       {"halt", IR_OP_HALT, 'h', 0},
       {"push_int", IR_OP_PUSH_INT, 'p', 0},
+      {"push_float", IR_OP_PUSH_FLOAT, 'P', 0},
       {"push_string", IR_OP_PUSH_STRING, 'l', 0},
       {"add", IR_OP_ADD, 'a', 0},
       {"sub", IR_OP_SUB, 's', 0},
@@ -121,6 +125,45 @@ void test_emitbc_opcode_map(void) {
 
 
 
+static void test_emitbc_push_float_immediate_layout(void) {
+  const uint64_t values[] = {
+      UINT64_C(0x0000000000000000),
+      UINT64_C(0x3ff0000000000000),
+      UINT64_C(0x8000000000000000),
+      UINT64_C(0x7ff8000000000042),
+  };
+
+  IR_Unit *unit = t_new_unit();
+  ASSERT_NOT_NULL(unit);
+  for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+    t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_FLOAT, .imm = (int64_t)values[i]});
+  }
+
+  OUTPUT_t out = {0};
+  out.maxsize = 8;
+  out.bytecode = malloc(out.maxsize);
+  out.nextbyte = out.bytecode;
+  ASSERT_NOT_NULL(out.bytecode);
+
+  char *errdetail = NULL;
+  int8_t rc = t_emit_bytecode(unit, 0, 0, &out, &errdetail);
+  ASSERT_EQ_INT(0, rc);
+  ASSERT_TRUE(errdetail == NULL);
+
+  size_t pos = 2;
+  for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+    uint8_t expected[sizeof(values[i])];
+    memcpy(expected, &values[i], sizeof(expected));
+    ASSERT_EQ_INT('P', out.bytecode[pos++]);
+    ASSERT_TRUE(memcmp(out.bytecode + pos, expected, sizeof(expected)) == 0);
+    pos += sizeof(expected);
+  }
+  ASSERT_EQ_INT((int)pos, (int)(out.nextbyte - out.bytecode));
+
+  free(out.bytecode);
+  ir_destroy_unit(unit);
+}
+
 void test_emitbc_push_int_immediate_layout(void) {
   const int64_t values[] = {
       0,
@@ -159,6 +202,8 @@ void test_emitbc_push_int_immediate_layout(void) {
 
   free(out.bytecode);
   ir_destroy_unit(unit);
+
+  test_emitbc_push_float_immediate_layout();
 }
 
 void test_emitbc_opcode_map_call_item_deref_alias_layout(void) {

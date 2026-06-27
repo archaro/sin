@@ -18,6 +18,8 @@ AS_VALUE *as_new_value(ENUM_VALUE valtype, uint64_t ival, char *sval) {
   newval->valtype = valtype;
   if (valtype == V_INT || valtype == V_BOOLTRUE || valtype == V_BOOLFALSE) {
     newval->value.i = ival;
+  } else if (valtype == V_FLOAT) {
+    newval->value.f_bits = ival;
   } else {
     newval->value.s = sval;  // Remember to free this eventually!
   }
@@ -139,7 +141,7 @@ void as_delete(AS_NODE *root) {
   switch (root->nodetype) {
     case N_VALUE: {
       AS_VALUE *val = (AS_VALUE*)root->lhs;
-      if (val->valtype != V_INT && val->valtype != V_BOOLTRUE && val->valtype != V_BOOLFALSE) free(val->value.s);
+      if (val->valtype != V_INT && val->valtype != V_FLOAT && val->valtype != V_BOOLTRUE && val->valtype != V_BOOLFALSE) free(val->value.s);
       FREE_ARRAY(AS_VALUE, root->lhs, 1);
       // rhs is always null for this nodetype
       break;
@@ -207,7 +209,7 @@ void as_delete(AS_NODE *root) {
 }
 
 // Keep this in sync with ENUM_VALUE!
-const char *valname[] = { "V_INT", "V_STR", "V_LOCAL", "V_LAYER", "V_BOOLTRUE", "V_BOOLFALSE" };
+const char *valname[] = { "V_INT", "V_FLOAT", "V_STR", "V_LOCAL", "V_LAYER", "V_BOOLTRUE", "V_BOOLFALSE" };
 // And keep this in sync with ENUM_NODE!
 const char *nodename[] = { "N_VALUE", "N_ADD", "N_SUB", "N_MUL", "N_DIV", "N_INC", "N_DEC", "N_EQUAL", "N_NOTEQ", "N_OR", "N_AND", "N_LT", "N_LTEQ", "N_GT", "N_GTEQ", "N_DEREF", "N_EXISTS", "N_DELETE", "N_NTHNAME", "N_ROOTNAME", "N_ITEM", "N_RELITEM", "N_NOT", "N_LIBCALL", "N_ARGLIST", "N_CODE", "N_CALL", "N_ASSITEM", "N_ASSLOCAL", "N_EXPRSTMT", "N_RETURN", "N_STMTLIST", "N_STMT", "N_WHILESTMT", "N_IFSTMT" };
 
@@ -223,6 +225,8 @@ void as_reconstruct_value(AS_NODE *node) {
   logmsg("%s: ", valname[val->valtype]);
   if (val->valtype == V_INT || val->valtype == V_BOOLTRUE || val->valtype == V_BOOLFALSE) {
     logmsg("%lld", val->value.i);
+  } else if (val->valtype == V_FLOAT) {
+    logmsg("0x%016llx", (unsigned long long)val->value.f_bits);
   } else {
     logmsg("%s", val->value.s);
   }
@@ -241,6 +245,8 @@ void as_reconstruct_item(AS_NODE *root) {
     AS_VALUE *val = (AS_VALUE*)node->lhs;
     if (val->valtype == V_INT || val->valtype == V_BOOLTRUE || val->valtype == V_BOOLFALSE) {
       logmsg("%lld", val->value.i);
+    } else if (val->valtype == V_FLOAT) {
+      logmsg("0x%016llx", (unsigned long long)val->value.f_bits);
     } else {
       logmsg("%s", val->value.s);
     }

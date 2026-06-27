@@ -809,6 +809,13 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent) {
         itemval.i = value;
         break;
       }
+      case VALUE_float:
+      {
+        uint64_t bits;
+        fread(&bits, sizeof(bits), 1, file);
+        itemval.f_bits = bits;
+        break;
+      }
       case VALUE_str:
       {
         int l;

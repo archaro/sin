@@ -65,6 +65,7 @@ static void assert_class_layout(IR_Inst inst, size_t expected_body_len, size_t e
 static void test_emitbc_op_class_invariants(void) {
   assert_class_layout((IR_Inst){.op = IR_OP_HALT}, 1, 0, 0);
   assert_class_layout((IR_Inst){.op = IR_OP_PUSH_INT, .imm = 123}, 9, 0, 0);
+  assert_class_layout((IR_Inst){.op = IR_OP_PUSH_FLOAT, .imm = (int64_t)UINT64_C(0x7ff8000000000042)}, 9, 0, 0);
   assert_class_layout((IR_Inst){.op = IR_OP_PUSH_STRING, .imm = (int64_t)(intptr_t)"abc"}, 6, 0, 0);
   assert_class_layout((IR_Inst){.op = IR_OP_ADD}, 1, 0, 0);
   assert_class_layout((IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = 4}, 2, 1, 0);
@@ -188,7 +189,7 @@ static void test_emitbc_label_heavy_jump_targets_in_bounds(void) {
       pc += 2;
       continue;
     }
-    if (op == 'p') pc += 8;
+    if (op == 'p' || op == 'P') pc += 8;
     else if (op == 'l' || op == 'B') {
       uint16_t n = (uint16_t)out.bytecode[pc] | ((uint16_t)out.bytecode[pc + 1] << 8);
       pc += 2 + n;
