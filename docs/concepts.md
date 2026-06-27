@@ -11,7 +11,7 @@ When the runtime engine starts up, it first loads and executes the bootstrap cod
 
 ## The Item ##
 
-The fundamental unit in Sinistra is the *item*.  An item can contain many things: integers, strings, Boolean values or `nil`, or it can contain code.  A value item simply returns its value, whereas a code item executes its code and returns the result.  All items return a value (even if the value is `nil`).  Items can also call other items.
+The fundamental unit in Sinistra is the *item*.  An item can contain many things: integers, floats, strings, Boolean values or `nil`, or it can contain code.  A value item simply returns its value, whereas a code item executes its code and returns the result.  All items return a value (even if the value is `nil`).  Items can also call other items.
 
 Items are nominally hierarchical, although this is only an organisational strategy – there is no inheritance.  Thus the following are items:  
 `foo`  
@@ -83,9 +83,23 @@ Comments begin with `/*` and end with `*/`, and may include anything, including 
 
 `RETURN` can be used at any point to halt execution of the item.  It takes no parameter; when execution ends, the value of the item is whatever is on the top of its stack.
 
-## Operators ##
+## Values and operators ##
 
-Arithmetic: `+`, `-`, `*`, `/` (all integer arithmetic).  The unary postfix operators `++` and `--` operate on local variables but not items, but note that these are statements, not expressions.  Thus the following is invalid:
+### Numeric values ###
+
+Integer literals are base-10 whole numbers. Float literals are base-10 decimal literals with digits on both sides of the decimal point, optionally followed by an exponent, for example `0.5`, `1.0`, `-0.0`, `1.25e2`, or `6.02E+23`. A token such as `42` remains an integer literal, while malformed decimal forms such as `1.` are rejected. Special spellings such as `nan`, `inf`, and `infinity` are not accepted as source literals, although arithmetic can still produce IEEE 754 infinities and NaNs at runtime.
+
+Sinistra floats are C `double` values and require IEEE 754 binary64 behavior: 53 bits of precision, binary radix, and the usual exponent range. Decimal float literals are converted with the C locale (`.` as the decimal separator) to the nearest binary64 value, including subnormal values, signed zero, and overflow to infinity when appropriate. Runtime arithmetic on floats follows the platform binary64 operations for addition, subtraction, multiplication, division, and unary negation.
+
+When an arithmetic or numeric comparison operation sees one integer and one float, the integer operand is promoted to binary64 and the result is a float for arithmetic, or a boolean for comparison. Integer-only arithmetic keeps the historical integer behavior. In particular, integer division by zero produces integer `0`, while float division uses IEEE 754 behavior such as infinities or NaN. String concatenation with `+` is still string-only, and invalid mixed non-numeric types produce `nil` or `false` according to the operator.
+
+Float equality and ordering use IEEE 754 comparison rules after any integer-to-float promotion. NaN is not equal to any value, including itself, so `NaN == NaN` is false and `NaN != NaN` is true when a NaN value is produced at runtime. Ordered comparisons involving NaN (`<`, `<=`, `>`, `>=`) are false. Positive and negative zero compare equal to each other and to integer `0`, but formatting preserves the sign: `+0.0` formats as `0.0` and `-0.0` formats as `-0.0`.
+
+Truthiness treats `+0.0` and `-0.0` as false. Every other float value is true, including infinities and NaN.
+
+### Operators ###
+
+Arithmetic: `+`, `-`, `*`, `/` (integer arithmetic when both operands are integers; binary64 float arithmetic when either operand is a float).  The unary postfix operators `++` and `--` operate on local variables but not items, but note that these are statements, not expressions.  Thus the following is invalid:
 
 `WHILE @a++ < 100 DO ...; ENDWHILE;`
 
@@ -93,7 +107,7 @@ The usual boolean comparison operators are present, and work in the same way as 
 
 Boolean literals are `true` and `false`.
 
-True values are: `true`, true outcomes of boolean operations, integer values which are not `0`, and non-empty strings.  False values are: `false`, `nil`, integer `0`, and the empty string (`""`).
+True values are: `true`, true outcomes of boolean operations, integer values which are not `0`, float values other than `+0.0` and `-0.0` (including NaN), and non-empty strings.  False values are: `false`, `nil`, integer `0`, float `+0.0` or `-0.0`, and the empty string (`""`).
 
 Examples:
 `is_wizard = true;`
