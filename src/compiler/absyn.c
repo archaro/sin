@@ -1,7 +1,9 @@
 // Abstract syntax tree
 
 // Licensed under the MIT License - see LICENSE file for details.
+#include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "log.h"
 #include "memory.h"
@@ -32,6 +34,16 @@ AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval) {
   AS_VALUE *newval;
   if (valtype == V_INT) {
     newval = as_new_value(V_INT, atoll(sval), NULL);
+    free(sval);
+  } else if (valtype == V_FLOAT) {
+    char *end = NULL;
+    errno = 0;
+    double parsed = strtod(sval, &end);
+    uint64_t bits = 0;
+    if (errno == 0 && end != NULL && *end == '\0') {
+      memcpy(&bits, &parsed, sizeof(bits));
+    }
+    newval = as_new_value(V_FLOAT, bits, NULL);
     free(sval);
   } else if (valtype == V_BOOLTRUE) {
     newval = as_new_value(V_BOOLTRUE, 1, NULL);

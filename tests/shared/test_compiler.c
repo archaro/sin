@@ -39,6 +39,10 @@ void test_sem_local_limit_over_255_fails_deterministically(void);
 void test_ir_validate(void);
 void test_opcode_schema_consistency(void);
 void test_parser_input_api(void);
+void test_parser_float_literals_decimal_forms(void);
+void test_parser_float_literals_integer_still_int(void);
+void test_parser_float_literals_item_layers_unchanged(void);
+void test_parser_float_literals_malformed_rejected(void);
 void test_fixture_policy_declared_goldens_exist(void);
 void test_find_item_cached_hit_and_negative_cache(void);
 void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
@@ -163,6 +167,10 @@ static const test_case_t core_tests[] = {
     {"test_ir_validate", test_ir_validate},
     {"test_opcode_schema_consistency", test_opcode_schema_consistency},
     {"test_parser_input_api", test_parser_input_api},
+    {"test_parser_float_literals_decimal_forms", test_parser_float_literals_decimal_forms},
+    {"test_parser_float_literals_integer_still_int", test_parser_float_literals_integer_still_int},
+    {"test_parser_float_literals_item_layers_unchanged", test_parser_float_literals_item_layers_unchanged},
+    {"test_parser_float_literals_malformed_rejected", test_parser_float_literals_malformed_rejected},
     {"test_fixture_policy_declared_goldens_exist", test_fixture_policy_declared_goldens_exist},
     {"test_find_item_cached_hit_and_negative_cache", test_find_item_cached_hit_and_negative_cache},
     {"test_find_item_cached_invalidation_on_delete_and_reinsert", test_find_item_cached_invalidation_on_delete_and_reinsert},
