@@ -46,18 +46,30 @@ static int bw_write_u8(BC_Writer *w, uint8_t v) {
   return 1;
 }
 static int bw_write_u16(BC_Writer *w, uint16_t v) {
-  if (!bw_ensure(w, 2)) return 0;
-  memcpy(w->out->nextbyte, &v, 2);
-  w->out->nextbyte += 2;
-  w->used += 2;
+  if (!bw_ensure(w, sizeof(v))) return 0;
+  memcpy(w->out->nextbyte, &v, sizeof(v));
+  w->out->nextbyte += sizeof(v);
+  w->used += sizeof(v);
+  return 1;
+}
+static int bw_write_i16(BC_Writer *w, int16_t v) {
+  if (!bw_ensure(w, sizeof(v))) return 0;
+  memcpy(w->out->nextbyte, &v, sizeof(v));
+  w->out->nextbyte += sizeof(v);
+  w->used += sizeof(v);
+  return 1;
+}
+static int bw_write_u64_payload(BC_Writer *w, uint64_t v) {
+  if (!bw_ensure(w, sizeof(v))) return 0;
+  memcpy(w->out->nextbyte, &v, sizeof(v));
+  w->out->nextbyte += sizeof(v);
+  w->used += sizeof(v);
   return 1;
 }
 static int bw_write_i64(BC_Writer *w, int64_t v) {
-  if (!bw_ensure(w, 8)) return 0;
-  memcpy(w->out->nextbyte, &v, 8);
-  w->out->nextbyte += 8;
-  w->used += 8;
-  return 1;
+  uint64_t payload;
+  memcpy(&payload, &v, sizeof(payload));
+  return bw_write_u64_payload(w, payload);
 }
 static int bw_write_bytes(BC_Writer *w, const void *src, size_t n) {
   if (!bw_ensure(w, n)) return 0;
@@ -216,7 +228,7 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
           compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc", "jump offset out of range: %ld", diff);
           return errnum;
         }
-        if (!bw_write_u16(&w, (uint16_t)(int16_t)diff)) goto oom;
+        if (!bw_write_i16(&w, (int16_t)diff)) goto oom;
         break;
       }
       case IR_OP_ITEM_PUSH_LAYER: {

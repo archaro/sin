@@ -87,6 +87,26 @@ void test_value_integer_arithmetic_helpers(void) {
   teardown_runtime();
 }
 
+
+void test_value_push_int_interprets_i64_immediates(void) {
+  setup_runtime();
+
+  const int64_t expected = INT64_C(-0x010203040506070);
+  uint8_t code[16] = {0};
+  size_t pos = 0;
+  code[pos++] = 0;
+  code[pos++] = 0;
+  code[pos++] = 'p';
+  emit_i64(code, &pos, expected);
+  code[pos++] = 'h';
+
+  VALUE_t result = run_code("test.value_push_int_i64", code, pos);
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_TRUE(result.i == expected);
+  value_free(&result);
+  teardown_runtime();
+}
+
 void test_value_arithmetic_invalid_and_nil_operands(void) {
   VALUE_t int_value = {VALUE_int, {.i = 7}};
   VALUE_t nil_value = VALUE_NIL;
