@@ -117,6 +117,7 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 
 %define api.value.type union /* Generate YYSTYPE from these types:  */
 %token <char *> TINTEGER
+%token <char *> TFLOAT
 %token <char *> TSTRINGLIT
 %token <char *> TLOCAL
 %token <char *> TLAYER
@@ -150,7 +151,7 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 
 // Free lexer-allocated token strings when symbols are discarded by error
 // recovery or parser teardown.
-%destructor { free ($$); } TINTEGER TSTRINGLIT TLOCAL TLAYER TLIBNAME TCODEBODY TUNKNOWNCHAR
+%destructor { free ($$); } TINTEGER TFLOAT TSTRINGLIT TLOCAL TLAYER TLIBNAME TCODEBODY TUNKNOWNCHAR
 %destructor { as_delete($$); } <AS_NODE*>
 %destructor { as_delete_if($$); } <AS_IF*>
 
@@ -186,6 +187,7 @@ stmt:   TWHILE expr TDO stmtlist TENDWHILE { $$ = as_new_node(N_WHILESTMT, $2, $
 
 expr:     TLOCAL { $$ = as_new_valnode(V_LOCAL, $1); }
         |	TINTEGER { $$ = as_new_valnode(V_INT, $1); }
+        | TFLOAT { $$ = as_new_valnode(V_FLOAT, $1); }
         |	TSTRINGLIT { $$ = as_new_valnode(V_STR, $1); }
         | TTRUE { $$ = as_new_valnode(V_BOOLTRUE, NULL); }
         | TFALSE { $$ = as_new_valnode(V_BOOLFALSE, NULL); }
