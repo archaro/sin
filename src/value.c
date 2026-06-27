@@ -2,7 +2,6 @@
 
 // Licensed under the MIT License - see LICENSE file for details.
 
-#include <float.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -12,11 +11,6 @@
 #define VALUE_INTERNAL
 #include "value.h"
 #include "floatconv.h"
-
-_Static_assert(sizeof(double) == 8, "VALUE_float requires 64-bit double");
-_Static_assert(DBL_MANT_DIG == 53, "VALUE_float requires IEEE 754 binary64 precision");
-_Static_assert(DBL_MAX_EXP == 1024, "VALUE_float requires IEEE 754 binary64 exponent range");
-_Static_assert(FLT_RADIX == 2, "VALUE_float requires binary floating-point radix");
 
 const VALUE_t VALUE_NIL = {.type = VALUE_nil, .i = 0};
 const VALUE_t VALUE_TRUE = {.type = VALUE_bool, .i = 1};

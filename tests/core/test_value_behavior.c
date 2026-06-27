@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -74,6 +75,25 @@ static VALUE_t run_float_binary(uint64_t lhs, uint64_t rhs, uint8_t op, const ch
   code[pos++] = op;
   code[pos++] = 'h';
   return run_code(name, code, pos);
+}
+
+
+void test_value_ieee754_environment_contract(void) {
+  volatile double one = 1.0;
+  volatile double positive_zero = 0.0;
+  volatile double negative_zero = -0.0;
+
+  double infinity = one / positive_zero;
+  double nan = positive_zero / positive_zero;
+
+  ASSERT_TRUE(isinf(infinity));
+  ASSERT_TRUE(!signbit(infinity));
+  ASSERT_TRUE(isnan(nan));
+  ASSERT_TRUE(signbit(negative_zero));
+  ASSERT_TRUE(!signbit(positive_zero));
+  ASSERT_TRUE(positive_zero == negative_zero);
+  ASSERT_TRUE(value_float_to_bits(positive_zero) == UINT64_C(0x0000000000000000));
+  ASSERT_TRUE(value_float_to_bits(negative_zero) == UINT64_C(0x8000000000000000));
 }
 
 void test_value_integer_arithmetic_helpers(void) {
