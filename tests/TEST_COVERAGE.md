@@ -19,11 +19,29 @@ This document maps major subsystems to concrete test entry points so reviewers c
   - `tests/core/test_absyn_lifecycle.c`
   - `tests/core/test_semant.c`
   - `tests/core/test_parser_input_api.c`
+  - `tests/core/test_parser_float_literals.c`
+    - `test_parser_float_literals_decimal_forms`
+    - `test_parser_float_literals_integer_still_int`
+    - `test_parser_float_literals_item_layers_unchanged`
+    - `test_parser_float_literals_malformed_rejected`
+    - `test_floatconv_binary64_formatting`
+    - `test_floatconv_binary64_format_roundtrip`
+    - `test_floatconv_binary64_edge_cases`
   - `tests/core/test_relative_item_leading_dot.c`
+    - `test_float_item_literal_layer_rejected_at_compile_time`
+    - `test_float_local_deref_layer_returns_nil_and_does_not_save_item`
 - **IR/core metadata and cache behavior**
   - `tests/core/test_ir_validate.c`
+    - `test_lower_float_value_emits_push_float` (float compiler/lowering coverage)
   - `tests/core/test_opcode_schema.c`
   - `tests/core/test_item_cache.c`
+- **Core value/float semantics**
+  - `tests/core/test_value_behavior.c`
+    - `test_value_push_float_interprets_binary64_payloads`
+    - `test_value_float_arithmetic_helpers`
+    - `test_value_float_arithmetic_interpreter_bytecode`
+    - `test_value_float_construction_copy_truthiness_cleanup`
+    - `test_value_comparison_float_ieee754_helpers`
 
 ### Known gaps
 - No property/fuzz-style parser robustness test in-tree (seeded random corpus/replay).
@@ -39,6 +57,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_emitbc_opcode_map`
     - `test_emitbc_opcode_map_call_item_deref_alias_layout`
     - `test_emitbc_opcode_map_unsupported_ir_op`
+    - `test_emitbc_push_float_immediate_layout` (`IR_OP_PUSH_FLOAT` opcode byte and 8-byte payload layout)
   - `tests/compiler/test_emitbc_jumps.c`
     - `test_emitbc_jumps`
   - `tests/compiler/test_emitbc_invariants.c`
@@ -72,7 +91,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
 ### Covered entry points
 - **Interpreter semantics golden contracts**
   - `tests/interpreter/test_interpret_semantics_golden.c`
-    - `test_interpret_semantics_golden`
+    - `test_interpret_semantics_golden` (includes VM numeric semantics such as mixed int/float promotion, NaN/signed-zero comparisons, float truthiness, and float formatting)
 - **Interpreter stress / determinism under repeated runs**
   - `tests/interpreter/test_interpret_stress.c`
     - `test_interpret_stress`
@@ -86,6 +105,9 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_missing_libcall_is_null_and_interpret_deterministic`
     - `test_libcall_registry_self_check_invalid_entries`
     - `test_libcall_invalid_arg_branches_return_contracts`
+    - `test_libcall_float_integer_only_arguments_rejected`
+    - `test_str_libcalls_float_returns_nil_without_error`
+    - `test_net_write_formats_float_output`
     - `test_net_write_ignores_disconnected_lines`
     - `test_net_write_ignores_non_writable_line_states`
 - **Compiler/runtime integration for system libcall execution**
@@ -99,3 +121,14 @@ This document maps major subsystems to concrete test entry points so reviewers c
 ### Known gaps
 - Runtime stress currently covers selected fixtures (`chat_boot`, `echo_boot`) and validates deterministic outputs across repeated runs; broader fixture/session diversity can still be expanded.
 - Performance guard is intentionally opt-in and environment-sensitive; threshold stability across heterogeneous CI hardware is not guaranteed.
+
+## documentation
+
+### Covered entry points
+- **Float user-facing and maintainer-facing docs**
+  - `docs/concepts.md` documents float literal syntax, binary64/IEEE 754 semantics, mixed numeric promotion, NaN comparisons, signed-zero comparison/formatting, and float truthiness.
+  - `docs/bytecode.md` documents `IR_OP_PUSH_FLOAT`, opcode byte `P`, the 8-byte binary64 immediate payload, and endian/platform assumptions.
+  - `docs/libcalls.md` documents float logging/writing behavior and float argument validation for libcalls.
+
+### Known gaps
+- Documentation coverage is maintained by review rather than an automated doc-lint that verifies every float behavior sentence against tests.
