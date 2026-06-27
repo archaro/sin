@@ -23,9 +23,15 @@ execution at byte offset 2.
 ## Encoding conventions
 
 Unless an opcode description says otherwise, numeric immediates are written in
-the platform representation used by the C emitter and interpreter (`memcpy` for
-multi-byte values). Current encodings are therefore little-endian on supported
-little-endian builds.
+the platform representation used by the C emitter and interpreter. The compiler
+centralizes fixed-width writes through helpers for `uint8_t`, `uint16_t`,
+`int16_t`, `int64_t`, and raw `uint64_t` payloads; the interpreter uses matching
+fixed-width read helpers. Multi-byte helpers copy bytes with `memcpy` rather
+than pointer casts, so unaligned instruction streams are safe while preserving
+the existing byte-for-byte format. Current encodings are therefore little-endian
+on supported little-endian builds, and persisted bytecode is portable only across
+platforms with the same integer widths, two's-complement signed representation,
+and byte order assumptions.
 
 * **Opcode bytes** are single-byte character symbols. For example, `p` is
   `IR_OP_PUSH_INT` and `h` is `IR_OP_HALT`.
@@ -34,7 +40,9 @@ little-endian builds.
 * **Two-byte immediates** (`u16` or signed `i16`) follow the opcode directly.
   Strings and embedded source blocks use unsigned 16-bit lengths. Jumps use a
   signed 16-bit relative offset.
-* **Eight-byte immediates** (`i64`) are used by `p` / `IR_OP_PUSH_INT`.
+* **Eight-byte immediates** (`i64`) are used by `p` / `IR_OP_PUSH_INT`. Raw
+  `uint64_t` payload helpers are reserved for future eight-byte payloads such as
+  binary64 bit patterns and intentionally do not imply numeric conversion.
 * **Strings** are encoded as a 16-bit unsigned byte length followed by exactly
   that many bytes. A trailing NUL is not stored in bytecode.
 * **Jumps** (`j`, `k`) encode a signed 16-bit offset measured from the first

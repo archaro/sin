@@ -47,6 +47,38 @@ static inline bool require_bytes(uint8_t *nextop, size_t bytes, const char *opna
 #define REQUIRE_BYTES(nextop, n, opname) \
   do { if (!require_bytes((nextop), (n), (opname))) return NULL; } while (0)
 
+static uint8_t *bc_read_u8(uint8_t *nextop, uint8_t *out, const char *opname) {
+  REQUIRE_BYTES(nextop, sizeof(*out), opname);
+  memcpy(out, nextop, sizeof(*out));
+  return nextop + sizeof(*out);
+}
+
+static uint8_t *bc_read_u16(uint8_t *nextop, uint16_t *out, const char *opname) {
+  REQUIRE_BYTES(nextop, sizeof(*out), opname);
+  memcpy(out, nextop, sizeof(*out));
+  return nextop + sizeof(*out);
+}
+
+static uint8_t *bc_read_i16(uint8_t *nextop, int16_t *out, const char *opname) {
+  REQUIRE_BYTES(nextop, sizeof(*out), opname);
+  memcpy(out, nextop, sizeof(*out));
+  return nextop + sizeof(*out);
+}
+
+static uint8_t *bc_read_u64_payload(uint8_t *nextop, uint64_t *out, const char *opname) {
+  REQUIRE_BYTES(nextop, sizeof(*out), opname);
+  memcpy(out, nextop, sizeof(*out));
+  return nextop + sizeof(*out);
+}
+
+static uint8_t *bc_read_i64(uint8_t *nextop, int64_t *out, const char *opname) {
+  uint64_t payload;
+  uint8_t *after = bc_read_u64_payload(nextop, &payload, opname);
+  if (!after) return NULL;
+  memcpy(out, &payload, sizeof(*out));
+  return after;
+}
+
 static OP_t opcode[256];
 static bool interpreter_initialized = false;
 uint8_t *op_undefined(uint8_t *nextop, ITEM_t *item);
@@ -267,23 +299,25 @@ uint8_t *op_undefined(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_pushint(uint8_t *nextop, ITEM_t *item) {
   // Push an int64 onto the stack.
   // Read the next 8 bytes and make an VALUE_t
-  REQUIRE_BYTES(nextop, 8, "OP_PUSHINT");
   VALUE_t v;
   v.type = VALUE_int;
-  v.i = *(int64_t*)nextop;
+  nextop = bc_read_i64(nextop, &v.i, "OP_PUSHINT");
+  if (!nextop) return NULL;
   push_stack(VM->stack, v);
   DISASS_LOG("OP_PUSHINT: %ld\n", v.i);
-  return nextop+8;
+  return nextop;
 }
 
 uint8_t *op_pushbool(uint8_t *nextop, ITEM_t *item) {
-  REQUIRE_BYTES(nextop, 1, "OP_PUSHBOOL");
+  uint8_t raw;
+  nextop = bc_read_u8(nextop, &raw, "OP_PUSHBOOL");
+  if (!nextop) return NULL;
   VALUE_t v;
   v.type = VALUE_bool;
-  v.i = (*nextop != 0) ? 1 : 0;
+  v.i = (raw != 0) ? 1 : 0;
   push_stack(VM->stack, v);
   DISASS_LOG("OP_PUSHBOOL: %ld\n", v.i);
-  return nextop + 1;
+  return nextop;
 }
 
 uint8_t *op_inclocal(uint8_t *nextop, ITEM_t *item) {
@@ -315,11 +349,11 @@ uint8_t *op_declocal(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_jump(uint8_t *nextop, ITEM_t *item) {
   // Unconditional jump.  Interpret the next two bytes as a
   // SIGNED int, and then modify the bytecode pointer by that amount.
-  REQUIRE_BYTES(nextop, 2, "OP_JUMP");
   int16_t offset;
-  memcpy(&offset, nextop, 2);
+  nextop = bc_read_i16(nextop, &offset, "OP_JUMP");
+  if (!nextop) return NULL;
   DISASS_LOG("OP_JUMP: offset is  %d.\n", offset);
-  return nextop + offset;
+  return nextop - sizeof(offset) + offset;
 }
 
 uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
@@ -328,7 +362,10 @@ uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
   // by that amount.  Alternatively, if true, simply skip the next
   // two bytes and go on to the next instruction.
 
-  REQUIRE_BYTES(nextop, 2, "OP_JUMPFALSE");
+  int16_t offset;
+  uint8_t *offset_start = nextop;
+  nextop = bc_read_i16(nextop, &offset, "OP_JUMPFALSE");
+  if (!nextop) return NULL;
   VALUE_t v1;
   v1 = pop_stack(VM->stack);
   if (value_is_truthy(&v1)) {
@@ -336,13 +373,11 @@ uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
     // the next two bytes.
     DISASS_LOG("OP_JUMPFALSE: evaluates to true (no jump).\n");
     value_free(&v1);
-    return nextop + 2;
+    return nextop;
   } else {
     // If not true then it must be false.  That's logic.
-    int16_t offset;
-    memcpy(&offset, nextop, 2);
     DISASS_LOG("OP_JUMPFALSE: evaluates to false (jump offset %d).\n", offset);
-    return nextop + offset;
+    return offset_start + offset;
   }
 }
 
@@ -384,11 +419,10 @@ uint8_t *op_pushstr(uint8_t *nextop, ITEM_t *item) {
   // Push a string literal onto the stack.
   VALUE_t v;
   v.type = VALUE_str;
-  REQUIRE_BYTES(nextop, 2, "OP_PUSHSTR length");
   uint16_t len;
   // Get the length
-  memcpy(&len, nextop, 2);
-  nextop += 2;
+  nextop = bc_read_u16(nextop, &len, "OP_PUSHSTR length");
+  if (!nextop) return NULL;
   REQUIRE_BYTES(nextop, len, "OP_PUSHSTR payload");
   v.s = GROW_ARRAY(char, NULL, 0, len+1);
   memcpy(v.s, nextop, len);
@@ -848,10 +882,9 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
   // If the item does not exist, nil is pushed onto the stack.
 
   // First, let's get the number of arguments passed to this item
-  REQUIRE_BYTES(nextop, 2, "OP_FETCHITEM arg-count");
   uint16_t arg_count;
-  memcpy(&arg_count, nextop, 2);
-  nextop += 2;
+  nextop = bc_read_u16(nextop, &arg_count, "OP_FETCHITEM arg-count");
+  if (!nextop) return NULL;
 
   // Now the item name.
   VALUE_t itemname = pop_stack(VM->stack);

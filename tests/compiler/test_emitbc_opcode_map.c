@@ -120,6 +120,47 @@ void test_emitbc_opcode_map(void) {
 }
 
 
+
+void test_emitbc_push_int_immediate_layout(void) {
+  const int64_t values[] = {
+      0,
+      42,
+      -1,
+      INT64_C(0x0102030405060708),
+      INT64_C(-9223372036854775807) - INT64_C(1),
+  };
+
+  IR_Unit *unit = t_new_unit();
+  ASSERT_NOT_NULL(unit);
+  for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+    t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = values[i]});
+  }
+
+  OUTPUT_t out = {0};
+  out.maxsize = 8;
+  out.bytecode = malloc(out.maxsize);
+  out.nextbyte = out.bytecode;
+  ASSERT_NOT_NULL(out.bytecode);
+
+  char *errdetail = NULL;
+  int8_t rc = t_emit_bytecode(unit, 0, 0, &out, &errdetail);
+  ASSERT_EQ_INT(0, rc);
+  ASSERT_TRUE(errdetail == NULL);
+
+  size_t pos = 2;
+  for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+    uint8_t expected[sizeof(values[i])];
+    memcpy(expected, &values[i], sizeof(expected));
+    ASSERT_EQ_INT('p', out.bytecode[pos++]);
+    ASSERT_TRUE(memcmp(out.bytecode + pos, expected, sizeof(expected)) == 0);
+    pos += sizeof(expected);
+  }
+  ASSERT_EQ_INT((int)pos, (int)(out.nextbyte - out.bytecode));
+
+  free(out.bytecode);
+  ir_destroy_unit(unit);
+}
+
 void test_emitbc_opcode_map_call_item_deref_alias_layout(void) {
   IR_Unit *unit = t_new_unit();
   ASSERT_NOT_NULL(unit);
