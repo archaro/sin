@@ -336,27 +336,33 @@ uint8_t *op_pushbool(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_inclocal(uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the locals.
   // If that local is an int, increment it.  Otherwise complain.
-  uint8_t index = *nextop + VM->stack->base;
+  uint8_t raw_index;
+  nextop = bc_read_u8(nextop, &raw_index, "OP_INCLOCAL");
+  if (!nextop) return NULL;
+  uint8_t index = raw_index + VM->stack->base;
   if (VM->stack->stack[index].type == VALUE_int) {
     VM->stack->stack[index].i++;
   } else {
     logerr("Trying to increment non integer local variable.\n");
   }
   DISASS_LOG("OP_INCLOCAL: index %d\n", index);
-  return nextop+1;
+  return nextop;
 }
 
 uint8_t *op_declocal(uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the locals.
   // If that local is an int, decrement it.  Otherwise complain.
-  uint8_t index = *nextop + VM->stack->base;
+  uint8_t raw_index;
+  nextop = bc_read_u8(nextop, &raw_index, "OP_DECLOCAL");
+  if (!nextop) return NULL;
+  uint8_t index = raw_index + VM->stack->base;
   if (VM->stack->stack[index].type == VALUE_int) {
     VM->stack->stack[index].i--;
   } else {
     logerr("Trying to decrement non integer local variable.\n");
   }
   DISASS_LOG("OP_DECLOCAL: index %d\n", index);
-  return nextop+1;
+  return nextop;
 }
 
 uint8_t *op_jump(uint8_t *nextop, ITEM_t *item) {
@@ -397,18 +403,24 @@ uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_savelocal(uint8_t *nextop, ITEM_t *item) {
   // This is the quickest way, without extra pushes and pops.
   // Interpret the next byte as an index into the stack.
-  uint8_t index = *nextop + VM->stack->base;
+  uint8_t raw_index;
+  nextop = bc_read_u8(nextop, &raw_index, "OP_SAVELOCAL");
+  if (!nextop) return NULL;
+  uint8_t index = raw_index + VM->stack->base;
   // First check if the current value is a string.  If so, free it.
   VALUE_t top = pop_stack(VM->stack);
   value_move(&VM->stack->stack[index], &top);
   DISASS_LOG("OP_SAVELOCAL: index %d\n", index);
-  return nextop+1;
+  return nextop;
 }
 
 uint8_t *op_getlocal(uint8_t *nextop, ITEM_t *item) {
   // This is the quickest way, without extra pushes and pops.
   // Interpret the next byte as an index into the stack.
-  uint8_t index = *nextop + VM->stack->base;
+  uint8_t raw_index;
+  nextop = bc_read_u8(nextop, &raw_index, "OP_GETLOCAL");
+  if (!nextop) return NULL;
+  uint8_t index = raw_index + VM->stack->base;
 
   push_stack(VM->stack, value_clone(&VM->stack->stack[index]));
 #ifdef DISASS
@@ -425,7 +437,7 @@ uint8_t *op_getlocal(uint8_t *nextop, ITEM_t *item) {
       DISASS_LOG("OP_GETLOCAL: index %d type %d.\n", index, v.type);
   }
 #endif
-  return nextop+1;
+  return nextop;
 }
 
 uint8_t *op_pushstr(uint8_t *nextop, ITEM_t *item) {
@@ -611,7 +623,9 @@ uint8_t *op_logicalor(uint8_t *nextop, ITEM_t *item) {
 }
 
 uint8_t *op_libcall_token(uint8_t *nextop, ITEM_t *item) {
-  uint8_t token = *nextop++;
+  uint8_t token;
+  nextop = bc_read_u8(nextop, &token, "OP_LIBCALL");
+  if (!nextop) return NULL;
   DISASS_LOG("Calling libcall token %d.\n", token);
   OP_t libcall = libcall_func_token(token);
   if (!libcall) {

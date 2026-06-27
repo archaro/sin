@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "config.h"
+#include "error.h"
 #include "interpret.h"
 #include "item.h"
 #include "test_assert.h"
@@ -14,6 +15,7 @@ extern CONFIG_t config;
 
 static void setup_runtime(void) {
   memset(&config, 0, sizeof(config));
+  init_errmsg();
   config.itemroot = make_root_item("root");
   ASSERT_NOT_NULL(config.itemroot);
   config.vm = make_vm();
@@ -53,6 +55,22 @@ static VALUE_t run_code(const char *name, const uint8_t *template_code, size_t l
   return interpret(code);
 }
 
+
+static void assert_truncated_bytecode_for_opcode(const char *name, uint8_t opcode, const char *opname) {
+  uint8_t code[] = {0, 0, opcode};
+  VALUE_t result = run_code(name, code, sizeof(code));
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_RUNTIME_TRUNCATED, err->value.i);
+
+  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_EQ_INT(VALUE_str, msg->value.type);
+  ASSERT_TRUE(strstr(msg->value.s, opname) != NULL);
+  ASSERT_TRUE(strstr(msg->value.s, "truncated bytecode read") != NULL);
+}
 
 static VALUE_t run_float_unary(uint64_t bits, uint8_t op, const char *name) {
   uint8_t code[32] = {0};
@@ -557,4 +575,11 @@ void test_value_comparison_unsupported_ordering_is_false(void) {
 
   value_free(&left);
   value_free(&right);
+}
+
+void test_interpreter_truncated_single_byte_operands(void) {
+  setup_runtime();
+  assert_truncated_bytecode_for_opcode("test.truncated_getlocal", 'e', "OP_GETLOCAL");
+  assert_truncated_bytecode_for_opcode("test.truncated_libcall_token", 'M', "OP_LIBCALL");
+  teardown_runtime();
 }
