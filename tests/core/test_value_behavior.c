@@ -30,6 +30,11 @@ static void emit_i64(uint8_t *code, size_t *pos, int64_t value) {
   *pos += sizeof(value);
 }
 
+static void emit_u64(uint8_t *code, size_t *pos, uint64_t value) {
+  memcpy(code + *pos, &value, sizeof(value));
+  *pos += sizeof(value);
+}
+
 static void emit_str(uint8_t *code, size_t *pos, const char *value) {
   uint16_t len = (uint16_t)strlen(value);
   memcpy(code + *pos, &len, sizeof(len));
@@ -104,6 +109,35 @@ void test_value_push_int_interprets_i64_immediates(void) {
   ASSERT_EQ_INT(VALUE_int, result.type);
   ASSERT_TRUE(result.i == expected);
   value_free(&result);
+  teardown_runtime();
+}
+
+void test_value_push_float_interprets_binary64_payloads(void) {
+  setup_runtime();
+
+  const uint64_t expected_bits[] = {
+      UINT64_C(0x3ff0000000000000), /* 1.0 */
+      UINT64_C(0x8000000000000000), /* -0.0 */
+      UINT64_C(0x7ff0000000000000), /* +inf */
+      UINT64_C(0x7ff8000000000042), /* quiet NaN */
+      UINT64_C(0xc006000000000000), /* -2.75 */
+  };
+
+  for (size_t i = 0; i < sizeof(expected_bits) / sizeof(expected_bits[0]); i++) {
+    uint8_t code[16] = {0};
+    size_t pos = 0;
+    code[pos++] = 0;
+    code[pos++] = 0;
+    code[pos++] = 'P';
+    emit_u64(code, &pos, expected_bits[i]);
+    code[pos++] = 'h';
+
+    VALUE_t result = run_code("test.value_push_float_binary64", code, pos);
+    ASSERT_EQ_INT(VALUE_float, result.type);
+    ASSERT_TRUE(value_float_to_bits(result.f) == expected_bits[i]);
+    value_free(&result);
+  }
+
   teardown_runtime();
 }
 

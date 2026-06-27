@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <getopt.h>
+#include <math.h>
 
 #include "version.h"
 #include "config.h"
@@ -30,6 +31,7 @@ typedef enum { OPERAND_NONE = 0,
                OPERAND_U8,
                OPERAND_I16,
                OPERAND_I64,
+               OPERAND_F64_BITS,
                OPERAND_BLOB_I16 } operand_kind_t;
 
 typedef struct {
@@ -102,6 +104,13 @@ static parse_status_t read_i16(uint8_t **p, uint8_t *end, int16_t *out,
 }
 static parse_status_t read_i64(uint8_t **p, uint8_t *end, int64_t *out,
                                const char *what) {
+  if (!require_bytes(*p, end, 8, what)) return PARSE_EOF;
+  memcpy(out, *p, 8);
+  *p += 8;
+  return PARSE_OK;
+}
+static parse_status_t read_u64_payload(uint8_t **p, uint8_t *end, uint64_t *out,
+                                       const char *what) {
   if (!require_bytes(*p, end, 8, what)) return PARSE_EOF;
   memcpy(out, *p, 8);
   *p += 8;
@@ -279,11 +288,15 @@ static uint8_t *h_int(uint8_t *p, uint8_t *e, decode_context_t c) {
 }
 static uint8_t *h_float(uint8_t *p, uint8_t *e, decode_context_t c) {
   (void) c;
-  int64_t raw;
   uint64_t bits;
-  if (read_i64(&p, e, &raw, "FLOAT literal") != PARSE_OK) return p;
-  memcpy(&bits, &raw, sizeof(bits));
-  logmsg("FLOAT 0x%016llx\n", (unsigned long long)bits);
+  double value;
+  const char *class_name = "finite";
+  if (read_u64_payload(&p, e, &bits, "FLOAT literal") != PARSE_OK) return p;
+  memcpy(&value, &bits, sizeof(value));
+  if (isnan(value)) class_name = "nan";
+  else if (isinf(value)) class_name = signbit(value) ? "-inf" : "+inf";
+  else if (value == 0.0) class_name = signbit(value) ? "-0.0" : "+0.0";
+  logmsg("FLOAT %.17g (%s bits=0x%016llx)\n", value, class_name, (unsigned long long)bits);
   return p;
 }
 static uint8_t *h_bool(uint8_t *p, uint8_t *e, decode_context_t c) {
@@ -350,7 +363,7 @@ static const opcode_desc_t OPCODES[] = {
     {'m', "MULTIPLY", OPERAND_NONE, h_mul}, {'n', "NEGATE", OPERAND_NONE,
                                              h_neg}, {'o', "BOOL EQ",
                                                       OPERAND_NONE, h_eq},
-    {'p', "INTEGER", OPERAND_I64, h_int}, {'P', "FLOAT", OPERAND_I64, h_float}, {'q', "BOOL NOTEQ", OPERAND_NONE,
+    {'p', "INTEGER", OPERAND_I64, h_int}, {'P', "FLOAT", OPERAND_F64_BITS, h_float}, {'q', "BOOL NOTEQ", OPERAND_NONE,
                                            h_neq}, {'r', "BOOL LT",
                                                     OPERAND_NONE, h_lt}, {'s',
                                                                           "SUBTRACT",
