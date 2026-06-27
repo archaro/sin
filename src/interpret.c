@@ -935,13 +935,7 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
       ITEMDEBUG_LOG("Fetched item %s (called with %d arguments).\n", fullname, arg_count);
       // Just push the item value onto the stack.
       if (i->type == ITEM_value) {
-        VALUE_t v;
-        v.type = i->value.type;
-        if (v.type == VALUE_str) {
-          v.s = strdup(i->value.s);
-        } else {
-          v.i = i->value.i;
-        }
+        VALUE_t v = value_clone(&i->value);
         push_stack(VM->stack, v);
       } else {
         // Are there any arguments in excess of what this item takes?

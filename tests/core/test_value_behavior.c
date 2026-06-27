@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -422,6 +423,39 @@ void test_value_float_construction_copy_truthiness_cleanup(void) {
 
   value_free(&dst);
   ASSERT_EQ_INT(VALUE_nil, dst.type);
+}
+
+void test_value_float_item_fetch_preserves_bits(void) {
+  setup_runtime();
+
+  const uint64_t expected_bits[] = {
+      UINT64_C(0x8000000000000000),
+      UINT64_C(0x7ff8000000000042),
+  };
+
+  for (size_t i = 0; i < sizeof(expected_bits) / sizeof(expected_bits[0]); i++) {
+    char item_name[32];
+    snprintf(item_name, sizeof(item_name), "float.fetch.%c", (char)('a' + i));
+    VALUE_t original = {VALUE_float, {.f = value_float_from_bits(expected_bits[i])}};
+    ASSERT_NOT_NULL(insert_item(config.itemroot, item_name, original));
+
+    uint8_t code[64] = {0};
+    size_t pos = 0;
+    code[pos++] = 0;
+    code[pos++] = 0;
+    code[pos++] = 'l'; emit_str(code, &pos, item_name);
+    code[pos++] = 'F'; code[pos++] = 0; code[pos++] = 0;
+    code[pos++] = 'h';
+
+    char code_name[32];
+    snprintf(code_name, sizeof(code_name), "float.runner.%c", (char)('a' + i));
+    VALUE_t fetched = run_code(code_name, code, pos);
+    ASSERT_EQ_INT(VALUE_float, fetched.type);
+    ASSERT_TRUE(value_float_to_bits(fetched.f) == expected_bits[i]);
+    value_free(&fetched);
+  }
+
+  teardown_runtime();
 }
 
 void test_value_string_local_load_store_clones(void) {
