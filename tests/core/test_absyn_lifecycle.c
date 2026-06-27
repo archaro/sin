@@ -93,7 +93,11 @@ void test_absyn_item_deref_chains(void) {
   as_delete(chain);
 }
 
+void test_absyn_malformed_float_valnode_returns_null(void) {
+  AS_NODE *node = as_new_valnode(V_FLOAT, strdup("not-a-float"));
 
+  ASSERT_TRUE(node == NULL);
+}
 
 void test_absyn_float_value_preserves_bits(void) {
   const uint64_t bits = UINT64_C(0x7ff8000000000042);

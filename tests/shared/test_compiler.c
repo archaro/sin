@@ -26,6 +26,7 @@ void test_absyn_stmtlist_multiple_statements(void);
 void test_absyn_if_elsif_else_chain(void);
 void test_absyn_item_deref_chains(void);
 void test_absyn_float_value_preserves_bits(void);
+void test_absyn_malformed_float_valnode_returns_null(void);
 void test_sem_check_locals_reusable_context(void);
 void test_sem_duplicate_local_keeps_original_index(void);
 void test_sem_code_params_are_treated_as_defined_locals(void);
@@ -168,6 +169,7 @@ static const test_case_t core_tests[] = {
     {"test_absyn_if_elsif_else_chain", test_absyn_if_elsif_else_chain},
     {"test_absyn_item_deref_chains", test_absyn_item_deref_chains},
     {"test_absyn_float_value_preserves_bits", test_absyn_float_value_preserves_bits},
+    {"test_absyn_malformed_float_valnode_returns_null", test_absyn_malformed_float_valnode_returns_null},
     {"test_sem_check_locals_reusable_context", test_sem_check_locals_reusable_context},
     {"test_sem_duplicate_local_keeps_original_index", test_sem_duplicate_local_keeps_original_index},
     {"test_sem_code_params_are_treated_as_defined_locals", test_sem_code_params_are_treated_as_defined_locals},
