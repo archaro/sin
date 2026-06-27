@@ -3,9 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+const char *test_harness_current_suite(void);
+const char *test_harness_current_test(void);
+
 #define TEST_FAILF(fmt, ...) \
   do { \
-    fprintf(stderr, "ASSERTION FAILED at %s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__); \
+    fprintf(stderr, "ASSERTION FAILED in [%s] %s at %s:%d: " fmt "\n", test_harness_current_suite(), test_harness_current_test(), __FILE__, __LINE__, ##__VA_ARGS__); \
     exit(1); \
   } while (0)
 
