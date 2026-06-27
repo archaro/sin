@@ -1060,6 +1060,11 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
                 just_processed_layer = true;
                 break;
               }
+              case VALUE_float: {
+                logerr("Float value cannot be used as an item layer name.\n");
+                invalid = true;
+                break;
+              }
               case VALUE_nil: {
                 if (!saw_non_missing_layer && !saw_missing_layer) {
                   saw_missing_layer = true;
@@ -1073,7 +1078,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
               }
               default: {
                 // Not a valid value type to convert into a layer name.
-                logerr("Layer type (%d) not int or string.\n", *nextop);
+                logerr("Layer type (%d) not int or string.\n", VM->stack->stack[idx].type);
                 invalid = true;
               }
             }
@@ -1122,6 +1127,12 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
                     just_processed_layer = true;
                     break;
                   }
+                  case VALUE_float: {
+                    logerr("Item dereference failed for '%s': float value cannot be used as an item layer name.\n",
+                           layername.s);
+                    invalid = true;
+                    break;
+                  }
                   case VALUE_nil: {
                     if (!saw_non_missing_layer && !saw_missing_layer) {
                       saw_missing_layer = true;
@@ -1160,6 +1171,9 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
         logerr("Invalid layer type '%c' (%d).\n", *nextop, *nextop);
         invalid = true;
       }
+    }
+    if (invalid) {
+      break;
     }
     if (missing_layer_possibly_leading && saw_non_missing_layer) {
       missing_layer_is_leading = true;

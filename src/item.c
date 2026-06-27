@@ -78,6 +78,14 @@ extern CONFIG_t config;
 
 static bool validate_item_name(const char *item_name,
                                                const char *func_name) {
+  /*
+   * Item names are already-assembled strings, not numeric values. Integer
+   * layers may be assembled by the compiler/runtime using base-10 integer
+   * text, but float values are rejected before this API is called. Therefore
+   * this validator treats dots only as layer separators: "1.0" is the two
+   * layers "1" and "0", not the float spellings "1.0" or "1.00"; +0.0/-0.0
+   * and NaN payloads have no item-name representation.
+   */
   if (!item_name || *item_name == '\0') {
     logerr("%s called with empty item name.\n", func_name);
     return false;

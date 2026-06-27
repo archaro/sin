@@ -19,6 +19,19 @@ Items are nominally hierarchical, although this is only an organisational strate
 `foo.bar.baz`  
 …although there is nothing can be inferred from `foo.bar` by its relationship with `foo`.
 
+Item layer names are strings. Integer layer literals and integer-valued
+dereferences are converted to canonical base-10 integer text, so `foo.1` and
+`foo.[@i]` with `@i = 1` address the same layer. Float values are not permitted
+as layer names or as dereference results used to build a layer name: a literal
+such as `foo.1.0` is parsed as layers `foo`, `1`, and `0`, not as a float layer,
+and a runtime dereference that evaluates to a float makes item assembly fail and
+produce `nil`. Consequently `1`, `1.0`, and `1.00` do not have three
+float-derived item-name spellings: only integer `1` is supported as a numeric
+layer value, while the dotted forms are normal multi-layer string names if
+written explicitly. Likewise `+0.0` and `-0.0` have no item-name mapping, and
+NaN payloads are neither preserved nor normalized for item names because NaN
+float values are rejected rather than formatted.
+
 To assign an item, use the assignment operator, `=`.  If the item does not exist, it will be created (as will all of its parents, if it is a multi-layered item).  If the item exists, its value will be overwritten with the new value.  An item which does not exist has the default value of `nil`.  Thus:  
 `foo = 10;`  
 `bar = 10 * foo;`  

@@ -112,6 +112,10 @@ static void lower_layer_part(LOWER_CTX *ctx, AS_NODE *part) {
                                    .imm = (int64_t)(intptr_t)layer});
       }
       return;
+    case V_FLOAT:
+      lower_set_error(ctx, ERR_COMP_SYNTAX,
+                      "float literals are not permitted as item layers");
+      return;
     default:
       lower_set_unsupported(ctx, part, "unsupported item layer value type");
       return;
