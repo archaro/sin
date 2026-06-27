@@ -63,6 +63,11 @@ void test_value_arithmetic_invalid_and_nil_operands(void);
 void test_value_string_concat_helpers(void);
 void test_value_bool_nil_truthiness_helpers(void);
 void test_value_string_local_load_store_clones(void);
+void test_value_comparison_int_helpers(void);
+void test_value_comparison_bool_helpers(void);
+void test_value_comparison_string_helpers(void);
+void test_value_comparison_mismatched_type_equality_quirk(void);
+void test_value_comparison_unsupported_ordering_is_false(void);
 
 /* Compiler component tests. */
 void test_emitbc_header(void);
@@ -166,6 +171,11 @@ static const test_case_t core_tests[] = {
     {"test_value_string_concat_helpers", test_value_string_concat_helpers},
     {"test_value_bool_nil_truthiness_helpers", test_value_bool_nil_truthiness_helpers},
     {"test_value_string_local_load_store_clones", test_value_string_local_load_store_clones},
+    {"test_value_comparison_int_helpers", test_value_comparison_int_helpers},
+    {"test_value_comparison_bool_helpers", test_value_comparison_bool_helpers},
+    {"test_value_comparison_string_helpers", test_value_comparison_string_helpers},
+    {"test_value_comparison_mismatched_type_equality_quirk", test_value_comparison_mismatched_type_equality_quirk},
+    {"test_value_comparison_unsupported_ordering_is_false", test_value_comparison_unsupported_ordering_is_false},
 };
 
 static const test_case_t compiler_tests[] = {

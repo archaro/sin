@@ -173,3 +173,76 @@ void test_value_string_local_load_store_clones(void) {
   value_free(&result);
   teardown_runtime();
 }
+
+void test_value_comparison_int_helpers(void) {
+  VALUE_t four = {VALUE_int, {.i = 4}};
+  VALUE_t also_four = {VALUE_int, {.i = 4}};
+  VALUE_t nine = {VALUE_int, {.i = 9}};
+
+  ASSERT_TRUE(value_equal(&four, &also_four));
+  ASSERT_TRUE(!value_not_equal(&four, &also_four));
+  ASSERT_TRUE(value_not_equal(&four, &nine));
+  ASSERT_TRUE(value_less_than(&four, &nine));
+  ASSERT_TRUE(value_less_equal(&four, &also_four));
+  ASSERT_TRUE(value_greater_than(&nine, &four));
+  ASSERT_TRUE(value_greater_equal(&also_four, &four));
+  ASSERT_TRUE(!value_less_than(&nine, &four));
+}
+
+void test_value_comparison_bool_helpers(void) {
+  VALUE_t false_value = VALUE_FALSE;
+  VALUE_t true_value = VALUE_TRUE;
+  VALUE_t another_true = VALUE_TRUE;
+
+  ASSERT_TRUE(value_equal(&true_value, &another_true));
+  ASSERT_TRUE(value_not_equal(&false_value, &true_value));
+  ASSERT_TRUE(value_less_than(&false_value, &true_value));
+  ASSERT_TRUE(value_less_equal(&true_value, &another_true));
+  ASSERT_TRUE(value_greater_than(&true_value, &false_value));
+  ASSERT_TRUE(value_greater_equal(&another_true, &true_value));
+}
+
+void test_value_comparison_string_helpers(void) {
+  VALUE_t left = {VALUE_str, {.s = strdup("same")}};
+  VALUE_t same = {VALUE_str, {.s = strdup("same")}};
+  VALUE_t different = {VALUE_str, {.s = strdup("different")}};
+
+  ASSERT_TRUE(value_equal(&left, &same));
+  ASSERT_TRUE(!value_not_equal(&left, &same));
+  ASSERT_TRUE(value_not_equal(&left, &different));
+
+  value_free(&left);
+  value_free(&same);
+  value_free(&different);
+}
+
+void test_value_comparison_mismatched_type_equality_quirk(void) {
+  VALUE_t int_value = {VALUE_int, {.i = 1}};
+  VALUE_t bool_value = VALUE_TRUE;
+  VALUE_t nil_value = VALUE_NIL;
+  VALUE_t str_value = {VALUE_str, {.s = strdup("1")}};
+
+  ASSERT_TRUE(!value_equal(&int_value, &bool_value));
+  ASSERT_TRUE(value_not_equal(&int_value, &bool_value));
+  ASSERT_TRUE(!value_equal(&nil_value, &str_value));
+  ASSERT_TRUE(value_not_equal(&nil_value, &str_value));
+
+  value_free(&str_value);
+}
+
+void test_value_comparison_unsupported_ordering_is_false(void) {
+  VALUE_t left = {VALUE_str, {.s = strdup("a")}};
+  VALUE_t right = {VALUE_str, {.s = strdup("b")}};
+  VALUE_t int_value = {VALUE_int, {.i = 1}};
+  VALUE_t nil_value = VALUE_NIL;
+
+  ASSERT_TRUE(!value_less_than(&left, &right));
+  ASSERT_TRUE(!value_less_equal(&left, &right));
+  ASSERT_TRUE(!value_greater_than(&left, &right));
+  ASSERT_TRUE(!value_greater_equal(&left, &right));
+  ASSERT_TRUE(!value_less_than(&int_value, &nil_value));
+  ASSERT_TRUE(!value_greater_equal(&nil_value, &int_value));
+
+  value_free(&left);
+  value_free(&right);
+}
