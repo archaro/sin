@@ -1,5 +1,10 @@
 # Quickstart
 
+## Dependencies
+The development environment is Ubuntu 24.04, but any modern Linux distro should be fine, as long as libuv1 is available (version 1.48 definitely works, but any recent version should be good).
+
+The code is written for x86_64 - other architectures are not supported but PRs are welcome to enable other architectures.
+
 ## Build
 
 ```bash

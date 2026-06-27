@@ -1,5 +1,14 @@
 # How to be Sinister #
 
+The style of the language is something like the misbegotten offspring of Forth and Smalltalk.
+
+## Flow of Operations ##
+
+When the runtime engine starts up, it first loads and executes the bootstrap code (which is separately compiled).  The engine is event-driven and this code sets things up ready for the game to run, including setting up the main game tasks.  Tasks are attached to the runloop and are called as necessary.  There are three kinds:
+- Network tasks: the listener, and any player connections created by it.  These tasks run outside the game and interact in limited ways with *Sinistra* code, and their purpose is to manage input from and output to connected players.
+- Timer tasks: these are managed by *Sinistra* code (for example, the bootstrap code).  Each time the timer expires, the specified code is run.
+- Input task: this is the most important task, and is run once per loop.  It processes connections, disconnections and data from the players and output back to them.  The input task expects to call the `input` item, which is written in *Sinistra*.  (And is, in fact, the only code item you *need* to write, making sure it calls the net.input libcall.)
+
 ## The Item ##
 
 The fundamental unit in Sinistra is the *item*.  An item can contain many things: integers, strings, Boolean values or `nil`, or it can contain code.  A value item simply returns its value, whereas a code item executes its code and returns the result.  All items return a value (even if the value is `nil`).  Items can also call other items.
