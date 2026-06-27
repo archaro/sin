@@ -502,7 +502,7 @@ uint8_t *op_divide(uint8_t *nextop, ITEM_t *item) {
   v2 = pop_stack(VM->stack);
   VALUE_t result;
   if (value_div(&v2, &v1, &result)) {
-    if (v1.i == 0) {
+    if (v1.type == VALUE_int && v1.i == 0) {
       logerr("Attempt to divide by zero.  Substitute zero as result.\n");
     }
     DISASS_LOG("OP_DIV: operand types %d and %d\n", v2.type, v1.type);

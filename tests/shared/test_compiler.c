@@ -68,6 +68,8 @@ void test_value_integer_arithmetic_helpers(void);
 void test_value_arithmetic_invalid_and_nil_operands(void);
 void test_value_push_int_interprets_i64_immediates(void);
 void test_value_push_float_interprets_binary64_payloads(void);
+void test_value_float_arithmetic_helpers(void);
+void test_value_float_arithmetic_interpreter_bytecode(void);
 void test_value_string_concat_helpers(void);
 void test_value_bool_nil_truthiness_helpers(void);
 void test_value_float_construction_copy_truthiness_cleanup(void);
@@ -187,6 +189,8 @@ static const test_case_t core_tests[] = {
     {"test_value_arithmetic_invalid_and_nil_operands", test_value_arithmetic_invalid_and_nil_operands},
     {"test_value_push_int_interprets_i64_immediates", test_value_push_int_interprets_i64_immediates},
     {"test_value_push_float_interprets_binary64_payloads", test_value_push_float_interprets_binary64_payloads},
+    {"test_value_float_arithmetic_helpers", test_value_float_arithmetic_helpers},
+    {"test_value_float_arithmetic_interpreter_bytecode", test_value_float_arithmetic_interpreter_bytecode},
     {"test_value_string_concat_helpers", test_value_string_concat_helpers},
     {"test_value_bool_nil_truthiness_helpers", test_value_bool_nil_truthiness_helpers},
     {"test_value_float_construction_copy_truthiness_cleanup", test_value_float_construction_copy_truthiness_cleanup},

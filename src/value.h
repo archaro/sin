@@ -16,7 +16,8 @@ typedef enum { VALUE_int,
              } VALUE_e;
 
 typedef enum { VALUE_NUMERIC_NONE,
-               VALUE_NUMERIC_INT
+               VALUE_NUMERIC_INT,
+               VALUE_NUMERIC_FLOAT
              } VALUE_numeric_kind_e;
 
 typedef struct {
@@ -73,10 +74,9 @@ bool value_greater_than(const VALUE_t *left, const VALUE_t *right);
 bool value_greater_equal(const VALUE_t *left, const VALUE_t *right);
 bool value_is_numeric(const VALUE_t *value);
 VALUE_numeric_kind_e value_numeric_kind(const VALUE_t *value);
-// Arithmetic helpers currently support integer arithmetic only. OP_ADD
-// intentionally preserves the VM quirk that nil participates as integer 0;
-// the other arithmetic operators require int operands until more numeric
-// kinds are added. value_div preserves the VM invalid-operand result of int 0.
+// Arithmetic helpers support int and IEEE 754 binary64 float arithmetic.
+// OP_ADD intentionally preserves the VM quirk that nil participates as
+// integer 0. value_div preserves the VM invalid-operand result of int 0.
 bool value_add(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
 bool value_sub(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
 bool value_mul(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
