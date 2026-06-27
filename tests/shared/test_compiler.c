@@ -59,6 +59,7 @@ void test_relative_item_leading_dot_boundary_max_name_after_prefix_expansion_com
 void test_relative_item_leading_dot_existing_absolute_item_unchanged(void);
 void test_relative_item_leading_dot_parse_still_rejects_bad_double_dot(void);
 void test_value_integer_arithmetic_helpers(void);
+void test_value_arithmetic_invalid_and_nil_operands(void);
 void test_value_string_concat_helpers(void);
 void test_value_bool_nil_truthiness_helpers(void);
 void test_value_string_local_load_store_clones(void);
@@ -161,6 +162,7 @@ static const test_case_t core_tests[] = {
     {"test_relative_item_leading_dot_existing_absolute_item_unchanged", test_relative_item_leading_dot_existing_absolute_item_unchanged},
     {"test_relative_item_leading_dot_parse_still_rejects_bad_double_dot", test_relative_item_leading_dot_parse_still_rejects_bad_double_dot},
     {"test_value_integer_arithmetic_helpers", test_value_integer_arithmetic_helpers},
+    {"test_value_arithmetic_invalid_and_nil_operands", test_value_arithmetic_invalid_and_nil_operands},
     {"test_value_string_concat_helpers", test_value_string_concat_helpers},
     {"test_value_bool_nil_truthiness_helpers", test_value_bool_nil_truthiness_helpers},
     {"test_value_string_local_load_store_clones", test_value_string_local_load_store_clones},

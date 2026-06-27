@@ -162,13 +162,12 @@ static VALUE_t concat_two_strings(VALUE_t left, VALUE_t right) {
   return left;
 }
 
-static inline int binary_int_operands(VALUE_t v1, VALUE_t v2, const char *opcode_name) {
-  int valid = (value_is_type(&v1, VALUE_int) && value_is_type(&v2, VALUE_int));
-  if (!valid) {
-    logerr("%s invalid operand types: left '%s', right '%s'.\n",
-          opcode_name, value_type_name(v2.type), value_type_name(v1.type));
-  }
-  return valid;
+static void log_invalid_binary_operands(const char *opcode_name,
+                                        const VALUE_t *left,
+                                        const VALUE_t *right) {
+  logerr("%s invalid operand types: left '%s', right '%s'.\n",
+         opcode_name, value_type_name(left ? left->type : VALUE_nil),
+         value_type_name(right ? right->type : VALUE_nil));
 }
 
 typedef enum {
@@ -416,12 +415,11 @@ uint8_t *op_add(uint8_t *nextop, ITEM_t *item) {
   VALUE_t v1, v2;
   v1 = pop_stack(VM->stack);
   v2 = pop_stack(VM->stack);
-  // It makes sense to treat nil as 0 in this context.
-  if ((v1.type == VALUE_nil || v1.type == VALUE_int) &&
-                            (v2.type==VALUE_nil || v2.type == VALUE_int)) {
-    v2.i += v1.i;
-    v2.type = VALUE_int;
-    push_stack(VM->stack, v2);
+  VALUE_t result;
+  if (value_add(&v2, &v1, &result)) {
+    value_free_runtime(&v1);
+    value_free_runtime(&v2);
+    push_stack(VM->stack, result);
   } else if (v1.type == VALUE_str && v2.type == VALUE_str) {
     push_stack(VM->stack, concat_two_strings(v2, v1));
   } else {
@@ -444,17 +442,16 @@ uint8_t *op_subtract(uint8_t *nextop, ITEM_t *item) {
   VALUE_t v1, v2;
   v1 = pop_stack(VM->stack);
   v2 = pop_stack(VM->stack);
-  if (binary_int_operands(v1, v2, "OP_SUB")) {
-    v2.i -= v1.i;
-    v2.type = VALUE_int;
+  VALUE_t result;
+  if (value_sub(&v2, &v1, &result)) {
     DISASS_LOG("OP_SUB: operand types %d and %d\n", v2.type, v1.type);
   } else {
+    log_invalid_binary_operands("OP_SUB", &v2, &v1);
     DISASS_LOG("OP_SUB: invalid operand types %d and %d\n", v2.type, v1.type);
-    value_free_runtime(&v1);
-    value_free_runtime(&v2);
-    v2 = VALUE_NIL;
   }
-  push_stack(VM->stack, v2);
+  value_free_runtime(&v1);
+  value_free_runtime(&v2);
+  push_stack(VM->stack, result);
   return nextop;
 }
 
@@ -466,22 +463,19 @@ uint8_t *op_divide(uint8_t *nextop, ITEM_t *item) {
   VALUE_t v1, v2;
   v1 = pop_stack(VM->stack);
   v2 = pop_stack(VM->stack);
-  if (binary_int_operands(v1, v2, "OP_DIV")) {
+  VALUE_t result;
+  if (value_div(&v2, &v1, &result)) {
     if (v1.i == 0) {
       logerr("Attempt to divide by zero.  Substitute zero as result.\n");
-      v2.i = 0;
-    } else {
-      v2.i /= v1.i;
     }
     DISASS_LOG("OP_DIV: operand types %d and %d\n", v2.type, v1.type);
   } else {
+    log_invalid_binary_operands("OP_DIV", &v2, &v1);
     DISASS_LOG("OP_DIV: invalid operand types %d and %d\n", v2.type, v1.type);
-    value_free_runtime(&v1);
-    value_free_runtime(&v2);
-    v2 = VALUE_NIL;
   }
-  v2.type = VALUE_int;
-  push_stack(VM->stack, v2);
+  value_free_runtime(&v1);
+  value_free_runtime(&v2);
+  push_stack(VM->stack, result);
   return nextop;
 }
 
@@ -491,26 +485,23 @@ uint8_t *op_multiply(uint8_t *nextop, ITEM_t *item) {
   VALUE_t v1, v2;
   v1 = pop_stack(VM->stack);
   v2 = pop_stack(VM->stack);
-  if (binary_int_operands(v1, v2, "OP_MUL")) {
-    v2.i *= v1.i;
-    v2.type = VALUE_int;
+  VALUE_t result;
+  if (value_mul(&v2, &v1, &result)) {
     DISASS_LOG("OP_MUL: operand types %d and %d\n", v2.type, v1.type);
   } else {
+    log_invalid_binary_operands("OP_MUL", &v2, &v1);
     DISASS_LOG("OP_MUL: invalid operand types %d and %d\n", v2.type, v1.type);
-    value_free_runtime(&v1);
-    value_free_runtime(&v2);
-    v2 = VALUE_NIL;
   }
-  push_stack(VM->stack, v2);
+  value_free_runtime(&v1);
+  value_free_runtime(&v2);
+  push_stack(VM->stack, result);
   return nextop;
 }
 
 uint8_t *op_negate(uint8_t *nextop, ITEM_t *item) {
   // If the top value on the stack is an int, negate it.
   //  Complain bitterly if not.
-  if (VM->stack->stack[VM->stack->current].type == VALUE_int) {
-    VM->stack->stack[VM->stack->current].i = -VM->stack->stack[VM->stack->current].i;
-  } else {
+  if (!value_neg(&VM->stack->stack[VM->stack->current])) {
     logerr("Attempt to negate a value of type '%d'.\n",
                                  VM->stack->stack[VM->stack->current].type);
   }
