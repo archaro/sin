@@ -48,10 +48,10 @@ static uint64_t bits_for_double(double value) {
 }
 
 void test_parser_float_literals_decimal_forms(void) {
-  AS_NODE *root = parse_ok("1.0; 0.5; 1.25e2;");
+  AS_NODE *root = parse_ok("1.0; 0.5; 1.25e2; 6.022E+23; 1.0e-3;");
   ASSERT_EQ_INT(N_STMTLIST, root->nodetype);
   AS_STMTLIST *list = (AS_STMTLIST *)root->lhs;
-  ASSERT_EQ_INT(3, list->count);
+  ASSERT_EQ_INT(5, list->count);
 
   AS_NODE *stmt = list->stmts[0];
   ASSERT_EQ_INT(N_EXPRSTMT, stmt->nodetype);
@@ -76,6 +76,22 @@ void test_parser_float_literals_decimal_forms(void) {
   value = (AS_VALUE *)value_node->lhs;
   ASSERT_EQ_INT(V_FLOAT, value->valtype);
   ASSERT_TRUE(value->value.f_bits == bits_for_double(125.0));
+
+  stmt = list->stmts[3];
+  ASSERT_EQ_INT(N_EXPRSTMT, stmt->nodetype);
+  value_node = (AS_NODE *)stmt->lhs;
+  ASSERT_EQ_INT(N_VALUE, value_node->nodetype);
+  value = (AS_VALUE *)value_node->lhs;
+  ASSERT_EQ_INT(V_FLOAT, value->valtype);
+  ASSERT_TRUE(value->value.f_bits == bits_for_double(6.022e23));
+
+  stmt = list->stmts[4];
+  ASSERT_EQ_INT(N_EXPRSTMT, stmt->nodetype);
+  value_node = (AS_NODE *)stmt->lhs;
+  ASSERT_EQ_INT(N_VALUE, value_node->nodetype);
+  value = (AS_VALUE *)value_node->lhs;
+  ASSERT_EQ_INT(V_FLOAT, value->valtype);
+  ASSERT_TRUE(value->value.f_bits == bits_for_double(1.0e-3));
 
   as_delete(root);
 }
@@ -136,6 +152,8 @@ void test_parser_float_literals_item_layers_unchanged(void) {
 
 void test_parser_float_literals_malformed_rejected(void) {
   parse_fails("1.;");
+  parse_fails("1.0e;");
+  parse_fails("1.0e+;");
   parse_fails("1.2.3;");
 }
 

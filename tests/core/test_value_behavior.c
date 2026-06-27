@@ -52,6 +52,30 @@ static VALUE_t run_code(const char *name, const uint8_t *template_code, size_t l
   return interpret(code);
 }
 
+
+static VALUE_t run_float_unary(uint64_t bits, uint8_t op, const char *name) {
+  uint8_t code[32] = {0};
+  size_t pos = 0;
+  code[pos++] = 0;
+  code[pos++] = 0;
+  code[pos++] = 'P'; emit_u64(code, &pos, bits);
+  code[pos++] = op;
+  code[pos++] = 'h';
+  return run_code(name, code, pos);
+}
+
+static VALUE_t run_float_binary(uint64_t lhs, uint64_t rhs, uint8_t op, const char *name) {
+  uint8_t code[64] = {0};
+  size_t pos = 0;
+  code[pos++] = 0;
+  code[pos++] = 0;
+  code[pos++] = 'P'; emit_u64(code, &pos, lhs);
+  code[pos++] = 'P'; emit_u64(code, &pos, rhs);
+  code[pos++] = op;
+  code[pos++] = 'h';
+  return run_code(name, code, pos);
+}
+
 void test_value_integer_arithmetic_helpers(void) {
   VALUE_t left = {VALUE_int, {.i = 9}};
   VALUE_t right = {VALUE_int, {.i = 4}};
@@ -230,6 +254,32 @@ void test_value_float_arithmetic_interpreter_bytecode(void) {
   ASSERT_TRUE(value_float_to_bits(result.f) == UINT64_C(0x8000000000000000));
   value_free(&result);
 
+  result = run_float_binary(UINT64_C(0x0010000000000000), UINT64_C(0x0000000000000001), 'a',
+                            "test.float_subnorm_add");
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(value_float_to_bits(result.f) == UINT64_C(0x0010000000000001));
+  value_free(&result);
+
+  result = run_float_binary(UINT64_C(0x7ff8000000000042), UINT64_C(0x3ff0000000000000), 'a',
+                            "test.float_nan_prop");
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE((value_float_to_bits(result.f) & UINT64_C(0x7ff0000000000000)) == UINT64_C(0x7ff0000000000000));
+  ASSERT_TRUE((value_float_to_bits(result.f) & UINT64_C(0x000fffffffffffff)) != 0);
+  value_free(&result);
+
+  pos = 0;
+  code[pos++] = 1;
+  code[pos++] = 0;
+  code[pos++] = 'P'; emit_u64(code, &pos, UINT64_C(0x8000000000000000)); /* -0.0 */
+  code[pos++] = 'c'; code[pos++] = 0;
+  code[pos++] = 'e'; code[pos++] = 0;
+  code[pos++] = 'h';
+
+  result = run_code("test.float_store_neg0", code, pos);
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(value_float_to_bits(result.f) == UINT64_C(0x8000000000000000));
+  value_free(&result);
+
   teardown_runtime();
 }
 
@@ -401,9 +451,34 @@ void test_value_comparison_float_ieee754_helpers(void) {
   ASSERT_TRUE(value_not_equal(&quiet_nan, &negative_nan));
   ASSERT_TRUE(value_not_equal(&quiet_nan, &one));
   ASSERT_TRUE(!value_less_than(&quiet_nan, &one));
+  ASSERT_TRUE(!value_less_than(&one, &quiet_nan));
   ASSERT_TRUE(!value_less_equal(&quiet_nan, &quiet_nan));
+  ASSERT_TRUE(!value_greater_than(&quiet_nan, &one));
   ASSERT_TRUE(!value_greater_than(&one, &quiet_nan));
   ASSERT_TRUE(!value_greater_equal(&quiet_nan, &negative_nan));
+
+  setup_runtime();
+  VALUE_t cmp = run_float_binary(UINT64_C(0x7ff8000000000042), UINT64_C(0x7ff8000000000042), 'o',
+                                 "test.float_nan_eq");
+  ASSERT_EQ_INT(VALUE_bool, cmp.type);
+  ASSERT_TRUE(cmp.i == 0);
+  value_free(&cmp);
+  cmp = run_float_binary(UINT64_C(0x7ff8000000000042), UINT64_C(0x7ff8000000000042), 'q',
+                         "test.float_nan_neq");
+  ASSERT_EQ_INT(VALUE_bool, cmp.type);
+  ASSERT_TRUE(cmp.i == 1);
+  value_free(&cmp);
+  cmp = run_float_binary(UINT64_C(0x0000000000000000), UINT64_C(0x8000000000000000), 'o',
+                         "test.float_zero_eq");
+  ASSERT_EQ_INT(VALUE_bool, cmp.type);
+  ASSERT_TRUE(cmp.i == 1);
+  value_free(&cmp);
+  VALUE_t neg = run_float_unary(UINT64_C(0x8000000000000000), 'n',
+                                "test.float_neg_neg0");
+  ASSERT_EQ_INT(VALUE_float, neg.type);
+  ASSERT_TRUE(value_float_to_bits(neg.f) == UINT64_C(0x0000000000000000));
+  value_free(&neg);
+  teardown_runtime();
 }
 
 void test_value_comparison_bool_helpers(void) {

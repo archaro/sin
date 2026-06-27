@@ -8,6 +8,7 @@
 
 static AS_NODE *v_int(int64_t n) { return t_int(n); }
 static AS_NODE *v_str(const char *s) { return as_new_valnode(V_STR, strdup(s)); }
+static AS_NODE *v_float_bits(uint64_t bits) { return t_node(N_VALUE, as_new_value(V_FLOAT, bits, NULL), NULL); }
 
 static AS_NODE *build_int_literal_program(void) {
   AS_NODE *stmt = t_node(N_EXPRSTMT, v_int(42), NULL);
@@ -28,6 +29,17 @@ static AS_NODE *build_locals_store_load_program(void) {
 
 static AS_NODE *build_arithmetic_program(void) {
   AS_NODE *add = t_node(N_ADD, v_int(2), v_int(3));
+  AS_NODE *stmt = t_node(N_EXPRSTMT, add, NULL);
+  return t_stmtlist_with_one(stmt);
+}
+
+static AS_NODE *build_float_literal_program(void) {
+  AS_NODE *stmt = t_node(N_EXPRSTMT, v_float_bits(UINT64_C(0x3ff8000000000000)), NULL);
+  return t_stmtlist_with_one(stmt);
+}
+
+static AS_NODE *build_mixed_float_arithmetic_program(void) {
+  AS_NODE *add = t_node(N_ADD, v_int(2), v_float_bits(UINT64_C(0x3fe0000000000000)));
   AS_NODE *stmt = t_node(N_EXPRSTMT, add, NULL);
   return t_stmtlist_with_one(stmt);
 }
@@ -56,6 +68,10 @@ static const PipelineGoldenCase PIPELINE_CASES[] = {
      PIPELINE_LAYER_AST | PIPELINE_LAYER_SOURCE},
     {"arithmetic_add", build_arithmetic_program, "2 + 3;", "tests/fixtures/arithmetic_add.hex",
      PIPELINE_LAYER_AST | PIPELINE_LAYER_SOURCE},
+    {"float_literal", build_float_literal_program, "1.5;", "tests/fixtures/float_literal.hex",
+     PIPELINE_LAYER_AST | PIPELINE_LAYER_SOURCE},
+    {"mixed_float_arithmetic", build_mixed_float_arithmetic_program, "2 + 0.5;",
+     "tests/fixtures/mixed_float_arithmetic.hex", PIPELINE_LAYER_AST | PIPELINE_LAYER_SOURCE},
     {"boolean_compare", build_boolean_compare_program, NULL, "tests/fixtures/boolean_compare.hex",
      PIPELINE_LAYER_AST},
     {"simple_if", build_simple_if_program, NULL, "tests/fixtures/simple_if.hex", PIPELINE_LAYER_AST},
