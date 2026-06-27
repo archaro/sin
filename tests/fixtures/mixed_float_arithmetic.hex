@@ -1,0 +1,7 @@
+00 00          # header: locals=0 params=0
+70             # p: push int
+02 00 00 00 00 00 00 00  # int64 2
+50             # P: push float
+00 00 00 00 00 00 e0 3f  # binary64 0.5 (LE)
+61             # a: add
+68             # h: halt
