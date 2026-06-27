@@ -43,6 +43,12 @@ static inline uint8_t *lc_invalid_args_return(uint8_t *nextop, VALUE_t ret) {
   return nextop;
 }
 
+static inline uint8_t *lc_invalid_args_detail_return(uint8_t *nextop, VALUE_t ret, const char *detail) {
+  set_error_item(ERR_RUNTIME_INVALIDARGS, detail);
+  push_stack(VM->stack, ret);
+  return nextop;
+}
+
 static inline void lc_cleanup_values(VALUE_t *values, size_t count) {
   for (size_t i = 0; i < count; i++) {
     value_free(&values[i]);
@@ -137,7 +143,8 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   if (!lc_value_is_type(val, VALUE_str)) {
     logmsg("Sys.compile called with non-string value.\n");
     FREE_STR(val);
-    return lc_invalid_args_return(nextop, VALUE_FALSE);
+    return lc_invalid_args_detail_return(nextop, VALUE_FALSE,
+        "sys.compile source must be a string; non-string values, including floats, are invalid");
   }
 
   int8_t result = 0;
@@ -269,7 +276,8 @@ uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
     // and return.
     VALUE_t popped[] = {repeatin, startin, itemname};
     lc_cleanup_values(popped, 3);
-    return lc_invalid_args_return(nextop, VALUE_NIL);
+    return lc_invalid_args_detail_return(nextop, VALUE_NIL,
+        "task.newgametask expects string item name and integer start/repeat intervals; floats are invalid for intervals");
   }
   ITEM_t *taskitem = find_item(config.itemroot, itemname.s);
   if (!taskitem) {
@@ -307,7 +315,8 @@ uint8_t *lc_task_killtask(uint8_t *nextop, ITEM_t *item) {
   if (!lc_value_is_type(taskid, VALUE_int)) {
     // taskid may only own heap memory when it is a string; FREE_STR is a safe no-op otherwise.
     FREE_STR(taskid);
-    return lc_invalid_args_return(nextop, VALUE_NIL);
+    return lc_invalid_args_detail_return(nextop, VALUE_NIL,
+        "task.killtask id must be an integer; floats are invalid");
   }
 
   // Does this task even exist?
@@ -382,7 +391,9 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
   if (!lc_value_is_type(linenum, VALUE_int) || linenum.i < 0 
                                         || linenum.i >= config.maxconns) {
     FREE_STR(out);
-    return lc_invalid_args_return(nextop, VALUE_NIL);
+    FREE_STR(linenum);
+    return lc_invalid_args_detail_return(nextop, VALUE_NIL,
+        "net.write line must be an integer connection index; floats are invalid");
   } else {
     if ((line[linenum.i].status != LINE_data
         && line[linenum.i].status != LINE_idle)

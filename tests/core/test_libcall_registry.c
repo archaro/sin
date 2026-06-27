@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "libcall.h"
 #include "config.h"
@@ -15,6 +16,11 @@
 uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_capitalise(uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_upper(uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_lower(uint8_t *nextop, ITEM_t *item);
 
 extern LINE_t *line;
 extern CONFIG_t config;
@@ -30,6 +36,12 @@ static void setup_libcall_runtime(void) {
 
 static void teardown_libcall_runtime(void) {
   if (line) {
+    for (uint8_t i = 0; i < config.maxconns; i++) {
+      if (line[i].telnet) {
+        telnet_free(line[i].telnet);
+        line[i].telnet = NULL;
+      }
+    }
     free(line);
     line = NULL;
   }
@@ -37,6 +49,64 @@ static void teardown_libcall_runtime(void) {
   destroy_item(config.itemroot);
 }
 
+static char telnet_capture[128];
+static size_t telnet_capture_len;
+
+static void capture_telnet_event(telnet_t *telnet, telnet_event_t *event, void *user_data) {
+  (void)telnet;
+  (void)user_data;
+  if (event->type != TELNET_EV_SEND) return;
+  size_t room = sizeof(telnet_capture) - telnet_capture_len - 1;
+  size_t n = event->data.size < room ? event->data.size : room;
+  memcpy(telnet_capture + telnet_capture_len, event->data.buffer, n);
+  telnet_capture_len += n;
+  telnet_capture[telnet_capture_len] = '\0';
+}
+
+static void assert_sys_log_float_output(void) {
+  FILE *capture = tmpfile();
+  ASSERT_NOT_NULL(capture);
+  int saved_stdout = dup(STDOUT_FILENO);
+  ASSERT_TRUE(saved_stdout >= 0);
+  ASSERT_TRUE(dup2(fileno(capture), STDOUT_FILENO) >= 0);
+
+  VALUE_t out = {VALUE_float, {.f = 3.5}};
+  push_stack(config.vm->stack, out);
+  (void)lc_sys_log(NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  fflush(stdout);
+
+  ASSERT_TRUE(dup2(saved_stdout, STDOUT_FILENO) >= 0);
+  close(saved_stdout);
+  rewind(capture);
+  char buffer[16] = {0};
+  size_t n = fread(buffer, 1, sizeof(buffer) - 1, capture);
+  buffer[n] = '\0';
+  ASSERT_TRUE(strcmp(buffer, "3.5") == 0);
+  fclose(capture);
+}
+
+static void assert_invalid_args_float_detail_contains(const char *expected) {
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_EQ_INT(VALUE_str, msg->value.type);
+  ASSERT_TRUE(strstr(msg->value.s, "float") != NULL);
+  ASSERT_TRUE(strstr(msg->value.s, expected) != NULL);
+}
+
+static void assert_float_string_libcall_returns_nil(uint8_t *(*func)(uint8_t *, ITEM_t *)) {
+  VALUE_t arg = {VALUE_float, {.f = 1.25}};
+  push_stack(config.vm->stack, arg);
+  (void)func(NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  ASSERT_TRUE(find_item(config.itemroot, "error") == NULL);
+  ASSERT_TRUE(find_item(config.itemroot, "error.msg") == NULL);
+}
 
 static uint8_t *test_noop_libcall(uint8_t *nextop, ITEM_t *item) {
   (void)item;
@@ -250,6 +320,87 @@ void test_net_write_ignores_non_writable_line_states(void) {
   (void)lc_net_write(NULL, config.itemroot);
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
+
+  teardown_libcall_runtime();
+}
+
+
+void test_libcall_float_integer_only_arguments_rejected(void) {
+  setup_libcall_runtime();
+
+  VALUE_t itemname = {VALUE_str, {.s = strdup("missing.task")}};
+  VALUE_t float_start = {VALUE_float, {.f = 1.5}};
+  VALUE_t repeat = {VALUE_int, {.i = 1}};
+  push_stack(config.vm->stack, itemname);
+  push_stack(config.vm->stack, float_start);
+  push_stack(config.vm->stack, repeat);
+  (void)lc_task_newgametask(NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_float_detail_contains("task.newgametask");
+
+  VALUE_t float_taskid = {VALUE_float, {.f = 2.0}};
+  push_stack(config.vm->stack, float_taskid);
+  (void)lc_task_killtask(NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_float_detail_contains("task.killtask");
+
+  config.maxconns = 1;
+  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+  VALUE_t float_line = {VALUE_float, {.f = 0.0}};
+  VALUE_t out = {VALUE_str, {.s = strdup("hello")}};
+  push_stack(config.vm->stack, float_line);
+  push_stack(config.vm->stack, out);
+  (void)lc_net_write(NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_float_detail_contains("net.write");
+
+  VALUE_t float_source = {VALUE_float, {.f = 3.25}};
+  push_stack(config.vm->stack, float_source);
+  (void)lc_sys_compile(NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  assert_invalid_args_float_detail_contains("sys.compile");
+
+  teardown_libcall_runtime();
+}
+
+
+void test_str_libcalls_float_returns_nil_without_error(void) {
+  setup_libcall_runtime();
+
+  assert_float_string_libcall_returns_nil(lc_str_capitalise);
+  assert_float_string_libcall_returns_nil(lc_str_upper);
+  assert_float_string_libcall_returns_nil(lc_str_lower);
+
+  teardown_libcall_runtime();
+}
+
+void test_net_write_formats_float_output(void) {
+  setup_libcall_runtime();
+  assert_sys_log_float_output();
+
+  config.maxconns = 1;
+  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+  line[0].status = LINE_idle;
+  line[0].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
+  ASSERT_NOT_NULL(line[0].telnet);
+  telnet_capture[0] = '\0';
+  telnet_capture_len = 0;
+
+  VALUE_t target_line = {VALUE_int, {.i = 0}};
+  VALUE_t out = {VALUE_float, {.f = 3.5}};
+  push_stack(config.vm->stack, target_line);
+  push_stack(config.vm->stack, out);
+  (void)lc_net_write(NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  ASSERT_TRUE(strcmp(telnet_capture, "3.5") == 0);
 
   teardown_libcall_runtime();
 }
