@@ -14,6 +14,10 @@ typedef enum { VALUE_int,
                VALUE_bool
              } VALUE_e;
 
+typedef enum { VALUE_NUMERIC_NONE,
+               VALUE_NUMERIC_INT
+             } VALUE_numeric_kind_e;
+
 typedef struct {
   VALUE_e type; // What sort of value am I?
   union {
@@ -55,4 +59,15 @@ VALUE_t value_clone(const VALUE_t *value);
 void value_move(VALUE_t *dst, VALUE_t *src);
 void value_replace(VALUE_t *dst, VALUE_t src);
 bool value_equal(const VALUE_t *left, const VALUE_t *right);
+bool value_is_numeric(const VALUE_t *value);
+VALUE_numeric_kind_e value_numeric_kind(const VALUE_t *value);
+// Arithmetic helpers currently support integer arithmetic only. OP_ADD
+// intentionally preserves the VM quirk that nil participates as integer 0;
+// the other arithmetic operators require int operands until more numeric
+// kinds are added. value_div preserves the VM invalid-operand result of int 0.
+bool value_add(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
+bool value_sub(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
+bool value_mul(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
+bool value_div(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
+bool value_neg(VALUE_t *value);
 bool value_order(const VALUE_t *left, const VALUE_t *right, int *comparison);

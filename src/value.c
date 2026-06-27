@@ -104,6 +104,97 @@ bool value_equal(const VALUE_t *left, const VALUE_t *right) {
   return false;
 }
 
+bool value_is_numeric(const VALUE_t *value) {
+  return value_numeric_kind(value) != VALUE_NUMERIC_NONE;
+}
+
+VALUE_numeric_kind_e value_numeric_kind(const VALUE_t *value) {
+  if (!value) return VALUE_NUMERIC_NONE;
+  switch (value->type) {
+    case VALUE_int:
+      return VALUE_NUMERIC_INT;
+    default:
+      return VALUE_NUMERIC_NONE;
+  }
+}
+
+static bool value_as_add_int_operand(const VALUE_t *value, int64_t *out) {
+  if (!value || !out) return false;
+  if (value->type == VALUE_nil) {
+    *out = 0;
+    return true;
+  }
+  if (value->type == VALUE_int) {
+    *out = value->i;
+    return true;
+  }
+  return false;
+}
+
+static bool value_as_int_operand(const VALUE_t *value, int64_t *out) {
+  if (!value || !out || value->type != VALUE_int) return false;
+  *out = value->i;
+  return true;
+}
+
+bool value_add(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
+  int64_t lhs;
+  int64_t rhs;
+  if (!result || !value_as_add_int_operand(left, &lhs) ||
+      !value_as_add_int_operand(right, &rhs)) {
+    if (result) *result = VALUE_NIL;
+    return false;
+  }
+  result->type = VALUE_int;
+  result->i = lhs + rhs;
+  return true;
+}
+
+bool value_sub(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
+  int64_t lhs;
+  int64_t rhs;
+  if (!result || !value_as_int_operand(left, &lhs) ||
+      !value_as_int_operand(right, &rhs)) {
+    if (result) *result = VALUE_NIL;
+    return false;
+  }
+  result->type = VALUE_int;
+  result->i = lhs - rhs;
+  return true;
+}
+
+bool value_mul(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
+  int64_t lhs;
+  int64_t rhs;
+  if (!result || !value_as_int_operand(left, &lhs) ||
+      !value_as_int_operand(right, &rhs)) {
+    if (result) *result = VALUE_NIL;
+    return false;
+  }
+  result->type = VALUE_int;
+  result->i = lhs * rhs;
+  return true;
+}
+
+bool value_div(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
+  int64_t lhs;
+  int64_t rhs;
+  if (!result) return false;
+  if (!value_as_int_operand(left, &lhs) || !value_as_int_operand(right, &rhs)) {
+    *result = VALUE_ZERO;
+    return false;
+  }
+  result->type = VALUE_int;
+  result->i = rhs == 0 ? 0 : lhs / rhs;
+  return true;
+}
+
+bool value_neg(VALUE_t *value) {
+  if (!value || value->type != VALUE_int) return false;
+  value->i = -value->i;
+  return true;
+}
+
 bool value_order(const VALUE_t *left, const VALUE_t *right, int *comparison) {
   if (!left || !right || left->type != right->type) return false;
   switch (left->type) {
