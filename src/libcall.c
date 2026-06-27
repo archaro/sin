@@ -19,6 +19,7 @@
 #include "item.h"
 #include "compiler_pipeline.h"
 #include "interpret.h"
+#include "floatconv.h"
 
 // Configuration object.  Defined in sin.c
 extern CONFIG_t config;
@@ -80,7 +81,15 @@ uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
       free(val.s);
       break;
     case VALUE_int:
-      logmsg("%d", val.i);
+      logmsg("%ld", val.i);
+      break;
+    case VALUE_float:
+      char fbuffer[64];
+      if (sin_format_binary64_buf(val.f, fbuffer, sizeof(fbuffer))) {
+        logmsg("%s", fbuffer);
+      } else {
+        logmsg("<float-format-error>");
+      }
       break;
     case VALUE_nil:
       // One cannot logically output nil.
@@ -223,6 +232,13 @@ void execute_task_cb(uv_timer_t *req) {
     } else if (ret.type == VALUE_str) {
       logmsg("Bytecode interpreter returned: %s\n", ret.s);
       value_free(&ret);
+    } else if (ret.type == VALUE_float) {
+      char fbuffer[64];
+      if (sin_format_binary64_buf(ret.f, fbuffer, sizeof(fbuffer))) {
+        logmsg("Bytecode interpreter returned: %s\n", fbuffer);
+      } else {
+        logmsg("Bytecode interpreter returned: <float-format-error>\n");
+      }
     } else if (ret.type == VALUE_bool) {
       logmsg("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
     } else if (ret.type == VALUE_nil) {
@@ -386,9 +402,10 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
         telnet_send_text(line[linenum.i].telnet, buffer, strlen(buffer));
         break;
       case VALUE_float:
-        char fbuffer[32];
-        snprintf(fbuffer, sizeof(fbuffer), "%g", out.f);
-        telnet_send_text(line[linenum.i].telnet, fbuffer, strlen(fbuffer));
+        char fbuffer[64];
+        if (sin_format_binary64_buf(out.f, fbuffer, sizeof(fbuffer))) {
+          telnet_send_text(line[linenum.i].telnet, fbuffer, strlen(fbuffer));
+        }
         break;
       case VALUE_nil:
         // Nothing to output

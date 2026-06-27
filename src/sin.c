@@ -17,6 +17,7 @@
 #include "error.h"
 #include "memory.h"
 #include "log.h"
+#include "floatconv.h"
 #include "network.h"
 #include "task.h"
 #include "value.h"
@@ -309,6 +310,13 @@ int main(int argc, char **argv) {
   } else if (ret.type == VALUE_str) {
     logmsg("Bytecode interpreter returned: %s\n", ret.s);
     FREE_ARRAY(char, ret.s, strlen(ret.s));
+  } else if (ret.type == VALUE_float) {
+    char fbuffer[64];
+    if (sin_format_binary64_buf(ret.f, fbuffer, sizeof(fbuffer))) {
+      logmsg("Bytecode interpreter returned: %s\n", fbuffer);
+    } else {
+      logmsg("Bytecode interpreter returned: <float-format-error>\n");
+    }
   } else if (ret.type == VALUE_bool) {
     logmsg("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
   } else if (ret.type == VALUE_nil) {

@@ -236,7 +236,14 @@ void as_reconstruct_value(AS_NODE *node) {
   if (val->valtype == V_INT || val->valtype == V_BOOLTRUE || val->valtype == V_BOOLFALSE) {
     logmsg("%lld", val->value.i);
   } else if (val->valtype == V_FLOAT) {
-    logmsg("0x%016llx", (unsigned long long)val->value.f_bits);
+    double f = 0.0;
+    memcpy(&f, &val->value.f_bits, sizeof(f));
+    char fbuffer[64];
+    if (sin_format_binary64_buf(f, fbuffer, sizeof(fbuffer))) {
+      logmsg("%s (bits=0x%016llx)", fbuffer, (unsigned long long)val->value.f_bits);
+    } else {
+      logmsg("0x%016llx", (unsigned long long)val->value.f_bits);
+    }
   } else {
     logmsg("%s", val->value.s);
   }
@@ -256,7 +263,14 @@ void as_reconstruct_item(AS_NODE *root) {
     if (val->valtype == V_INT || val->valtype == V_BOOLTRUE || val->valtype == V_BOOLFALSE) {
       logmsg("%lld", val->value.i);
     } else if (val->valtype == V_FLOAT) {
-      logmsg("0x%016llx", (unsigned long long)val->value.f_bits);
+      double f = 0.0;
+      memcpy(&f, &val->value.f_bits, sizeof(f));
+      char fbuffer[64];
+      if (sin_format_binary64_buf(f, fbuffer, sizeof(fbuffer))) {
+        logmsg("%s (bits=0x%016llx)", fbuffer, (unsigned long long)val->value.f_bits);
+      } else {
+        logmsg("0x%016llx", (unsigned long long)val->value.f_bits);
+      }
     } else {
       logmsg("%s", val->value.s);
     }

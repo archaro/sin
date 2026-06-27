@@ -11,6 +11,7 @@
 
 #define VALUE_INTERNAL
 #include "value.h"
+#include "floatconv.h"
 
 _Static_assert(sizeof(double) == 8, "VALUE_float requires 64-bit double");
 _Static_assert(DBL_MANT_DIG == 53, "VALUE_float requires IEEE 754 binary64 precision");
@@ -350,7 +351,9 @@ const char *value_debug_string(const VALUE_t *value, char *buffer, size_t buffer
       snprintf(buffer, buffer_size, "%s", value->i ? "true" : "false");
       break;
     case VALUE_float:
-      snprintf(buffer, buffer_size, "%g", value->f);
+      if (!sin_format_binary64_buf(value->f, buffer, buffer_size)) {
+        snprintf(buffer, buffer_size, "<float-format-error>");
+      }
       break;
     case VALUE_str:
       snprintf(buffer, buffer_size, "'%s'", value->s ? value->s : "");
