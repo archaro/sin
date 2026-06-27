@@ -2,9 +2,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "config.h"
 #include "compiler_pipeline.h"
 #include "error.h"
+#include "interpret.h"
+#include "item.h"
 #include "test_assert.h"
+#include "value.h"
+#include "vm.h"
+
+extern CONFIG_t config;
 
 static void assert_compile_ok(const char *name, const char *source) {
   OUTPUT_t *out = NULL;
@@ -28,6 +35,41 @@ static void assert_compile_err(const char *source, int8_t expected_code,
   ASSERT_NOT_NULL(errdetail);
   ASSERT_TRUE(strstr(errdetail, expected_substr) != NULL);
   free(errdetail);
+}
+
+static VALUE_t compile_and_run(const char *name, const char *source) {
+  OUTPUT_t *out = NULL;
+  char *errdetail = NULL;
+  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(out);
+
+  uint32_t len = (uint32_t)(out->nextbyte - out->bytecode);
+  uint8_t *bytecode = malloc(len);
+  ASSERT_NOT_NULL(bytecode);
+  memcpy(bytecode, out->bytecode, len);
+  ITEM_t *code = insert_code_item(config.itemroot, name, len, bytecode);
+  ASSERT_NOT_NULL(code);
+  VALUE_t result = interpret(code);
+
+  free(out->bytecode);
+  free(out);
+  return result;
+}
+
+static void setup_runtime(void) {
+  memset(&config, 0, sizeof(config));
+  config.itemroot = make_root_item("root");
+  ASSERT_NOT_NULL(config.itemroot);
+  config.vm = make_vm();
+  ASSERT_NOT_NULL(config.vm);
+}
+
+static void teardown_runtime(void) {
+  destroy_vm(config.vm);
+  destroy_item(config.itemroot);
+  memset(&config, 0, sizeof(config));
 }
 
 void test_relative_item_leading_dot_parse_accepts_deref_chain(void) {
@@ -63,4 +105,17 @@ void test_relative_item_leading_dot_existing_absolute_item_unchanged(void) {
 
 void test_relative_item_leading_dot_parse_still_rejects_bad_double_dot(void) {
   assert_compile_err("foo..bar = 1;", ERR_COMP_SYNTAX, "syntax error");
+}
+
+void test_float_item_literal_layer_rejected_at_compile_time(void) {
+  assert_compile_err("foo.1.0 = 1;", ERR_COMP_SYNTAX, "syntax");
+}
+
+void test_float_local_deref_layer_returns_nil_and_does_not_save_item(void) {
+  setup_runtime();
+  VALUE_t result = compile_and_run("test.floatlocal",
+                                   "@layer = 1.0; foo.[@layer] = 7; foo;");
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_TRUE(find_item(config.itemroot, "foo") == NULL);
+  teardown_runtime();
 }
