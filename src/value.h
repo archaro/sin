@@ -7,6 +7,21 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <float.h>
+#include <limits.h>
+
+/*
+ * Sin serializes and interprets VALUE_float as IEEE 754 binary64. Keep these
+ * requirements at the value boundary so every user of VALUE_t gets an early
+ * compile-time failure on unsupported floating-point targets.
+ */
+_Static_assert(CHAR_BIT == 8, "VALUE_float binary64 payloads require 8-bit bytes");
+_Static_assert(sizeof(uint64_t) == 8, "VALUE_float binary64 payloads require 64-bit uint64_t");
+_Static_assert(sizeof(double) == 8, "VALUE_float requires 64-bit double");
+_Static_assert(FLT_RADIX == 2, "VALUE_float requires binary floating-point radix");
+_Static_assert(DBL_MANT_DIG == 53, "VALUE_float requires IEEE 754 binary64 precision");
+_Static_assert(DBL_MAX_EXP == 1024, "VALUE_float requires IEEE 754 binary64 exponent range");
+_Static_assert(DBL_MIN_EXP == -1021, "VALUE_float requires IEEE 754 binary64 minimum exponent");
 
 typedef enum { VALUE_int,
                VALUE_float,
