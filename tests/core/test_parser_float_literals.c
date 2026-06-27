@@ -6,6 +6,7 @@
 #include "error.h"
 #include "parse_input.h"
 #include "parser.h"
+#include "floatconv.h"
 #include "test_assert.h"
 
 static AS_NODE *parse_ok(const char *source) {
@@ -47,10 +48,10 @@ static uint64_t bits_for_double(double value) {
 }
 
 void test_parser_float_literals_decimal_forms(void) {
-  AS_NODE *root = parse_ok("1.0; 0.5;");
+  AS_NODE *root = parse_ok("1.0; 0.5; 1.25e2;");
   ASSERT_EQ_INT(N_STMTLIST, root->nodetype);
   AS_STMTLIST *list = (AS_STMTLIST *)root->lhs;
-  ASSERT_EQ_INT(2, list->count);
+  ASSERT_EQ_INT(3, list->count);
 
   AS_NODE *stmt = list->stmts[0];
   ASSERT_EQ_INT(N_EXPRSTMT, stmt->nodetype);
@@ -67,6 +68,14 @@ void test_parser_float_literals_decimal_forms(void) {
   value = (AS_VALUE *)value_node->lhs;
   ASSERT_EQ_INT(V_FLOAT, value->valtype);
   ASSERT_TRUE(value->value.f_bits == bits_for_double(0.5));
+
+  stmt = list->stmts[2];
+  ASSERT_EQ_INT(N_EXPRSTMT, stmt->nodetype);
+  value_node = (AS_NODE *)stmt->lhs;
+  ASSERT_EQ_INT(N_VALUE, value_node->nodetype);
+  value = (AS_VALUE *)value_node->lhs;
+  ASSERT_EQ_INT(V_FLOAT, value->valtype);
+  ASSERT_TRUE(value->value.f_bits == bits_for_double(125.0));
 
   as_delete(root);
 }
@@ -128,4 +137,50 @@ void test_parser_float_literals_item_layers_unchanged(void) {
 void test_parser_float_literals_malformed_rejected(void) {
   parse_fails("1.;");
   parse_fails("1.2.3;");
+}
+
+static void assert_parse_bits(const char *literal, uint64_t expected) {
+  uint64_t bits = 0;
+  char *errdetail = NULL;
+  ASSERT_TRUE(sin_parse_binary64_bits(literal, &bits, &errdetail));
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(bits == expected);
+}
+
+static void assert_parse_rejected(const char *literal) {
+  uint64_t bits = 0;
+  char *errdetail = NULL;
+  ASSERT_TRUE(!sin_parse_binary64_bits(literal, &bits, &errdetail));
+  ASSERT_NOT_NULL(errdetail);
+  free(errdetail);
+}
+
+void test_floatconv_binary64_edge_cases(void) {
+  /* Exact integers around 2^53. */
+  assert_parse_bits("9007199254740991.0", UINT64_C(0x433fffffffffffff));
+  assert_parse_bits("9007199254740992.0", UINT64_C(0x4340000000000000));
+  assert_parse_bits("9007199254740993.0", UINT64_C(0x4340000000000000));
+  assert_parse_bits("9007199254740994.0", UINT64_C(0x4340000000000001));
+
+  /* Smallest positive subnormal and neighboring underflow cases. */
+  assert_parse_bits("4.9406564584124654e-324", UINT64_C(0x0000000000000001));
+  assert_parse_bits("2.4703282292062327e-324", UINT64_C(0x0000000000000000));
+  assert_parse_bits("-2.4703282292062327e-324", UINT64_C(0x8000000000000000));
+
+  /* Largest finite double and explicit overflow to infinity. */
+  assert_parse_bits("1.7976931348623157e308", UINT64_C(0x7fefffffffffffff));
+  assert_parse_bits("1.7976931348623159e308", UINT64_C(0x7ff0000000000000));
+
+  /* Halfway/tie-to-even rounding cases. */
+  assert_parse_bits("1.00000000000000011102230246251565404236316680908203125", UINT64_C(0x3ff0000000000000));
+  assert_parse_bits("1.00000000000000033306690738754696212708950042724609375", UINT64_C(0x3ff0000000000002));
+
+  /* Negative zero literal. */
+  assert_parse_bits("-0.0", UINT64_C(0x8000000000000000));
+
+  /* Special spellings and locale-specific decimal commas are rejected. */
+  assert_parse_rejected("nan");
+  assert_parse_rejected("inf");
+  assert_parse_rejected("infinity");
+  assert_parse_rejected("1,5");
 }

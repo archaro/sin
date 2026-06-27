@@ -1,13 +1,13 @@
 // Abstract syntax tree
 
 // Licensed under the MIT License - see LICENSE file for details.
-#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "log.h"
 #include "memory.h"
 #include "absyn.h"
+#include "floatconv.h"
 
 AS_VALUE *as_new_value(ENUM_VALUE valtype, uint64_t ival, char *sval) {
   // Create a new AS value
@@ -36,12 +36,10 @@ AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval) {
     newval = as_new_value(V_INT, atoll(sval), NULL);
     free(sval);
   } else if (valtype == V_FLOAT) {
-    char *end = NULL;
-    errno = 0;
-    double parsed = strtod(sval, &end);
     uint64_t bits = 0;
-    if (errno == 0 && end != NULL && *end == '\0') {
-      memcpy(&bits, &parsed, sizeof(bits));
+    char *errdetail = NULL;
+    if (!sin_parse_binary64_bits(sval, &bits, &errdetail)) {
+      free(errdetail);
     }
     newval = as_new_value(V_FLOAT, bits, NULL);
     free(sval);

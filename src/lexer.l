@@ -63,7 +63,7 @@
 local       @[a-z_][a-z0-9_]*
 layer       [a-z0-9_]+
 integer     [0-9]+
-float       [0-9]+\.[0-9]+
+float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
 %%
                 // Maximum length of string literal is uint16_t
                 char *strbuf, *strbuf_ptr;
