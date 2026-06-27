@@ -9,6 +9,8 @@ This document maps major subsystems to concrete test entry points so reviewers c
   - `tests/shared/test_compiler.c`
     - `main(...)`
     - `run_suite(...)`
+    - Per-test and per-suite elapsed-time reporting
+    - Assertion-failure suite/test context via `tests/test_assert.h`
     - Core suite registration (`core_tests[]`)
 - **Fixture contract integrity / regeneration policy**
   - `tests/shared/test_fixture_policy.c`
@@ -45,7 +47,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
 
 ### Known gaps
 - No property/fuzz-style parser robustness test in-tree (seeded random corpus/replay).
-- No dedicated "core malformed-source matrix" test file; malformed-source cases are still distributed across compiler pipeline tests.
+- Malformed-source cases are centralized in the compiler pipeline negative matrix rather than split between source-golden and negative tests.
 
 ## compiler
 
@@ -71,7 +73,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
   - `tests/compiler/test_pipeline_source_golden.c`
     - `test_pipeline_source_golden`
   - `tests/compiler/test_pipeline_negative_matrix.c`
-    - `test_pipeline_negative_matrix` (parser, semantic, IR-validate, emitter negative-stage checks)
+    - `test_pipeline_negative_matrix` (centralized parser, semantic, IR-validate, emitter negative-stage checks plus boolean/truthiness source nonregressions)
 - **Compiler context/diagnostics and tool parity**
   - `tests/compiler/test_compiler_context_failures.c`
     - `test_compiler_context_failures`

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "ir.h"
 #include "test_assert.h"
@@ -18,7 +19,18 @@ typedef struct {
 typedef struct {
   const char *name;
   size_t count;
+  double elapsed_ms;
 } test_suite_summary_t;
+
+static const char *current_suite_name = "<startup>";
+static const char *current_test_name = "<startup>";
+
+const char *test_harness_current_suite(void) { return current_suite_name; }
+const char *test_harness_current_test(void) { return current_test_name; }
+
+static double elapsed_ms_since(clock_t start) {
+  return ((double)(clock() - start) * 1000.0) / (double)CLOCKS_PER_SEC;
+}
 
 /* Shared/core component tests. */
 void test_absyn_nested_binary_expressions(void);
@@ -282,20 +294,27 @@ static int env_flag_enabled(const char *name) {
   return strcmp(value, "1") == 0 || strcmp(value, "true") == 0 || strcmp(value, "TRUE") == 0;
 }
 
-static size_t run_suite(const char *suite_name, const test_case_t *cases, size_t count) {
-  size_t suite_ran = 0;
+static test_suite_summary_t run_suite(const char *suite_name, const test_case_t *cases, size_t count) {
+  test_suite_summary_t summary = {suite_name, 0, 0.0};
+  clock_t suite_start = clock();
   harness_printf("\n[test-harness][%s][START] total=%zu\n", suite_name, count);
   for (size_t i = 0; i < count; ++i) {
+    current_suite_name = suite_name;
+    current_test_name = cases[i].name;
+    clock_t test_start = clock();
     harness_printf("[test-harness][%s][START] index=%zu/%zu test=%s\n", suite_name, i + 1,
                    count, cases[i].name);
     cases[i].fn();
-    harness_printf("[test-harness][%s][PASS] index=%zu/%zu test=%s\n", suite_name, i + 1,
-                   count, cases[i].name);
-    suite_ran++;
+    harness_printf("[test-harness][%s][PASS] index=%zu/%zu test=%s elapsed_ms=%.2f\n", suite_name, i + 1,
+                   count, cases[i].name, elapsed_ms_since(test_start));
+    summary.count++;
   }
-  harness_printf("[test-harness][%s][COMPLETE] executed=%zu expected=%zu status=PASS\n",
-                 suite_name, suite_ran, count);
-  return suite_ran;
+  summary.elapsed_ms = elapsed_ms_since(suite_start);
+  current_suite_name = "<idle>";
+  current_test_name = "<idle>";
+  harness_printf("[test-harness][%s][COMPLETE] executed=%zu expected=%zu status=PASS elapsed_ms=%.2f\n",
+                 suite_name, summary.count, count, summary.elapsed_ms);
+  return summary;
 }
 
 int main(void) {
@@ -316,11 +335,11 @@ int main(void) {
                  strict_bench ? "strict" : "standard",
                  strict_bench ? "enabled" : "disabled", suite_count, total_expected);
 
-  suites[0].count = run_suite("core", core_tests, sizeof(core_tests) / sizeof(core_tests[0]));
-  suites[1].count = run_suite("compiler", compiler_tests,
-                              sizeof(compiler_tests) / sizeof(compiler_tests[0]));
-  suites[2].count = run_suite("runtime", runtime_tests,
-                              sizeof(runtime_tests) / sizeof(runtime_tests[0]));
+  suites[0] = run_suite("core", core_tests, sizeof(core_tests) / sizeof(core_tests[0]));
+  suites[1] = run_suite("compiler", compiler_tests,
+                        sizeof(compiler_tests) / sizeof(compiler_tests[0]));
+  suites[2] = run_suite("runtime", runtime_tests,
+                        sizeof(runtime_tests) / sizeof(runtime_tests[0]));
 
   size_t total_ran = 0;
   for (size_t i = 0; i < suite_count; ++i) {
@@ -334,7 +353,7 @@ int main(void) {
                  total_expected);
   harness_printf("[test-harness] suite summary:");
   for (size_t i = 0; i < suite_count; ++i) {
-    harness_printf(" %s=%zu", suites[i].name, suites[i].count);
+    harness_printf(" %s=%zu(%.2fms)", suites[i].name, suites[i].count, suites[i].elapsed_ms);
   }
   harness_printf("\n");
   return 0;
