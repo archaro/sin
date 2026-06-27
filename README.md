@@ -7,7 +7,7 @@
 - The structure of the language is broadly complete, but library functions are almost nonexistent.  Player connection/disconnection/activity is handled, but what can be done with such events is limited.  Still, the engine is sufficiently developed that it can run a simple echoserver.
 - The code is written in the vernacular style without any formal design.  In other words, I'm making it up as I go along.  There are various code styles and design patterns in use, depending on the mood I was in when I wrote each particular bit of code.  Much of the code is quite naïve, and will require tightening up and optimisation.  I follow the mantra "first, make it work; then make it work well; finally make it work fast".
 - The compiler isn't particularly helpful if it encounters something it doesn't like.
-- Documentation is sparse.
+- Documentation is sparse, though `docs/documentation-roadmap.md` tracks proposed improvements for organising reader guides and preparing a future formal language reference.
 
 ## Compiling and Running ##
 
