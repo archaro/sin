@@ -453,8 +453,8 @@ ITEM_t *make_root_item(const char* name) {
 void destroy_item(ITEM_t *item) {
   if (item->type == ITEM_code) {
     free(item->bytecode);
-  } else if (item->type == ITEM_value && item->value.type == VALUE_str) {
-    free(item->value.s);
+  } else if (item->type == ITEM_value) {
+    value_free(&item->value);
   }
   // Free the item's innards
   free_hashtable(item->children);
@@ -495,10 +495,8 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
       // If there's no next dot, we've reached the last layer
       // Possibly free currently in-use memory
       // (it might have been newly-created, or might already exist)
-      if (current_item->type == ITEM_value &&
-                                    current_item->value.type == VALUE_str) {
-          FREE_ARRAY(char, current_item->value.s,
-                                           strlen(current_item->value.s+1));
+      if (current_item->type == ITEM_value) {
+          value_free(&current_item->value);
       } else if (current_item->type == ITEM_code) {
         if (current_item->inuse) {
           char name[MAX_ITEM_NAME];
@@ -553,10 +551,8 @@ ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
     if (next_dot == NULL) {
       // If there's no next dot, we've reached the last layer
       // It's code item, remember!
-      if (current_item->type == ITEM_value
-                              && current_item->value.type == VALUE_str) {
-        FREE_ARRAY(char, current_item->value.s,
-                                           strlen(current_item->value.s+1));
+      if (current_item->type == ITEM_value) {
+        value_free(&current_item->value);
       }
       current_item->type = ITEM_code;
       current_item->value.type = VALUE_nil; // Just to be safe
@@ -660,10 +656,7 @@ void set_item(ITEM_t *root, const char *item_name, VALUE_t value) {
   ITEM_t *item = find_item(root, item_name);
   if (item) {
     // Item exists, so just update its value.
-    if (item->value.type == VALUE_str) {
-      free(item->value.s);
-    }
-    item->value = value;
+    value_replace(&item->value, value);
   } else {
     // Item doesn't exist, so create it.
     insert_item(root, item_name, value);

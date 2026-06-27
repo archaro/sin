@@ -108,7 +108,18 @@ static void strbuf_track(char *ptr, size_t cap) {
 static void free_runtime_string(char *s) {
   if (!s) return;
   strbuf_forget(s);
-  FREE_ARRAY(char, s, strlen(s) + 1);
+  free(s);
+}
+
+static void value_free_runtime(VALUE_t *value) {
+  if (!value) return;
+  if (value->type == VALUE_str) {
+    free_runtime_string(value->s);
+    value->type = VALUE_nil;
+    value->i = 0;
+  } else {
+    value_free(value);
+  }
 }
 
 static size_t strbuf_growth_capacity(size_t needed) {
@@ -133,7 +144,7 @@ static VALUE_t concat_two_strings(VALUE_t left, VALUE_t right) {
     memcpy(out + left_len, right.s, right_len + 1);
     out_cap = left_meta->cap;
     strbuf_forget(right.s);
-    FREE_ARRAY(char, right.s, right_len + 1);
+    free(right.s);
   } else {
     if (left_meta) {
       out_cap = strbuf_growth_capacity(needed);
@@ -152,10 +163,10 @@ static VALUE_t concat_two_strings(VALUE_t left, VALUE_t right) {
 }
 
 static inline int binary_int_operands(VALUE_t v1, VALUE_t v2, const char *opcode_name) {
-  int valid = (v1.type == VALUE_int && v2.type == VALUE_int);
+  int valid = (value_is_type(&v1, VALUE_int) && value_is_type(&v2, VALUE_int));
   if (!valid) {
-    logerr("%s invalid operand types: left '%c', right '%c'.\n",
-          opcode_name, v2.type, v1.type);
+    logerr("%s invalid operand types: left '%s', right '%s'.\n",
+          opcode_name, value_type_name(v2.type), value_type_name(v1.type));
   }
   return valid;
 }
@@ -198,19 +209,19 @@ static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const cha
   // Intentional quirk preserved: OP_NOTEQUAL treats mismatched types as true,
   // while the other comparison operators treat unsupported/mismatched operands
   // as false.
-  if (v1.type == VALUE_int && v2.type == VALUE_int) {
-    comparison_true = apply_comparison(mode, v2.i, v1.i);
-  } else if (v1.type == VALUE_bool && v2.type == VALUE_bool) {
-    comparison_true = apply_comparison(mode, v2.i, v1.i);
-  } else if ((mode == CMP_EQ || mode == CMP_NE)
-             && v1.type == VALUE_str && v2.type == VALUE_str) {
-    int cmp = strcmp(v2.s, v1.s);
-    comparison_true = (mode == CMP_EQ) ? (cmp == 0) : (cmp != 0);
-  } else if (mode == CMP_NE && v1.type != v2.type) {
-    comparison_true = 1;
+  if (mode == CMP_EQ || mode == CMP_NE) {
+    comparison_true = value_equal(&v2, &v1);
+    if (mode == CMP_NE) comparison_true = !comparison_true;
+  } else {
+    int cmp = 0;
+    if (value_order(&v2, &v1, &cmp)) {
+      comparison_true = apply_comparison(mode, cmp, 0);
+    }
   }
 
   result.i = comparison_true;
+  value_free_runtime(&v1);
+  value_free_runtime(&v2);
   push_stack(VM->stack, result);
   if (!comparison_true) {
     DISASS_LOG("%s: types %d and %d\n", opcode_tag, v1.type, v2.type);
@@ -335,7 +346,7 @@ uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
     // A true value means that we don't branch.  Skip over
     // the next two bytes.
     DISASS_LOG("OP_JUMPFALSE: evaluates to true (no jump).\n");
-    FREE_STR(v1);
+    value_free(&v1);
     return nextop + 2;
   } else {
     // If not true then it must be false.  That's logic.
@@ -351,14 +362,8 @@ uint8_t *op_savelocal(uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the stack.
   uint8_t index = *nextop + VM->stack->base;
   // First check if the current value is a string.  If so, free it.
-  if (VM->stack->stack[index].type == VALUE_str) {
-    free(VM->stack->stack[index].s);
-  }
-  // Then copy the top of the stack into that location.
-  memcpy(&(VM->stack->stack[index]), &(VM->stack->stack[VM->stack->current]),
-                                                    sizeof(VALUE_t));
-  // Then reduce the size of the stack.
-  VM->stack->current--;
+  VALUE_t top = pop_stack(VM->stack);
+  value_move(&VM->stack->stack[index], &top);
   DISASS_LOG("OP_SAVELOCAL: index %d\n", index);
   return nextop+1;
 }
@@ -368,15 +373,7 @@ uint8_t *op_getlocal(uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the stack.
   uint8_t index = *nextop + VM->stack->base;
 
-  // Then increase the size of the stack.
-  VM->stack->current++;
-  // Then copy that location to the top of the stack.
-  memcpy(&(VM->stack->stack[VM->stack->current]), &(VM->stack->stack[index]),
-                                                    sizeof(VALUE_t));
-  // Remember to copy the string if necessary.
-  if (VM->stack->stack[VM->stack->current].type == VALUE_str) {
-    VM->stack->stack[VM->stack->current].s = strdup(VM->stack->stack[index].s);
-  }
+  push_stack(VM->stack, value_clone(&VM->stack->stack[index]));
 #ifdef DISASS
   VALUE_t v;
   v = peek_stack(VM->stack);
@@ -428,14 +425,12 @@ uint8_t *op_add(uint8_t *nextop, ITEM_t *item) {
   } else if (v1.type == VALUE_str && v2.type == VALUE_str) {
     push_stack(VM->stack, concat_two_strings(v2, v1));
   } else {
-    if (v1.type == VALUE_str) {
-      free_runtime_string(v1.s);
-    }
-    if (v2.type == VALUE_str) {
-      free_runtime_string(v2.s);
-    }
-    logerr("OP_ADD invalid operand types: left '%c', right '%c'. Result is NIL.\n",
-          v2.type, v1.type);
+    VALUE_e left_type = v2.type;
+    VALUE_e right_type = v1.type;
+    value_free_runtime(&v1);
+    value_free_runtime(&v2);
+    logerr("OP_ADD invalid operand types: left '%s', right '%s'. Result is NIL.\n",
+          value_type_name(left_type), value_type_name(right_type));
     push_stack(VM->stack, VALUE_NIL);
   }
   DISASS_LOG("OP_ADD: types %d and %d\n", v1.type, v2.type);
@@ -455,12 +450,8 @@ uint8_t *op_subtract(uint8_t *nextop, ITEM_t *item) {
     DISASS_LOG("OP_SUB: operand types %d and %d\n", v2.type, v1.type);
   } else {
     DISASS_LOG("OP_SUB: invalid operand types %d and %d\n", v2.type, v1.type);
-    if (v1.type == VALUE_str) {
-      FREE_ARRAY(char, v1.s, strlen(v1.s) + 1);
-    }
-    if (v2.type == VALUE_str) {
-      FREE_ARRAY(char, v2.s, strlen(v2.s) + 1);
-    }
+    value_free_runtime(&v1);
+    value_free_runtime(&v2);
     v2 = VALUE_NIL;
   }
   push_stack(VM->stack, v2);
@@ -485,12 +476,8 @@ uint8_t *op_divide(uint8_t *nextop, ITEM_t *item) {
     DISASS_LOG("OP_DIV: operand types %d and %d\n", v2.type, v1.type);
   } else {
     DISASS_LOG("OP_DIV: invalid operand types %d and %d\n", v2.type, v1.type);
-    if (v1.type == VALUE_str) {
-      FREE_ARRAY(char, v1.s, strlen(v1.s) + 1);
-    }
-    if (v2.type == VALUE_str) {
-      FREE_ARRAY(char, v2.s, strlen(v2.s) + 1);
-    }
+    value_free_runtime(&v1);
+    value_free_runtime(&v2);
     v2 = VALUE_NIL;
   }
   v2.type = VALUE_int;
@@ -510,12 +497,8 @@ uint8_t *op_multiply(uint8_t *nextop, ITEM_t *item) {
     DISASS_LOG("OP_MUL: operand types %d and %d\n", v2.type, v1.type);
   } else {
     DISASS_LOG("OP_MUL: invalid operand types %d and %d\n", v2.type, v1.type);
-    if (v1.type == VALUE_str) {
-      FREE_ARRAY(char, v1.s, strlen(v1.s) + 1);
-    }
-    if (v2.type == VALUE_str) {
-      FREE_ARRAY(char, v2.s, strlen(v2.s) + 1);
-    }
+    value_free_runtime(&v1);
+    value_free_runtime(&v2);
     v2 = VALUE_NIL;
   }
   push_stack(VM->stack, v2);

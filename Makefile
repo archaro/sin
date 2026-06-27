@@ -26,7 +26,8 @@ TEST_CORE_SOURCES := \
 	$(TEST_DIR)/core/test_parser_input_api.c \
 	$(TEST_DIR)/core/test_item_cache.c \
 	$(TEST_DIR)/core/test_libcall_registry.c \
-	$(TEST_DIR)/core/test_relative_item_leading_dot.c
+	$(TEST_DIR)/core/test_relative_item_leading_dot.c \
+	$(TEST_DIR)/core/test_value_behavior.c
 TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_emitbc_header.c \
 	$(TEST_DIR)/compiler/test_emitbc_opcode_map.c \

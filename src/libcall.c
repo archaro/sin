@@ -33,7 +33,7 @@ extern LINE_t *line;
 // - Callers own popped values and must free any owned string payload exactly once.
 // - FREE_STR(v) is the canonical cleanup helper; it is a safe no-op for non-string values.
 static inline bool lc_value_is_type(VALUE_t v, VALUE_e type) {
-  return v.type == type;
+  return value_is_type(&v, type);
 }
 
 static inline uint8_t *lc_invalid_args_return(uint8_t *nextop, VALUE_t ret) {
@@ -44,7 +44,7 @@ static inline uint8_t *lc_invalid_args_return(uint8_t *nextop, VALUE_t ret) {
 
 static inline void lc_cleanup_values(VALUE_t *values, size_t count) {
   for (size_t i = 0; i < count; i++) {
-    FREE_STR(values[i]);
+    value_free(&values[i]);
   }
 }
 
@@ -189,7 +189,8 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   int32_t stack_top_before_interpret = VM->stack->current;
   (void)interpret(tmpitem);
   while (VM->stack->current > stack_top_before_interpret) {
-    FREE_STR(pop_stack(VM->stack));
+    VALUE_t dropped = pop_stack(VM->stack);
+    value_free(&dropped);
   }
 
   // Best-effort cleanup of temp item
@@ -221,7 +222,7 @@ void execute_task_cb(uv_timer_t *req) {
       logmsg("Bytecode interpreter returned: %ld\n", ret.i);
     } else if (ret.type == VALUE_str) {
       logmsg("Bytecode interpreter returned: %s\n", ret.s);
-      FREE_ARRAY(char, ret.s, strlen(ret.s));
+      value_free(&ret);
     } else if (ret.type == VALUE_bool) {
       logmsg("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
     } else if (ret.type == VALUE_nil) {

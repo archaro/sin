@@ -32,11 +32,7 @@ void reset_stack(STACK_t *stack) {
   // Note that this includes any local variables!
   // Really simple!
   for (int v = 0; v < (stack->current + stack->locals); v++) {
-    if (stack->stack[v].type == VALUE_str) {
-      STRINGDEBUG_LOG("Freeing string: %s\n", stack->stack[v].s);
-      FREE_ARRAY(char, stack->stack[v].s,
-                                    strlen(stack->stack[v].s) + 1);
-    }
+    value_free(&stack->stack[v]);
   }
   stack->current = -1;
 }
@@ -82,11 +78,7 @@ void throwaway_stack(STACK_t *stack) {
   // Set the type on the stack to nil, to prevent inadvertent
   // freeing of strings which may be in use elsewhere.
   if (stack->current >= 0) {
-    if (stack->stack[stack->current].type == VALUE_str) {
-      FREE_ARRAY(char, stack->stack[stack->current].s,
-                                   strlen(stack->stack[stack->current].s));
-    }
-    stack->stack[stack->current].type = VALUE_nil;
+    value_free(&stack->stack[stack->current]);
     stack->current--;
   }
   logerr("Stack cleared.\n");
