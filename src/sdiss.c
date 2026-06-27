@@ -13,6 +13,7 @@
 #include "config.h"
 #include "memory.h"
 #include "log.h"
+#include "floatconv.h"
 #include "value.h"
 #include "item.h"
 #include "stack.h"
@@ -296,7 +297,11 @@ static uint8_t *h_float(uint8_t *p, uint8_t *e, decode_context_t c) {
   if (isnan(value)) class_name = "nan";
   else if (isinf(value)) class_name = signbit(value) ? "-inf" : "+inf";
   else if (value == 0.0) class_name = signbit(value) ? "-0.0" : "+0.0";
-  logmsg("FLOAT %.17g (%s bits=0x%016llx)\n", value, class_name, (unsigned long long)bits);
+  char fbuffer[64];
+  if (!sin_format_binary64_buf(value, fbuffer, sizeof(fbuffer))) {
+    snprintf(fbuffer, sizeof(fbuffer), "<float-format-error>");
+  }
+  logmsg("FLOAT %s (%s bits=0x%016llx)\n", fbuffer, class_name, (unsigned long long)bits);
   return p;
 }
 static uint8_t *h_bool(uint8_t *p, uint8_t *e, decode_context_t c) {

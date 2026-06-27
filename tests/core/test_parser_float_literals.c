@@ -155,6 +155,61 @@ static void assert_parse_rejected(const char *literal) {
   free(errdetail);
 }
 
+static void assert_format_text(uint64_t bits, const char *expected) {
+  double value = 0.0;
+  memcpy(&value, &bits, sizeof(value));
+  char buf[64];
+  ASSERT_TRUE(sin_format_binary64_buf(value, buf, sizeof(buf)));
+  ASSERT_TRUE(strcmp(buf, expected) == 0);
+}
+
+static void assert_format_roundtrip(uint64_t bits) {
+  double value = 0.0;
+  memcpy(&value, &bits, sizeof(value));
+  char buf[64];
+  ASSERT_TRUE(sin_format_binary64_buf(value, buf, sizeof(buf)));
+  uint64_t reparsed = 0;
+  char *errdetail = NULL;
+  ASSERT_TRUE(sin_parse_binary64_bits(buf, &reparsed, &errdetail));
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(reparsed == bits);
+}
+
+void test_floatconv_binary64_formatting(void) {
+  assert_format_text(UINT64_C(0x0000000000000000), "0.0");
+  assert_format_text(UINT64_C(0x8000000000000000), "-0.0");
+  assert_format_text(UINT64_C(0x7ff0000000000000), "inf");
+  assert_format_text(UINT64_C(0xfff0000000000000), "-inf");
+  assert_format_text(UINT64_C(0x7ff8000000000042), "nan");
+  assert_format_text(UINT64_C(0x3ff0000000000000), "1.0");
+  assert_format_text(UINT64_C(0x3ff8000000000000), "1.5");
+
+  char small[3];
+  double one = 1.0;
+  ASSERT_TRUE(!sin_format_binary64_buf(one, small, sizeof(small)));
+  char *allocated = sin_format_binary64(one);
+  ASSERT_NOT_NULL(allocated);
+  ASSERT_TRUE(strcmp(allocated, "1.0") == 0);
+  free(allocated);
+}
+
+void test_floatconv_binary64_format_roundtrip(void) {
+  const uint64_t cases[] = {
+    UINT64_C(0x3fb999999999999a), /* 0.1 */
+    UINT64_C(0x400921fb54442d18), /* pi-ish */
+    UINT64_C(0x7fefffffffffffff),
+    UINT64_C(0x0000000000000001),
+    UINT64_C(0x0010000000000000),
+    UINT64_C(0x433fffffffffffff),
+    UINT64_C(0x4340000000000001),
+    UINT64_C(0xbff0000000000000),
+    UINT64_C(0xc008000000000000),
+  };
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+    assert_format_roundtrip(cases[i]);
+  }
+}
+
 void test_floatconv_binary64_edge_cases(void) {
   /* Exact integers around 2^53. */
   assert_parse_bits("9007199254740991.0", UINT64_C(0x433fffffffffffff));
