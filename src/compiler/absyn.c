@@ -39,8 +39,12 @@ AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval) {
     uint64_t bits = 0;
     char *errdetail = NULL;
     if (!sin_parse_binary64_bits(sval, &bits, &errdetail)) {
+      logerr("Failed to parse float literal '%s'%s%s\n", sval, errdetail ? ": " : "", errdetail ? errdetail : "");
       free(errdetail);
+      free(sval);
+      return NULL;
     }
+    free(errdetail);
     newval = as_new_value(V_FLOAT, bits, NULL);
     free(sval);
   } else if (valtype == V_BOOLTRUE) {
