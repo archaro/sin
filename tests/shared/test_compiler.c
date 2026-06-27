@@ -62,6 +62,7 @@ void test_relative_item_leading_dot_parse_still_rejects_bad_double_dot(void);
 void test_value_integer_arithmetic_helpers(void);
 void test_value_arithmetic_invalid_and_nil_operands(void);
 void test_value_push_int_interprets_i64_immediates(void);
+void test_value_push_float_interprets_binary64_payloads(void);
 void test_value_string_concat_helpers(void);
 void test_value_bool_nil_truthiness_helpers(void);
 void test_value_float_construction_copy_truthiness_cleanup(void);
@@ -76,6 +77,7 @@ void test_value_comparison_unsupported_ordering_is_false(void);
 void test_emitbc_header(void);
 void test_emitbc_opcode_map(void);
 void test_emitbc_push_int_immediate_layout(void);
+void test_emitbc_push_float_immediate_layout(void);
 void test_emitbc_opcode_map_unsupported_ir_op(void);
 void test_emitbc_opcode_map_call_item_deref_alias_layout(void);
 void test_emitbc_all_ir_ops_accounted_for(void);
@@ -174,6 +176,7 @@ static const test_case_t core_tests[] = {
     {"test_value_integer_arithmetic_helpers", test_value_integer_arithmetic_helpers},
     {"test_value_arithmetic_invalid_and_nil_operands", test_value_arithmetic_invalid_and_nil_operands},
     {"test_value_push_int_interprets_i64_immediates", test_value_push_int_interprets_i64_immediates},
+    {"test_value_push_float_interprets_binary64_payloads", test_value_push_float_interprets_binary64_payloads},
     {"test_value_string_concat_helpers", test_value_string_concat_helpers},
     {"test_value_bool_nil_truthiness_helpers", test_value_bool_nil_truthiness_helpers},
     {"test_value_float_construction_copy_truthiness_cleanup", test_value_float_construction_copy_truthiness_cleanup},
@@ -189,6 +192,7 @@ static const test_case_t compiler_tests[] = {
     {"test_emitbc_header", test_emitbc_header},
     {"test_emitbc_opcode_map", test_emitbc_opcode_map},
     {"test_emitbc_push_int_immediate_layout", test_emitbc_push_int_immediate_layout},
+    {"test_emitbc_push_float_immediate_layout", test_emitbc_push_float_immediate_layout},
     {"test_emitbc_all_ir_ops_accounted_for", test_emitbc_all_ir_ops_accounted_for},
     {"test_emitbc_opcode_map_call_item_deref_alias_layout", test_emitbc_opcode_map_call_item_deref_alias_layout},
     {"test_emitbc_opcode_map_unsupported_ir_op", test_emitbc_opcode_map_unsupported_ir_op},

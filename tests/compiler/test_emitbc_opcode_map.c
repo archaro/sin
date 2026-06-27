@@ -125,12 +125,13 @@ void test_emitbc_opcode_map(void) {
 
 
 
-static void test_emitbc_push_float_immediate_layout(void) {
+void test_emitbc_push_float_immediate_layout(void) {
   const uint64_t values[] = {
-      UINT64_C(0x0000000000000000),
-      UINT64_C(0x3ff0000000000000),
-      UINT64_C(0x8000000000000000),
-      UINT64_C(0x7ff8000000000042),
+      UINT64_C(0x3ff0000000000000), /* 1.0 */
+      UINT64_C(0x8000000000000000), /* -0.0 */
+      UINT64_C(0x7ff0000000000000), /* +inf */
+      UINT64_C(0x7ff8000000000042), /* quiet NaN */
+      UINT64_C(0xc006000000000000), /* -2.75 */
   };
 
   IR_Unit *unit = t_new_unit();

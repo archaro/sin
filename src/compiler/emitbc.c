@@ -71,6 +71,9 @@ static int bw_write_i64(BC_Writer *w, int64_t v) {
   memcpy(&payload, &v, sizeof(payload));
   return bw_write_u64_payload(w, payload);
 }
+static int bw_write_f64_bits(BC_Writer *w, uint64_t bits) {
+  return bw_write_u64_payload(w, bits);
+}
 static int bw_write_bytes(BC_Writer *w, const void *src, size_t n) {
   if (!bw_ensure(w, n)) return 0;
   memcpy(w->out->nextbyte, src, n);
@@ -180,7 +183,7 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     }
     switch (in->op) {
       case IR_OP_PUSH_INT: if (!bw_write_i64(&w, in->imm)) goto oom; break;
-      case IR_OP_PUSH_FLOAT: if (!bw_write_i64(&w, in->imm)) goto oom; break;
+      case IR_OP_PUSH_FLOAT: if (!bw_write_f64_bits(&w, (uint64_t)in->imm)) goto oom; break;
       case IR_OP_PUSH_BOOL:
         if (!bw_write_u8(&w, (uint8_t)in->a)) goto oom;
         break;
