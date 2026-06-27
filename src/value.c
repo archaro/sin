@@ -2,6 +2,7 @@
 
 // Licensed under the MIT License - see LICENSE file for details.
 
+#include <float.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -10,10 +11,27 @@
 #define VALUE_INTERNAL
 #include "value.h"
 
-const VALUE_t VALUE_NIL = {VALUE_nil, {0}};
-const VALUE_t VALUE_TRUE = {VALUE_bool, {1}};
-const VALUE_t VALUE_FALSE = {VALUE_bool, {0}};
-const VALUE_t VALUE_ZERO = {VALUE_int, {0}};
+_Static_assert(sizeof(double) == 8, "VALUE_float requires 64-bit double");
+_Static_assert(DBL_MANT_DIG == 53, "VALUE_float requires IEEE 754 binary64 precision");
+_Static_assert(DBL_MAX_EXP == 1024, "VALUE_float requires IEEE 754 binary64 exponent range");
+_Static_assert(FLT_RADIX == 2, "VALUE_float requires binary floating-point radix");
+
+const VALUE_t VALUE_NIL = {.type = VALUE_nil, .i = 0};
+const VALUE_t VALUE_TRUE = {.type = VALUE_bool, .i = 1};
+const VALUE_t VALUE_FALSE = {.type = VALUE_bool, .i = 0};
+const VALUE_t VALUE_ZERO = {.type = VALUE_int, .i = 0};
+
+uint64_t value_float_to_bits(double value) {
+  uint64_t bits;
+  memcpy(&bits, &value, sizeof(bits));
+  return bits;
+}
+
+double value_float_from_bits(uint64_t bits) {
+  double value;
+  memcpy(&value, &bits, sizeof(value));
+  return value;
+}
 
 const char *value_type_name(VALUE_e type) {
   switch (type) {
@@ -72,7 +90,7 @@ int value_is_truthy(const VALUE_t *value) {
     case VALUE_int:
       return value->i != 0;
     case VALUE_float:
-      return value->f_bits != 0;
+      return value->f != 0.0;
     case VALUE_str:
       return value->s && value->s[0] != '\0';
     case VALUE_nil:
@@ -100,7 +118,7 @@ bool value_equal(const VALUE_t *left, const VALUE_t *right) {
     case VALUE_bool:
       return left->i == right->i;
     case VALUE_float:
-      return left->f_bits == right->f_bits;
+      return left->f == right->f;
     case VALUE_str:
       return strcmp(left->s ? left->s : "", right->s ? right->s : "") == 0;
     case VALUE_nil:
@@ -259,7 +277,7 @@ const char *value_debug_string(const VALUE_t *value, char *buffer, size_t buffer
       snprintf(buffer, buffer_size, "%s", value->i ? "true" : "false");
       break;
     case VALUE_float:
-      snprintf(buffer, buffer_size, "0x%016llx", (unsigned long long)value->f_bits);
+      snprintf(buffer, buffer_size, "%g", value->f);
       break;
     case VALUE_str:
       snprintf(buffer, buffer_size, "'%s'", value->s ? value->s : "");

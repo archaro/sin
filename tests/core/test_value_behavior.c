@@ -174,6 +174,42 @@ void test_value_bool_nil_truthiness_helpers(void) {
   value_free(&text);
 }
 
+
+void test_value_float_construction_copy_truthiness_cleanup(void) {
+  VALUE_t zero = {.type = VALUE_float, .f = 0.0};
+  VALUE_t negative_zero = {.type = VALUE_float, .f = -0.0};
+  VALUE_t finite = {.type = VALUE_float, .f = 3.5};
+  VALUE_t negative = {.type = VALUE_float, .f = -2.25};
+  VALUE_t infinity = {.type = VALUE_float, .f = value_float_from_bits(0x7ff0000000000000ULL)};
+  VALUE_t nan = {.type = VALUE_float, .f = value_float_from_bits(0x7ff8000000000000ULL)};
+
+  ASSERT_EQ_INT(VALUE_float, finite.type);
+  ASSERT_TRUE(value_float_to_bits(value_float_from_bits(0x400c000000000000ULL)) == 0x400c000000000000ULL);
+  ASSERT_TRUE(!value_is_truthy(&zero));
+  ASSERT_TRUE(!value_is_truthy(&negative_zero));
+  ASSERT_TRUE(value_is_truthy(&finite));
+  ASSERT_TRUE(value_is_truthy(&negative));
+  ASSERT_TRUE(value_is_truthy(&infinity));
+  ASSERT_TRUE(value_is_truthy(&nan));
+
+  VALUE_t clone = value_clone(&finite);
+  ASSERT_EQ_INT(VALUE_float, clone.type);
+  ASSERT_TRUE(clone.f == finite.f);
+
+  VALUE_t dst = VALUE_NIL;
+  value_move(&dst, &clone);
+  ASSERT_EQ_INT(VALUE_float, dst.type);
+  ASSERT_TRUE(dst.f == finite.f);
+  ASSERT_EQ_INT(VALUE_nil, clone.type);
+
+  value_replace(&dst, negative);
+  ASSERT_EQ_INT(VALUE_float, dst.type);
+  ASSERT_TRUE(dst.f == negative.f);
+
+  value_free(&dst);
+  ASSERT_EQ_INT(VALUE_nil, dst.type);
+}
+
 void test_value_string_local_load_store_clones(void) {
   setup_runtime();
   uint8_t code[96] = {0};

@@ -312,10 +312,12 @@ uint8_t *op_pushint(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_pushfloat(uint8_t *nextop, ITEM_t *item) {
   VALUE_t v;
   v.type = VALUE_float;
-  nextop = bc_read_u64_payload(nextop, &v.f_bits, "OP_PUSHFLOAT");
+  uint64_t bits;
+  nextop = bc_read_u64_payload(nextop, &bits, "OP_PUSHFLOAT");
   if (!nextop) return NULL;
+  v.f = value_float_from_bits(bits);
   push_stack(VM->stack, v);
-  DISASS_LOG("OP_PUSHFLOAT: 0x%016llx\n", (unsigned long long)v.f_bits);
+  DISASS_LOG("OP_PUSHFLOAT: %g (0x%016llx)\n", v.f, (unsigned long long)bits);
   return nextop;
 }
 

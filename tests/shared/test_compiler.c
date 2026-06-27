@@ -64,6 +64,7 @@ void test_value_arithmetic_invalid_and_nil_operands(void);
 void test_value_push_int_interprets_i64_immediates(void);
 void test_value_string_concat_helpers(void);
 void test_value_bool_nil_truthiness_helpers(void);
+void test_value_float_construction_copy_truthiness_cleanup(void);
 void test_value_string_local_load_store_clones(void);
 void test_value_comparison_int_helpers(void);
 void test_value_comparison_bool_helpers(void);
@@ -175,6 +176,7 @@ static const test_case_t core_tests[] = {
     {"test_value_push_int_interprets_i64_immediates", test_value_push_int_interprets_i64_immediates},
     {"test_value_string_concat_helpers", test_value_string_concat_helpers},
     {"test_value_bool_nil_truthiness_helpers", test_value_bool_nil_truthiness_helpers},
+    {"test_value_float_construction_copy_truthiness_cleanup", test_value_float_construction_copy_truthiness_cleanup},
     {"test_value_string_local_load_store_clones", test_value_string_local_load_store_clones},
     {"test_value_comparison_int_helpers", test_value_comparison_int_helpers},
     {"test_value_comparison_bool_helpers", test_value_comparison_bool_helpers},

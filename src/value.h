@@ -23,7 +23,8 @@ typedef struct {
   VALUE_e type; // What sort of value am I?
   union {
     int64_t i;  // This is an integer value
-    uint64_t f_bits; // This is an IEEE 754 binary64 payload
+    double f; // This is a floating-point value used for arithmetic
+    uint64_t f_bits; // This is an IEEE 754 binary64 payload view
     char *s; // This is a string value
   };
 } VALUE_t;
@@ -38,11 +39,15 @@ extern VALUE_t VALUE_FALSE;
 #define FREE_STR(val) value_free(&(val))
   
 VALUE_t convert_to_bool(VALUE_t from);
+uint64_t value_float_to_bits(double value);
+double value_float_from_bits(uint64_t bits);
 
 // Truthiness contract for VM values:
 // - nil is false
 // - bool false/true preserve their value
 // - int 0 is false; any non-zero int is true
+// - float +0.0 and -0.0 are false; all other values are true.
+//   NaN is truthy because it is not equal to zero.
 // - string "" (empty) is false; any non-empty string is true
 //
 // Ownership contract:
