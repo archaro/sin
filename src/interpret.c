@@ -57,8 +57,7 @@ static bool verify_runtime_bytecode(ITEM_t *item) {
     set_error_item(ERR_RUNTIME_BYTECODE, detail);
     return false;
   }
-  BC_VerifyOptions options = bc_verify_default_options();
-  options.mode = BC_VERIFY_MODE_RUNTIME;
+  BC_VerifyOptions options = bc_verify_strict_options();
   BC_VerifyResult result = bc_verify_bytecode(item->bytecode,
       (uint32_t)item->bytecode_len, label, &options);
   if (result.status == BC_VERIFY_OK) return true;
@@ -1039,16 +1038,6 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
   // assembled, push the full item name onto the stack as a string.
   // Return a pointer to the bytecode after the item assembly.
   // May recurse - necessary for the handling of nested derefs.
-  if (config.strict_validation && current_frame_end) {
-    const uint8_t *validated_end = NULL;
-    BC_VerifyError diagnostic;
-    if (!bc_decode_item_expression(nextop, current_frame_end,
-                                   relative ? BC_ITEM_EXPR_RELATIVE : BC_ITEM_EXPR_ABSOLUTE,
-                                   &validated_end, &diagnostic)) {
-      (void)diagnostic;
-    }
-    (void)validated_end;
-  }
   bool invalid = false;
   bool saw_missing_layer = false;
   bool saw_non_missing_layer = false;

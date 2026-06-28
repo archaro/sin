@@ -315,7 +315,7 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     return errnum;
   }
 
-  BC_VerifyOptions verify_options = bc_verify_compiler_options();
+  BC_VerifyOptions verify_options = bc_verify_strict_options();
   BC_VerifyResult verify = bc_verify_bytecode(
       out->bytecode, (uint32_t)bytecode_len, "compiler output",
       &verify_options);

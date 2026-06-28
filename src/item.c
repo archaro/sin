@@ -1282,9 +1282,7 @@ static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
     }
 
     if (config.strict_validation) {
-      BC_VerifyOptions verify_options = bc_verify_default_options();
-      verify_options.mode = BC_VERIFY_MODE_ITEMSTORE;
-      verify_options.strict_trailing_bytes = true;
+      BC_VerifyOptions verify_options = bc_verify_strict_options();
       BC_VerifyResult verify = bc_verify_bytecode(bytecode, bytecode_len,
                                                   name, &verify_options);
       if (verify.status != BC_VERIFY_OK) {

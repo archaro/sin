@@ -20,6 +20,42 @@ static void assert_verify_status(const uint8_t *bytes, uint32_t len,
   }
 }
 
+void test_bytecode_verify_policy_profiles(void) {
+  BC_VerifyOptions strict = bc_verify_strict_options();
+  ASSERT_TRUE(strict.validate_control_flow);
+  ASSERT_TRUE(strict.validate_stack_effects);
+  ASSERT_EQ_INT(BC_TRAILING_BYTES_ERROR, strict.trailing_bytes);
+
+  BC_VerifyOptions disassembly = bc_verify_disassembly_options();
+  ASSERT_TRUE(!disassembly.validate_control_flow);
+  ASSERT_TRUE(!disassembly.validate_stack_effects);
+  ASSERT_EQ_INT(BC_TRAILING_BYTES_WARNING, disassembly.trailing_bytes);
+
+  const uint8_t trailing[] = {0, 0, 'h', 'h'};
+  BC_VerifyResult result = bc_verify_bytecode(
+      trailing, sizeof(trailing), "strict trailing", &strict);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  result = bc_verify_bytecode(trailing, sizeof(trailing),
+                              "disassembly trailing", &disassembly);
+  ASSERT_EQ_INT(BC_VERIFY_WARNING, result.status);
+
+  const uint8_t invalid_jump[] = {0, 0, 'j', 4, 0, 'h'};
+  result = bc_verify_bytecode(invalid_jump, sizeof(invalid_jump),
+                              "strict jump", &strict);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  result = bc_verify_bytecode(invalid_jump, sizeof(invalid_jump),
+                              "disassembly jump", &disassembly);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+
+  const uint8_t underflow[] = {0, 0, 'a', 'h'};
+  result = bc_verify_bytecode(underflow, sizeof(underflow),
+                              "strict stack", &strict);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  result = bc_verify_bytecode(underflow, sizeof(underflow),
+                              "disassembly stack", &disassembly);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+}
+
 void test_bytecode_verify_minimal_and_header_errors(void) {
   const uint8_t minimal[] = {0, 0, 'h'};
   assert_verify_status(minimal, sizeof(minimal), BC_VERIFY_OK, "minimal", NULL);

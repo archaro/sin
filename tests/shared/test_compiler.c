@@ -134,6 +134,7 @@ void test_emitbc_all_ir_ops_accounted_for(void);
 void test_emitbc_jumps(void);
 void test_emitbc_invariants(void);
 void test_emitbc_post_emission_verification(void);
+void test_bytecode_verify_policy_profiles(void);
 void test_bytecode_verify_minimal_and_header_errors(void);
 void test_bytecode_verify_opcode_halt_and_trailing_bytes(void);
 void test_bytecode_verify_truncated_operand_widths(void);
@@ -250,6 +251,7 @@ static const test_case_t compiler_tests[] = {
     {"test_emitbc_jumps", test_emitbc_jumps},
     {"test_emitbc_invariants", test_emitbc_invariants},
     {"test_emitbc_post_emission_verification", test_emitbc_post_emission_verification},
+    {"test_bytecode_verify_policy_profiles", test_bytecode_verify_policy_profiles},
     {"test_bytecode_verify_minimal_and_header_errors", test_bytecode_verify_minimal_and_header_errors},
     {"test_bytecode_verify_opcode_halt_and_trailing_bytes", test_bytecode_verify_opcode_halt_and_trailing_bytes},
     {"test_bytecode_verify_truncated_operand_widths", test_bytecode_verify_truncated_operand_widths},

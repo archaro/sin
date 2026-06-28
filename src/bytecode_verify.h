@@ -8,13 +8,6 @@
 
 
 typedef enum {
-  BC_VERIFY_MODE_RUNTIME = 0,
-  BC_VERIFY_MODE_ITEMSTORE = 1,
-  BC_VERIFY_MODE_DISASSEMBLY = 2,
-  BC_VERIFY_MODE_COMPILER = 3
-} BC_VerifyMode;
-
-typedef enum {
   BC_VERIFY_OK = 0,
   BC_VERIFY_WARNING = 1,
   BC_VERIFY_ERROR = 2
@@ -106,9 +99,18 @@ typedef struct {
   char message[192];
 } BC_VerifyError;
 
+typedef enum {
+  BC_TRAILING_BYTES_ERROR = 0,
+  BC_TRAILING_BYTES_WARNING = 1
+} BC_TrailingBytesPolicy;
+
+/* Verification behavior after a caller has chosen to invoke the verifier.
+ * Executable-level policy, such as sin's --strict-validation gate, remains
+ * the caller's responsibility. */
 typedef struct {
-  BC_VerifyMode mode;
-  bool strict_trailing_bytes;
+  bool validate_control_flow;
+  bool validate_stack_effects;
+  BC_TrailingBytesPolicy trailing_bytes;
 } BC_VerifyOptions;
 
 typedef struct {
@@ -124,9 +126,8 @@ typedef enum {
   BC_ITEM_EXPR_RELATIVE = 1
 } BC_ItemExprKind;
 
-BC_VerifyOptions bc_verify_default_options(void);
+BC_VerifyOptions bc_verify_strict_options(void);
 BC_VerifyOptions bc_verify_disassembly_options(void);
-BC_VerifyOptions bc_verify_compiler_options(void);
 BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
                                    uint32_t bytecode_len,
                                    const char *source_label,

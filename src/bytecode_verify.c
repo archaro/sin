@@ -41,25 +41,20 @@ typedef struct {
   uint32_t event_depth;
 } BC_Decoder;
 
-BC_VerifyOptions bc_verify_default_options(void) {
-  BC_VerifyOptions options;
-  options.mode = BC_VERIFY_MODE_RUNTIME;
-  options.strict_trailing_bytes = true;
-  return options;
+BC_VerifyOptions bc_verify_strict_options(void) {
+  return (BC_VerifyOptions){
+      .validate_control_flow = true,
+      .validate_stack_effects = true,
+      .trailing_bytes = BC_TRAILING_BYTES_ERROR,
+  };
 }
 
 BC_VerifyOptions bc_verify_disassembly_options(void) {
-  BC_VerifyOptions options;
-  options.mode = BC_VERIFY_MODE_DISASSEMBLY;
-  options.strict_trailing_bytes = false;
-  return options;
-}
-
-BC_VerifyOptions bc_verify_compiler_options(void) {
-  BC_VerifyOptions options;
-  options.mode = BC_VERIFY_MODE_COMPILER;
-  options.strict_trailing_bytes = true;
-  return options;
+  return (BC_VerifyOptions){
+      .validate_control_flow = false,
+      .validate_stack_effects = false,
+      .trailing_bytes = BC_TRAILING_BYTES_WARNING,
+  };
 }
 
 const char *bc_verify_status_name(BC_VerifyStatus status) {
@@ -643,7 +638,7 @@ bool bc_decode_item_expression(const uint8_t *item_payload,
   d.base = item_payload;
   d.end = bytecode_end;
   d.label = kind == BC_ITEM_EXPR_RELATIVE ? "relative item expression" : "item expression";
-  d.options = bc_verify_default_options();
+  d.options = bc_verify_strict_options();
   d.result.status = BC_VERIFY_OK;
   d.result.halt_offset = UINT32_MAX;
 
@@ -670,7 +665,7 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
   d.base = bytecode;
   d.end = bytecode ? bytecode + bytecode_len : NULL;
   d.label = source_label;
-  d.options = options ? *options : bc_verify_default_options();
+  d.options = options ? *options : bc_verify_strict_options();
   d.callback = callback;
   d.callback_ctx = callback_ctx;
   d.result.status = BC_VERIFY_OK;
@@ -717,13 +712,15 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
     }
     if (*start == 'h') {
       d.result.halt_offset = bc_offset(&d, start);
-      if (d.options.mode != BC_VERIFY_MODE_DISASSEMBLY) {
+      if (d.options.validate_control_flow) {
         if (!bc_validate_recorded_jumps(&d)) {
           free(d.top_level_instruction_starts);
           free(d.instructions);
           free(d.jumps);
           return d.result;
         }
+      }
+      if (d.options.validate_stack_effects) {
         if (!bc_verify_stack_flow(&d, params)) {
           free(d.top_level_instruction_starts);
           free(d.instructions);
@@ -732,7 +729,7 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
         }
       }
       if (cursor < d.end) {
-        if (d.options.strict_trailing_bytes || d.options.mode != BC_VERIFY_MODE_DISASSEMBLY) {
+        if (d.options.trailing_bytes == BC_TRAILING_BYTES_ERROR) {
           bc_fail(&d, cursor, *cursor, "trailing bytes after HALT");
         } else {
           bc_warn(&d, cursor, *cursor, "trailing bytes after HALT");
