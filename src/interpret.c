@@ -1413,6 +1413,7 @@ void init_interpreter() {
   // runtime opcode bindings fail fast during development without affecting
   // optimized/release startup behavior.
   ir_opcode_schema_for_each_runtime_opcode(assert_runtime_binding, &ctx);
+  assert(bc_opcode_lookup('h', BC_CONTEXT_STATEMENT) != NULL);
 #endif
 }
 

@@ -142,7 +142,7 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     IR_Inst *in = &ir->function.code[i];
     if (in->op == IR_OP_LABEL) continue;
     const IR_OpSchema *meta = ir_opcode_schema(in->op);
-    if (!meta || meta->encoded_symbol == 0) {
+    if (!meta || bc_opcode_byte(in->op) == 0) {
       FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
       {
         int8_t errnum = ERR_NOERROR;
@@ -150,7 +150,7 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
         return errnum;
       }
     }
-    if (!bw_write_u8(&w, meta->encoded_symbol)) goto oom;
+    if (!bw_write_u8(&w, bc_opcode_byte(in->op))) goto oom;
     switch (meta->validator) {
       case VALIDATE_NONE: break;
       case VALIDATE_A_U8:
