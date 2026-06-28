@@ -7,237 +7,406 @@
 #include "item.h"
 #include "test_assert.h"
 
+/* Itemstore v1 wire constants, duplicated here to document fixture bytes. */
+enum {
+  WIRE_ITEM_VALUE = 1,
+  WIRE_ITEM_CODE = 2,
+  WIRE_VALUE_INT = 0,
+  WIRE_VALUE_FLOAT = 1,
+  WIRE_VALUE_STRING = 2,
+  WIRE_VALUE_NIL = 3,
+  WIRE_VALUE_BOOL = 4
+};
+
+#define WIRE_VERSION 1u
+#define WIRE_MAX_DEPTH 8u
+#define WIRE_MAX_CHILDREN 250u
+#define WIRE_MAX_STRING_LEN (16u * 1024u * 1024u)
+#define WIRE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
+
+static void put_bytes(FILE *file, const void *bytes, size_t length) {
+  ASSERT_EQ_INT((long long)length,
+                (long long)fwrite(bytes, 1, length, file));
+}
+
 static void put_u8(FILE *file, uint8_t value) {
-  ASSERT_EQ_INT(1, fwrite(&value, 1, 1, file));
+  put_bytes(file, &value, sizeof(value));
 }
 
 static void put_u16_le(FILE *file, uint16_t value) {
-  put_u8(file, (uint8_t)value);
-  put_u8(file, (uint8_t)(value >> 8));
+  uint8_t bytes[] = {(uint8_t)value, (uint8_t)(value >> 8)};
+  put_bytes(file, bytes, sizeof(bytes));
 }
 
 static void put_u32_le(FILE *file, uint32_t value) {
-  put_u16_le(file, (uint16_t)value);
-  put_u16_le(file, (uint16_t)(value >> 16));
+  uint8_t bytes[] = {
+    (uint8_t)value,
+    (uint8_t)(value >> 8),
+    (uint8_t)(value >> 16),
+    (uint8_t)(value >> 24)
+  };
+  put_bytes(file, bytes, sizeof(bytes));
+}
+
+static void put_u64_le(FILE *file, uint64_t value) {
+  uint8_t bytes[8];
+  for (size_t i = 0; i < sizeof(bytes); i++) {
+    bytes[i] = (uint8_t)(value >> (i * 8));
+  }
+  put_bytes(file, bytes, sizeof(bytes));
 }
 
 static void put_header(FILE *file, uint16_t version) {
-  static const char magic[] = "SINITEM";
-  ASSERT_EQ_INT(sizeof(magic), fwrite(magic, 1, sizeof(magic), file));
+  static const uint8_t magic[] = {'S', 'I', 'N', 'I', 'T', 'E', 'M', 0};
+  put_bytes(file, magic, sizeof(magic));
   put_u16_le(file, version);
 }
 
-static FILE *new_record(const char *name, uint8_t item_tag) {
-  FILE *file = tmpfile();
-  ASSERT_NOT_NULL(file);
+static void put_record_prefix(FILE *file, const char *name, uint8_t item_tag) {
   size_t length = strlen(name);
   ASSERT_TRUE(length <= UINT8_MAX);
   put_u8(file, (uint8_t)length);
-  ASSERT_EQ_INT((long long)length, (long long)fwrite(name, 1, length, file));
+  put_bytes(file, name, length);
   put_u8(file, item_tag);
-  return file;
 }
 
-static void assert_root_record_rejected(FILE *file) {
-  rewind(file);
-  ASSERT_TRUE(read_item(file, NULL) == NULL);
-  ASSERT_EQ_INT(0, fclose(file));
+static void put_nil_record_prefix(FILE *file, const char *name,
+                                  uint32_t child_count) {
+  put_record_prefix(file, name, WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_NIL);
+  put_u32_le(file, child_count);
 }
 
-void test_itemstore_record_roundtrip(void) {
-  ITEM_t *root = make_root_item("root");
-  ASSERT_NOT_NULL(root);
-
-  VALUE_t integer = {.type = VALUE_int, .i = -123456789};
-  VALUE_t floating = {.type = VALUE_float,
-                      .f_bits = UINT64_C(0x8000000000000000)};
-  VALUE_t string = {.type = VALUE_str, .s = strdup("itemstore-v1")};
-  VALUE_t boolean = {.type = VALUE_bool, .i = 1};
-  ASSERT_NOT_NULL(string.s);
-  ASSERT_NOT_NULL(insert_item(root, "integer", integer));
-  ASSERT_NOT_NULL(insert_item(root, "floating", floating));
-  ASSERT_NOT_NULL(insert_item(root, "string", string));
-  ASSERT_NOT_NULL(insert_item(root, "boolean", boolean));
-
-  uint8_t *bytecode = malloc(3);
-  ASSERT_NOT_NULL(bytecode);
-  bytecode[0] = 0;
-  bytecode[1] = 0;
-  bytecode[2] = 'h';
-  ASSERT_NOT_NULL(insert_code_item(root, "code", 3, bytecode));
-
-  FILE *file = tmpfile();
-  ASSERT_NOT_NULL(file);
-  ASSERT_TRUE(write_item(file, root));
-  rewind(file);
-
-  ITEM_t *loaded = read_item(file, NULL);
-  ASSERT_NOT_NULL(loaded);
-  ASSERT_EQ_INT(0, fclose(file));
-
-  ITEM_t *loaded_integer = find_item(loaded, "integer");
-  ITEM_t *loaded_floating = find_item(loaded, "floating");
-  ITEM_t *loaded_string = find_item(loaded, "string");
-  ITEM_t *loaded_boolean = find_item(loaded, "boolean");
-  ITEM_t *loaded_code = find_item(loaded, "code");
-  ASSERT_NOT_NULL(loaded_integer);
-  ASSERT_NOT_NULL(loaded_floating);
-  ASSERT_NOT_NULL(loaded_string);
-  ASSERT_NOT_NULL(loaded_boolean);
-  ASSERT_NOT_NULL(loaded_code);
-  ASSERT_EQ_INT(-123456789, loaded_integer->value.i);
-  ASSERT_TRUE(loaded_floating->value.f_bits == UINT64_C(0x8000000000000000));
-  ASSERT_TRUE(strcmp("itemstore-v1", loaded_string->value.s) == 0);
-  ASSERT_EQ_INT(1, loaded_boolean->value.i);
-  ASSERT_EQ_INT(3, loaded_code->bytecode_len);
-  ASSERT_EQ_INT('h', loaded_code->bytecode[2]);
-
-  VALUE_t flush = {.type = VALUE_nil, .i = 0};
-  ASSERT_NOT_NULL(insert_item(loaded, "cache_flush", flush));
-  destroy_item(loaded);
-  destroy_item(root);
-}
-
-void test_itemstore_read_rejects_corrupt_records(void) {
-  /* Name lengths above the item model's 32-byte layer limit. */
-  FILE *file = tmpfile();
-  ASSERT_NOT_NULL(file);
-  put_u8(file, 33);
-  assert_root_record_rejected(file);
-
-  /* Unknown item and value wire tags. */
-  file = new_record("root", 0xff);
-  assert_root_record_rejected(file);
-
-  file = new_record("root", 1);
-  put_u8(file, 0xff);
-  assert_root_record_rejected(file);
-
-  /* String and bytecode lengths above their configured limits. */
-  file = new_record("root", 1);
-  put_u8(file, 2);
-  put_u32_le(file, (16u * 1024u * 1024u) + 1u);
-  assert_root_record_rejected(file);
-
-  file = new_record("root", 2);
-  put_u32_le(file, (64u * 1024u * 1024u) + 1u);
-  assert_root_record_rejected(file);
-
-  /* Child counts above the in-memory ordered-array limit. */
-  file = new_record("root", 1);
-  put_u8(file, 3);
-  put_u32_le(file, 251);
-  assert_root_record_rejected(file);
-
-  /* Duplicate siblings are rejected before the second item is inserted. */
-  file = new_record("root", 1);
-  put_u8(file, 3);
-  put_u32_le(file, 2);
-  put_u8(file, 3);
-  ASSERT_EQ_INT(3, fwrite("dup", 1, 3, file));
-  put_u8(file, 1);
-  put_u8(file, 3);
-  put_u32_le(file, 0);
-  put_u8(file, 3);
-  ASSERT_EQ_INT(3, fwrite("dup", 1, 3, file));
-  assert_root_record_rejected(file);
-
-  /* Invalid non-root layer names. */
-  ITEM_t *parent = make_root_item("root");
-  ASSERT_NOT_NULL(parent);
-  file = new_record("bad-name", 1);
-  put_u8(file, 3);
-  put_u32_le(file, 0);
-  rewind(file);
-  ASSERT_TRUE(read_item(file, parent) == NULL);
-  ASSERT_EQ_INT(0, fclose(file));
-  destroy_item(parent);
-
-  /* A child below eight existing layers would exceed the nesting limit. */
-  parent = make_root_item("root");
-  ASSERT_NOT_NULL(parent);
-  ITEM_t *deep = insert_item(parent, "a.b.c.d.e.f.g.h",
-                             (VALUE_t){.type = VALUE_nil, .i = 0});
-  ASSERT_NOT_NULL(deep);
-  file = tmpfile();
-  ASSERT_NOT_NULL(file);
-  ASSERT_TRUE(read_item(file, deep) == NULL);
-  ASSERT_EQ_INT(0, fclose(file));
-  destroy_item(parent);
-}
-
-void test_load_itemstore_rejects_incomplete_or_trailing_data(void) {
-  char path[] = "/tmp/sin-itemstore-test-XXXXXX";
+static FILE *new_fixture(char path[]) {
   int fd = mkstemp(path);
   ASSERT_TRUE(fd >= 0);
   FILE *file = fdopen(fd, "wb");
   ASSERT_NOT_NULL(file);
+  return file;
+}
+
+static FILE *replace_fixture(const char *path) {
+  FILE *file = fopen(path, "wb");
+  ASSERT_NOT_NULL(file);
+  return file;
+}
+
+static void assert_fixture_rejected(FILE *file, const char *path) {
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_TRUE(load_itemstore(path) == NULL);
+}
+
+static void put_nested_nil_record(FILE *file, unsigned depth,
+                                  unsigned deepest_depth) {
+  char name[8];
+  if (depth == 0) {
+    memcpy(name, "root", 5);
+  } else {
+    ASSERT_TRUE(snprintf(name, sizeof(name), "n%u", depth) > 0);
+  }
+  put_nil_record_prefix(file, name, depth < deepest_depth ? 1u : 0u);
+  if (depth < deepest_depth) {
+    put_nested_nil_record(file, depth + 1, deepest_depth);
+  }
+}
+
+void test_itemstore_value_and_code_roundtrip(void) {
+  char path[] = "/tmp/sin-itemstore-roundtrip-XXXXXX";
+  FILE *file = new_fixture(path);
+  ASSERT_EQ_INT(0, fclose(file));
 
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  put_header(file, 1);
-  ASSERT_TRUE(write_item(file, root));
-  put_u8(file, 0xaa);
-  ASSERT_EQ_INT(0, fclose(file));
-  ASSERT_TRUE(load_itemstore(path) == NULL);
+  ASSERT_NOT_NULL(insert_item(root, "nil",
+                              (VALUE_t){.type = VALUE_nil, .i = 0}));
+  ASSERT_NOT_NULL(insert_item(root, "bool",
+                              (VALUE_t){.type = VALUE_bool, .i = 1}));
+  ASSERT_NOT_NULL(insert_item(root, "int",
+                              (VALUE_t){.type = VALUE_int,
+                                        .i = -123456789}));
+  ASSERT_NOT_NULL(insert_item(root, "float",
+                              (VALUE_t){.type = VALUE_float,
+                                        .f_bits = UINT64_C(0x8000000000000000)}));
+  char *text = strdup("itemstore-v1");
+  ASSERT_NOT_NULL(text);
+  ASSERT_NOT_NULL(insert_item(root, "string",
+                              (VALUE_t){.type = VALUE_str, .s = text}));
 
-  file = fopen(path, "wb");
-  ASSERT_NOT_NULL(file);
-  ASSERT_EQ_INT(4, fwrite("SINI", 1, 4, file));
-  ASSERT_EQ_INT(0, fclose(file));
-  ASSERT_TRUE(load_itemstore(path) == NULL);
-
-  file = fopen(path, "wb");
-  ASSERT_NOT_NULL(file);
-  ASSERT_EQ_INT(8, fwrite("SINITEM", 1, 8, file));
-  put_u8(file, 1);
-  ASSERT_EQ_INT(0, fclose(file));
-  ASSERT_TRUE(load_itemstore(path) == NULL);
-
-  file = fopen(path, "wb");
-  ASSERT_NOT_NULL(file);
-  ASSERT_EQ_INT(8, fwrite("BADMAGIC", 1, 8, file));
-  put_u16_le(file, 1);
-  ASSERT_EQ_INT(0, fclose(file));
-  ASSERT_TRUE(load_itemstore(path) == NULL);
-
-  file = fopen(path, "wb");
-  ASSERT_NOT_NULL(file);
-  put_header(file, 2);
-  ASSERT_EQ_INT(0, fclose(file));
-  ASSERT_TRUE(load_itemstore(path) == NULL);
+  static const uint8_t expected_bytecode[] = {0x00, 0xff, 0x42, 0x00};
+  uint8_t *bytecode = malloc(sizeof(expected_bytecode));
+  ASSERT_NOT_NULL(bytecode);
+  memcpy(bytecode, expected_bytecode, sizeof(expected_bytecode));
+  ASSERT_NOT_NULL(insert_code_item(root, "code", sizeof(expected_bytecode),
+                                   bytecode));
 
   ASSERT_TRUE(save_itemstore(path, root));
   ITEM_t *loaded = load_itemstore(path);
   ASSERT_NOT_NULL(loaded);
+
+  ITEM_t *item = find_item(loaded, "nil");
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(ITEM_value, item->type);
+  ASSERT_EQ_INT(VALUE_nil, item->value.type);
+
+  item = find_item(loaded, "bool");
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(VALUE_bool, item->value.type);
+  ASSERT_EQ_INT(1, item->value.i);
+
+  item = find_item(loaded, "int");
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(VALUE_int, item->value.type);
+  ASSERT_EQ_INT(-123456789, item->value.i);
+
+  item = find_item(loaded, "float");
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(VALUE_float, item->value.type);
+  ASSERT_TRUE(item->value.f_bits == UINT64_C(0x8000000000000000));
+
+  item = find_item(loaded, "string");
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(VALUE_str, item->value.type);
+  ASSERT_TRUE(strcmp("itemstore-v1", item->value.s) == 0);
+
+  item = find_item(loaded, "code");
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(ITEM_code, item->type);
+  ASSERT_EQ_INT(sizeof(expected_bytecode), item->bytecode_len);
+  ASSERT_TRUE(memcmp(expected_bytecode, item->bytecode,
+                     sizeof(expected_bytecode)) == 0);
+
   destroy_item(loaded);
   destroy_item(root);
   ASSERT_EQ_INT(0, unlink(path));
 }
 
-void test_save_itemstore_preserves_existing_file_on_failure(void) {
-  static const char original[] = "existing-itemstore";
-  char path[] = "/tmp/sin-itemstore-save-test-XXXXXX";
-  int fd = mkstemp(path);
-  ASSERT_TRUE(fd >= 0);
-  FILE *file = fdopen(fd, "wb");
-  ASSERT_NOT_NULL(file);
-  ASSERT_EQ_INT(sizeof(original), fwrite(original, 1, sizeof(original), file));
+void test_itemstore_nested_depth_roundtrip(void) {
+  char path[] = "/tmp/sin-itemstore-depth-XXXXXX";
+  FILE *file = new_fixture(path);
   ASSERT_EQ_INT(0, fclose(file));
 
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  ASSERT_NOT_NULL(insert_code_item(root, "invalid_code", 1, NULL));
-  ASSERT_TRUE(!save_itemstore(path, root));
+  ASSERT_NOT_NULL(insert_item(root, "a.b.c.d.e.f.g.h",
+                              (VALUE_t){.type = VALUE_int, .i = 8}));
+  ASSERT_TRUE(save_itemstore(path, root));
 
-  file = fopen(path, "rb");
-  ASSERT_NOT_NULL(file);
-  char actual[sizeof(original)];
-  ASSERT_EQ_INT(sizeof(actual), fread(actual, 1, sizeof(actual), file));
-  ASSERT_TRUE(memcmp(original, actual, sizeof(original)) == 0);
-  ASSERT_EQ_INT(EOF, fgetc(file));
+  ITEM_t *loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  ITEM_t *leaf = find_item(loaded, "a.b.c.d.e.f.g.h");
+  ASSERT_NOT_NULL(leaf);
+  ASSERT_EQ_INT(VALUE_int, leaf->value.type);
+  ASSERT_EQ_INT(8, leaf->value.i);
+
+  destroy_item(loaded);
+  destroy_item(root);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_itemstore_loads_generated_v1_wire_fixture(void) {
+  char path[] = "/tmp/sin-itemstore-wire-XXXXXX";
+  FILE *file = new_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_nil_record_prefix(file, "root", 6);
+
+  put_nil_record_prefix(file, "nil", 0);
+
+  put_record_prefix(file, "bool", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_BOOL);
+  put_u8(file, 1);
+  put_u32_le(file, 0);
+
+  put_record_prefix(file, "int", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_INT);
+  put_u64_le(file, UINT64_C(0x0102030405060708));
+  put_u32_le(file, 0);
+
+  put_record_prefix(file, "float", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_FLOAT);
+  put_u64_le(file, UINT64_C(0x3ff8000000000000)); /* IEEE-754 1.5. */
+  put_u32_le(file, 0);
+
+  put_record_prefix(file, "string", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_STRING);
+  put_u32_le(file, 3);
+  put_bytes(file, "sin", 3);
+  put_u32_le(file, 0);
+
+  static const uint8_t bytecode[] = {0x10, 0x00, 0x7f};
+  put_record_prefix(file, "code", WIRE_ITEM_CODE);
+  put_u32_le(file, sizeof(bytecode));
+  put_bytes(file, bytecode, sizeof(bytecode));
+  put_u32_le(file, 0);
   ASSERT_EQ_INT(0, fclose(file));
 
-  destroy_item(root);
+  ITEM_t *loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  ITEM_t *item = find_item(loaded, "nil");
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(VALUE_nil, item->value.type);
+  item = find_item(loaded, "bool");
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(1, item->value.i);
+  item = find_item(loaded, "int");
+  ASSERT_NOT_NULL(item);
+  ASSERT_TRUE(item->value.i == INT64_C(0x0102030405060708));
+  item = find_item(loaded, "float");
+  ASSERT_NOT_NULL(item);
+  ASSERT_TRUE(item->value.f_bits == UINT64_C(0x3ff8000000000000));
+  item = find_item(loaded, "string");
+  ASSERT_NOT_NULL(item);
+  ASSERT_TRUE(strcmp(item->value.s, "sin") == 0);
+  item = find_item(loaded, "code");
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(sizeof(bytecode), item->bytecode_len);
+  ASSERT_TRUE(memcmp(bytecode, item->bytecode, sizeof(bytecode)) == 0);
+
+  destroy_item(loaded);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_load_itemstore_rejects_bad_headers(void) {
+  char path[] = "/tmp/sin-itemstore-header-XXXXXX";
+  FILE *file = new_fixture(path);
+
+  static const uint8_t bad_magic[] = {'B', 'A', 'D', 'I', 'T', 'E', 'M', 0};
+  put_bytes(file, bad_magic, sizeof(bad_magic));
+  put_u16_le(file, WIRE_VERSION);
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION + 1);
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_bytes(file, "SINI", 4);
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_bytes(file, "SINITEM", 8);
+  put_u8(file, WIRE_VERSION); /* Only half of the uint16 version. */
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_u8(file, 4);
+  put_bytes(file, "root", 4);
+  put_u8(file, WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_INT);
+  put_u32_le(file, UINT32_C(0x12345678)); /* Half of the int64 payload. */
+  assert_fixture_rejected(file, path);
+
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_load_itemstore_rejects_invalid_wire_tags(void) {
+  char path[] = "/tmp/sin-itemstore-tags-XXXXXX";
+  FILE *file = new_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_record_prefix(file, "root", 0xff);
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+  put_u8(file, 0xff);
+  assert_fixture_rejected(file, path);
+
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_load_itemstore_rejects_structural_corruption(void) {
+  char path[] = "/tmp/sin-itemstore-structure-XXXXXX";
+  FILE *file = new_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_nil_record_prefix(file, "root", 0);
+  put_u8(file, 0xaa); /* No bytes may follow the root record. */
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_nil_record_prefix(file, "root", 2);
+  put_nil_record_prefix(file, "dup", 0);
+  put_nil_record_prefix(file, "dup", 0);
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_nil_record_prefix(file, "root", 1);
+  put_nil_record_prefix(file, "bad-name", 0);
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_nil_record_prefix(file, "root", 1);
+  put_u8(file, 33); /* Layer names are limited to 32 bytes. */
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_BOOL);
+  put_u8(file, 2); /* Boolean payloads must be exactly zero or one. */
+  put_u32_le(file, 0);
+  assert_fixture_rejected(file, path);
+
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_load_itemstore_rejects_resource_limit_violations(void) {
+  char path[] = "/tmp/sin-itemstore-limits-XXXXXX";
+  FILE *file = new_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_STRING);
+  put_u32_le(file, WIRE_MAX_STRING_LEN + 1u);
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_record_prefix(file, "root", WIRE_ITEM_CODE);
+  put_u32_le(file, WIRE_MAX_BYTECODE_LEN + 1u);
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_nil_record_prefix(file, "root", WIRE_MAX_CHILDREN + 1u);
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_nested_nil_record(file, 0, WIRE_MAX_DEPTH + 1u);
+  assert_fixture_rejected(file, path);
+
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_save_itemstore_preserves_existing_file_on_failure(void) {
+  char path[] = "/tmp/sin-itemstore-save-test-XXXXXX";
+  FILE *file = new_fixture(path);
+  ASSERT_EQ_INT(0, fclose(file));
+
+  ITEM_t *original = make_root_item("root");
+  ASSERT_NOT_NULL(original);
+  ASSERT_NOT_NULL(insert_item(original, "sentinel",
+                              (VALUE_t){.type = VALUE_int, .i = 42}));
+  ASSERT_TRUE(save_itemstore(path, original));
+  destroy_item(original);
+
+  ITEM_t *invalid = make_root_item("root");
+  ASSERT_NOT_NULL(invalid);
+  ASSERT_NOT_NULL(insert_code_item(invalid, "invalid_code", 1, NULL));
+  ASSERT_TRUE(!save_itemstore(path, invalid));
+  destroy_item(invalid);
+
+  ITEM_t *loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  ITEM_t *sentinel = find_item(loaded, "sentinel");
+  ASSERT_NOT_NULL(sentinel);
+  ASSERT_EQ_INT(VALUE_int, sentinel->value.type);
+  ASSERT_EQ_INT(42, sentinel->value.i);
+  ASSERT_TRUE(find_item(loaded, "invalid_code") == NULL);
+
+  destroy_item(loaded);
   ASSERT_EQ_INT(0, unlink(path));
 }

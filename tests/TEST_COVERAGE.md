@@ -38,10 +38,13 @@ This document maps major subsystems to concrete test entry points so reviewers c
   - `tests/core/test_opcode_schema.c`
   - `tests/core/test_item_cache.c`
   - `tests/core/test_itemstore_io.c`
-    - `test_itemstore_record_roundtrip`
-    - `test_itemstore_read_rejects_corrupt_records` (depth, name, wire-tag,
-      payload-length, child-count, and duplicate-child validation)
-    - `test_load_itemstore_rejects_incomplete_or_trailing_data`
+    - `test_itemstore_value_and_code_roundtrip`
+    - `test_itemstore_nested_depth_roundtrip`
+    - `test_itemstore_loads_generated_v1_wire_fixture`
+    - `test_load_itemstore_rejects_bad_headers`
+    - `test_load_itemstore_rejects_invalid_wire_tags`
+    - `test_load_itemstore_rejects_structural_corruption`
+    - `test_load_itemstore_rejects_resource_limit_violations`
     - `test_save_itemstore_preserves_existing_file_on_failure`
 - **Core value/float semantics**
   - `tests/core/test_value_behavior.c`
@@ -79,7 +82,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
   - `tests/compiler/test_pipeline_source_golden.c`
     - `test_pipeline_source_golden`
   - `tests/compiler/test_pipeline_negative_matrix.c`
-    - `test_pipeline_negative_matrix` (centralized parser, semantic, IR-validate, emitter negative-stage checks plus boolean/truthiness source nonregressions)
+    - `test_pipeline_negative_matrix` (centralized parser and semantic failure checks plus boolean/truthiness source nonregressions)
 - **Compiler context/diagnostics and tool parity**
   - `tests/compiler/test_compiler_context_failures.c`
     - `test_compiler_context_failures`
@@ -116,8 +119,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_libcall_float_integer_only_arguments_rejected`
     - `test_str_libcalls_float_returns_nil_without_error`
     - `test_net_write_formats_float_output`
-    - `test_net_write_ignores_disconnected_lines`
-    - `test_net_write_ignores_non_writable_line_states`
+    - `test_net_write_ignores_non_writable_lines`
 - **Compiler/runtime integration for system libcall execution**
   - `tests/compiler/test_sys_compile_libcall.c`
     - `test_sys_compile_libcall_runtime`

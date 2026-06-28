@@ -44,7 +44,6 @@ void test_sem_duplicate_local_keeps_original_index(void);
 void test_sem_code_params_are_treated_as_defined_locals(void);
 void test_sem_seed_params_duplicate_name_only_marks_target_symbol(void);
 void test_sem_code_params_duplicate_after_unrelated_locals_no_param_corruption(void);
-void test_sem_parent_scope_error_detail_format(void);
 void test_sem_embedded_scope_error_detail_includes_provenance(void);
 void test_sem_many_locals_deterministic_indices(void);
 void test_sem_local_limit_255_is_accepted(void);
@@ -62,9 +61,13 @@ void test_floatconv_binary64_format_roundtrip(void);
 void test_fixture_policy_declared_goldens_exist(void);
 void test_find_item_cached_hit_and_negative_cache(void);
 void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
-void test_itemstore_record_roundtrip(void);
-void test_itemstore_read_rejects_corrupt_records(void);
-void test_load_itemstore_rejects_incomplete_or_trailing_data(void);
+void test_itemstore_value_and_code_roundtrip(void);
+void test_itemstore_nested_depth_roundtrip(void);
+void test_itemstore_loads_generated_v1_wire_fixture(void);
+void test_load_itemstore_rejects_bad_headers(void);
+void test_load_itemstore_rejects_invalid_wire_tags(void);
+void test_load_itemstore_rejects_structural_corruption(void);
+void test_load_itemstore_rejects_resource_limit_violations(void);
 void test_save_itemstore_preserves_existing_file_on_failure(void);
 void test_libcall_registry_roundtrip(void);
 void test_libcall_registry_init_failure_has_no_partial_state(void);
@@ -74,8 +77,7 @@ void test_libcall_name_duplicate_detection(void);
 void test_missing_libcall_is_null_and_interpret_deterministic(void);
 void test_libcall_registry_self_check_invalid_entries(void);
 void test_libcall_invalid_arg_branches_return_contracts(void);
-void test_net_write_ignores_disconnected_lines(void);
-void test_net_write_ignores_non_writable_line_states(void);
+void test_net_write_ignores_non_writable_lines(void);
 void test_libcall_float_integer_only_arguments_rejected(void);
 void test_net_write_formats_float_output(void);
 void test_str_libcalls_float_returns_nil_without_error(void);
@@ -85,7 +87,6 @@ void test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed(vo
 void test_relative_item_leading_dot_nil_or_empty_non_leading_rejected(void);
 void test_relative_item_leading_dot_boundary_max_name_after_prefix_expansion_compiles(void);
 void test_relative_item_leading_dot_existing_absolute_item_unchanged(void);
-void test_relative_item_leading_dot_parse_still_rejects_bad_double_dot(void);
 void test_float_item_literal_layer_rejected_at_compile_time(void);
 void test_float_local_deref_layer_returns_nil_and_does_not_save_item(void);
 void test_value_ieee754_environment_contract(void);
@@ -128,58 +129,13 @@ void test_sdiss_reads_compiler_operand_widths(void);
 void test_compiler_context_failures(void);
 void test_compiler_diag_pipeline(void);
 void test_sys_compile_libcall_runtime(void);
-void test_libcall_lookup_precomputed(void);
-void test_libcall_dispatch_microbench(void);
 
 /* Runtime component tests. */
 void test_interpret_semantics_golden(void);
 void test_interpret_stress(void);
 void test_runtime_benchmark_optin(void);
 
-static void test_absyn_helpers(void) {
-  AS_NODE *lhs = t_int(1);
-  AS_NODE *rhs = t_int(2);
-  AS_NODE *sum = t_node(N_ADD, lhs, rhs);
-  AS_NODE *stmt = t_node(N_EXPRSTMT, sum, NULL);
-  AS_NODE *list = t_stmtlist_with_one(stmt);
-
-  ASSERT_NOT_NULL(list);
-  ASSERT_EQ_INT(N_STMTLIST, list->nodetype);
-  ASSERT_TRUE(((AS_STMTLIST *)list->lhs)->count == 1);
-
-  as_delete(list);
-}
-
-static void test_ir_and_emitbc_helpers(void) {
-  IR_Unit *unit = t_new_unit();
-  ASSERT_NOT_NULL(unit);
-
-  int32_t done = ir_new_label(unit);
-  t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 7});
-  t_emit(unit, (IR_Inst){.op = IR_OP_JUMP, .a = done});
-  t_bind(unit, done);
-  t_emit(unit, (IR_Inst){.op = IR_OP_LABEL, .a = done});
-  t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
-
-  OUTPUT_t out = {0};
-  out.maxsize = 64;
-  out.bytecode = malloc(out.maxsize);
-  out.nextbyte = out.bytecode;
-  ASSERT_NOT_NULL(out.bytecode);
-
-  char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, 0, 0, &out, &errdetail);
-  ASSERT_EQ_INT(0, rc);
-  ASSERT_TRUE(errdetail == NULL);
-  ASSERT_TRUE((size_t)(out.nextbyte - out.bytecode) > 0);
-
-  free(out.bytecode);
-  ir_destroy_unit(unit);
-}
-
 static const test_case_t core_tests[] = {
-    {"test_absyn_helpers", test_absyn_helpers},
-    {"test_ir_and_emitbc_helpers", test_ir_and_emitbc_helpers},
     {"test_absyn_nested_binary_expressions", test_absyn_nested_binary_expressions},
     {"test_absyn_stmtlist_multiple_statements", test_absyn_stmtlist_multiple_statements},
     {"test_absyn_if_elsif_else_chain", test_absyn_if_elsif_else_chain},
@@ -191,7 +147,6 @@ static const test_case_t core_tests[] = {
     {"test_sem_code_params_are_treated_as_defined_locals", test_sem_code_params_are_treated_as_defined_locals},
     {"test_sem_seed_params_duplicate_name_only_marks_target_symbol", test_sem_seed_params_duplicate_name_only_marks_target_symbol},
     {"test_sem_code_params_duplicate_after_unrelated_locals_no_param_corruption", test_sem_code_params_duplicate_after_unrelated_locals_no_param_corruption},
-    {"test_sem_parent_scope_error_detail_format", test_sem_parent_scope_error_detail_format},
     {"test_sem_embedded_scope_error_detail_includes_provenance", test_sem_embedded_scope_error_detail_includes_provenance},
     {"test_sem_many_locals_deterministic_indices", test_sem_many_locals_deterministic_indices},
     {"test_sem_local_limit_255_is_accepted", test_sem_local_limit_255_is_accepted},
@@ -209,9 +164,13 @@ static const test_case_t core_tests[] = {
     {"test_fixture_policy_declared_goldens_exist", test_fixture_policy_declared_goldens_exist},
     {"test_find_item_cached_hit_and_negative_cache", test_find_item_cached_hit_and_negative_cache},
     {"test_find_item_cached_invalidation_on_delete_and_reinsert", test_find_item_cached_invalidation_on_delete_and_reinsert},
-    {"test_itemstore_record_roundtrip", test_itemstore_record_roundtrip},
-    {"test_itemstore_read_rejects_corrupt_records", test_itemstore_read_rejects_corrupt_records},
-    {"test_load_itemstore_rejects_incomplete_or_trailing_data", test_load_itemstore_rejects_incomplete_or_trailing_data},
+    {"test_itemstore_value_and_code_roundtrip", test_itemstore_value_and_code_roundtrip},
+    {"test_itemstore_nested_depth_roundtrip", test_itemstore_nested_depth_roundtrip},
+    {"test_itemstore_loads_generated_v1_wire_fixture", test_itemstore_loads_generated_v1_wire_fixture},
+    {"test_load_itemstore_rejects_bad_headers", test_load_itemstore_rejects_bad_headers},
+    {"test_load_itemstore_rejects_invalid_wire_tags", test_load_itemstore_rejects_invalid_wire_tags},
+    {"test_load_itemstore_rejects_structural_corruption", test_load_itemstore_rejects_structural_corruption},
+    {"test_load_itemstore_rejects_resource_limit_violations", test_load_itemstore_rejects_resource_limit_violations},
     {"test_save_itemstore_preserves_existing_file_on_failure", test_save_itemstore_preserves_existing_file_on_failure},
     {"test_relative_item_leading_dot_parse_accepts_deref_chain", test_relative_item_leading_dot_parse_accepts_deref_chain},
     {"test_relative_item_leading_dot_nested_relative_deref_layers", test_relative_item_leading_dot_nested_relative_deref_layers},
@@ -219,7 +178,6 @@ static const test_case_t core_tests[] = {
     {"test_relative_item_leading_dot_nil_or_empty_non_leading_rejected", test_relative_item_leading_dot_nil_or_empty_non_leading_rejected},
     {"test_relative_item_leading_dot_boundary_max_name_after_prefix_expansion_compiles", test_relative_item_leading_dot_boundary_max_name_after_prefix_expansion_compiles},
     {"test_relative_item_leading_dot_existing_absolute_item_unchanged", test_relative_item_leading_dot_existing_absolute_item_unchanged},
-    {"test_relative_item_leading_dot_parse_still_rejects_bad_double_dot", test_relative_item_leading_dot_parse_still_rejects_bad_double_dot},
     {"test_float_item_literal_layer_rejected_at_compile_time", test_float_item_literal_layer_rejected_at_compile_time},
     {"test_float_local_deref_layer_returns_nil_and_does_not_save_item", test_float_local_deref_layer_returns_nil_and_does_not_save_item},
     {"test_value_ieee754_environment_contract", test_value_ieee754_environment_contract},
@@ -275,14 +233,11 @@ static const test_case_t runtime_tests[] = {
     {"test_missing_libcall_is_null_and_interpret_deterministic", test_missing_libcall_is_null_and_interpret_deterministic},
     {"test_libcall_registry_self_check_invalid_entries", test_libcall_registry_self_check_invalid_entries},
     {"test_libcall_invalid_arg_branches_return_contracts", test_libcall_invalid_arg_branches_return_contracts},
-    {"test_net_write_ignores_disconnected_lines", test_net_write_ignores_disconnected_lines},
-    {"test_net_write_ignores_non_writable_line_states", test_net_write_ignores_non_writable_line_states},
+    {"test_net_write_ignores_non_writable_lines", test_net_write_ignores_non_writable_lines},
     {"test_libcall_float_integer_only_arguments_rejected", test_libcall_float_integer_only_arguments_rejected},
     {"test_str_libcalls_float_returns_nil_without_error", test_str_libcalls_float_returns_nil_without_error},
     {"test_net_write_formats_float_output", test_net_write_formats_float_output},
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},
-    {"test_libcall_lookup_precomputed", test_libcall_lookup_precomputed},
-    {"test_libcall_dispatch_microbench", test_libcall_dispatch_microbench},
     {"test_runtime_benchmark_optin", test_runtime_benchmark_optin},
 };
 

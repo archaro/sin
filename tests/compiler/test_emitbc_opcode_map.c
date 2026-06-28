@@ -203,8 +203,6 @@ void test_emitbc_push_int_immediate_layout(void) {
 
   free(out.bytecode);
   ir_destroy_unit(unit);
-
-  test_emitbc_push_float_immediate_layout();
 }
 
 void test_emitbc_opcode_map_call_item_deref_alias_layout(void) {

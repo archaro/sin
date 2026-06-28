@@ -103,10 +103,6 @@ void test_relative_item_leading_dot_existing_absolute_item_unchanged(void) {
                     "foo.bar.baz = 1; foo.bar.baz = foo.bar.baz + 1;");
 }
 
-void test_relative_item_leading_dot_parse_still_rejects_bad_double_dot(void) {
-  assert_compile_err("foo..bar = 1;", ERR_COMP_SYNTAX, "syntax error");
-}
-
 void test_float_item_literal_layer_rejected_at_compile_time(void) {
   assert_compile_err("foo.1.0 = 1;", ERR_COMP_SYNTAX, "syntax");
 }

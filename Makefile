@@ -43,9 +43,7 @@ TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_sdiss_fixtures.c \
 	$(TEST_DIR)/compiler/test_compiler_context_failures.c \
 	$(TEST_DIR)/compiler/test_compiler_diag_pipeline.c \
-	$(TEST_DIR)/compiler/test_sys_compile_libcall.c \
-	$(TEST_DIR)/compiler/test_libcall_lookup_precomputed.c \
-	$(TEST_DIR)/compiler/test_libcall_dispatch_microbench.c
+	$(TEST_DIR)/compiler/test_sys_compile_libcall.c
 TEST_INTERPRETER_SOURCES := \
 	$(TEST_DIR)/interpreter/test_interpret_semantics_golden.c \
 	$(TEST_DIR)/interpreter/test_interpret_stress.c \

@@ -125,6 +125,10 @@ void test_libcall_registry_roundtrip(void) {
 
   ASSERT_NOT_NULL(libcall_func_token(token));
   ASSERT_TRUE(libcall_func_token(255) == NULL);
+
+  ASSERT_TRUE(libcall_lookup_token("task", "newgametask", &token, &args));
+  ASSERT_EQ_INT(3, args);
+  ASSERT_TRUE(!libcall_lookup_token("missing", "missing", &token, &args));
 }
 
 void test_libcall_registry_init_failure_has_no_partial_state(void) {
@@ -282,44 +286,26 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
   teardown_libcall_runtime();
 }
 
-void test_net_write_ignores_disconnected_lines(void) {
+void test_net_write_ignores_non_writable_lines(void) {
   setup_libcall_runtime();
 
-  config.maxconns = 2;
+  config.maxconns = 3;
   line = calloc((size_t)config.maxconns, sizeof(LINE_t));
   ASSERT_NOT_NULL(line);
-  line[1].status = LINE_empty;
-  line[1].telnet = NULL;
+  const int statuses[] = {
+    LINE_empty, LINE_connecting, LINE_disconnecting
+  };
+  for (size_t i = 0; i < sizeof(statuses) / sizeof(statuses[0]); i++) {
+    line[i].status = statuses[i];
+    line[i].telnet = NULL;
 
-  VALUE_t target_line = {VALUE_int, {.i = 1}};
-  VALUE_t out = {VALUE_str, {.s = strdup("hello")}};
-  push_stack(config.vm->stack, target_line);
-  push_stack(config.vm->stack, out);
-
-  (void)lc_net_write(NULL, config.itemroot);
-  VALUE_t ret = pop_stack(config.vm->stack);
-  ASSERT_EQ_INT(VALUE_nil, ret.type);
-
-  teardown_libcall_runtime();
-}
-
-void test_net_write_ignores_non_writable_line_states(void) {
-  setup_libcall_runtime();
-
-  config.maxconns = 1;
-  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
-  ASSERT_NOT_NULL(line);
-  line[0].status = LINE_connecting;
-  line[0].telnet = NULL;
-
-  VALUE_t target_line = {VALUE_int, {.i = 0}};
-  VALUE_t out = {VALUE_str, {.s = strdup("hello")}};
-  push_stack(config.vm->stack, target_line);
-  push_stack(config.vm->stack, out);
-
-  (void)lc_net_write(NULL, config.itemroot);
-  VALUE_t ret = pop_stack(config.vm->stack);
-  ASSERT_EQ_INT(VALUE_nil, ret.type);
+    push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = (int64_t)i}});
+    push_stack(config.vm->stack,
+               (VALUE_t){VALUE_str, {.s = strdup("hello")}});
+    (void)lc_net_write(NULL, config.itemroot);
+    VALUE_t ret = pop_stack(config.vm->stack);
+    ASSERT_EQ_INT(VALUE_nil, ret.type);
+  }
 
   teardown_libcall_runtime();
 }

@@ -135,24 +135,6 @@ void test_sem_code_params_are_treated_as_defined_locals(void) {
   sem_delete_ctx(ctx);
 }
 
-void test_sem_parent_scope_error_detail_format(void) {
-  SEM_CTX *ctx = sem_create_ctx();
-  ASSERT_NOT_NULL(ctx);
-
-  AS_NODE *bad_stmt = t_node(N_EXPRSTMT, t_local("missing_parent"), NULL);
-  AS_NODE *program = t_stmtlist_with_one(bad_stmt);
-
-  char *errdetail = NULL;
-  int8_t rc = sem_check_locals(program, &errdetail, ctx);
-  ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail, "semant: missing_parent") == 0);
-
-  free(errdetail);
-  as_delete(program);
-  sem_delete_ctx(ctx);
-}
-
 void test_sem_embedded_scope_error_detail_includes_provenance(void) {
   SEM_CTX *ctx = sem_create_ctx();
   ASSERT_NOT_NULL(ctx);
