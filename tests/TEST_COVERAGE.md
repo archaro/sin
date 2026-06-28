@@ -37,6 +37,11 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_lower_float_value_emits_push_float` (float compiler/lowering coverage)
   - `tests/core/test_opcode_schema.c`
   - `tests/core/test_item_cache.c`
+  - `tests/core/test_itemstore_io.c`
+    - `test_itemstore_record_roundtrip`
+    - `test_itemstore_read_rejects_corrupt_records` (depth, name, wire-tag,
+      payload-length, child-count, and duplicate-child validation)
+    - `test_load_itemstore_rejects_incomplete_or_trailing_data`
 - **Core value/float semantics**
   - `tests/core/test_value_behavior.c`
     - `test_value_push_float_interprets_binary64_payloads`

@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <setjmp.h>
+#include <errno.h>
 #include <uv.h>
 
 #include "version.h"
@@ -70,10 +71,31 @@ void usage() {
   logmsg("\t\t\t  given must exist or the interpreter will not run.\n");
 }
 
+static ITEM_t *load_or_create_itemstore(const char *filename) {
+  struct stat buffer;
+  if (stat(filename, &buffer) == 0) {
+    logmsg("Loading itemstore from %s.\n", filename);
+    ITEM_t *root = load_itemstore(filename);
+    if (!root) {
+      logerr("Existing itemstore '%s' could not be loaded; refusing to "
+             "replace it.\n", filename);
+    }
+    return root;
+  }
+
+  if (errno != ENOENT) {
+    logerr("Unable to inspect itemstore '%s': %s\n", filename,
+           strerror(errno));
+    return NULL;
+  }
+
+  logmsg("Creating a new itemstore, which will be saved as %s.\n", filename);
+  return make_root_item("root");
+}
+
 int main(int argc, char **argv) {
   FILE *in;
   int filesize = 0, listener_port = LISTENER_PORT;
-  struct stat buffer;
   uint8_t *bytecode = NULL;
   bool bootonly = false;
 
@@ -133,17 +155,8 @@ int main(int argc, char **argv) {
       case 'i': {
         // Optional: if given use this filename for the itemstore.
         config.itemstore = strdup(optarg);
-        if (stat(config.itemstore, &buffer) == 0) {
-          // The file exists, so load it.
-          logmsg("Loading itemstore from %s.\n", config.itemstore);
-          config.itemroot = load_itemstore(config.itemstore);
-        } else {
-          // The file does not exist, so create a blank itemstore
-          // and save it to the file at the end.
-          logmsg("Creating a new itemstore, which will be saved as %s.\n",
-                                                         config.itemstore);
-          config.itemroot = make_root_item("root");
-        }
+        config.itemroot = load_or_create_itemstore(config.itemstore);
+        if (!config.itemroot) exit(EXIT_FAILURE);
         break;
       }
       case 'l': {
@@ -272,14 +285,8 @@ int main(int argc, char **argv) {
   // If the itemstore hasn't been loaded, do so now.
   if (!config.itemroot) {
     config.itemstore = strdup("items.dat");
-    if (stat(config.itemstore, &buffer) == 0) {
-      logmsg("Loading itemstore from %s\n", config.itemstore);
-      config.itemroot = load_itemstore(config.itemstore);
-    } else {
-      logmsg("Creating a new itemstore, which will be saved as %s.\n",
-                                                         config.itemstore);
-      config.itemroot = make_root_item("root");
-    }
+    config.itemroot = load_or_create_itemstore(config.itemstore);
+    if (!config.itemroot) exit(EXIT_FAILURE);
   }
   // Boot is a special item, which sits outside of the itemstore.
   // We have to abuse the API slightly here. :(
@@ -376,4 +383,3 @@ int main(int argc, char **argv) {
   close_log();
   return runloop_retval;
 }
-

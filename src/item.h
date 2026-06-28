@@ -69,7 +69,7 @@ void delete_hashtable(HASHTABLE_t *hashtable, const char *key);
 void free_hashtable(HASHTABLE_t *hashtable);
 uint32_t murmur3_32(const char *key, size_t len, uint32_t seed);
 char *substr(const char *str, size_t begin, size_t len);
-void write_item(FILE *file, ITEM_t *item);
+bool write_item(FILE *file, ITEM_t *item);
 ITEM_t *read_item(FILE *file, ITEM_t *parent);
 
 // Allocator API
