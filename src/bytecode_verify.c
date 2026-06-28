@@ -101,12 +101,16 @@ static int bc_decode_item(BC_Decoder *d, const uint8_t **cursor) {
   while (*cursor < d->end) {
     uint8_t op = **cursor;
     if (op == 'E') return bc_decode_one(d, cursor, BC_CTX_ITEM);
+    if (op == 'L') {
+      if (!bc_decode_one(d, cursor, BC_CTX_ITEM)) return 0;
+      continue;
+    }
     if (op == 'D') {
       if (!bc_decode_one(d, cursor, BC_CTX_ITEM)) return 0;
       if (!bc_decode_one(d, cursor, BC_CTX_DEREF)) return 0;
       continue;
     }
-    if (!bc_decode_one(d, cursor, BC_CTX_ITEM)) return 0;
+    return bc_fail(d, *cursor, op, "unknown item-layer opcode");
   }
   return bc_fail(d, *cursor, 0, "unterminated item stream (missing ITEM_END)");
 }
@@ -183,6 +187,31 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
       break;
   }
   return bc_fail(d, start, op, "unsupported opcode schema entry");
+}
+
+bool bc_decode_item_expression(const uint8_t *item_payload,
+                               const uint8_t *bytecode_end,
+                               BC_ItemExprKind kind,
+                               const uint8_t **after_item,
+                               BC_VerifyError *diagnostic) {
+  BC_Decoder d;
+  memset(&d, 0, sizeof(d));
+  d.base = item_payload;
+  d.end = bytecode_end;
+  d.label = kind == BC_ITEM_EXPR_RELATIVE ? "relative item expression" : "item expression";
+  d.options = bc_verify_default_options();
+  d.result.status = BC_VERIFY_OK;
+  d.result.halt_offset = UINT32_MAX;
+
+  const uint8_t *cursor = item_payload;
+  if (!bc_decode_item(&d, &cursor)) {
+    if (diagnostic) *diagnostic = d.result.diagnostic;
+    if (after_item) *after_item = cursor;
+    return false;
+  }
+  if (after_item) *after_item = cursor;
+  if (diagnostic) memset(diagnostic, 0, sizeof(*diagnostic));
+  return true;
 }
 
 BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
