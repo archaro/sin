@@ -8,6 +8,7 @@
 #include <libgen.h>
 #include <errno.h>
 #include <limits.h>
+#include <unistd.h>
 
 #include "config.h"
 #include "error.h"
@@ -854,18 +855,27 @@ static bool write_u8(FILE *file, uint8_t value, const char *context) {
 }
 
 static bool write_u16_le(FILE *file, uint16_t value, const char *context) {
-  return write_u8(file, (uint8_t)(value & UINT16_C(0xff)), context)
-      && write_u8(file, (uint8_t)((value >> 8) & UINT16_C(0xff)), context);
+  uint8_t bytes[2] = {
+    (uint8_t)(value & UINT16_C(0xff)),
+    (uint8_t)((value >> 8) & UINT16_C(0xff))
+  };
+  return write_bytes(file, bytes, sizeof(bytes), context);
 }
 
 static bool write_u32_le(FILE *file, uint32_t value, const char *context) {
-  return write_u16_le(file, (uint16_t)(value & UINT32_C(0xffff)), context)
-      && write_u16_le(file, (uint16_t)(value >> 16), context);
+  uint8_t bytes[4];
+  for (size_t i = 0; i < sizeof(bytes); i++) {
+    bytes[i] = (uint8_t)((value >> (i * 8)) & UINT32_C(0xff));
+  }
+  return write_bytes(file, bytes, sizeof(bytes), context);
 }
 
 static bool write_u64_le(FILE *file, uint64_t value, const char *context) {
-  return write_u32_le(file, (uint32_t)(value & UINT64_C(0xffffffff)), context)
-      && write_u32_le(file, (uint32_t)(value >> 32), context);
+  uint8_t bytes[8];
+  for (size_t i = 0; i < sizeof(bytes); i++) {
+    bytes[i] = (uint8_t)((value >> (i * 8)) & UINT64_C(0xff));
+  }
+  return write_bytes(file, bytes, sizeof(bytes), context);
 }
 
 static bool read_u8(FILE *file, uint8_t *value, const char *context) {
@@ -873,34 +883,29 @@ static bool read_u8(FILE *file, uint8_t *value, const char *context) {
 }
 
 static bool read_u16_le(FILE *file, uint16_t *value, const char *context) {
-  uint8_t low;
-  uint8_t high;
-  if (!read_u8(file, &low, context) || !read_u8(file, &high, context)) {
-    return false;
-  }
-  *value = (uint16_t)low | ((uint16_t)high << 8);
+  uint8_t bytes[2];
+  if (!read_bytes(file, bytes, sizeof(bytes), context)) return false;
+  *value = (uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8);
   return true;
 }
 
 static bool read_u32_le(FILE *file, uint32_t *value, const char *context) {
-  uint16_t low;
-  uint16_t high;
-  if (!read_u16_le(file, &low, context)
-      || !read_u16_le(file, &high, context)) {
-    return false;
+  uint8_t bytes[4];
+  if (!read_bytes(file, bytes, sizeof(bytes), context)) return false;
+  *value = 0;
+  for (size_t i = 0; i < sizeof(bytes); i++) {
+    *value |= (uint32_t)bytes[i] << (i * 8);
   }
-  *value = (uint32_t)low | ((uint32_t)high << 16);
   return true;
 }
 
 static bool read_u64_le(FILE *file, uint64_t *value, const char *context) {
-  uint32_t low;
-  uint32_t high;
-  if (!read_u32_le(file, &low, context)
-      || !read_u32_le(file, &high, context)) {
-    return false;
+  uint8_t bytes[8];
+  if (!read_bytes(file, bytes, sizeof(bytes), context)) return false;
+  *value = 0;
+  for (size_t i = 0; i < sizeof(bytes); i++) {
+    *value |= (uint64_t)bytes[i] << (i * 8);
   }
-  *value = (uint64_t)low | ((uint64_t)high << 32);
   return true;
 }
 
@@ -1033,10 +1038,35 @@ bool write_item(FILE *file, ITEM_t *item) {
 }
 
 void save_itemstore(const char *filename, ITEM_t *root) {
-  FILE* file = fopen(filename, "wb");
-  if (file == NULL) {
-    logerr("Failed to open itemstore '%s' for writing: %s\n",
+  size_t temp_path_size;
+  if (alloc_add_overflow(strlen(filename), sizeof(".tmp.XXXXXX"),
+                         &temp_path_size)) {
+    logerr("Failed to save itemstore '%s': temporary path is too long.\n",
+           filename);
+    return;
+  }
+  char *temp_path = malloc(temp_path_size);
+  if (!temp_path) {
+    logerr("Failed to save itemstore '%s': cannot allocate temporary path.\n",
+           filename);
+    return;
+  }
+  snprintf(temp_path, temp_path_size, "%s.tmp.XXXXXX", filename);
+
+  int fd = mkstemp(temp_path);
+  if (fd < 0) {
+    logerr("Failed to create temporary itemstore for '%s': %s\n",
            filename, strerror(errno));
+    free(temp_path);
+    return;
+  }
+  FILE *file = fdopen(fd, "wb");
+  if (!file) {
+    logerr("Failed to open temporary itemstore for '%s': %s\n",
+           filename, strerror(errno));
+    close(fd);
+    unlink(temp_path);
+    free(temp_path);
     return;
   }
 
@@ -1045,15 +1075,32 @@ void save_itemstore(const char *filename, ITEM_t *root) {
               && write_u16_le(file, ITEMSTORE_V1_FORMAT_VERSION,
                               "file-header version")
               && write_item(file, root);
-  if (fclose(file) != 0) {
-    logerr("Failed to close itemstore '%s' after writing: %s\n",
+  if (success && fflush(file) != 0) {
+    logerr("Failed to flush temporary itemstore for '%s': %s\n",
            filename, strerror(errno));
     success = false;
   }
+  if (success && fsync(fd) != 0) {
+    logerr("Failed to sync temporary itemstore for '%s': %s\n",
+           filename, strerror(errno));
+    success = false;
+  }
+  if (fclose(file) != 0) {
+    logerr("Failed to close temporary itemstore for '%s': %s\n",
+           filename, strerror(errno));
+    success = false;
+  }
+  if (success && rename(temp_path, filename) != 0) {
+    logerr("Failed to replace itemstore '%s' with completed temporary file: "
+           "%s\n", filename, strerror(errno));
+    success = false;
+  }
   if (!success) {
-    logerr("Failed to save itemstore '%s'; the output may be incomplete.\n",
+    unlink(temp_path);
+    logerr("Failed to save itemstore '%s'; existing data was not replaced.\n",
            filename);
   }
+  free(temp_path);
 }
 
 static void detach_loaded_item(ITEM_t *item) {

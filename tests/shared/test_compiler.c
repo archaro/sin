@@ -65,6 +65,7 @@ void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
 void test_itemstore_record_roundtrip(void);
 void test_itemstore_read_rejects_corrupt_records(void);
 void test_load_itemstore_rejects_incomplete_or_trailing_data(void);
+void test_save_itemstore_preserves_existing_file_on_failure(void);
 void test_libcall_registry_roundtrip(void);
 void test_libcall_registry_init_failure_has_no_partial_state(void);
 void test_libcall_registry_lifecycle_reinit_sequence(void);
@@ -211,6 +212,7 @@ static const test_case_t core_tests[] = {
     {"test_itemstore_record_roundtrip", test_itemstore_record_roundtrip},
     {"test_itemstore_read_rejects_corrupt_records", test_itemstore_read_rejects_corrupt_records},
     {"test_load_itemstore_rejects_incomplete_or_trailing_data", test_load_itemstore_rejects_incomplete_or_trailing_data},
+    {"test_save_itemstore_preserves_existing_file_on_failure", test_save_itemstore_preserves_existing_file_on_failure},
     {"test_relative_item_leading_dot_parse_accepts_deref_chain", test_relative_item_leading_dot_parse_accepts_deref_chain},
     {"test_relative_item_leading_dot_nested_relative_deref_layers", test_relative_item_leading_dot_nested_relative_deref_layers},
     {"test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed", test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed},

@@ -214,3 +214,31 @@ void test_load_itemstore_rejects_incomplete_or_trailing_data(void) {
   destroy_item(root);
   ASSERT_EQ_INT(0, unlink(path));
 }
+
+void test_save_itemstore_preserves_existing_file_on_failure(void) {
+  static const char original[] = "existing-itemstore";
+  char path[] = "/tmp/sin-itemstore-save-test-XXXXXX";
+  int fd = mkstemp(path);
+  ASSERT_TRUE(fd >= 0);
+  FILE *file = fdopen(fd, "wb");
+  ASSERT_NOT_NULL(file);
+  ASSERT_EQ_INT(sizeof(original), fwrite(original, 1, sizeof(original), file));
+  ASSERT_EQ_INT(0, fclose(file));
+
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  VALUE_t invalid_bool = {.type = VALUE_bool, .i = 2};
+  ASSERT_NOT_NULL(insert_item(root, "invalid_bool", invalid_bool));
+  save_itemstore(path, root);
+
+  file = fopen(path, "rb");
+  ASSERT_NOT_NULL(file);
+  char actual[sizeof(original)];
+  ASSERT_EQ_INT(sizeof(actual), fread(actual, 1, sizeof(actual), file));
+  ASSERT_TRUE(memcmp(original, actual, sizeof(original)) == 0);
+  ASSERT_EQ_INT(EOF, fgetc(file));
+  ASSERT_EQ_INT(0, fclose(file));
+
+  destroy_item(root);
+  ASSERT_EQ_INT(0, unlink(path));
+}
