@@ -37,6 +37,7 @@ TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_emitbc_jumps.c \
 	$(TEST_DIR)/compiler/test_emitbc_invariants.c \
 	$(TEST_DIR)/compiler/test_emitbc_post_verify.c \
+	$(TEST_DIR)/compiler/test_bytecode_verify.c \
 	$(TEST_DIR)/compiler/test_pipeline_golden.c \
 	$(TEST_DIR)/compiler/test_pipeline_source_golden.c \
 	$(TEST_DIR)/compiler/test_pipeline_negative_matrix.c \
