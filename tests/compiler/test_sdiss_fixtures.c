@@ -51,6 +51,36 @@ void test_sdiss_fixture_basic(void) {
   free(expected);
 }
 
+static void run_sdiss_fixture(const char *path, char *output, size_t output_size, int *exit_code) {
+  char cmd[512];
+  int rc = snprintf(cmd, sizeof(cmd), "./sdiss --no-header -o %s 2>&1", path);
+  ASSERT_TRUE(rc > 0 && (size_t)rc < sizeof(cmd));
+  FILE *pipe = popen(cmd, "r");
+  ASSERT_NOT_NULL(pipe);
+  size_t total = fread(output, 1, output_size - 1, pipe);
+  output[total] = '\0';
+  rc = pclose(pipe);
+  ASSERT_TRUE(rc != -1);
+  ASSERT_TRUE(WIFEXITED(rc));
+  *exit_code = WEXITSTATUS(rc);
+}
+
+void test_sdiss_malformed_fixture_reports_verifier_diagnostic(void) {
+  const uint8_t bytes[] = {0x00, 0x00, 'l', 0x03, 0x00, 'a'};
+  const char *tmp_path = "tests/fixtures/sdiss/malformed.bin";
+  FILE *out = fopen(tmp_path, "wb");
+  ASSERT_NOT_NULL(out);
+  ASSERT_EQ_INT((int)sizeof(bytes), (int)fwrite(bytes, 1, sizeof(bytes), out));
+  fclose(out);
+
+  char output[4096];
+  int exit_code = 0;
+  run_sdiss_fixture(tmp_path, output, sizeof(output), &exit_code);
+  ASSERT_EQ_INT(1, exit_code);
+  ASSERT_TRUE(strstr(output, "truncated") != NULL);
+  ASSERT_TRUE(strstr(output, "Disassembly aborted due to malformed bytecode") != NULL);
+}
+
 void test_sdiss_reads_compiler_operand_widths(void) {
   const uint8_t bytes[] = {
       0x00, 0x00, /* locals/params */
@@ -77,4 +107,9 @@ void test_sdiss_reads_compiler_operand_widths(void) {
   ASSERT_TRUE(strstr(output, "LIBCALL_TOKEN 9") != NULL);
   ASSERT_TRUE(strstr(output, "CALL ARGC 2") != NULL);
   ASSERT_TRUE(strstr(output, "unknown=0") != NULL);
+
+  char output2[4096];
+  int exit_code = 0;
+  run_sdiss_fixture("tests/fixtures/sdiss/operand-widths.bin", output2, sizeof(output2), &exit_code);
+  ASSERT_EQ_INT(0, exit_code);
 }
