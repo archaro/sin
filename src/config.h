@@ -21,6 +21,7 @@ typedef struct {
   ITEM_t *itemroot;     // Root of in-memory itemstore
   char *srcroot;        // Root of source tree
   char *itemstore;      // Filename of on-disk itemstore
+  ITEMSTORE_DURABILITY_e itemstore_durability;
   char *input;          // Name of the input item
   char *inputline;      // Item to receive the input line number
   char *inputtext;      // Item to receive the input data
@@ -29,4 +30,3 @@ typedef struct {
   uint8_t lastconn;     // Last connection processed by net.input
   bool safe_shutdown;   // Determins how to shut down.
 } CONFIG_t;
-

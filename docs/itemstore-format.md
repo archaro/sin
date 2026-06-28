@@ -44,7 +44,9 @@ Every item, including the root, uses this recursive structure:
 | 6 | variable | Exactly `child count` consecutive item records |
 
 Children appear recursively and are associated with the immediately enclosing
-record. No offsets, alignment padding, or record terminators are stored.
+record. The writer emits children in the item model's ordered-array order, and
+the loader reconstructs that order. No offsets, alignment padding, or record
+terminators are stored.
 
 ### Item-kind tags
 
@@ -102,11 +104,18 @@ returns `NULL`.
 ## Save and replacement behavior
 
 `save_itemstore` writes a temporary file beside the destination, flushes and
-closes it, and then renames it over the destination. On POSIX systems it also
-synchronizes the temporary file before replacement. If serialization or any
-file operation fails, the temporary file is removed where possible and the
-existing destination is left in place. The function returns `true` only after
-the replacement succeeds.
+closes it, and then renames it over the destination. The
+`--itemstore-durability` startup option controls synchronization:
+
+- `full` is the default. On POSIX systems, it calls `fsync` on the temporary
+  file after `fflush` and before close and replacement.
+- `fast` skips `fsync`, but still flushes, closes, and renames the temporary
+  file. This can substantially reduce save latency on physical storage, but an
+  operating-system crash or power loss can lose or corrupt the latest save.
+
+In either mode, if serialization or a reported file operation fails, the
+temporary file is removed where possible and the existing destination is left
+in place. The function returns `true` only after replacement succeeds.
 
 ## Versioning
 

@@ -46,6 +46,8 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_load_itemstore_rejects_structural_corruption`
     - `test_load_itemstore_rejects_resource_limit_violations`
     - `test_save_itemstore_preserves_existing_file_on_failure`
+    - `test_itemstore_durability_modes`
+    - `test_itemstore_large_load_presizes_child_storage`
 - **Core value/float semantics**
   - `tests/core/test_value_behavior.c`
     - `test_value_push_float_interprets_binary64_payloads`

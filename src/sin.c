@@ -56,6 +56,9 @@ void usage() {
   logmsg("\t\t\t  If this option is not supplied, the default filename\n");
   logmsg("\t\t\t  'items.dat' is used.  The file is created if it does\n");
   logmsg("\t\t\t  not exist.\n");
+  logmsg(" -d, --itemstore-durability <full|fast>\n");
+  logmsg("\t\t\t  Full durability synchronizes itemstore data before\n");
+  logmsg("\t\t\t  replacement; fast mode skips that synchronization.\n");
   logmsg(" -l, --log [file]\tLog output to <file>.\n");
   logmsg("\t\t\t  If no filename is given, the default filename, 'sin'\n");
   logmsg("\t\t\t  is used.  The filename is suffixed with .log for\n");
@@ -108,6 +111,7 @@ int main(int argc, char **argv) {
   // Set up some defaults (may be overridden by config options)
   config.itemroot = NULL;
   config.srcroot = NULL;
+  config.itemstore_durability = ITEMSTORE_DURABLE_FULL;
   config.input = strdup("input");
   config.inputline = malloc(strlen(config.input) + 6);
   config.inputtext = malloc(strlen(config.input) + 6);
@@ -132,6 +136,7 @@ int main(int argc, char **argv) {
   const struct option options[] =
   {
     {"bootonly", no_argument, 0, 'b'},
+    {"itemstore-durability", required_argument, 0, 'd'},
     {"help", no_argument, 0, 'h'},
     {"itemstore", required_argument, 0, 'i'},
     {"log", optional_argument, 0, 'l'},
@@ -141,10 +146,22 @@ int main(int argc, char **argv) {
     {"srcroot", required_argument, 0, 's'},
     {NULL, 0, 0, '\0'}
   };
-  while ((opt = getopt_long(argc, argv, "bhi:l::n:o:p:s:", options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "bd:hi:l::n:o:p:s:", options, NULL)) != -1) {
     switch(opt) {
       case 'b': {
         bootonly = true;
+        break;
+      }
+      case 'd': {
+        if (strcmp(optarg, "full") == 0) {
+          config.itemstore_durability = ITEMSTORE_DURABLE_FULL;
+        } else if (strcmp(optarg, "fast") == 0) {
+          config.itemstore_durability = ITEMSTORE_DURABLE_FAST;
+        } else {
+          logerr("Invalid itemstore durability '%s'; expected full or fast.\n",
+                 optarg);
+          return EXIT_FAILURE;
+        }
         break;
       }
       case 'h': {

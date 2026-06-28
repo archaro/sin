@@ -46,11 +46,19 @@ static bool sync_itemstore_file(FILE *file, const char *path) {
 #endif
 }
 
-#define FETCHITEM_CACHE_SIZE 64
+bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability) {
+  return durability != ITEMSTORE_DURABLE_FAST;
+}
+
+#define FETCHITEM_CACHE_SIZE 256u
+_Static_assert((FETCHITEM_CACHE_SIZE & (FETCHITEM_CACHE_SIZE - 1u)) == 0,
+               "fetch-item cache size must be a power of two");
 typedef struct {
   bool valid;
   bool found;
   char key[MAX_ITEM_NAME];
+  uint64_t generation;
+  ITEM_t *root;
   ITEM_t *item;
 } FETCHITEM_CACHE_ENTRY_t;
 
@@ -58,13 +66,8 @@ static FETCHITEM_CACHE_ENTRY_t fetchitem_cache[FETCHITEM_CACHE_SIZE];
 static uint64_t fetchitem_cache_hits = 0;
 static uint64_t fetchitem_cache_misses = 0;
 
-static void invalidate_fetchitem_cache(void) {
-  memset(fetchitem_cache, 0, sizeof(fetchitem_cache));
-}
-
 static inline void bump_itemstore_generation(void) {
   itemstore_generation++;
-  invalidate_fetchitem_cache();
 }
 
 uint64_t get_itemstore_generation(void) {
@@ -76,10 +79,13 @@ static uint32_t fetchitem_cache_hash(const char *key) {
 }
 
 ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
-  uint32_t index = fetchitem_cache_hash(item_name) % FETCHITEM_CACHE_SIZE;
+  uint32_t index =
+      fetchitem_cache_hash(item_name) & (FETCHITEM_CACHE_SIZE - 1u);
   FETCHITEM_CACHE_ENTRY_t *entry = &fetchitem_cache[index];
 
-  if (entry->valid && strcmp(entry->key, item_name) == 0) {
+  if (entry->valid && entry->generation == itemstore_generation
+      && entry->root == root
+      && strcmp(entry->key, item_name) == 0) {
     fetchitem_cache_hits++;
     if (found) *found = entry->found;
     DISASS_LOG("itemcache hit: %s (hits=%llu misses=%llu)\n", item_name,
@@ -91,6 +97,8 @@ ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
   fetchitem_cache_misses++;
   ITEM_t *item = find_item(root, item_name);
   entry->valid = true;
+  entry->generation = itemstore_generation;
+  entry->root = root;
   entry->item = item;
   entry->found = (item != NULL);
   strncpy(entry->key, item_name, MAX_ITEM_NAME - 1);
@@ -147,6 +155,7 @@ HASHTABLE_t *create_hashtable(int size) {
   // Create a hashtable with the given number of buckets
   HASHTABLE_t *hashtable = allocate_hashtable();
   hashtable->size = size;
+  hashtable->entry_count = 0;
   hashtable->table = (ENTRY_t **)malloc(sizeof(ENTRY_t *) * size);
   for (int i = 0; i < size; i++) {
     hashtable->table[i] = NULL;
@@ -154,14 +163,20 @@ HASHTABLE_t *create_hashtable(int size) {
   return hashtable;
 }
 
+static void create_ordered_array_with_capacity(ITEM_t *item,
+                                               size_t capacity) {
+  item->ordered_size = 0;
+  item->ordered_capacity = capacity;
+  item->ordered_array = capacity > 0
+      ? (ITEM_t **)malloc(sizeof(ITEM_t *) * capacity)
+      : NULL;
+}
+
 void create_ordered_array(ITEM_t *item) {
   // This must be called after a new hashtable has been created,
   // but must not be called when a hashtable is resized, or memory
   // will leak like a very leaky thing.
-  item->ordered_size = 0;
-  item->ordered_capacity = ITEM_ARRAY_INIT_CAPACITY;
-  item->ordered_array = (ITEM_t **)malloc(sizeof(ITEM_t *) *
-                                              item->ordered_capacity);
+  create_ordered_array_with_capacity(item, ITEM_ARRAY_INIT_CAPACITY);
 }
 
 uint32_t simple_hash(const char *key, size_t len) {
@@ -174,6 +189,7 @@ uint32_t simple_hash(const char *key, size_t len) {
 HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize) {
   // Create a new hash table with the new size
   HASHTABLE_t *newhashtable = create_hashtable(newsize);
+  newhashtable->entry_count = oldhashtable->entry_count;
   // Rehash all the existing entries
   for (int i = 0; i < (oldhashtable)->size; i++) {
     ENTRY_t *current_entry = (oldhashtable)->table[i];
@@ -189,20 +205,9 @@ HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize) {
         newhashindex = murmur3_32(current_entry->key, keylen, 0);
       }
       newhashindex %= newhashtable->size;
-      // Remove it from the old list
-      current_entry->next = NULL;
-      // Add it to the new list
-      // No need to allocate new memory for the entry itself
-      if (newhashtable->table[newhashindex] == NULL) {
-        newhashtable->table[newhashindex] = current_entry;
-      } else {
-        // Handle collision with separate chaining
-        ENTRY_t *temp = newhashtable->table[newhashindex];
-        while (temp->next != NULL) {
-          temp = temp->next;
-        }
-        temp->next = current_entry;
-      }
+      // Move the existing entry to the head of the new collision chain.
+      current_entry->next = newhashtable->table[newhashindex];
+      newhashtable->table[newhashindex] = current_entry;
       // Move to the next entry
       current_entry = nextEntry;
     }
@@ -216,24 +221,27 @@ HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize) {
 }
 
 void resize_ordered_array(ITEM_t *item) {
-  // If the ordered array is full, embiggen it
-  if (item->ordered_size >= item->ordered_capacity) {
-    item->ordered_capacity += ITEM_ARRAY_INIT_CAPACITY;
-    item->ordered_array = (ITEM_t **)realloc(item->ordered_array,
-                                item->ordered_capacity * sizeof(ITEM_t *));
+  if (item->ordered_size < item->ordered_capacity) return;
+
+  size_t required = item->ordered_size + 1;
+  size_t new_capacity = item->ordered_capacity > 0
+      ? item->ordered_capacity
+      : ITEM_ARRAY_INIT_CAPACITY;
+  while (new_capacity < required) {
+    if (new_capacity > SIZE_MAX / 2) {
+      logerr("Cannot grow ordered item array beyond %zu entries.\n",
+             new_capacity);
+      abort();
+    }
+    new_capacity *= 2;
   }
+  item->ordered_array = (ITEM_t **)realloc(
+      item->ordered_array, new_capacity * sizeof(ITEM_t *));
+  item->ordered_capacity = new_capacity;
 }
 
 float calculate_load_factor(HASHTABLE_t *hashtable) {
-  int numentries = 0;
-  for (int i = 0; i < hashtable->size; i++) {
-    ENTRY_t *entry = hashtable->table[i];
-    while (entry) {
-      numentries++;
-      entry = entry->next;
-    }
-  }
-  return (float)numentries / (float)hashtable->size;
+  return (float)hashtable->entry_count / (float)hashtable->size;
 }
 
 HASHTABLE_t *maybe_resize_hashtable(HASHTABLE_t *hashtable) {
@@ -264,20 +272,9 @@ void insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child) {
   ENTRY_t *newEntry = allocate_entry();
   newEntry->key = strdup(key);
   newEntry->child = child;
-  newEntry->next = NULL;
-
-  // Insert into the hash table
-  ENTRY_t* current = hashtable->table[hashindex];
-  if (current == NULL) {
-    hashtable->table[hashindex] = newEntry;
-  }
-  else {
-    // Handle collision with separate chaining
-    while (current->next != NULL) {
-      current = current->next;
-    }
-    current->next = newEntry;
-  }
+  newEntry->next = hashtable->table[hashindex];
+  hashtable->table[hashindex] = newEntry;
+  hashtable->entry_count++;
 }
 
 ITEM_t *search_hashtable(HASHTABLE_t *hashtable, const char *key) {
@@ -329,6 +326,7 @@ void delete_hashtable(HASHTABLE_t *hashtable, const char *key) {
       }
       free(current->key);
       deallocate_entry(current);
+      hashtable->entry_count--;
       return;
     }
     previous = current;
@@ -439,11 +437,15 @@ void deallocate_item(ITEM_t *item) {
   FREE_ARRAY(ITEM_t, item, 1);
 }
 
-ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
-                                VALUE_t value, uint8_t *bytecode, int len) {
-  // Note that for performance reasons this function does not check
-  // to see if the item already exists at this layer.  You MUST
-  // check that before you call this function!
+static uint32_t hashtable_buckets_for_entries(uint32_t entry_count) {
+  if (entry_count == 0) return 1;
+  return (uint32_t)(((uint64_t)entry_count * 4u + 2u) / 3u);
+}
+
+static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
+                              VALUE_t value, uint8_t *bytecode, int len,
+                              uint32_t expected_children,
+                              bool presize_children) {
   ITEM_t *item = allocate_item();
   item->parent = parent;
   item->inuse = false;
@@ -458,34 +460,42 @@ ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
     item->bytecode_len = len;
   }
   strncpy(item->name, name, strlen(name)+1);
-  item->children = create_hashtable(16); // Size is chosen arbitrarily
-  create_ordered_array(item);
-  // Now add the newly-created item to its parent's hashtable
-  insert_hashtable(parent->children, name, item);
-  // Maybe resize the hashtable?
-  parent->children = maybe_resize_hashtable(parent->children);
+  uint32_t bucket_count = presize_children
+      ? hashtable_buckets_for_entries(expected_children)
+      : 16u;
+  size_t ordered_capacity = presize_children
+      ? expected_children
+      : ITEM_ARRAY_INIT_CAPACITY;
+  item->children = create_hashtable((int)bucket_count);
+  create_ordered_array_with_capacity(item, ordered_capacity);
 
-  // And insert into the ordered array
-  resize_ordered_array(parent);
-  parent->ordered_array[parent->ordered_size++] = item;
+  if (parent != NULL) {
+    insert_hashtable(parent->children, name, item);
+    parent->children = maybe_resize_hashtable(parent->children);
+    resize_ordered_array(parent);
+    parent->ordered_array[parent->ordered_size++] = item;
+  }
   return item;
 }
 
+ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
+                                VALUE_t value, uint8_t *bytecode, int len) {
+  // Note that for performance reasons this function does not check
+  // to see if the item already exists at this layer.  You MUST
+  // check that before you call this function!
+  return construct_item(name, parent, type, value, bytecode, len, 0, false);
+}
+
 ITEM_t *make_root_item(const char* name) {
-  // This is exactly the same as make_item, except that it doesn't try to
-  // insert the item into its parent's hashtable.  This is a separate
-  // function for performance reasons - it is only ever used ONCE, so there
-  // is no point having an additional if statement that always evaluates
-  // one way.
-  ITEM_t *item = allocate_item();
-  item->parent = NULL;
-  item->type = ITEM_value;
-  item->value.type = VALUE_int;
-  item->value.i = 0; // Root item is never reference, so this doesn't matter
-  strncpy(item->name, name, strlen(name)+1);
-  item->children = create_hashtable(16); // Size is chosen arbitrarily
-  create_ordered_array(item);
-  return item;
+  VALUE_t value = {.type = VALUE_int, .i = 0};
+  return construct_item(name, NULL, ITEM_value, value, NULL, 0, 0, false);
+}
+
+static ITEM_t *make_loaded_item(const char *name, ITEM_t *parent, ITEM_e type,
+                                VALUE_t value, uint8_t *bytecode, int len,
+                                uint32_t expected_children) {
+  return construct_item(name, parent, type, value, bytecode, len,
+                        expected_children, true);
 }
 
 void destroy_item(ITEM_t *item) {
@@ -788,7 +798,6 @@ enum {
 };
 
 #define ITEMSTORE_MAX_DEPTH 8u
-/* ordered_capacity is uint8_t and grows in steps of ten, so 250 is its limit. */
 #define ITEMSTORE_MAX_CHILDREN_PER_ITEM 250u
 #define ITEMSTORE_MAX_STRING_LEN (16u * 1024u * 1024u)
 #define ITEMSTORE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
@@ -1004,28 +1013,17 @@ bool write_item(FILE *file, ITEM_t *item) {
                      "bytecode payload")) return false;
   }
 
-  uint32_t numchildren = 0;
-  for (int i = 0; i < item->children->size; i++) {
-    ENTRY_t *entry = item->children->table[i];
-    while (entry) {
-      numchildren++;
-      entry = entry->next;
-    }
-  }
+  size_t numchildren = item->ordered_size;
   if (numchildren > ITEMSTORE_MAX_CHILDREN_PER_ITEM) {
-    logerr("Failed to write itemstore item '%s': child count %u exceeds "
+    logerr("Failed to write itemstore item '%s': child count %zu exceeds "
            "maximum %u.\n", item->name, numchildren,
            ITEMSTORE_MAX_CHILDREN_PER_ITEM);
     return false;
   }
-  if (!write_u32_le(file, numchildren, "child count")) return false;
+  if (!write_u32_le(file, (uint32_t)numchildren, "child count")) return false;
 
-  for (int i = 0; i < item->children->size; i++) {
-    ENTRY_t *entry = item->children->table[i];
-    while (entry) {
-      if (!write_item(file, entry->child)) return false;
-      entry = entry->next;
-    }
+  for (size_t i = 0; i < item->ordered_size; i++) {
+    if (!write_item(file, item->ordered_array[i])) return false;
   }
   return true;
 }
@@ -1069,7 +1067,10 @@ bool save_itemstore(const char *filename, ITEM_t *root) {
     goto cleanup;
   }
 
-  if (!sync_itemstore_file(file, temp_path)) goto cleanup;
+  if (itemstore_durability_requires_sync(config.itemstore_durability)
+      && !sync_itemstore_file(file, temp_path)) {
+    goto cleanup;
+  }
 
   if (fclose(file) != 0) {
     file = NULL;
@@ -1284,19 +1285,8 @@ static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
     goto fail_before_item;
   }
 
-  ITEM_t *item;
-  if (parent == NULL) {
-    item = make_root_item(name);
-    item->type = type;
-    if (type == ITEM_value) {
-      item->value = itemval;
-    } else {
-      item->bytecode = bytecode;
-      item->bytecode_len = bytecode_len;
-    }
-  } else {
-    item = make_item(name, parent, type, itemval, bytecode, bytecode_len);
-  }
+  ITEM_t *item = make_loaded_item(name, parent, type, itemval, bytecode,
+                                  bytecode_len, numchildren);
 
   for (uint32_t i = 0; i < numchildren; i++) {
     ctx->depth++;
@@ -1423,17 +1413,8 @@ void dump_item(ITEM_t *item, char *item_name, bool isroot) {
       logmsg("Item: %s, Value: (unknown)\n", currentpath);
     }
   }
-  // If the item has children, iterate over the hash table and calli
-  // dumpItem on each
-  if (item->children != NULL) {
-    for (int i = 0; i < item->children->size; ++i) {
-      ENTRY_t *entry = item->children->table[i];
-      while (entry != NULL) {
-        // Pass isroot as false because we are past the root now
-        dump_item(entry->child, currentpath, false);
-        entry = entry->next;
-      }
-    }
+  for (size_t i = 0; i < item->ordered_size; i++) {
+    dump_item(item->ordered_array[i], currentpath, false);
   }
 }
 

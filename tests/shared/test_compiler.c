@@ -61,6 +61,8 @@ void test_floatconv_binary64_format_roundtrip(void);
 void test_fixture_policy_declared_goldens_exist(void);
 void test_find_item_cached_hit_and_negative_cache(void);
 void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
+void test_find_item_cached_distinguishes_roots(void);
+void test_item_hashtable_resize_preserves_entries_and_count(void);
 void test_itemstore_value_and_code_roundtrip(void);
 void test_itemstore_nested_depth_roundtrip(void);
 void test_itemstore_loads_generated_v1_wire_fixture(void);
@@ -69,6 +71,8 @@ void test_load_itemstore_rejects_invalid_wire_tags(void);
 void test_load_itemstore_rejects_structural_corruption(void);
 void test_load_itemstore_rejects_resource_limit_violations(void);
 void test_save_itemstore_preserves_existing_file_on_failure(void);
+void test_itemstore_durability_modes(void);
+void test_itemstore_large_load_presizes_child_storage(void);
 void test_libcall_registry_roundtrip(void);
 void test_libcall_registry_init_failure_has_no_partial_state(void);
 void test_libcall_registry_lifecycle_reinit_sequence(void);
@@ -164,6 +168,8 @@ static const test_case_t core_tests[] = {
     {"test_fixture_policy_declared_goldens_exist", test_fixture_policy_declared_goldens_exist},
     {"test_find_item_cached_hit_and_negative_cache", test_find_item_cached_hit_and_negative_cache},
     {"test_find_item_cached_invalidation_on_delete_and_reinsert", test_find_item_cached_invalidation_on_delete_and_reinsert},
+    {"test_find_item_cached_distinguishes_roots", test_find_item_cached_distinguishes_roots},
+    {"test_item_hashtable_resize_preserves_entries_and_count", test_item_hashtable_resize_preserves_entries_and_count},
     {"test_itemstore_value_and_code_roundtrip", test_itemstore_value_and_code_roundtrip},
     {"test_itemstore_nested_depth_roundtrip", test_itemstore_nested_depth_roundtrip},
     {"test_itemstore_loads_generated_v1_wire_fixture", test_itemstore_loads_generated_v1_wire_fixture},
@@ -172,6 +178,8 @@ static const test_case_t core_tests[] = {
     {"test_load_itemstore_rejects_structural_corruption", test_load_itemstore_rejects_structural_corruption},
     {"test_load_itemstore_rejects_resource_limit_violations", test_load_itemstore_rejects_resource_limit_violations},
     {"test_save_itemstore_preserves_existing_file_on_failure", test_save_itemstore_preserves_existing_file_on_failure},
+    {"test_itemstore_durability_modes", test_itemstore_durability_modes},
+    {"test_itemstore_large_load_presizes_child_storage", test_itemstore_large_load_presizes_child_storage},
     {"test_relative_item_leading_dot_parse_accepts_deref_chain", test_relative_item_leading_dot_parse_accepts_deref_chain},
     {"test_relative_item_leading_dot_nested_relative_deref_layers", test_relative_item_leading_dot_nested_relative_deref_layers},
     {"test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed", test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed},

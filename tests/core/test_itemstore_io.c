@@ -4,8 +4,11 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "config.h"
 #include "item.h"
 #include "test_assert.h"
+
+extern CONFIG_t config;
 
 /* Generated fixtures follow docs/itemstore-format.md. */
 enum {
@@ -127,6 +130,8 @@ void test_itemstore_value_and_code_roundtrip(void) {
   ASSERT_NOT_NULL(insert_item(root, "float",
                               (VALUE_t){.type = VALUE_float,
                                         .f_bits = UINT64_C(0x8000000000000000)}));
+  ASSERT_NOT_NULL(insert_item(root, "transient",
+                              (VALUE_t){.type = VALUE_nil, .i = 0}));
   char *text = strdup("itemstore-v1");
   ASSERT_NOT_NULL(text);
   ASSERT_NOT_NULL(insert_item(root, "string",
@@ -138,10 +143,26 @@ void test_itemstore_value_and_code_roundtrip(void) {
   memcpy(bytecode, expected_bytecode, sizeof(expected_bytecode));
   ASSERT_NOT_NULL(insert_code_item(root, "code", sizeof(expected_bytecode),
                                    bytecode));
+  ASSERT_EQ_INT(7, root->ordered_size);
+  delete_item(root, "transient");
+
+  static const char *expected_order[] = {
+    "nil", "bool", "int", "float", "string", "code"
+  };
+  ASSERT_EQ_INT(sizeof(expected_order) / sizeof(expected_order[0]),
+                root->ordered_size);
 
   ASSERT_TRUE(save_itemstore(path, root));
   ITEM_t *loaded = load_itemstore(path);
   ASSERT_NOT_NULL(loaded);
+  ASSERT_EQ_INT(sizeof(expected_order) / sizeof(expected_order[0]),
+                loaded->ordered_size);
+  for (size_t i = 0; i < sizeof(expected_order) / sizeof(expected_order[0]);
+       i++) {
+    ITEM_t *ordered = find_item_by_index(loaded, i);
+    ASSERT_NOT_NULL(ordered);
+    ASSERT_TRUE(strcmp(expected_order[i], ordered->name) == 0);
+  }
 
   ITEM_t *item = find_item(loaded, "nil");
   ASSERT_NOT_NULL(item);
@@ -339,6 +360,12 @@ void test_load_itemstore_rejects_structural_corruption(void) {
   file = replace_fixture(path);
   put_header(file, WIRE_VERSION);
   put_nil_record_prefix(file, "root", 1);
+  put_nil_record_prefix(file, "branch", 1);
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_nil_record_prefix(file, "root", 1);
   put_u8(file, 33);
   assert_fixture_rejected(file, path);
 
@@ -399,6 +426,17 @@ void test_save_itemstore_preserves_existing_file_on_failure(void) {
   ASSERT_TRUE(!save_itemstore(path, invalid));
   destroy_item(invalid);
 
+  ITEM_t *too_many_children = make_root_item("root");
+  ASSERT_NOT_NULL(too_many_children);
+  for (int i = 0; i < 251; i++) {
+    char name[16];
+    ASSERT_TRUE(snprintf(name, sizeof(name), "child_%03d", i) > 0);
+    ASSERT_NOT_NULL(insert_item(
+        too_many_children, name, (VALUE_t){.type = VALUE_nil, .i = 0}));
+  }
+  ASSERT_TRUE(!save_itemstore(path, too_many_children));
+  destroy_item(too_many_children);
+
   ITEM_t *loaded = load_itemstore(path);
   ASSERT_NOT_NULL(loaded);
   ITEM_t *sentinel = find_item(loaded, "sentinel");
@@ -406,6 +444,63 @@ void test_save_itemstore_preserves_existing_file_on_failure(void) {
   ASSERT_EQ_INT(VALUE_int, sentinel->value.type);
   ASSERT_EQ_INT(42, sentinel->value.i);
   ASSERT_TRUE(find_item(loaded, "invalid_code") == NULL);
+
+  destroy_item(loaded);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_itemstore_durability_modes(void) {
+  ASSERT_TRUE(itemstore_durability_requires_sync(ITEMSTORE_DURABLE_FULL));
+  ASSERT_TRUE(!itemstore_durability_requires_sync(ITEMSTORE_DURABLE_FAST));
+
+  char path[] = "/tmp/sin-itemstore-durability-XXXXXX";
+  FILE *file = new_fixture(path);
+  ASSERT_EQ_INT(0, fclose(file));
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+
+  config.itemstore_durability = ITEMSTORE_DURABLE_FAST;
+  ASSERT_TRUE(save_itemstore(path, root));
+  ITEM_t *loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  destroy_item(loaded);
+
+  config.itemstore_durability = ITEMSTORE_DURABLE_FULL;
+  ASSERT_TRUE(save_itemstore(path, root));
+  loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  destroy_item(loaded);
+
+  destroy_item(root);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_itemstore_large_load_presizes_child_storage(void) {
+  enum { CHILD_COUNT = 200 };
+  char path[] = "/tmp/sin-itemstore-large-load-XXXXXX";
+  FILE *file = new_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_nil_record_prefix(file, "root", CHILD_COUNT);
+  for (int i = 0; i < CHILD_COUNT; i++) {
+    char name[16];
+    ASSERT_TRUE(snprintf(name, sizeof(name), "child_%03d", i) > 0);
+    put_nil_record_prefix(file, name, 0);
+  }
+  ASSERT_EQ_INT(0, fclose(file));
+
+  ITEM_t *loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  ASSERT_EQ_INT(CHILD_COUNT, loaded->children->entry_count);
+  ASSERT_EQ_INT(CHILD_COUNT, loaded->ordered_size);
+  ASSERT_EQ_INT(CHILD_COUNT, loaded->ordered_capacity);
+  ASSERT_EQ_INT(267, loaded->children->size);
+  for (int i = 0; i < CHILD_COUNT; i++) {
+    ITEM_t *child = find_item_by_index(loaded, (size_t)i);
+    ASSERT_NOT_NULL(child);
+    char expected[16];
+    ASSERT_TRUE(snprintf(expected, sizeof(expected), "child_%03d", i) > 0);
+    ASSERT_TRUE(strcmp(expected, child->name) == 0);
+  }
 
   destroy_item(loaded);
   ASSERT_EQ_INT(0, unlink(path));

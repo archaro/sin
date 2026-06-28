@@ -38,10 +38,16 @@ struct Entry {
 // This hashtable contains pointers to all the children of this Item.
 struct HashTable {
   uint32_t size;
+  uint32_t entry_count;
   ENTRY_t **table; // An array of pointers to ENTRY_t
 };
 
 typedef enum {ITEM_value, ITEM_code} ITEM_e;
+typedef enum {
+  ITEMSTORE_DURABLE_FULL = 0,
+  ITEMSTORE_DURABLE_FAST = 1
+} ITEMSTORE_DURABILITY_e;
+
 struct Item {
   ITEM_e type;           // 4 bytes
   uint32_t bytecode_len; // 4 bytes
@@ -52,8 +58,8 @@ struct Item {
   HASHTABLE_t *children; // 8 bytes - Hash table for immediate children
   uint8_t *bytecode;     // 8 bytes - Bytecode if a code item
   VALUE_t value;         // 16 bytes - (at present)
-  uint8_t ordered_size;  // Number of children in the ordered array
-  uint8_t ordered_capacity; // Max size of ordered array
+  size_t ordered_size;  // Number of children in the ordered array
+  size_t ordered_capacity; // Max size of ordered array
   ITEM_t **ordered_array; // Ordered array of all children
 };
 
@@ -98,6 +104,7 @@ void set_item(ITEM_t *root, const char *item_name, VALUE_t value);
 void get_itemname(ITEM_t *item, char *itemname);
 char *get_itemfilename(ITEM_t *item);
 bool save_itemsource(ITEM_t *item, char *source);
+bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability);
 bool save_itemstore(const char *filename, ITEM_t *root);
 ITEM_t *load_itemstore(const char *filename); 
 void dump_item(ITEM_t *item, char *item_name, bool isroot);
