@@ -133,6 +133,13 @@ void test_emitbc_all_ir_ops_accounted_for(void);
 void test_emitbc_jumps(void);
 void test_emitbc_invariants(void);
 void test_emitbc_post_emission_verification(void);
+void test_bytecode_verify_minimal_and_header_errors(void);
+void test_bytecode_verify_opcode_halt_and_trailing_bytes(void);
+void test_bytecode_verify_truncated_operand_widths(void);
+void test_bytecode_verify_local_indexes_and_items(void);
+void test_bytecode_verify_jumps_and_stack_flow(void);
+void test_bytecode_verify_pipeline_fixture_bytecode(void);
+void test_bytecode_verify_compiler_emitted_bytecode(void);
 void test_pipeline_golden(void);
 void test_pipeline_large_local_lookup_duplicate(void);
 void test_pipeline_source_golden(void);
@@ -239,6 +246,13 @@ static const test_case_t compiler_tests[] = {
     {"test_emitbc_jumps", test_emitbc_jumps},
     {"test_emitbc_invariants", test_emitbc_invariants},
     {"test_emitbc_post_emission_verification", test_emitbc_post_emission_verification},
+    {"test_bytecode_verify_minimal_and_header_errors", test_bytecode_verify_minimal_and_header_errors},
+    {"test_bytecode_verify_opcode_halt_and_trailing_bytes", test_bytecode_verify_opcode_halt_and_trailing_bytes},
+    {"test_bytecode_verify_truncated_operand_widths", test_bytecode_verify_truncated_operand_widths},
+    {"test_bytecode_verify_local_indexes_and_items", test_bytecode_verify_local_indexes_and_items},
+    {"test_bytecode_verify_jumps_and_stack_flow", test_bytecode_verify_jumps_and_stack_flow},
+    {"test_bytecode_verify_pipeline_fixture_bytecode", test_bytecode_verify_pipeline_fixture_bytecode},
+    {"test_bytecode_verify_compiler_emitted_bytecode", test_bytecode_verify_compiler_emitted_bytecode},
     {"test_pipeline_golden", test_pipeline_golden},
     {"test_pipeline_large_local_lookup_duplicate", test_pipeline_large_local_lookup_duplicate},
     {"test_pipeline_source_golden", test_pipeline_source_golden},
