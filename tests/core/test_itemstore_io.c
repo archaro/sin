@@ -7,7 +7,7 @@
 #include "item.h"
 #include "test_assert.h"
 
-/* Itemstore v1 wire constants, duplicated here to document fixture bytes. */
+/* Generated fixtures follow docs/itemstore-format.md. */
 enum {
   WIRE_ITEM_VALUE = 1,
   WIRE_ITEM_CODE = 2,
@@ -223,7 +223,7 @@ void test_itemstore_loads_generated_v1_wire_fixture(void) {
 
   put_record_prefix(file, "float", WIRE_ITEM_VALUE);
   put_u8(file, WIRE_VALUE_FLOAT);
-  put_u64_le(file, UINT64_C(0x3ff8000000000000)); /* IEEE-754 1.5. */
+  put_u64_le(file, UINT64_C(0x3ff8000000000000));
   put_u32_le(file, 0);
 
   put_record_prefix(file, "string", WIRE_ITEM_VALUE);
@@ -284,7 +284,7 @@ void test_load_itemstore_rejects_bad_headers(void) {
 
   file = replace_fixture(path);
   put_bytes(file, "SINITEM", 8);
-  put_u8(file, WIRE_VERSION); /* Only half of the uint16 version. */
+  put_u8(file, WIRE_VERSION);
   assert_fixture_rejected(file, path);
 
   file = replace_fixture(path);
@@ -293,7 +293,7 @@ void test_load_itemstore_rejects_bad_headers(void) {
   put_bytes(file, "root", 4);
   put_u8(file, WIRE_ITEM_VALUE);
   put_u8(file, WIRE_VALUE_INT);
-  put_u32_le(file, UINT32_C(0x12345678)); /* Half of the int64 payload. */
+  put_u32_le(file, UINT32_C(0x12345678));
   assert_fixture_rejected(file, path);
 
   ASSERT_EQ_INT(0, unlink(path));
@@ -320,7 +320,7 @@ void test_load_itemstore_rejects_structural_corruption(void) {
   FILE *file = new_fixture(path);
   put_header(file, WIRE_VERSION);
   put_nil_record_prefix(file, "root", 0);
-  put_u8(file, 0xaa); /* No bytes may follow the root record. */
+  put_u8(file, 0xaa);
   assert_fixture_rejected(file, path);
 
   file = replace_fixture(path);
@@ -339,14 +339,14 @@ void test_load_itemstore_rejects_structural_corruption(void) {
   file = replace_fixture(path);
   put_header(file, WIRE_VERSION);
   put_nil_record_prefix(file, "root", 1);
-  put_u8(file, 33); /* Layer names are limited to 32 bytes. */
+  put_u8(file, 33);
   assert_fixture_rejected(file, path);
 
   file = replace_fixture(path);
   put_header(file, WIRE_VERSION);
   put_record_prefix(file, "root", WIRE_ITEM_VALUE);
   put_u8(file, WIRE_VALUE_BOOL);
-  put_u8(file, 2); /* Boolean payloads must be exactly zero or one. */
+  put_u8(file, 2);
   put_u32_le(file, 0);
   assert_fixture_rejected(file, path);
 

@@ -767,26 +767,17 @@ bool save_itemsource(ITEM_t *item, char *source) {
   return true;
 }
 
-/*
- * Itemstore v1 wire-format constants.  save_itemstore() / load_itemstore()
- * write and validate the header; write_item() / read_item() implement the
- * recursive record that follows it.
- *
- * ITEMSTORE_V1_MAGIC includes its terminating NUL on disk, so the magic bytes
- * are exactly: 'S', 'I', 'N', 'I', 'T', 'E', 'M', '\0'.
- */
+/* The on-disk contract is documented in docs/itemstore-format.md. */
 #define ITEMSTORE_V1_MAGIC "SINITEM"
 #define ITEMSTORE_V1_MAGIC_SIZE ((uint32_t)sizeof(ITEMSTORE_V1_MAGIC))
 #define ITEMSTORE_V1_FORMAT_VERSION ((uint16_t)1u)
 
-/* Wire tags are encoded as uint8_t values and are independent of ITEM_e. */
 typedef uint8_t ITEMSTORE_ITEM_TAG_t;
 enum {
   ITEMSTORE_ITEM_TAG_VALUE = 1,
   ITEMSTORE_ITEM_TAG_CODE = 2
 };
 
-/* Wire tags are encoded as uint8_t values and are independent of VALUE_e. */
 typedef uint8_t ITEMSTORE_VALUE_TAG_t;
 enum {
   ITEMSTORE_VALUE_TAG_INT = 0,
@@ -810,36 +801,6 @@ typedef struct {
   uint32_t max_bytecode_len;
   const char *filename;
 } ITEMSTORE_READ_CTX_t;
-
-/*
- * Itemstore v1 layout
- * ===================
- *
- * File header:
- *   - magic: ITEMSTORE_V1_MAGIC_SIZE bytes (ITEMSTORE_V1_MAGIC)
- *   - format version: little-endian uint16
- *
- * Recursive item record:
- *   - name length: uint8
- *   - name: exactly name-length bytes, with no trailing NUL
- *   - item kind: uint8 ITEMSTORE_ITEM_TAG_*
- *   - payload:
- *       ITEMSTORE_ITEM_TAG_VALUE:
- *         - value kind: uint8 ITEMSTORE_VALUE_TAG_*
- *         - NIL: no additional payload
- *         - INT: int64
- *         - FLOAT: uint64 containing the IEEE 754 binary64 payload bits
- *         - STRING: uint32 byte length, then exactly that many bytes
- *         - BOOL: uint8, restricted to 0 or 1
- *       ITEMSTORE_ITEM_TAG_CODE:
- *         - uint32 bytecode length, then exactly that many bytecode bytes
- *   - child count: uint32
- *   - children: child-count recursive item records
- *
- * Every integer field is fixed-width and encoded little-endian.  Enum object
- * representations, native byte order, native sizeof values, padding, and
- * pointers are never part of the v1 wire format.
- */
 
 static bool write_bytes(FILE *file, const void *data, size_t length,
                         const char *context) {
