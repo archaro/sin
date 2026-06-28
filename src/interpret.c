@@ -17,6 +17,7 @@
 #include "parser.h"
 #include "compiler_pipeline.h"
 #include "compiler/ir/opcode_schema.h"
+#include "bytecode_verify.h"
 #include "absyn.h"
 #include "value.h"
 #include "stack.h"
@@ -995,6 +996,16 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
   // assembled, push the full item name onto the stack as a string.
   // Return a pointer to the bytecode after the item assembly.
   // May recurse - necessary for the handling of nested derefs.
+  if (current_frame_end) {
+    const uint8_t *validated_end = NULL;
+    BC_VerifyError diagnostic;
+    if (!bc_decode_item_expression(nextop, current_frame_end,
+                                   relative ? BC_ITEM_EXPR_RELATIVE : BC_ITEM_EXPR_ABSOLUTE,
+                                   &validated_end, &diagnostic)) {
+      (void)diagnostic;
+    }
+    (void)validated_end;
+  }
   bool invalid = false;
   bool saw_missing_layer = false;
   bool saw_non_missing_layer = false;

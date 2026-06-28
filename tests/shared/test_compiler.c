@@ -50,6 +50,10 @@ void test_sem_local_limit_255_is_accepted(void);
 void test_sem_local_limit_over_255_fails_deterministically(void);
 void test_ir_validate(void);
 void test_opcode_schema_consistency(void);
+void test_bytecode_verify_item_expression_streams(void);
+void test_bytecode_verify_local_index_bounds(void);
+void test_bytecode_verify_jump_targets(void);
+void test_bytecode_verify_stack_flow(void);
 void test_parser_input_api(void);
 void test_parser_float_literals_decimal_forms(void);
 void test_parser_float_literals_integer_still_int(void);
@@ -157,6 +161,10 @@ static const test_case_t core_tests[] = {
     {"test_sem_local_limit_over_255_fails_deterministically", test_sem_local_limit_over_255_fails_deterministically},
     {"test_ir_validate", test_ir_validate},
     {"test_opcode_schema_consistency", test_opcode_schema_consistency},
+    {"test_bytecode_verify_item_expression_streams", test_bytecode_verify_item_expression_streams},
+    {"test_bytecode_verify_local_index_bounds", test_bytecode_verify_local_index_bounds},
+    {"test_bytecode_verify_jump_targets", test_bytecode_verify_jump_targets},
+    {"test_bytecode_verify_stack_flow", test_bytecode_verify_stack_flow},
     {"test_parser_input_api", test_parser_input_api},
     {"test_parser_float_literals_decimal_forms", test_parser_float_literals_decimal_forms},
     {"test_parser_float_literals_integer_still_int", test_parser_float_literals_integer_still_int},
