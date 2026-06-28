@@ -146,7 +146,7 @@ void test_itemstore_value_and_code_roundtrip(void) {
   ASSERT_NOT_NULL(insert_item(root, "string",
                               (VALUE_t){.type = VALUE_str, .s = text}));
 
-  static const uint8_t expected_bytecode[] = {0x00, 0xff, 0x42, 0x00};
+  static const uint8_t expected_bytecode[] = {0x00, 0x00, 'h'};
   uint8_t *bytecode = malloc(sizeof(expected_bytecode));
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, expected_bytecode, sizeof(expected_bytecode));
@@ -262,7 +262,7 @@ void test_itemstore_loads_generated_v1_wire_fixture(void) {
   put_bytes(file, "sin", 3);
   put_u32_le(file, 0);
 
-  static const uint8_t bytecode[] = {0x10, 0x00, 0x7f};
+  static const uint8_t bytecode[] = {0x00, 0x00, 'h'};
   put_record_prefix(file, "code", WIRE_ITEM_CODE);
   put_u32_le(file, sizeof(bytecode));
   put_bytes(file, bytecode, sizeof(bytecode));
@@ -293,6 +293,82 @@ void test_itemstore_loads_generated_v1_wire_fixture(void) {
 
   destroy_item(loaded);
   ASSERT_EQ_INT(0, unlink(path));
+}
+
+
+static void put_code_record(FILE *file, const char *name, const uint8_t *bytecode,
+                            uint32_t bytecode_len, uint32_t child_count) {
+  put_record_prefix(file, name, WIRE_ITEM_CODE);
+  put_u32_le(file, bytecode_len);
+  if (bytecode_len > 0) put_bytes(file, bytecode, bytecode_len);
+  put_u32_le(file, child_count);
+}
+
+static void assert_malformed_code_rejected(const uint8_t *bytecode,
+                                           uint32_t bytecode_len) {
+  char path[] = "/tmp/sin-itemstore-bad-code-XXXXXX";
+  FILE *file = new_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_nil_record_prefix(file, "root", 1);
+  put_code_record(file, "badcode", bytecode, bytecode_len, 0);
+  assert_fixture_rejected(file, path);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_load_itemstore_rejects_malformed_code_bytecode(void) {
+  bool previous_strict_validation = config.strict_validation;
+  config.strict_validation = true;
+
+  const uint8_t missing_header[] = {'h'};
+  assert_malformed_code_rejected(missing_header, sizeof(missing_header));
+
+  const uint8_t missing_halt[] = {0, 0, 'b', 1};
+  assert_malformed_code_rejected(missing_halt, sizeof(missing_halt));
+
+  const uint8_t truncated_string_operand[] = {0, 0, 'l', 3, 0, 'a', 'b'};
+  assert_malformed_code_rejected(truncated_string_operand,
+                                 sizeof(truncated_string_operand));
+
+  const uint8_t invalid_local_index[] = {0, 0, 'e', 0, 'h'};
+  assert_malformed_code_rejected(invalid_local_index,
+                                 sizeof(invalid_local_index));
+
+  const uint8_t invalid_jump_target[] = {0, 0, 'j', 0x04, 0x00, 'h'};
+  assert_malformed_code_rejected(invalid_jump_target,
+                                 sizeof(invalid_jump_target));
+
+  const uint8_t malformed_nested_item_expression[] = {
+    0, 0, 'I', 'L', 4, 'x', 'E', 'h'
+  };
+  assert_malformed_code_rejected(malformed_nested_item_expression,
+                                 sizeof(malformed_nested_item_expression));
+
+  config.strict_validation = previous_strict_validation;
+}
+
+void test_load_itemstore_allows_malformed_code_when_strict_validation_disabled(
+    void) {
+  bool previous_strict_validation = config.strict_validation;
+  config.strict_validation = false;
+
+  char path[] = "/tmp/sin-itemstore-bad-code-disabled-XXXXXX";
+  FILE *file = new_fixture(path);
+  const uint8_t missing_halt[] = {0, 0, 'b', 1};
+  put_header(file, WIRE_VERSION);
+  put_nil_record_prefix(file, "root", 1);
+  put_code_record(file, "badcode", missing_halt, sizeof(missing_halt), 0);
+  ASSERT_EQ_INT(0, fclose(file));
+
+  ITEM_t *loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  ITEM_t *badcode = find_item(loaded, "badcode");
+  ASSERT_NOT_NULL(badcode);
+  ASSERT_EQ_INT(ITEM_code, badcode->type);
+  ASSERT_EQ_INT(sizeof(missing_halt), badcode->bytecode_len);
+
+  destroy_item(loaded);
+  ASSERT_EQ_INT(0, unlink(path));
+  config.strict_validation = previous_strict_validation;
 }
 
 void test_load_itemstore_rejects_bad_headers(void) {
