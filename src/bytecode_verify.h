@@ -32,6 +32,32 @@ typedef enum {
   BC_OPERAND_EMBEDDED_SOURCE
 } BC_OperandKind;
 
+typedef enum {
+  BC_CONTEXT_STATEMENT = 0,
+  BC_CONTEXT_ITEM_EXPRESSION = 1,
+  BC_CONTEXT_DEREFERENCE = 2
+} BC_Context;
+
+typedef struct {
+  int pops;
+  int pushes;
+  bool operand_dependent;
+} BC_StackEffect;
+
+typedef struct {
+  uint8_t opcode;
+  const char *mnemonic;
+  BC_OperandKind operand_encoding;
+  bool valid_in_statement;
+  bool valid_in_item_expression;
+  bool valid_in_dereference;
+  BC_StackEffect stack_effect;
+  bool terminates;
+  bool valid_top_level;
+  bool item_assembly_only;
+  const IR_OpSchema *ir;
+} BC_OpcodeSchema;
+
 typedef struct {
   BC_OperandKind kind;
   uint32_t offset;
@@ -118,3 +144,10 @@ bool bc_decode_item_expression(const uint8_t *item_payload,
                                const uint8_t **after_item,
                                BC_VerifyError *diagnostic);
 const char *bc_verify_status_name(BC_VerifyStatus status);
+const BC_OpcodeSchema *bc_opcode_lookup(uint8_t opcode, BC_Context context);
+const BC_OpcodeSchema *bc_opcode_for_ir(IR_Op op);
+const char *bc_opcode_mnemonic(const BC_OpcodeSchema *schema);
+BC_StackEffect bc_opcode_stack_effect(const BC_OpcodeSchema *schema,
+                                      uint16_t operand_u16);
+uint8_t bc_opcode_byte(IR_Op op);
+BC_OperandKind bc_opcode_operand_encoding(IR_Op op);

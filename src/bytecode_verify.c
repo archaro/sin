@@ -4,11 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef enum {
-  BC_CTX_STMT = 0,
-  BC_CTX_ITEM = 1,
-  BC_CTX_DEREF = 2
-} BC_DecodeContext;
+#define BC_CTX_STMT BC_CONTEXT_STATEMENT
+#define BC_CTX_ITEM BC_CONTEXT_ITEM_EXPRESSION
+#define BC_CTX_DEREF BC_CONTEXT_DEREFERENCE
+typedef BC_Context BC_DecodeContext;
 
 typedef struct {
   uint32_t offset;
@@ -112,23 +111,6 @@ static int bc_need(BC_Decoder *d, const uint8_t *p, size_t n,
   return 1;
 }
 
-static const IR_OpSchema *bc_schema_for(uint8_t opcode, BC_DecodeContext ctx) {
-  const IR_OpSchema *fallback = NULL;
-  for (size_t i = 0; i < g_ir_opcode_schema_count; i++) {
-    const IR_OpSchema *s = &g_ir_opcode_schema[i];
-    if (s->encoded_symbol != opcode || opcode == 0) continue;
-    if (opcode == 'F') {
-      if (ctx == BC_CTX_STMT && s->op == IR_OP_CALL) return s;
-      if (ctx != BC_CTX_STMT && s->op == IR_OP_ITEM_DEREF) return s;
-    }
-    if (!fallback) fallback = s;
-  }
-  return fallback;
-}
-
-static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
-                         BC_DecodeContext ctx);
-
 static const char *bc_disassembly_mnemonic(IR_Op op) {
   switch (op) {
     case IR_OP_HALT: return "HALT";
@@ -176,6 +158,142 @@ static const char *bc_disassembly_mnemonic(IR_Op op) {
   return "UNKNOWN";
 }
 
+static BC_OperandKind bc_operand_encoding_from_ir(const IR_OpSchema *s) {
+  if (!s) return BC_OPERAND_NONE;
+  switch (s->size_policy) {
+    case SIZE_FIXED_0:
+    case SIZE_FIXED_1: return BC_OPERAND_NONE;
+    case SIZE_FIXED_2:
+      return s->operand_kind == OPERAND_IMM_CSTR ? BC_OPERAND_CSTR_U8 : BC_OPERAND_U8;
+    case SIZE_FIXED_3:
+      return s->operand_kind == OPERAND_LABEL_ID ? BC_OPERAND_I16 : BC_OPERAND_U16;
+    case SIZE_PUSH_INT: return BC_OPERAND_I64;
+    case SIZE_PUSH_FLOAT: return BC_OPERAND_F64_BITS;
+    case SIZE_PUSH_STRING: return BC_OPERAND_CSTR_U16;
+    case SIZE_ITEM_PUSH_LAYER: return BC_OPERAND_CSTR_U8;
+    case SIZE_ITEM_SAVE_CODE: return BC_OPERAND_EMBEDDED_SOURCE;
+  }
+  return BC_OPERAND_NONE;
+}
+
+static BC_StackEffect bc_base_stack_effect(IR_Op op) {
+  switch (op) {
+    case IR_OP_PUSH_INT: case IR_OP_PUSH_FLOAT: case IR_OP_PUSH_BOOL:
+    case IR_OP_PUSH_STRING: case IR_OP_LOAD_LOCAL: case IR_OP_ITEM_BEGIN:
+    case IR_OP_ITEM_BEGIN_REL: case IR_OP_LIBCALL_TOKEN:
+      return (BC_StackEffect){0, 1, false};
+    case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV:
+    case IR_OP_EQ: case IR_OP_NEQ: case IR_OP_LT: case IR_OP_GT:
+    case IR_OP_LE: case IR_OP_GE: case IR_OP_AND: case IR_OP_OR:
+    case IR_OP_NTHNAME:
+      return (BC_StackEffect){2, 1, false};
+    case IR_OP_NEG: case IR_OP_NOT: case IR_OP_EXISTS: case IR_OP_ROOTNAME:
+    case IR_OP_ITEM_DEREF:
+      return (BC_StackEffect){1, 1, false};
+    case IR_OP_STORE_LOCAL: case IR_OP_JUMP_IF_FALSE: case IR_OP_DELETE:
+    case IR_OP_ITEM_SAVE_CODE:
+      return (BC_StackEffect){1, 0, false};
+    case IR_OP_ITEM_SAVE:
+      return (BC_StackEffect){2, 0, false};
+    case IR_OP_CALL:
+      return (BC_StackEffect){1, 1, true};
+    default:
+      return (BC_StackEffect){0, 0, false};
+  }
+}
+
+static bool bc_valid_context(IR_Op op, BC_Context ctx) {
+  switch (op) {
+    case IR_OP_ITEM_PUSH_LAYER:
+    case IR_OP_ITEM_PUSH_DEREF:
+    case IR_OP_ITEM_PUSH_DEREF_LOCAL:
+    case IR_OP_ITEM_END:
+      return ctx == BC_CONTEXT_ITEM_EXPRESSION || ctx == BC_CONTEXT_DEREFERENCE;
+    case IR_OP_ITEM_DEREF:
+      return ctx == BC_CONTEXT_DEREFERENCE;
+    case IR_OP_LABEL:
+      return false;
+    default:
+      return ctx == BC_CONTEXT_STATEMENT;
+  }
+}
+
+static BC_OpcodeSchema bc_make_schema(const IR_OpSchema *s) {
+  BC_OpcodeSchema out;
+  memset(&out, 0, sizeof(out));
+  out.ir = s;
+  out.opcode = s ? s->encoded_symbol : 0;
+  out.mnemonic = s ? bc_disassembly_mnemonic(s->op) : "UNKNOWN";
+  out.operand_encoding = bc_operand_encoding_from_ir(s);
+  if (s) {
+    out.valid_in_statement = bc_valid_context(s->op, BC_CONTEXT_STATEMENT);
+    out.valid_in_item_expression = bc_valid_context(s->op, BC_CONTEXT_ITEM_EXPRESSION);
+    out.valid_in_dereference = bc_valid_context(s->op, BC_CONTEXT_DEREFERENCE);
+    out.stack_effect = bc_base_stack_effect(s->op);
+    out.terminates = s->op == IR_OP_HALT;
+    out.valid_top_level = out.valid_in_statement;
+    out.item_assembly_only = out.valid_in_item_expression || out.valid_in_dereference;
+  }
+  return out;
+}
+
+const BC_OpcodeSchema *bc_opcode_for_ir(IR_Op op) {
+  enum { BC_IR_OP_CACHE_COUNT = IR_OP_ITEM_SAVE_CODE + 1 };
+  static BC_OpcodeSchema cache[BC_IR_OP_CACHE_COUNT];
+  static bool initialized[BC_IR_OP_CACHE_COUNT];
+  const IR_OpSchema *s = ir_opcode_schema(op);
+  if (!s || op < 0 || (int)op >= BC_IR_OP_CACHE_COUNT) return NULL;
+  if (!initialized[op]) {
+    cache[op] = bc_make_schema(s);
+    initialized[op] = true;
+  }
+  return &cache[op];
+}
+
+const BC_OpcodeSchema *bc_opcode_lookup(uint8_t opcode, BC_Context context) {
+  const BC_OpcodeSchema *fallback = NULL;
+  for (size_t i = 0; i < g_ir_opcode_schema_count; i++) {
+    const IR_OpSchema *s = &g_ir_opcode_schema[i];
+    if (s->encoded_symbol != opcode || opcode == 0) continue;
+    const BC_OpcodeSchema *bc = bc_opcode_for_ir(s->op);
+    if (!bc) continue;
+    if (opcode == 'F') {
+      if (context == BC_CONTEXT_STATEMENT && s->op == IR_OP_CALL) return bc;
+      if (context == BC_CONTEXT_DEREFERENCE && s->op == IR_OP_ITEM_DEREF) return bc;
+    }
+    if (bc_valid_context(s->op, context)) return bc;
+    if (!fallback) fallback = bc;
+  }
+  return fallback && bc_valid_context(fallback->ir->op, context) ? fallback : NULL;
+}
+
+const char *bc_opcode_mnemonic(const BC_OpcodeSchema *schema) {
+  return schema ? schema->mnemonic : "UNKNOWN";
+}
+
+BC_StackEffect bc_opcode_stack_effect(const BC_OpcodeSchema *schema,
+                                      uint16_t operand_u16) {
+  BC_StackEffect effect = schema ? schema->stack_effect : (BC_StackEffect){0, 0, false};
+  if (schema && schema->ir && schema->ir->op == IR_OP_CALL) {
+    effect.pops = (int)operand_u16 + 1;
+    effect.operand_dependent = false;
+  }
+  return effect;
+}
+
+uint8_t bc_opcode_byte(IR_Op op) {
+  const BC_OpcodeSchema *schema = bc_opcode_for_ir(op);
+  return schema ? schema->opcode : 0;
+}
+
+BC_OperandKind bc_opcode_operand_encoding(IR_Op op) {
+  const BC_OpcodeSchema *schema = bc_opcode_for_ir(op);
+  return schema ? schema->operand_encoding : BC_OPERAND_NONE;
+}
+
+static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
+                         BC_DecodeContext ctx);
+
 static int bc_emit_event(BC_Decoder *d, const uint8_t *start, const uint8_t *cursor,
                          uint8_t opcode, const IR_OpSchema *schema,
                          const BC_Operand *operand, BC_DecodeContext ctx) {
@@ -184,7 +302,7 @@ static int bc_emit_event(BC_Decoder *d, const uint8_t *start, const uint8_t *cur
   memset(&inst, 0, sizeof(inst));
   inst.offset = bc_offset(d, start);
   inst.opcode = opcode;
-  inst.mnemonic = bc_disassembly_mnemonic(schema->op);
+  inst.mnemonic = bc_opcode_mnemonic(bc_opcode_for_ir(schema->op));
   inst.schema = schema;
   if (operand) inst.operand = *operand;
   inst.raw = start;
@@ -230,47 +348,12 @@ static int bc_record_jump(BC_Decoder *d, const uint8_t *operand_start,
 
 static bool bc_stack_effect(const BC_InstructionMeta *meta, int *pops,
                             int *pushes) {
-  *pops = 0;
-  *pushes = 0;
-  switch (meta->op) {
-    case IR_OP_PUSH_INT: case IR_OP_PUSH_FLOAT: case IR_OP_PUSH_BOOL:
-    case IR_OP_PUSH_STRING: case IR_OP_LOAD_LOCAL: case IR_OP_ITEM_BEGIN:
-    case IR_OP_ITEM_BEGIN_REL: case IR_OP_LIBCALL_TOKEN:
-      *pushes = 1;
-      return true;
-    case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV:
-    case IR_OP_EQ: case IR_OP_NEQ: case IR_OP_LT: case IR_OP_GT:
-    case IR_OP_LE: case IR_OP_GE: case IR_OP_AND: case IR_OP_OR:
-    case IR_OP_NTHNAME:
-      *pops = 2;
-      *pushes = 1;
-      return true;
-    case IR_OP_NEG: case IR_OP_NOT: case IR_OP_EXISTS: case IR_OP_ROOTNAME:
-    case IR_OP_ITEM_DEREF:
-      *pops = 1;
-      *pushes = 1;
-      return true;
-    case IR_OP_STORE_LOCAL: case IR_OP_JUMP_IF_FALSE: case IR_OP_DELETE:
-    case IR_OP_ITEM_SAVE_CODE:
-      *pops = 1;
-      return true;
-    case IR_OP_ITEM_SAVE:
-      *pops = 2;
-      return true;
-    case IR_OP_CALL:
-      *pops = (int)meta->operand_u16 + 1;
-      *pushes = 1;
-      return true;
-    case IR_OP_HALT:
-      return true;
-    case IR_OP_INC_LOCAL: case IR_OP_DEC_LOCAL: case IR_OP_JUMP:
-      return true;
-    case IR_OP_LABEL: case IR_OP_ITEM_PUSH_LAYER: case IR_OP_ITEM_PUSH_DEREF:
-    case IR_OP_ITEM_PUSH_DEREF_LOCAL:
-    case IR_OP_ITEM_END:
-      return true;
-  }
-  return false;
+  const BC_OpcodeSchema *schema = bc_opcode_for_ir(meta->op);
+  if (!schema) return false;
+  BC_StackEffect effect = bc_opcode_stack_effect(schema, meta->operand_u16);
+  *pops = effect.pops;
+  *pushes = effect.pushes;
+  return true;
 }
 
 static int bc_enqueue_stack_depth(BC_Decoder *d, int *depths, uint32_t *work,
@@ -413,12 +496,12 @@ static int bc_decode_deref(BC_Decoder *d, const uint8_t **cursor) {
     const uint8_t *index_p = *cursor;
     uint8_t index = *(*cursor)++;
     if (!bc_validate_local_index(d, index_p, type, index)) return 0;
-    const IR_OpSchema *schema = bc_schema_for(type, BC_CTX_DEREF);
-    if (schema) {
+    const BC_OpcodeSchema *bc_schema = bc_opcode_lookup(type, BC_CTX_DEREF);
+    if (bc_schema && bc_schema->ir) {
       BC_Operand operand;
       memset(&operand, 0, sizeof(operand));
       operand.kind = BC_OPERAND_U8; operand.offset = bc_offset(d, index_p); operand.width = 1; operand.value.u8 = index;
-      if (!bc_emit_event(d, start, *cursor, type, schema, &operand, BC_CTX_DEREF)) return 0;
+      if (!bc_emit_event(d, start, *cursor, type, bc_schema->ir, &operand, BC_CTX_DEREF)) return 0;
     }
     return 1;
   }
@@ -450,8 +533,9 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
   uint16_t operand_u16 = 0;
   if (!bc_need(d, start, 1, 0, "opcode")) return 0;
   uint8_t op = *(*cursor)++;
-  const IR_OpSchema *schema = bc_schema_for(op, ctx);
-  if (!schema) return bc_fail(d, start, op, "unknown opcode");
+  const BC_OpcodeSchema *bc_schema = bc_opcode_lookup(op, ctx);
+  if (!bc_schema || !bc_schema->ir) return bc_fail(d, start, op, "unknown opcode");
+  const IR_OpSchema *schema = bc_schema->ir;
   d->result.instruction_count++;
 
   switch (schema->op) {
