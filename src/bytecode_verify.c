@@ -37,6 +37,9 @@ typedef struct {
   BC_JumpRef *jumps;
   uint32_t jump_count;
   uint32_t jump_capacity;
+  BC_DecodeInstructionCallback callback;
+  void *callback_ctx;
+  uint32_t event_depth;
 } BC_Decoder;
 
 BC_VerifyOptions bc_verify_default_options(void) {
@@ -125,6 +128,74 @@ static const IR_OpSchema *bc_schema_for(uint8_t opcode, BC_DecodeContext ctx) {
 
 static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
                          BC_DecodeContext ctx);
+
+static const char *bc_disassembly_mnemonic(IR_Op op) {
+  switch (op) {
+    case IR_OP_HALT: return "HALT";
+    case IR_OP_ADD: return "ADD";
+    case IR_OP_SUB: return "SUBTRACT";
+    case IR_OP_MUL: return "MULTIPLY";
+    case IR_OP_DIV: return "DIVIDE";
+    case IR_OP_NEG: return "NEGATE";
+    case IR_OP_EQ: return "BOOL EQ";
+    case IR_OP_NEQ: return "BOOL NOTEQ";
+    case IR_OP_LT: return "BOOL LT";
+    case IR_OP_GT: return "BOOL GT";
+    case IR_OP_LE: return "BOOL LTEQ";
+    case IR_OP_GE: return "BOOL GTEQ";
+    case IR_OP_NOT: return "LOGICAL NOT";
+    case IR_OP_AND: return "LOGICAL AND";
+    case IR_OP_OR: return "LOGICAL OR";
+    case IR_OP_LOAD_LOCAL: return "RETRIEVE LOCAL";
+    case IR_OP_STORE_LOCAL: return "SAVE LOCAL";
+    case IR_OP_INC_LOCAL: return "INCREMENT LOCAL";
+    case IR_OP_DEC_LOCAL: return "DECREMENT LOCAL";
+    case IR_OP_PUSH_INT: return "INTEGER";
+    case IR_OP_PUSH_FLOAT: return "FLOAT";
+    case IR_OP_PUSH_BOOL: return "BOOLEAN";
+    case IR_OP_PUSH_STRING: return "STRINGLIT";
+    case IR_OP_JUMP: return "JUMP";
+    case IR_OP_JUMP_IF_FALSE: return "JUMP IF FALSE";
+    case IR_OP_CALL: return "CALL";
+    case IR_OP_LIBCALL_TOKEN: return "LIBCALL_TOKEN";
+    case IR_OP_ITEM_BEGIN: return "BEGIN ITEM ASSEMBLY";
+    case IR_OP_ITEM_BEGIN_REL: return "BEGIN RELATIVE ITEM ASSEMBLY";
+    case IR_OP_ITEM_PUSH_LAYER: return "LAYER";
+    case IR_OP_ITEM_PUSH_DEREF: return "BEGIN DEREFERENCE LAYER";
+    case IR_OP_ITEM_PUSH_DEREF_LOCAL: return "LOCALVAR";
+    case IR_OP_ITEM_END: return "END ITEM LAYER ASSEMBLY";
+    case IR_OP_ITEM_DEREF: return "ITEM DEREF";
+    case IR_OP_ITEM_SAVE: return "SAVE ITEM";
+    case IR_OP_ITEM_SAVE_CODE: return "EMBEDDED CODE";
+    case IR_OP_EXISTS: return "ITEM EXISTS";
+    case IR_OP_DELETE: return "DELETE ITEM";
+    case IR_OP_NTHNAME: return "NTHNAME";
+    case IR_OP_ROOTNAME: return "ROOTNAME";
+    case IR_OP_LABEL: return "LABEL";
+  }
+  return "UNKNOWN";
+}
+
+static int bc_emit_event(BC_Decoder *d, const uint8_t *start, const uint8_t *cursor,
+                         uint8_t opcode, const IR_OpSchema *schema,
+                         const BC_Operand *operand, BC_DecodeContext ctx) {
+  if (!d->callback) return 1;
+  BC_Instruction inst;
+  memset(&inst, 0, sizeof(inst));
+  inst.offset = bc_offset(d, start);
+  inst.opcode = opcode;
+  inst.mnemonic = bc_disassembly_mnemonic(schema->op);
+  inst.schema = schema;
+  if (operand) inst.operand = *operand;
+  inst.raw = start;
+  inst.raw_len = (uint32_t)(cursor - start);
+  inst.context = ctx == BC_CTX_STMT ? BC_EVENT_CONTEXT_STMT : (ctx == BC_CTX_ITEM ? BC_EVENT_CONTEXT_ITEM : BC_EVENT_CONTEXT_DEREF);
+  inst.depth = d->event_depth;
+  if (!d->callback(&inst, d->callback_ctx)) {
+    return bc_fail(d, start, opcode, "decoder callback aborted");
+  }
+  return 1;
+}
 
 static int bc_validate_local_index(BC_Decoder *d, const uint8_t *p,
                                    uint8_t opcode, uint8_t index) {
@@ -341,9 +412,22 @@ static int bc_decode_deref(BC_Decoder *d, const uint8_t **cursor) {
     if (!bc_need(d, *cursor, 1, type, "dereference local index")) return 0;
     const uint8_t *index_p = *cursor;
     uint8_t index = *(*cursor)++;
-    return bc_validate_local_index(d, index_p, type, index);
+    if (!bc_validate_local_index(d, index_p, type, index)) return 0;
+    const IR_OpSchema *schema = bc_schema_for(type, BC_CTX_DEREF);
+    if (schema) {
+      BC_Operand operand;
+      memset(&operand, 0, sizeof(operand));
+      operand.kind = BC_OPERAND_U8; operand.offset = bc_offset(d, index_p); operand.width = 1; operand.value.u8 = index;
+      if (!bc_emit_event(d, start, *cursor, type, schema, &operand, BC_CTX_DEREF)) return 0;
+    }
+    return 1;
   }
-  if (type == 'I' || type == 'R') return bc_decode_item(d, cursor);
+  if (type == 'I' || type == 'R') {
+    d->event_depth++;
+    int ok = bc_decode_item(d, cursor);
+    d->event_depth--;
+    return ok;
+  }
   return bc_fail(d, start, type, "unknown dereference type");
 }
 
@@ -360,6 +444,9 @@ static void bc_record_instruction_meta(BC_Decoder *d, const uint8_t *start,
 static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
                          BC_DecodeContext ctx) {
   const uint8_t *start = *cursor;
+  BC_Operand operand;
+  memset(&operand, 0, sizeof(operand));
+  operand.kind = BC_OPERAND_NONE;
   uint16_t operand_u16 = 0;
   if (!bc_need(d, start, 1, 0, "opcode")) return 0;
   uint8_t op = *(*cursor)++;
@@ -375,31 +462,36 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
     case IR_OP_ITEM_DEREF: case IR_OP_ITEM_SAVE: case IR_OP_EXISTS: case IR_OP_DELETE:
     case IR_OP_NTHNAME: case IR_OP_ROOTNAME: case IR_OP_ITEM_END:
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
-      return 1;
+      return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     case IR_OP_PUSH_BOOL:
     case IR_OP_LIBCALL_TOKEN:
       if (!bc_need(d, *cursor, 1, op, schema->name)) return 0;
+      operand.kind = BC_OPERAND_U8; operand.offset = bc_offset(d, *cursor); operand.width = 1; operand.value.u8 = **cursor;
       (*cursor)++;
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
-      return 1;
+      return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     case IR_OP_LOAD_LOCAL: case IR_OP_STORE_LOCAL: case IR_OP_INC_LOCAL:
     case IR_OP_DEC_LOCAL: case IR_OP_ITEM_PUSH_DEREF_LOCAL: {
       if (!bc_need(d, *cursor, 1, op, schema->name)) return 0;
       const uint8_t *index_p = *cursor;
-      uint8_t index = *(*cursor)++;
+      uint8_t index = **cursor;
+      operand.kind = BC_OPERAND_U8; operand.offset = bc_offset(d, *cursor); operand.width = 1; operand.value.u8 = index;
+      (*cursor)++;
       if (!bc_validate_local_index(d, index_p, op, index)) return 0;
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
-      return 1;
+      return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     }
     case IR_OP_CALL:
       if (!bc_need(d, *cursor, 2, op, schema->name)) return 0;
       operand_u16 = (uint16_t)(*cursor)[0] | ((uint16_t)(*cursor)[1] << 8);
+      operand.kind = BC_OPERAND_U16; operand.offset = bc_offset(d, *cursor); operand.width = 2; operand.value.u16 = operand_u16;
       *cursor += 2;
       break;
     case IR_OP_JUMP: case IR_OP_JUMP_IF_FALSE: {
       if (!bc_need(d, *cursor, 2, op, schema->name)) return 0;
       const uint8_t *operand_start = *cursor;
       operand_u16 = (uint16_t)(*cursor)[0] | ((uint16_t)(*cursor)[1] << 8);
+      operand.kind = BC_OPERAND_I16; operand.offset = bc_offset(d, *cursor); operand.width = 2; operand.value.i16 = (int16_t)operand_u16;
       if (ctx == BC_CTX_STMT && !bc_record_jump(d, operand_start, op)) return 0;
       *cursor += 2;
       break;
@@ -407,42 +499,54 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
     case IR_OP_PUSH_INT:
     case IR_OP_PUSH_FLOAT:
       if (!bc_need(d, *cursor, 8, op, schema->name)) return 0;
+      operand.offset = bc_offset(d, *cursor); operand.width = 8;
+      memcpy(&operand.value.u64, *cursor, 8);
+      operand.kind = schema->op == IR_OP_PUSH_INT ? BC_OPERAND_I64 : BC_OPERAND_F64_BITS;
       *cursor += 8;
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
-      return 1;
+      return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     case IR_OP_PUSH_STRING:
     case IR_OP_ITEM_SAVE_CODE: {
       if (!bc_need(d, *cursor, 2, op, "length")) return 0;
       uint16_t len;
       memcpy(&len, *cursor, sizeof(len));
+      const uint8_t *data_start = *cursor + 2;
       *cursor += 2;
       if (!bc_need(d, *cursor, len, op, schema->name)) return 0;
+      operand.kind = schema->op == IR_OP_PUSH_STRING ? BC_OPERAND_CSTR_U16 : BC_OPERAND_EMBEDDED_SOURCE;
+      operand.offset = bc_offset(d, data_start); operand.width = len; operand.value.bytes.data = data_start; operand.value.bytes.len = len;
       *cursor += len;
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
-      return 1;
+      return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     }
     case IR_OP_ITEM_PUSH_LAYER: {
       if (!bc_need(d, *cursor, 1, op, "layer length")) return 0;
-      uint8_t len = *(*cursor)++;
+      uint8_t len = **cursor;
+      (*cursor)++;
       if (!bc_need(d, *cursor, len, op, "layer string")) return 0;
+      operand.kind = BC_OPERAND_CSTR_U8; operand.offset = bc_offset(d, *cursor); operand.width = len; operand.value.bytes.data = *cursor; operand.value.bytes.len = len;
       *cursor += len;
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
-      return 1;
+      return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     }
     case IR_OP_ITEM_PUSH_DEREF:
-      if (!bc_decode_deref(d, cursor)) return 0;
+      d->event_depth++;
+      if (!bc_decode_deref(d, cursor)) { d->event_depth--; return 0; }
+      d->event_depth--;
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
-      return 1;
+      return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     case IR_OP_ITEM_BEGIN:
     case IR_OP_ITEM_BEGIN_REL:
-      if (!bc_decode_item(d, cursor)) return 0;
+      d->event_depth++;
+      if (!bc_decode_item(d, cursor)) { d->event_depth--; return 0; }
+      d->event_depth--;
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
-      return 1;
+      return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     case IR_OP_LABEL:
       break;
   }
   bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
-  return 1;
+  return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
 }
 
 bool bc_decode_item_expression(const uint8_t *item_payload,
@@ -470,16 +574,21 @@ bool bc_decode_item_expression(const uint8_t *item_payload,
   return true;
 }
 
-BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
-                                   uint32_t bytecode_len,
-                                   const char *source_label,
-                                   const BC_VerifyOptions *options) {
+BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
+                                          uint32_t bytecode_len,
+                                          const char *source_label,
+                                          const BC_VerifyOptions *options,
+                                          BC_BytecodeMetadata *metadata,
+                                          BC_DecodeInstructionCallback callback,
+                                          void *callback_ctx) {
   BC_Decoder d;
   memset(&d, 0, sizeof(d));
   d.base = bytecode;
   d.end = bytecode ? bytecode + bytecode_len : NULL;
   d.label = source_label;
   d.options = options ? *options : bc_verify_default_options();
+  d.callback = callback;
+  d.callback_ctx = callback_ctx;
   d.result.status = BC_VERIFY_OK;
   d.result.halt_offset = UINT32_MAX;
 
@@ -494,6 +603,7 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
 
   uint8_t locals = bytecode[0];
   uint8_t params = bytecode[1];
+  if (metadata) { metadata->locals = locals; metadata->params = params; }
   d.local_count = locals;
   d.validate_local_indices = true;
   if (params > locals) {
@@ -523,17 +633,19 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
     }
     if (*start == 'h') {
       d.result.halt_offset = bc_offset(&d, start);
-      if (!bc_validate_recorded_jumps(&d)) {
-        free(d.top_level_instruction_starts);
-        free(d.instructions);
-        free(d.jumps);
-        return d.result;
-      }
-      if (!bc_verify_stack_flow(&d, params)) {
-        free(d.top_level_instruction_starts);
-        free(d.instructions);
-        free(d.jumps);
-        return d.result;
+      if (d.options.mode != BC_VERIFY_MODE_DISASSEMBLY) {
+        if (!bc_validate_recorded_jumps(&d)) {
+          free(d.top_level_instruction_starts);
+          free(d.instructions);
+          free(d.jumps);
+          return d.result;
+        }
+        if (!bc_verify_stack_flow(&d, params)) {
+          free(d.top_level_instruction_starts);
+          free(d.instructions);
+          free(d.jumps);
+          return d.result;
+        }
       }
       if (cursor < d.end) {
         if (d.options.strict_trailing_bytes || d.options.mode != BC_VERIFY_MODE_DISASSEMBLY) {
@@ -554,4 +666,12 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
   free(d.instructions);
   free(d.jumps);
   return d.result;
+}
+
+BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
+                                   uint32_t bytecode_len,
+                                   const char *source_label,
+                                   const BC_VerifyOptions *options) {
+  return bc_decode_bytecode_events(bytecode, bytecode_len, source_label, options,
+                                   NULL, NULL, NULL);
 }

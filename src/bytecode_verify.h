@@ -36,14 +36,43 @@ typedef struct {
   BC_OperandKind kind;
   uint32_t offset;
   uint32_t width;
+  union {
+    uint8_t u8;
+    uint16_t u16;
+    int16_t i16;
+    int64_t i64;
+    uint64_t u64;
+    struct {
+      const uint8_t *data;
+      uint16_t len;
+    } bytes;
+  } value;
 } BC_Operand;
+
+typedef enum {
+  BC_EVENT_CONTEXT_STMT = 0,
+  BC_EVENT_CONTEXT_ITEM = 1,
+  BC_EVENT_CONTEXT_DEREF = 2
+} BC_EventContext;
 
 typedef struct {
   uint32_t offset;
   uint8_t opcode;
+  const char *mnemonic;
   const IR_OpSchema *schema;
   BC_Operand operand;
+  const uint8_t *raw;
+  uint32_t raw_len;
+  BC_EventContext context;
+  uint32_t depth;
 } BC_Instruction;
+
+typedef struct {
+  uint8_t locals;
+  uint8_t params;
+} BC_BytecodeMetadata;
+
+typedef bool (*BC_DecodeInstructionCallback)(const BC_Instruction *instruction, void *ctx);
 
 typedef struct {
   uint32_t offset;
@@ -76,6 +105,13 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
                                    uint32_t bytecode_len,
                                    const char *source_label,
                                    const BC_VerifyOptions *options);
+BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
+                                          uint32_t bytecode_len,
+                                          const char *source_label,
+                                          const BC_VerifyOptions *options,
+                                          BC_BytecodeMetadata *metadata,
+                                          BC_DecodeInstructionCallback callback,
+                                          void *callback_ctx);
 bool bc_decode_item_expression(const uint8_t *item_payload,
                                const uint8_t *bytecode_end,
                                BC_ItemExprKind kind,
