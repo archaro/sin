@@ -8,7 +8,11 @@
 #include <libgen.h>
 #include <errno.h>
 #include <limits.h>
+#ifdef _WIN32
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 
 #include "config.h"
 #include "error.h"
@@ -18,6 +22,30 @@
 #include "item.h"
 
 static uint64_t itemstore_generation = 1;
+
+static long current_process_id(void) {
+#ifdef _WIN32
+  return (long)_getpid();
+#else
+  return (long)getpid();
+#endif
+}
+
+static bool sync_itemstore_file(FILE *file, const char *path) {
+#ifdef _WIN32
+  (void)file;
+  (void)path;
+  return true;
+#else
+  if (fsync(fileno(file)) != 0) {
+    logerr("Failed to sync temporary itemstore %s: %s\n", path,
+           strerror(errno));
+    return false;
+  }
+  return true;
+#endif
+}
+
 #define FETCHITEM_CACHE_SIZE 64
 typedef struct {
   bool valid;
@@ -761,18 +789,18 @@ enum {
 /* Wire tags are encoded as uint8_t values and are independent of VALUE_e. */
 typedef uint8_t ITEMSTORE_VALUE_TAG_t;
 enum {
-  ITEMSTORE_VALUE_TAG_NIL = 1,
-  ITEMSTORE_VALUE_TAG_INT = 2,
-  ITEMSTORE_VALUE_TAG_FLOAT = 3,
-  ITEMSTORE_VALUE_TAG_STRING = 4,
-  ITEMSTORE_VALUE_TAG_BOOL = 5
+  ITEMSTORE_VALUE_TAG_INT = 0,
+  ITEMSTORE_VALUE_TAG_FLOAT = 1,
+  ITEMSTORE_VALUE_TAG_STRING = 2,
+  ITEMSTORE_VALUE_TAG_NIL = 3,
+  ITEMSTORE_VALUE_TAG_BOOL = 4
 };
 
 #define ITEMSTORE_MAX_DEPTH 8u
 /* ordered_capacity is uint8_t and grows in steps of ten, so 250 is its limit. */
 #define ITEMSTORE_MAX_CHILDREN_PER_ITEM 250u
 #define ITEMSTORE_MAX_STRING_LEN (16u * 1024u * 1024u)
-#define ITEMSTORE_MAX_BYTECODE_LEN (16u * 1024u * 1024u)
+#define ITEMSTORE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
 
 typedef struct {
   size_t depth;
@@ -792,7 +820,7 @@ typedef struct {
  *   - format version: little-endian uint16
  *
  * Recursive item record:
- *   - name length: uint16
+ *   - name length: uint8
  *   - name: exactly name-length bytes, with no trailing NUL
  *   - item kind: uint8 ITEMSTORE_ITEM_TAG_*
  *   - payload:
@@ -932,7 +960,7 @@ bool write_item(FILE *file, ITEM_t *item) {
            item->name);
     return false;
   }
-  if (!write_u16_le(file, (uint16_t)name_len, "item name length")
+  if (!write_u8(file, (uint8_t)name_len, "item name length")
       || !write_bytes(file, item->name, name_len, "item name")) {
     return false;
   }
@@ -967,9 +995,13 @@ bool write_item(FILE *file, ITEM_t *item) {
       case VALUE_nil:
         break;
       case VALUE_int:
-        if (!write_u64_le(file, (uint64_t)item->value.i,
+      {
+        uint64_t payload;
+        memcpy(&payload, &item->value.i, sizeof(payload));
+        if (!write_u64_le(file, payload,
                           "integer payload")) return false;
         break;
+      }
       case VALUE_float:
         if (!write_u64_le(file, item->value.f_bits,
                           "float payload")) return false;
@@ -990,12 +1022,7 @@ bool write_item(FILE *file, ITEM_t *item) {
         break;
       }
       case VALUE_bool:
-        if (item->value.i != 0 && item->value.i != 1) {
-          logerr("Failed to write itemstore item '%s': invalid boolean value "
-                 "%lld.\n", item->name, (long long)item->value.i);
-          return false;
-        }
-        if (!write_u8(file, (uint8_t)item->value.i,
+        if (!write_u8(file, item->value.i ? 1u : 0u,
                       "boolean payload")) return false;
         break;
     }
@@ -1004,6 +1031,11 @@ bool write_item(FILE *file, ITEM_t *item) {
       logerr("Failed to write itemstore bytecode for '%s': length %u exceeds "
              "maximum %u.\n", item->name, item->bytecode_len,
              ITEMSTORE_MAX_BYTECODE_LEN);
+      return false;
+    }
+    if (item->bytecode_len > 0 && item->bytecode == NULL) {
+      logerr("Failed to write itemstore bytecode for '%s': length is %u but "
+             "bytecode is NULL.\n", item->name, item->bytecode_len);
       return false;
     }
     if (!write_u32_le(file, item->bytecode_len, "bytecode length")) return false;
@@ -1038,65 +1070,72 @@ bool write_item(FILE *file, ITEM_t *item) {
 }
 
 void save_itemstore(const char *filename, ITEM_t *root) {
-  size_t temp_path_size;
-  if (alloc_add_overflow(strlen(filename), sizeof(".tmp.XXXXXX"),
-                         &temp_path_size)) {
-    logerr("Failed to save itemstore '%s': temporary path is too long.\n",
-           filename);
-    return;
-  }
-  char *temp_path = malloc(temp_path_size);
-  if (!temp_path) {
-    logerr("Failed to save itemstore '%s': cannot allocate temporary path.\n",
-           filename);
-    return;
-  }
-  snprintf(temp_path, temp_path_size, "%s.tmp.XXXXXX", filename);
-
-  int fd = mkstemp(temp_path);
-  if (fd < 0) {
-    logerr("Failed to create temporary itemstore for '%s': %s\n",
-           filename, strerror(errno));
-    free(temp_path);
-    return;
-  }
-  FILE *file = fdopen(fd, "wb");
-  if (!file) {
-    logerr("Failed to open temporary itemstore for '%s': %s\n",
-           filename, strerror(errno));
-    close(fd);
-    unlink(temp_path);
-    free(temp_path);
+  FILE *file = NULL;
+  char *temp_path = NULL;
+  bool success = false;
+  long pid = current_process_id();
+  int temp_path_len = snprintf(NULL, 0, "%s.tmp.%ld", filename, pid);
+  if (temp_path_len < 0) {
+    logerr("Failed to build temporary itemstore path for %s.\n", filename);
     return;
   }
 
-  bool success = write_bytes(file, ITEMSTORE_V1_MAGIC,
-                             ITEMSTORE_V1_MAGIC_SIZE, "file-header magic")
-              && write_u16_le(file, ITEMSTORE_V1_FORMAT_VERSION,
-                              "file-header version")
-              && write_item(file, root);
-  if (success && fflush(file) != 0) {
-    logerr("Failed to flush temporary itemstore for '%s': %s\n",
-           filename, strerror(errno));
-    success = false;
+  temp_path = malloc((size_t)temp_path_len + 1);
+  if (temp_path == NULL) {
+    logerr("Failed to allocate temporary itemstore path for %s.\n", filename);
+    return;
   }
-  if (success && fsync(fd) != 0) {
-    logerr("Failed to sync temporary itemstore for '%s': %s\n",
-           filename, strerror(errno));
-    success = false;
+  snprintf(temp_path, (size_t)temp_path_len + 1, "%s.tmp.%ld", filename, pid);
+
+  file = fopen(temp_path, "wb");
+  if (file == NULL) {
+    logerr("Failed to open temporary itemstore %s for writing: %s\n",
+           temp_path, strerror(errno));
+    goto cleanup;
   }
+
+  if (!write_bytes(file, ITEMSTORE_V1_MAGIC, ITEMSTORE_V1_MAGIC_SIZE,
+                   "file-header magic")
+      || !write_u16_le(file, ITEMSTORE_V1_FORMAT_VERSION,
+                       "file-header version")
+      || !write_item(file, root)) {
+    goto cleanup;
+  }
+
+  if (fflush(file) != 0) {
+    logerr("Failed to flush temporary itemstore %s: %s\n", temp_path,
+           strerror(errno));
+    goto cleanup;
+  }
+
+  if (!sync_itemstore_file(file, temp_path)) goto cleanup;
+
   if (fclose(file) != 0) {
-    logerr("Failed to close temporary itemstore for '%s': %s\n",
-           filename, strerror(errno));
-    success = false;
+    file = NULL;
+    logerr("Failed to close temporary itemstore %s: %s\n", temp_path,
+           strerror(errno));
+    goto cleanup;
   }
-  if (success && rename(temp_path, filename) != 0) {
-    logerr("Failed to replace itemstore '%s' with completed temporary file: "
-           "%s\n", filename, strerror(errno));
-    success = false;
+  file = NULL;
+
+  if (rename(temp_path, filename) != 0) {
+    logerr("Failed to replace itemstore %s with %s: %s\n", filename,
+           temp_path, strerror(errno));
+    goto cleanup;
+  }
+
+  success = true;
+
+cleanup:
+  if (file != NULL && fclose(file) != 0) {
+    logerr("Failed to close temporary itemstore %s during cleanup: %s\n",
+           temp_path, strerror(errno));
   }
   if (!success) {
-    unlink(temp_path);
+    if (remove(temp_path) != 0 && errno != ENOENT) {
+      logerr("Failed to remove temporary itemstore %s: %s\n", temp_path,
+             strerror(errno));
+    }
     logerr("Failed to save itemstore '%s'; existing data was not replaced.\n",
            filename);
   }
@@ -1143,7 +1182,7 @@ static void free_unowned_item_payload(ITEM_e type, VALUE_t *value,
 static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
                                 ITEMSTORE_READ_CTX_t *ctx) {
   char name[33];
-  uint16_t name_len;
+  uint8_t name_len;
   uint8_t item_tag;
   uint8_t value_tag;
   uint64_t raw_value;
@@ -1158,7 +1197,7 @@ static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
     return NULL;
   }
 
-  if (!read_u16_le(file, &name_len, "item name length")) return NULL;
+  if (!read_u8(file, &name_len, "item name length")) return NULL;
   if (name_len > 32) {
     logerr("Corrupt itemstore '%s': item name length %u exceeds 32 bytes "
            "at depth %zu.\n", ctx->filename, name_len, ctx->depth);
@@ -1212,7 +1251,7 @@ static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
         break;
       case VALUE_int:
         if (!read_u64_le(file, &raw_value, "integer payload")) return NULL;
-        itemval.i = (int64_t)raw_value;
+        memcpy(&itemval.i, &raw_value, sizeof(itemval.i));
         break;
       case VALUE_float:
         if (!read_u64_le(file, &itemval.f_bits, "float payload")) return NULL;

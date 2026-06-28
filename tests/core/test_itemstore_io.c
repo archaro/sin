@@ -31,8 +31,8 @@ static FILE *new_record(const char *name, uint8_t item_tag) {
   FILE *file = tmpfile();
   ASSERT_NOT_NULL(file);
   size_t length = strlen(name);
-  ASSERT_TRUE(length <= UINT16_MAX);
-  put_u16_le(file, (uint16_t)length);
+  ASSERT_TRUE(length <= UINT8_MAX);
+  put_u8(file, (uint8_t)length);
   ASSERT_EQ_INT((long long)length, (long long)fwrite(name, 1, length, file));
   put_u8(file, item_tag);
   return file;
@@ -102,7 +102,7 @@ void test_itemstore_read_rejects_corrupt_records(void) {
   /* Name lengths above the item model's 32-byte layer limit. */
   FILE *file = tmpfile();
   ASSERT_NOT_NULL(file);
-  put_u16_le(file, 33);
+  put_u8(file, 33);
   assert_root_record_rejected(file);
 
   /* Unknown item and value wire tags. */
@@ -113,32 +113,32 @@ void test_itemstore_read_rejects_corrupt_records(void) {
   put_u8(file, 0xff);
   assert_root_record_rejected(file);
 
-  /* String and bytecode lengths above the configured 16 MiB limits. */
+  /* String and bytecode lengths above their configured limits. */
   file = new_record("root", 1);
-  put_u8(file, 4);
+  put_u8(file, 2);
   put_u32_le(file, (16u * 1024u * 1024u) + 1u);
   assert_root_record_rejected(file);
 
   file = new_record("root", 2);
-  put_u32_le(file, (16u * 1024u * 1024u) + 1u);
+  put_u32_le(file, (64u * 1024u * 1024u) + 1u);
   assert_root_record_rejected(file);
 
   /* Child counts above the in-memory ordered-array limit. */
   file = new_record("root", 1);
-  put_u8(file, 1);
+  put_u8(file, 3);
   put_u32_le(file, 251);
   assert_root_record_rejected(file);
 
   /* Duplicate siblings are rejected before the second item is inserted. */
   file = new_record("root", 1);
-  put_u8(file, 1);
+  put_u8(file, 3);
   put_u32_le(file, 2);
-  put_u16_le(file, 3);
+  put_u8(file, 3);
   ASSERT_EQ_INT(3, fwrite("dup", 1, 3, file));
   put_u8(file, 1);
-  put_u8(file, 1);
+  put_u8(file, 3);
   put_u32_le(file, 0);
-  put_u16_le(file, 3);
+  put_u8(file, 3);
   ASSERT_EQ_INT(3, fwrite("dup", 1, 3, file));
   assert_root_record_rejected(file);
 
@@ -146,7 +146,7 @@ void test_itemstore_read_rejects_corrupt_records(void) {
   ITEM_t *parent = make_root_item("root");
   ASSERT_NOT_NULL(parent);
   file = new_record("bad-name", 1);
-  put_u8(file, 1);
+  put_u8(file, 3);
   put_u32_le(file, 0);
   rewind(file);
   ASSERT_TRUE(read_item(file, parent) == NULL);
@@ -227,8 +227,7 @@ void test_save_itemstore_preserves_existing_file_on_failure(void) {
 
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  VALUE_t invalid_bool = {.type = VALUE_bool, .i = 2};
-  ASSERT_NOT_NULL(insert_item(root, "invalid_bool", invalid_bool));
+  ASSERT_NOT_NULL(insert_code_item(root, "invalid_code", 1, NULL));
   save_itemstore(path, root);
 
   file = fopen(path, "rb");
