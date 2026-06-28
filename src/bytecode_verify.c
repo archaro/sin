@@ -1,6 +1,7 @@
 #include "bytecode_verify.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef enum {
@@ -10,6 +11,12 @@ typedef enum {
 } BC_DecodeContext;
 
 typedef struct {
+  uint32_t offset;
+  int16_t relative;
+  uint8_t opcode;
+} BC_JumpRef;
+
+typedef struct {
   const uint8_t *base;
   const uint8_t *end;
   const char *label;
@@ -17,6 +24,11 @@ typedef struct {
   BC_VerifyResult result;
   uint8_t local_count;
   bool validate_local_indices;
+  bool *top_level_instruction_starts;
+  uint32_t top_level_instruction_start_capacity;
+  BC_JumpRef *jumps;
+  uint32_t jump_count;
+  uint32_t jump_capacity;
 } BC_Decoder;
 
 BC_VerifyOptions bc_verify_default_options(void) {
@@ -109,6 +121,46 @@ static int bc_validate_local_index(BC_Decoder *d, const uint8_t *p,
   return bc_fail(d, p, opcode, msg);
 }
 
+static int bc_record_jump(BC_Decoder *d, const uint8_t *operand_start,
+                          uint8_t opcode) {
+  if (d->jump_count == d->jump_capacity) {
+    uint32_t new_capacity = d->jump_capacity == 0 ? 8 : d->jump_capacity * 2;
+    BC_JumpRef *new_jumps = realloc(d->jumps, new_capacity * sizeof(*new_jumps));
+    if (!new_jumps) return bc_fail(d, operand_start, opcode, "out of memory recording jump target");
+    d->jumps = new_jumps;
+    d->jump_capacity = new_capacity;
+  }
+  uint16_t raw = (uint16_t)operand_start[0] | ((uint16_t)operand_start[1] << 8);
+  d->jumps[d->jump_count++] = (BC_JumpRef){
+      .offset = bc_offset(d, operand_start),
+      .relative = (int16_t)raw,
+      .opcode = opcode,
+  };
+  return 1;
+}
+
+static int bc_validate_recorded_jumps(BC_Decoder *d) {
+  uint32_t bytecode_len = (uint32_t)(d->end - d->base);
+  for (uint32_t i = 0; i < d->jump_count; i++) {
+    const BC_JumpRef *jump = &d->jumps[i];
+    int64_t target = (int64_t)jump->offset + (int64_t)jump->relative;
+    const uint8_t *jump_p = d->base + jump->offset - 1;
+    if (target < 2) {
+      return bc_fail(d, jump_p, jump->opcode, "jump target before bytecode body");
+    }
+    if (target >= (int64_t)bytecode_len) {
+      return bc_fail(d, jump_p, jump->opcode, "jump target past bytecode body");
+    }
+    if ((uint32_t)target == d->result.halt_offset) continue;
+    if ((uint32_t)target >= d->top_level_instruction_start_capacity ||
+        !d->top_level_instruction_starts[target]) {
+      return bc_fail(d, jump_p, jump->opcode,
+                     "jump target is not a top-level instruction boundary");
+    }
+  }
+  return 1;
+}
+
 static int bc_decode_item(BC_Decoder *d, const uint8_t **cursor) {
   while (*cursor < d->end) {
     uint8_t op = **cursor;
@@ -170,10 +222,16 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
       return bc_validate_local_index(d, index_p, op, index);
     }
     case IR_OP_CALL:
-    case IR_OP_JUMP: case IR_OP_JUMP_IF_FALSE:
       if (!bc_need(d, *cursor, 2, op, schema->name)) return 0;
       *cursor += 2;
       return 1;
+    case IR_OP_JUMP: case IR_OP_JUMP_IF_FALSE: {
+      if (!bc_need(d, *cursor, 2, op, schema->name)) return 0;
+      const uint8_t *operand_start = *cursor;
+      if (ctx == BC_CTX_STMT && !bc_record_jump(d, operand_start, op)) return 0;
+      *cursor += 2;
+      return 1;
+    }
     case IR_OP_PUSH_INT:
     case IR_OP_PUSH_FLOAT:
       if (!bc_need(d, *cursor, 8, op, schema->name)) return 0;
@@ -263,12 +321,29 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
     return d.result;
   }
 
+  d.top_level_instruction_starts = calloc((size_t)bytecode_len + 1, sizeof(bool));
+  d.top_level_instruction_start_capacity = bytecode_len + 1;
+  if (!d.top_level_instruction_starts) {
+    bc_fail(&d, d.base, 0, "out of memory recording instruction starts");
+    return d.result;
+  }
+
   const uint8_t *cursor = bytecode + 2;
   while (cursor < d.end) {
     const uint8_t *start = cursor;
-    if (!bc_decode_one(&d, &cursor, BC_CTX_STMT)) return d.result;
+    d.top_level_instruction_starts[bc_offset(&d, start)] = true;
+    if (!bc_decode_one(&d, &cursor, BC_CTX_STMT)) {
+      free(d.top_level_instruction_starts);
+      free(d.jumps);
+      return d.result;
+    }
     if (*start == 'h') {
       d.result.halt_offset = bc_offset(&d, start);
+      if (!bc_validate_recorded_jumps(&d)) {
+        free(d.top_level_instruction_starts);
+        free(d.jumps);
+        return d.result;
+      }
       if (cursor < d.end) {
         if (d.options.strict_trailing_bytes || d.options.mode != BC_VERIFY_MODE_DISASSEMBLY) {
           bc_fail(&d, cursor, *cursor, "trailing bytes after HALT");
@@ -276,10 +351,14 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
           bc_warn(&d, cursor, *cursor, "trailing bytes after HALT");
         }
       }
+      free(d.top_level_instruction_starts);
+      free(d.jumps);
       return d.result;
     }
   }
 
   bc_fail(&d, d.end, 0, "missing terminating HALT opcode");
+  free(d.top_level_instruction_starts);
+  free(d.jumps);
   return d.result;
 }
