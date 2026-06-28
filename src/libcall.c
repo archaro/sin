@@ -71,7 +71,10 @@ uint8_t *lc_sys_backup(uint8_t *nextop, ITEM_t *item) {
   char backupfile[strlen(config.itemstore)+strlen(timestamp)+2];
   snprintf(backupfile, sizeof(backupfile), "%s_%s", config.itemstore,
                                                                 timestamp);
-  save_itemstore(backupfile, config.itemroot);
+  if (!save_itemstore(backupfile, config.itemroot)) {
+    logerr("sys.backup failed to persist itemstore backup '%s'.\n",
+           backupfile);
+  }
   // libcalls always return a value.
   push_stack(VM->stack, VALUE_NIL);
   return nextop;

@@ -371,7 +371,11 @@ int main(int argc, char **argv) {
   }
   uv_loop_close(config.loop);
   if (config.safe_shutdown) {
-    save_itemstore(config.itemstore, config.itemroot);
+    if (!save_itemstore(config.itemstore, config.itemroot)) {
+      logerr("Shutdown could not persist itemstore '%s'.\n",
+             config.itemstore);
+      if (runloop_retval == 0) runloop_retval = EXIT_FAILURE;
+    }
   }
   FREE_ARRAY(uv_loop_t, config.loop, sizeof(uv_loop_t));
   free(config.itemstore);

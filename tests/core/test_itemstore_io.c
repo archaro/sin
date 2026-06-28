@@ -207,7 +207,7 @@ void test_load_itemstore_rejects_incomplete_or_trailing_data(void) {
   ASSERT_EQ_INT(0, fclose(file));
   ASSERT_TRUE(load_itemstore(path) == NULL);
 
-  save_itemstore(path, root);
+  ASSERT_TRUE(save_itemstore(path, root));
   ITEM_t *loaded = load_itemstore(path);
   ASSERT_NOT_NULL(loaded);
   destroy_item(loaded);
@@ -228,7 +228,7 @@ void test_save_itemstore_preserves_existing_file_on_failure(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
   ASSERT_NOT_NULL(insert_code_item(root, "invalid_code", 1, NULL));
-  save_itemstore(path, root);
+  ASSERT_TRUE(!save_itemstore(path, root));
 
   file = fopen(path, "rb");
   ASSERT_NOT_NULL(file);

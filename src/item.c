@@ -1069,7 +1069,7 @@ bool write_item(FILE *file, ITEM_t *item) {
   return true;
 }
 
-void save_itemstore(const char *filename, ITEM_t *root) {
+bool save_itemstore(const char *filename, ITEM_t *root) {
   FILE *file = NULL;
   char *temp_path = NULL;
   bool success = false;
@@ -1077,13 +1077,13 @@ void save_itemstore(const char *filename, ITEM_t *root) {
   int temp_path_len = snprintf(NULL, 0, "%s.tmp.%ld", filename, pid);
   if (temp_path_len < 0) {
     logerr("Failed to build temporary itemstore path for %s.\n", filename);
-    return;
+    return false;
   }
 
   temp_path = malloc((size_t)temp_path_len + 1);
   if (temp_path == NULL) {
     logerr("Failed to allocate temporary itemstore path for %s.\n", filename);
-    return;
+    return false;
   }
   snprintf(temp_path, (size_t)temp_path_len + 1, "%s.tmp.%ld", filename, pid);
 
@@ -1140,6 +1140,7 @@ cleanup:
            filename);
   }
   free(temp_path);
+  return success;
 }
 
 static void detach_loaded_item(ITEM_t *item) {

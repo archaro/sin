@@ -10,7 +10,7 @@ are written without an argument list in normal Sinistra source, for example
 
 | Libcall | Library | Call | Arity | Argument expectations | Return value | Side effects | Failure behaviour | Example |
 | --- | --- | --- | ---: | --- | --- | --- | --- | --- |
-| `sys.backup` | `sys` | `backup` | 0 | None. | `nil`. | Saves a backup copy of the current in-memory itemstore.  The filename is the configured itemstore name followed by a timestamp suffix. | The call does not report backup errors through its return value. | `sys.backup;` |
+| `sys.backup` | `sys` | `backup` | 0 | None. | `nil`. | Saves a backup copy of the current in-memory itemstore.  The filename is the configured itemstore name followed by a timestamp suffix. | The call does not report backup errors through its return value, but failures are written to the error log. | `sys.backup;` |
 | `sys.log{value}` | `sys` | `log` | 1 | Any expression.  Strings are logged as text, integers as decimal integers, floats as canonical binary64 decimal text (including `0.0`, `-0.0`, `inf`, `-inf`, and `nan`), booleans as `true` or `false`, and `nil` is ignored. | `nil`. | Writes to the system log. | Unknown value types produce a diagnostic log message. | `sys.log{"player connected"};` |
 | `sys.shutdown` | `sys` | `shutdown` | 0 | None. | `nil`. | Logs the request, marks the shutdown as safe, and stops the event loop so the engine can shut down cleanly and save the itemstore. | No failure is reported to Sinistra code. | `sys.shutdown;` |
 | `sys.abort` | `sys` | `abort` | 0 | None. | `nil`. | Logs the request, marks the shutdown as unsafe, and stops the event loop without the normal itemstore save. | No failure is reported to Sinistra code. | `sys.abort;` |
