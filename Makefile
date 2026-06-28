@@ -27,6 +27,7 @@ TEST_CORE_SOURCES := \
 	$(TEST_DIR)/core/test_parser_float_literals.c \
 	$(TEST_DIR)/core/test_item_cache.c \
 	$(TEST_DIR)/core/test_itemstore_io.c \
+	$(TEST_DIR)/core/test_itemstore_verifier.c \
 	$(TEST_DIR)/core/test_libcall_registry.c \
 	$(TEST_DIR)/core/test_relative_item_leading_dot.c \
 	$(TEST_DIR)/core/test_value_behavior.c

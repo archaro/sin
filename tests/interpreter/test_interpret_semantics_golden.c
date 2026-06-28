@@ -6,7 +6,15 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "config.h"
+#include "error.h"
+#include "interpret.h"
+#include "item.h"
 #include "test_assert.h"
+#include "value.h"
+#include "vm.h"
+
+extern CONFIG_t config;
 
 typedef struct {
   const char *name;
@@ -204,4 +212,37 @@ void test_interpret_semantics_golden(void) {
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
     run_case(&cases[i]);
   }
+}
+
+
+void test_interpret_rejects_malformed_bytecode_before_execution(void) {
+  memset(&config, 0, sizeof(config));
+  init_errmsg();
+  config.strict_validation = true;
+  config.itemroot = make_root_item("root");
+  ASSERT_NOT_NULL(config.itemroot);
+  config.vm = make_vm();
+  ASSERT_NOT_NULL(config.vm);
+
+  uint8_t bytecode[] = {0, 0, 'l', 3, 0, 'a'};
+  uint8_t *owned = malloc(sizeof(bytecode));
+  ASSERT_NOT_NULL(owned);
+  memcpy(owned, bytecode, sizeof(bytecode));
+  ITEM_t *code = insert_code_item(config.itemroot, "malformed", sizeof(bytecode), owned);
+  ASSERT_NOT_NULL(code);
+
+  VALUE_t result = interpret(code);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, err->value.i);
+  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_EQ_INT(VALUE_str, msg->value.type);
+  ASSERT_TRUE(strstr(msg->value.s, "Runtime bytecode validation failed") != NULL);
+  ASSERT_TRUE(strstr(msg->value.s, "truncated") != NULL);
+
+  destroy_vm(config.vm);
+  destroy_item(config.itemroot);
+  memset(&config, 0, sizeof(config));
 }

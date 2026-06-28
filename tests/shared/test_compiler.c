@@ -80,6 +80,7 @@ void test_load_itemstore_rejects_resource_limit_violations(void);
 void test_save_itemstore_preserves_existing_file_on_failure(void);
 void test_itemstore_durability_modes(void);
 void test_itemstore_large_load_presizes_child_storage(void);
+void test_itemstore_verifier_rejects_malformed_code_item_bytecode(void);
 void test_libcall_registry_roundtrip(void);
 void test_libcall_registry_init_failure_has_no_partial_state(void);
 void test_libcall_registry_lifecycle_reinit_sequence(void);
@@ -147,12 +148,14 @@ void test_pipeline_negative_matrix(void);
 void test_parser_examples_obj_golden(void);
 void test_sdiss_fixture_basic(void);
 void test_sdiss_reads_compiler_operand_widths(void);
+void test_sdiss_malformed_fixture_reports_verifier_diagnostic(void);
 void test_compiler_context_failures(void);
 void test_compiler_diag_pipeline(void);
 void test_sys_compile_libcall_runtime(void);
 
 /* Runtime component tests. */
 void test_interpret_semantics_golden(void);
+void test_interpret_rejects_malformed_bytecode_before_execution(void);
 void test_interpret_stress(void);
 void test_runtime_benchmark_optin(void);
 
@@ -204,6 +207,7 @@ static const test_case_t core_tests[] = {
     {"test_save_itemstore_preserves_existing_file_on_failure", test_save_itemstore_preserves_existing_file_on_failure},
     {"test_itemstore_durability_modes", test_itemstore_durability_modes},
     {"test_itemstore_large_load_presizes_child_storage", test_itemstore_large_load_presizes_child_storage},
+    {"test_itemstore_verifier_rejects_malformed_code_item_bytecode", test_itemstore_verifier_rejects_malformed_code_item_bytecode},
     {"test_relative_item_leading_dot_parse_accepts_deref_chain", test_relative_item_leading_dot_parse_accepts_deref_chain},
     {"test_relative_item_leading_dot_nested_relative_deref_layers", test_relative_item_leading_dot_nested_relative_deref_layers},
     {"test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed", test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed},
@@ -259,6 +263,7 @@ static const test_case_t compiler_tests[] = {
     {"test_pipeline_negative_matrix", test_pipeline_negative_matrix},
     {"test_parser_examples_obj_golden", test_parser_examples_obj_golden},
     {"test_sdiss_fixture_basic", test_sdiss_fixture_basic},
+    {"test_sdiss_malformed_fixture_reports_verifier_diagnostic", test_sdiss_malformed_fixture_reports_verifier_diagnostic},
     {"test_sdiss_reads_compiler_operand_widths", test_sdiss_reads_compiler_operand_widths},
     {"test_compiler_context_failures", test_compiler_context_failures},
     {"test_compiler_diag_pipeline", test_compiler_diag_pipeline},
@@ -266,6 +271,7 @@ static const test_case_t compiler_tests[] = {
 
 static const test_case_t runtime_tests[] = {
     {"test_interpret_semantics_golden", test_interpret_semantics_golden},
+    {"test_interpret_rejects_malformed_bytecode_before_execution", test_interpret_rejects_malformed_bytecode_before_execution},
     {"test_interpret_stress", test_interpret_stress},
     {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},
     {"test_libcall_registry_init_failure_has_no_partial_state", test_libcall_registry_init_failure_has_no_partial_state},
