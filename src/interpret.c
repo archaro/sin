@@ -396,6 +396,7 @@ uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
   } else {
     // If not true then it must be false.  That's logic.
     DISASS_LOG("OP_JUMPFALSE: evaluates to false (jump offset %d).\n", offset);
+    value_free(&v1);
     return offset_start + offset;
   }
 }
