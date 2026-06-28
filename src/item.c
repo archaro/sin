@@ -7,6 +7,11 @@
 #include <string.h>
 #include <libgen.h>
 #include <errno.h>
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "config.h"
 #include "error.h"
@@ -16,6 +21,29 @@
 #include "item.h"
 
 static uint64_t itemstore_generation = 1;
+
+static long current_process_id(void) {
+#ifdef _WIN32
+  return (long)_getpid();
+#else
+  return (long)getpid();
+#endif
+}
+
+static bool sync_itemstore_file(FILE *file, const char *path) {
+#ifdef _WIN32
+  (void)file;
+  (void)path;
+  return true;
+#else
+  if (fsync(fileno(file)) != 0) {
+    logerr("Failed to sync temporary itemstore %s: %s\n", path,
+           strerror(errno));
+    return false;
+  }
+  return true;
+#endif
+}
 #define FETCHITEM_CACHE_SIZE 64
 #define ITEMSTORE_MAX_STRING_BYTES UINT32_MAX
 #define ITEMSTORE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
@@ -895,14 +923,74 @@ void write_item(FILE *file, ITEM_t *item) {
 }
 
 void save_itemstore(const char *filename, ITEM_t *root) {
-  FILE* file = fopen(filename, "wb");
-  if (file == NULL) {
-    logerr("Failed to open itemstore for writing");
+  FILE *file = NULL;
+  char *temp_path = NULL;
+  bool success = false;
+  long pid = current_process_id();
+  int temp_path_len = snprintf(NULL, 0, "%s.tmp.%ld", filename, pid);
+  if (temp_path_len < 0) {
+    logerr("Failed to build temporary itemstore path for %s.\n", filename);
     return;
-  } else {
-    write_item(file, root);
-    fclose(file);
   }
+
+  temp_path = (char*)malloc((size_t)temp_path_len + 1);
+  if (temp_path == NULL) {
+    logerr("Failed to allocate temporary itemstore path for %s.\n", filename);
+    return;
+  }
+  snprintf(temp_path, (size_t)temp_path_len + 1, "%s.tmp.%ld", filename, pid);
+
+  file = fopen(temp_path, "wb");
+  if (file == NULL) {
+    logerr("Failed to open temporary itemstore %s for writing: %s\n",
+           temp_path, strerror(errno));
+    goto cleanup;
+  }
+
+  write_item(file, root);
+  if (ferror(file)) {
+    logerr("Failed to write itemstore records to %s: %s\n", temp_path,
+           strerror(errno));
+    goto cleanup;
+  }
+
+  if (fflush(file) != 0) {
+    logerr("Failed to flush temporary itemstore %s: %s\n", temp_path,
+           strerror(errno));
+    goto cleanup;
+  }
+
+  if (!sync_itemstore_file(file, temp_path)) {
+    goto cleanup;
+  }
+
+  if (fclose(file) != 0) {
+    file = NULL;
+    logerr("Failed to close temporary itemstore %s: %s\n", temp_path,
+           strerror(errno));
+    goto cleanup;
+  }
+  file = NULL;
+
+  if (rename(temp_path, filename) != 0) {
+    logerr("Failed to replace itemstore %s with %s: %s\n", filename,
+           temp_path, strerror(errno));
+    goto cleanup;
+  }
+
+  success = true;
+
+cleanup:
+  if (file != NULL && fclose(file) != 0) {
+    logerr("Failed to close temporary itemstore %s during cleanup: %s\n",
+           temp_path, strerror(errno));
+  }
+  if (!success && temp_path != NULL && remove(temp_path) != 0 &&
+      errno != ENOENT) {
+    logerr("Failed to remove temporary itemstore %s: %s\n", temp_path,
+           strerror(errno));
+  }
+  free(temp_path);
 }
 
 ITEM_t *read_item(FILE *file, ITEM_t *parent) {
