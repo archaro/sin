@@ -34,9 +34,41 @@ void test_opcode_schema_consistency(void) {
   free(err_b);
 }
 
+
+void test_bytecode_verify_local_index_bounds(void) {
+  const uint8_t top_level_opcodes[] = {'e', 'c', 'f', 'g'};
+  for (size_t i = 0; i < sizeof(top_level_opcodes); i++) {
+    const uint8_t local_zero_count_zero[] = {0, 0, top_level_opcodes[i], 0, 'h'};
+    BC_VerifyResult result = bc_verify_bytecode(local_zero_count_zero,
+                                                sizeof(local_zero_count_zero),
+                                                "top_local_zero_count_zero", NULL);
+    ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+    ASSERT_TRUE(strstr(result.diagnostic.message, "local index 0 out of range for local count 0") != NULL);
+
+    const uint8_t local_one_count_one[] = {1, 0, top_level_opcodes[i], 1, 'h'};
+    result = bc_verify_bytecode(local_one_count_one, sizeof(local_one_count_one),
+                                "top_local_one_count_one", NULL);
+    ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+    ASSERT_TRUE(strstr(result.diagnostic.message, "local index 1 out of range for local count 1") != NULL);
+  }
+
+  const uint8_t deref_zero_count_zero[] = {0, 0, 'I', 'D', 'V', 0, 'E', 'h'};
+  BC_VerifyResult result = bc_verify_bytecode(deref_zero_count_zero,
+                                              sizeof(deref_zero_count_zero),
+                                              "deref_zero_count_zero", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  ASSERT_TRUE(strstr(result.diagnostic.message, "local index 0 out of range for local count 0") != NULL);
+
+  const uint8_t deref_one_count_one[] = {1, 0, 'I', 'D', 'V', 1, 'E', 'h'};
+  result = bc_verify_bytecode(deref_one_count_one, sizeof(deref_one_count_one),
+                              "deref_one_count_one", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  ASSERT_TRUE(strstr(result.diagnostic.message, "local index 1 out of range for local count 1") != NULL);
+}
+
 void test_bytecode_verify_item_expression_streams(void) {
   const uint8_t valid[] = {
-      0, 0,
+      1, 0,
       'I', 'L', 3, 'f', 'o', 'o',
            'D', 'V', 0,
            'D', 'I', 'L', 3, 'b', 'a', 'r', 'E',
