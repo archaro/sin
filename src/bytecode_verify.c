@@ -15,6 +15,8 @@ typedef struct {
   const char *label;
   BC_VerifyOptions options;
   BC_VerifyResult result;
+  uint8_t local_count;
+  bool validate_local_indices;
 } BC_Decoder;
 
 BC_VerifyOptions bc_verify_default_options(void) {
@@ -97,6 +99,16 @@ static const IR_OpSchema *bc_schema_for(uint8_t opcode, BC_DecodeContext ctx) {
 static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
                          BC_DecodeContext ctx);
 
+static int bc_validate_local_index(BC_Decoder *d, const uint8_t *p,
+                                   uint8_t opcode, uint8_t index) {
+  if (!d->validate_local_indices || index < d->local_count) return 1;
+  char msg[96];
+  snprintf(msg, sizeof(msg),
+           "local index %u out of range for local count %u",
+           (unsigned)index, (unsigned)d->local_count);
+  return bc_fail(d, p, opcode, msg);
+}
+
 static int bc_decode_item(BC_Decoder *d, const uint8_t **cursor) {
   while (*cursor < d->end) {
     uint8_t op = **cursor;
@@ -121,8 +133,9 @@ static int bc_decode_deref(BC_Decoder *d, const uint8_t **cursor) {
   uint8_t type = *(*cursor)++;
   if (type == 'V') {
     if (!bc_need(d, *cursor, 1, type, "dereference local index")) return 0;
-    (*cursor)++;
-    return 1;
+    const uint8_t *index_p = *cursor;
+    uint8_t index = *(*cursor)++;
+    return bc_validate_local_index(d, index_p, type, index);
   }
   if (type == 'I' || type == 'R') return bc_decode_item(d, cursor);
   return bc_fail(d, start, type, "unknown dereference type");
@@ -146,11 +159,16 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
     case IR_OP_NTHNAME: case IR_OP_ROOTNAME: case IR_OP_ITEM_END:
       return 1;
     case IR_OP_PUSH_BOOL:
-    case IR_OP_LOAD_LOCAL: case IR_OP_STORE_LOCAL: case IR_OP_INC_LOCAL: case IR_OP_DEC_LOCAL:
     case IR_OP_LIBCALL_TOKEN:
       if (!bc_need(d, *cursor, 1, op, schema->name)) return 0;
       (*cursor)++;
       return 1;
+    case IR_OP_LOAD_LOCAL: case IR_OP_STORE_LOCAL: case IR_OP_INC_LOCAL: case IR_OP_DEC_LOCAL: {
+      if (!bc_need(d, *cursor, 1, op, schema->name)) return 0;
+      const uint8_t *index_p = *cursor;
+      uint8_t index = *(*cursor)++;
+      return bc_validate_local_index(d, index_p, op, index);
+    }
     case IR_OP_CALL:
     case IR_OP_JUMP: case IR_OP_JUMP_IF_FALSE:
       if (!bc_need(d, *cursor, 2, op, schema->name)) return 0;
@@ -238,6 +256,8 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
 
   uint8_t locals = bytecode[0];
   uint8_t params = bytecode[1];
+  d.local_count = locals;
+  d.validate_local_indices = true;
   if (params > locals) {
     bc_fail(&d, bytecode + 1, params, "parameter count exceeds local count");
     return d.result;
