@@ -47,6 +47,7 @@ typedef enum {
   ITEMSTORE_DURABLE_FULL = 0,
   ITEMSTORE_DURABLE_FAST = 1
 } ITEMSTORE_DURABILITY_e;
+typedef bool (*ITEMSTORE_SYNC_HOOK_t)(FILE *file, const char *path);
 
 struct Item {
   ITEM_e type;           // 4 bytes
@@ -105,6 +106,7 @@ void get_itemname(ITEM_t *item, char *itemname);
 char *get_itemfilename(ITEM_t *item);
 bool save_itemsource(ITEM_t *item, char *source);
 bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability);
+void itemstore_set_sync_hook_for_tests(ITEMSTORE_SYNC_HOOK_t hook);
 bool save_itemstore(const char *filename, ITEM_t *root);
 ITEM_t *load_itemstore(const char *filename); 
 void dump_item(ITEM_t *item, char *item_name, bool isroot);

@@ -113,6 +113,15 @@ static void put_nested_nil_record(FILE *file, unsigned depth,
   }
 }
 
+static int sync_hook_calls;
+
+static bool reject_sync(FILE *file, const char *path) {
+  (void)file;
+  (void)path;
+  sync_hook_calls++;
+  return false;
+}
+
 void test_itemstore_value_and_code_roundtrip(void) {
   char path[] = "/tmp/sin-itemstore-roundtrip-XXXXXX";
   FILE *file = new_fixture(path);
@@ -458,17 +467,28 @@ void test_itemstore_durability_modes(void) {
   ASSERT_EQ_INT(0, fclose(file));
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
+  ASSERT_NOT_NULL(insert_item(root, "persisted",
+                              (VALUE_t){.type = VALUE_int, .i = 1}));
+
+  sync_hook_calls = 0;
+  itemstore_set_sync_hook_for_tests(reject_sync);
 
   config.itemstore_durability = ITEMSTORE_DURABLE_FAST;
   ASSERT_TRUE(save_itemstore(path, root));
-  ITEM_t *loaded = load_itemstore(path);
-  ASSERT_NOT_NULL(loaded);
-  destroy_item(loaded);
+  ASSERT_EQ_INT(0, sync_hook_calls);
+
+  ASSERT_NOT_NULL(insert_item(root, "not_persisted",
+                              (VALUE_t){.type = VALUE_int, .i = 2}));
 
   config.itemstore_durability = ITEMSTORE_DURABLE_FULL;
-  ASSERT_TRUE(save_itemstore(path, root));
-  loaded = load_itemstore(path);
+  ASSERT_TRUE(!save_itemstore(path, root));
+  ASSERT_EQ_INT(1, sync_hook_calls);
+  itemstore_set_sync_hook_for_tests(NULL);
+
+  ITEM_t *loaded = load_itemstore(path);
   ASSERT_NOT_NULL(loaded);
+  ASSERT_NOT_NULL(find_item(loaded, "persisted"));
+  ASSERT_TRUE(find_item(loaded, "not_persisted") == NULL);
   destroy_item(loaded);
 
   destroy_item(root);

@@ -46,6 +46,12 @@ static bool sync_itemstore_file(FILE *file, const char *path) {
 #endif
 }
 
+static ITEMSTORE_SYNC_HOOK_t itemstore_sync_hook = sync_itemstore_file;
+
+void itemstore_set_sync_hook_for_tests(ITEMSTORE_SYNC_HOOK_t hook) {
+  itemstore_sync_hook = hook != NULL ? hook : sync_itemstore_file;
+}
+
 bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability) {
   return durability != ITEMSTORE_DURABLE_FAST;
 }
@@ -1068,7 +1074,7 @@ bool save_itemstore(const char *filename, ITEM_t *root) {
   }
 
   if (itemstore_durability_requires_sync(config.itemstore_durability)
-      && !sync_itemstore_file(file, temp_path)) {
+      && !itemstore_sync_hook(file, temp_path)) {
     goto cleanup;
   }
 
