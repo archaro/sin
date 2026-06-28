@@ -17,7 +17,10 @@ static void assert_compile_ok(const char *name, const char *source) {
   OUTPUT_t *out = NULL;
   char *errdetail = NULL;
   int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
-  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  if (rc != ERR_NOERROR) {
+    TEST_FAILF("%s: compiler error %d: %s", name, rc,
+               errdetail ? errdetail : "<no detail>");
+  }
   ASSERT_TRUE(errdetail == NULL);
   ASSERT_NOT_NULL(out);
   free(out->bytecode);

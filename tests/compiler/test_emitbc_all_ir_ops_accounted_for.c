@@ -45,6 +45,7 @@ void test_emitbc_all_ir_ops_accounted_for(void) {
       {IR_OP_ITEM_BEGIN_REL, 'R', 1},
       {IR_OP_ITEM_PUSH_LAYER, 'L', 0},
       {IR_OP_ITEM_PUSH_DEREF, 'D', 0},
+      {IR_OP_ITEM_PUSH_DEREF_LOCAL, 'V', 0},
       {IR_OP_ITEM_END, 'E', 0},
       {IR_OP_ITEM_DEREF, 'F', 1},
       {IR_OP_ITEM_SAVE, 'C', 1},

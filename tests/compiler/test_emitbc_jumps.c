@@ -24,14 +24,15 @@ static void test_emitbc_jump_forward_offsets(void) {
   int32_t l2 = ir_new_label(unit);
 
   t_emit(unit, (IR_Inst){.op = IR_OP_JUMP, .a = l1});
-  t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
+  t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 99});
   t_bind(unit, l1);
   t_emit(unit, (IR_Inst){.op = IR_OP_LABEL, .a = l1});
 
+  t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_BOOL, .a = 1});
   t_emit(unit, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = l2});
-  t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 1});
   t_bind(unit, l2);
   t_emit(unit, (IR_Inst){.op = IR_OP_LABEL, .a = l2});
+  t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
 
   OUTPUT_t out = t_out();
   char *errdetail = NULL;
@@ -40,12 +41,12 @@ static void test_emitbc_jump_forward_offsets(void) {
   ASSERT_TRUE(errdetail == NULL);
 
   ASSERT_EQ_INT('j', out.bytecode[2]);
-  ASSERT_EQ_INT(0x03, out.bytecode[3]);
+  ASSERT_EQ_INT(0x0B, out.bytecode[3]);
   ASSERT_EQ_INT(0x00, out.bytecode[4]);
 
-  ASSERT_EQ_INT('k', out.bytecode[6]);
-  ASSERT_EQ_INT(0x0B, out.bytecode[7]);
-  ASSERT_EQ_INT(0x00, out.bytecode[8]);
+  ASSERT_EQ_INT('k', out.bytecode[16]);
+  ASSERT_EQ_INT(0x02, out.bytecode[17]);
+  ASSERT_EQ_INT(0x00, out.bytecode[18]);
 
   free(out.bytecode);
   ir_destroy_unit(unit);
@@ -60,6 +61,7 @@ static void test_emitbc_jump_backward_offset_negative(void) {
   t_emit(unit, (IR_Inst){.op = IR_OP_LABEL, .a = loop});
   t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 7});
   t_emit(unit, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = loop});
+  t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
 
   OUTPUT_t out = t_out();
   char *errdetail = NULL;

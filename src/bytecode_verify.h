@@ -10,7 +10,8 @@
 typedef enum {
   BC_VERIFY_MODE_RUNTIME = 0,
   BC_VERIFY_MODE_ITEMSTORE = 1,
-  BC_VERIFY_MODE_DISASSEMBLY = 2
+  BC_VERIFY_MODE_DISASSEMBLY = 2,
+  BC_VERIFY_MODE_COMPILER = 3
 } BC_VerifyMode;
 
 typedef enum {
@@ -70,6 +71,7 @@ typedef enum {
 
 BC_VerifyOptions bc_verify_default_options(void);
 BC_VerifyOptions bc_verify_disassembly_options(void);
+BC_VerifyOptions bc_verify_compiler_options(void);
 BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
                                    uint32_t bytecode_len,
                                    const char *source_label,

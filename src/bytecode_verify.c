@@ -53,6 +53,13 @@ BC_VerifyOptions bc_verify_disassembly_options(void) {
   return options;
 }
 
+BC_VerifyOptions bc_verify_compiler_options(void) {
+  BC_VerifyOptions options;
+  options.mode = BC_VERIFY_MODE_COMPILER;
+  options.strict_trailing_bytes = true;
+  return options;
+}
+
 const char *bc_verify_status_name(BC_VerifyStatus status) {
   switch (status) {
     case BC_VERIFY_OK: return "ok";
@@ -188,6 +195,7 @@ static bool bc_stack_effect(const BC_InstructionMeta *meta, int *pops,
     case IR_OP_INC_LOCAL: case IR_OP_DEC_LOCAL: case IR_OP_JUMP:
       return true;
     case IR_OP_LABEL: case IR_OP_ITEM_PUSH_LAYER: case IR_OP_ITEM_PUSH_DEREF:
+    case IR_OP_ITEM_PUSH_DEREF_LOCAL:
     case IR_OP_ITEM_END:
       return true;
   }
@@ -208,6 +216,10 @@ static int bc_enqueue_stack_depth(BC_Decoder *d, int *depths, uint32_t *work,
     work[(*work_count)++] = offset;
     return 1;
   }
+  /* HALT has no successor and does not consume the operand stack, so paths
+   * may terminate with different residual depths without making later
+   * execution ambiguous. */
+  if (d->instructions[offset].op == IR_OP_HALT) return 1;
   if (depths[offset] != depth) {
     char msg[128];
     snprintf(msg, sizeof(msg), "conflicting stack depths at byte %u (%d vs %d)",
@@ -314,7 +326,6 @@ static int bc_decode_item(BC_Decoder *d, const uint8_t **cursor) {
     }
     if (op == 'D') {
       if (!bc_decode_one(d, cursor, BC_CTX_ITEM)) return 0;
-      if (!bc_decode_one(d, cursor, BC_CTX_DEREF)) return 0;
       continue;
     }
     return bc_fail(d, *cursor, op, "unknown item-layer opcode");
@@ -371,7 +382,8 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
       (*cursor)++;
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
       return 1;
-    case IR_OP_LOAD_LOCAL: case IR_OP_STORE_LOCAL: case IR_OP_INC_LOCAL: case IR_OP_DEC_LOCAL: {
+    case IR_OP_LOAD_LOCAL: case IR_OP_STORE_LOCAL: case IR_OP_INC_LOCAL:
+    case IR_OP_DEC_LOCAL: case IR_OP_ITEM_PUSH_DEREF_LOCAL: {
       if (!bc_need(d, *cursor, 1, op, schema->name)) return 0;
       const uint8_t *index_p = *cursor;
       uint8_t index = *(*cursor)++;

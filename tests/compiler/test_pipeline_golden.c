@@ -35,7 +35,10 @@ static void run_ast_case(const PipelineGoldenCase *tc) {
   ASSERT_NOT_NULL(out.bytecode);
 
   rc = t_emit_bytecode(ir, (uint8_t)sem->count, 0, &out, &errdetail);
-  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  if (rc != ERR_NOERROR) {
+    TEST_FAILF("pipeline case %s failed emission: %s", tc->name,
+               errdetail ? errdetail : "<no diagnostic>");
+  }
   ASSERT_TRUE(errdetail == NULL);
 
   size_t actual_len = (size_t)(out.nextbyte - out.bytecode);

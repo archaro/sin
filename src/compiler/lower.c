@@ -136,6 +136,32 @@ static void lower_deref_payload(LOWER_CTX *ctx, AS_NODE *payload) {
   lower_expr(ctx, payload);
 }
 
+static void lower_item_deref_payload(LOWER_CTX *ctx, AS_NODE *payload) {
+  if (!payload) {
+    lower_set_unsupported(ctx, payload, "missing item-layer deref payload");
+    return;
+  }
+
+  if (payload->nodetype == N_ITEM || payload->nodetype == N_RELITEM) {
+    lower_item(ctx, payload);
+    return;
+  }
+
+  if (payload->nodetype == N_VALUE) {
+    AS_VALUE *value = (AS_VALUE *)payload->lhs;
+    uint8_t index = 0;
+    if (value && value->valtype == V_LOCAL &&
+        lower_resolve_local_index(ctx, payload, &index)) {
+      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_PUSH_DEREF_LOCAL,
+                                 .a = index});
+      return;
+    }
+  }
+
+  lower_set_unsupported(ctx, payload,
+                        "item-layer deref must reference a local or item");
+}
+
 static void lower_item(LOWER_CTX *ctx, AS_NODE *item) {
   AS_NODE *cursor;
   bool relative = false;
@@ -163,9 +189,9 @@ static void lower_item(LOWER_CTX *ctx, AS_NODE *item) {
     }
 
     if (part->nodetype == N_DEREF) {
-      lower_deref_payload(ctx, (AS_NODE *)part->lhs);
-      if (ctx->errnum != ERR_NOERROR) return;
       ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_PUSH_DEREF});
+      lower_item_deref_payload(ctx, (AS_NODE *)part->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
     } else {
       lower_layer_part(ctx, part);
       if (ctx->errnum != ERR_NOERROR) return;

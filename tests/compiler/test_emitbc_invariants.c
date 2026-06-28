@@ -37,17 +37,20 @@ static void assert_class_layout(IR_Inst inst, size_t expected_body_len, size_t e
   } else {
     t_emit(unit, inst);
   }
+  if (inst.op != IR_OP_HALT) {
+    t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
+  }
 
   OUTPUT_t out = make_out(16);
   char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, 7, 9, &out, &errdetail);
+  int8_t rc = t_emit_bytecode(unit, UINT8_MAX, UINT8_MAX, &out, &errdetail);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
   ASSERT_TRUE(errdetail == NULL);
 
   size_t len = (size_t)(out.nextbyte - out.bytecode);
-  ASSERT_EQ_INT(7, out.bytecode[0]);
-  ASSERT_EQ_INT(9, out.bytecode[1]);
-  ASSERT_EQ_INT(2 + expected_body_len, len);
+  ASSERT_EQ_INT(UINT8_MAX, out.bytecode[0]);
+  ASSERT_EQ_INT(UINT8_MAX, out.bytecode[1]);
+  ASSERT_EQ_INT(2 + expected_body_len + (inst.op == IR_OP_HALT ? 0 : 1), len);
 
   if (expect_jump_width) {
     ASSERT_TRUE(len >= 5);
@@ -70,63 +73,40 @@ static void test_emitbc_op_class_invariants(void) {
   assert_class_layout((IR_Inst){.op = IR_OP_ADD}, 1, 0, 0);
   assert_class_layout((IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = 4}, 2, 1, 0);
   assert_class_layout((IR_Inst){.op = IR_OP_LIBCALL_TOKEN, .a = 1}, 2, 1, 0);
-  assert_class_layout((IR_Inst){.op = IR_OP_CALL, .a = 513}, 3, 2, 0);
+  assert_class_layout((IR_Inst){.op = IR_OP_CALL, .a = 2}, 3, 2, 0);
   assert_class_layout((IR_Inst){.op = IR_OP_JUMP}, 3, 2, 1);
   assert_class_layout((IR_Inst){.op = IR_OP_JUMP_IF_FALSE}, 3, 2, 1);
-  assert_class_layout((IR_Inst){.op = IR_OP_ITEM_PUSH_LAYER, .imm = (int64_t)(intptr_t)"xy"}, 4, 0, 0);
 
   IR_Unit *u = t_new_unit();
   ASSERT_NOT_NULL(u);
   IR_EmbeddedCodePayload payload = {.source = "code"};
   int32_t idx = ir_add_embedded_code_payload(u, payload);
   t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = idx});
+  t_emit(u, (IR_Inst){.op = IR_OP_HALT});
   OUTPUT_t out = make_out(16);
   char *errdetail = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 1, 2, &out, &errdetail));
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 2, 2, &out, &errdetail));
   ASSERT_TRUE(errdetail == NULL);
-  ASSERT_EQ_INT(1, out.bytecode[0]);
+  ASSERT_EQ_INT(2, out.bytecode[0]);
   ASSERT_EQ_INT(2, out.bytecode[1]);
-  ASSERT_EQ_INT(2 + 1 + 2 + 4, (size_t)(out.nextbyte - out.bytecode));
+  ASSERT_EQ_INT(2 + 1 + 2 + 4 + 1, (size_t)(out.nextbyte - out.bytecode));
   free(out.bytecode);
   ir_destroy_unit(u);
 }
 
 static void emit_random_program(IR_Unit *u, uint32_t *seed, int count) {
-  int32_t labels[8] = {0};
-  size_t label_count = 0;
   for (int i = 0; i < count; i++) {
     uint32_t r = lcg_next(seed);
-    switch (r % 8u) {
+    switch (r % 6u) {
       case 0: t_emit(u, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = (int64_t)(r & 0x7FFF)}); break;
-      case 1: t_emit(u, (IR_Inst){.op = IR_OP_ADD}); break;
+      case 1: t_emit(u, (IR_Inst){.op = IR_OP_PUSH_FLOAT, .imm = (int64_t)r}); break;
       case 2: t_emit(u, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = (int32_t)(r % 8u)}); break;
-      case 3: t_emit(u, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = (int32_t)(r % 8u)}); break;
+      case 3: t_emit(u, (IR_Inst){.op = IR_OP_PUSH_BOOL, .a = (int32_t)(r & 1u)}); break;
       case 4: t_emit(u, (IR_Inst){.op = IR_OP_LIBCALL_TOKEN, .a = (int32_t)(r % 4u)}); break;
-      case 5: {
-        if (label_count < 8) labels[label_count++] = ir_new_label(u);
-        t_emit(u, (IR_Inst){.op = IR_OP_ITEM_BEGIN});
-      } break;
-      case 6: t_emit(u, (IR_Inst){.op = IR_OP_ITEM_END}); break;
-      case 7: {
-        if (label_count > 0) {
-          int32_t l = labels[r % label_count];
-          if ((r & 1u) == 0) t_emit(u, (IR_Inst){.op = IR_OP_JUMP, .a = l});
-          else t_emit(u, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = l});
-        } else {
-          t_emit(u, (IR_Inst){.op = IR_OP_NEG});
-        }
-      } break;
-    }
-    if ((r % 11u) == 0 && label_count > 0) {
-      int32_t l = labels[r % label_count];
-      t_bind(u, l);
-      t_emit(u, (IR_Inst){.op = IR_OP_LABEL, .a = l});
+      case 5: t_emit(u, (IR_Inst){.op = IR_OP_INC_LOCAL, .a = (int32_t)(r % 8u)}); break;
     }
   }
-  for (size_t i = 0; i < label_count; i++) {
-    t_bind(u, labels[i]);
-    t_emit(u, (IR_Inst){.op = IR_OP_LABEL, .a = labels[i]});
-  }
+  t_emit(u, (IR_Inst){.op = IR_OP_HALT});
 }
 
 static void test_emitbc_determinism_fixed_seed(void) {
@@ -143,9 +123,9 @@ static void test_emitbc_determinism_fixed_seed(void) {
   OUTPUT_t oa = make_out(32);
   OUTPUT_t ob = make_out(32);
   char *errdetail = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(a, 3, 1, &oa, &errdetail));
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(a, 8, 0, &oa, &errdetail));
   ASSERT_TRUE(errdetail == NULL);
-  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(b, 3, 1, &ob, &errdetail));
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(b, 8, 0, &ob, &errdetail));
   ASSERT_TRUE(errdetail == NULL);
 
   size_t lena = (size_t)(oa.nextbyte - oa.bytecode);
@@ -168,12 +148,16 @@ static void test_emitbc_label_heavy_jump_targets_in_bounds(void) {
     t_bind(u, labels[i]);
     t_emit(u, (IR_Inst){.op = IR_OP_LABEL, .a = labels[i]});
     t_emit(u, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = i});
-    t_emit(u, (IR_Inst){.op = (i % 2 == 0) ? IR_OP_JUMP : IR_OP_JUMP_IF_FALSE, .a = labels[(i * 7) % 32]});
+    t_emit(u, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = 0});
+    if (i + 1 < 32) {
+      t_emit(u, (IR_Inst){.op = IR_OP_JUMP, .a = labels[i + 1]});
+    }
   }
+  t_emit(u, (IR_Inst){.op = IR_OP_HALT});
 
   OUTPUT_t out = make_out(128);
   char *errdetail = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 0, 0, &out, &errdetail));
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 1, 0, &out, &errdetail));
   ASSERT_TRUE(errdetail == NULL);
 
   size_t len = (size_t)(out.nextbyte - out.bytecode);

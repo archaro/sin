@@ -96,7 +96,7 @@ arguments as described below.
 | `C` | `IR_OP_ITEM_SAVE` | none | Pop an item name and value, then save the value into the item. |
 | `D` | `IR_OP_ITEM_PUSH_DEREF` | deref payload | Inside item assembly, append a dereferenced layer name. The payload identifies the dereference source, such as `V` plus a local index. |
 | `E` | `IR_OP_ITEM_END` | none | End item assembly. Evaluate the assembled item name and push the resulting name, or `nil` if the name is invalid. |
-| `F` | `IR_OP_ITEM_DEREF`, `IR_OP_CALL` | shared; see below | Fetch item contents or call a code item. |
+| `F` | `IR_OP_ITEM_DEREF`, `IR_OP_CALL` | `u16 argument_count` | Fetch item contents or call a code item; see below. |
 | `I` | `IR_OP_ITEM_BEGIN` | item layers until `E` | Begin absolute item-name assembly. |
 | `L` | `IR_OP_ITEM_PUSH_LAYER` | `u8 length`, bytes | Inside item assembly, append a literal layer name. |
 | `M` | `IR_OP_LIBCALL_TOKEN` | `u8 token` | Dispatch a prevalidated library-call registry token. |
@@ -126,8 +126,8 @@ then behaves as follows:
 
 The IR schema distinguishes the two producers of `F`:
 
-* `IR_OP_ITEM_DEREF` is a plain item dereference and has no IR operand in the
-  schema.
+* `IR_OP_ITEM_DEREF` is a plain item dereference and has no IR operand; the
+  emitter writes an encoded argument count of zero.
 * `IR_OP_CALL` carries the call arity as an unsigned 16-bit immediate after `F`.
 
 A plain dereference is semantically a zero-argument fetch. Keep the schema,

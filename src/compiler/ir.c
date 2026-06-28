@@ -243,7 +243,8 @@ int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
       case IR_OP_LOAD_LOCAL:
       case IR_OP_STORE_LOCAL:
       case IR_OP_INC_LOCAL:
-      case IR_OP_DEC_LOCAL: {
+      case IR_OP_DEC_LOCAL:
+      case IR_OP_ITEM_PUSH_DEREF_LOCAL: {
         if (inst->a < 0 || (uint32_t)inst->a >= local_count) {
           return ir_validate_error(errdetail, ERR_COMP_LOCALBEFOREDEF,
                                    "Instruction %zu (%s) has out-of-range local index %d (locals=%u).",

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "bytecode_verify.h"
 #include "compdiag.h"
 #include "compiler/ir/opcode_schema.h"
 #include "error.h"
@@ -203,11 +204,17 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case IR_OP_STORE_LOCAL:
       case IR_OP_INC_LOCAL:
       case IR_OP_DEC_LOCAL:
+      case IR_OP_ITEM_PUSH_DEREF_LOCAL:
       case IR_OP_LIBCALL_TOKEN:
         if (!bw_write_u8(&w, (uint8_t)in->a)) goto oom;
         break;
       case IR_OP_CALL:
         if (!bw_write_u16(&w, (uint16_t)in->a)) goto oom;
+        break;
+      case IR_OP_ITEM_DEREF:
+        /* ITEM_DEREF is the zero-argument form of the VM's shared 'F'
+         * fetch/call encoding. */
+        if (!bw_write_u16(&w, 0)) goto oom;
         break;
       case IR_OP_JUMP:
       case IR_OP_JUMP_IF_FALSE: {
@@ -298,6 +305,27 @@ int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
   }
 
   FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+
+  size_t bytecode_len = (size_t)(out->nextbyte - out->bytecode);
+  if (bytecode_len > UINT32_MAX) {
+    int8_t errnum = ERR_NOERROR;
+    compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc",
+                       "emitted bytecode length %zu exceeds verifier limit",
+                       bytecode_len);
+    return errnum;
+  }
+
+  BC_VerifyOptions verify_options = bc_verify_compiler_options();
+  BC_VerifyResult verify = bc_verify_bytecode(
+      out->bytecode, (uint32_t)bytecode_len, "compiler output",
+      &verify_options);
+  if (verify.status != BC_VERIFY_OK) {
+    int8_t errnum = ERR_NOERROR;
+    compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "emitbc",
+                       "bytecode verification failed: %s",
+                       verify.diagnostic.message);
+    return errnum;
+  }
   return ERR_NOERROR;
 oom:
   FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);

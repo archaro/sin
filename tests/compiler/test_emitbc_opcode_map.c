@@ -25,6 +25,9 @@ static void emit_case_inst(IR_Unit *unit, IR_Op op) {
     case IR_OP_PUSH_STRING:
       t_emit(unit, (IR_Inst){.op = op, .imm = (int64_t)(intptr_t)"x"});
       break;
+    case IR_OP_PUSH_BOOL:
+      t_emit(unit, (IR_Inst){.op = op, .a = 1});
+      break;
     case IR_OP_LOAD_LOCAL:
     case IR_OP_STORE_LOCAL:
     case IR_OP_INC_LOCAL:
@@ -49,7 +52,30 @@ static void emit_case_inst(IR_Unit *unit, IR_Op op) {
       break;
     }
     case IR_OP_ITEM_PUSH_LAYER:
+      t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_BEGIN});
       t_emit(unit, (IR_Inst){.op = op, .imm = (int64_t)(intptr_t)"L"});
+      t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_END});
+      break;
+    case IR_OP_ITEM_PUSH_DEREF:
+      t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_BEGIN});
+      t_emit(unit, (IR_Inst){.op = op});
+      t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_PUSH_DEREF_LOCAL, .a = 0});
+      t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_END});
+      break;
+    case IR_OP_ITEM_PUSH_DEREF_LOCAL:
+      t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_BEGIN});
+      t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_PUSH_DEREF});
+      t_emit(unit, (IR_Inst){.op = op, .a = 0});
+      t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_END});
+      break;
+    case IR_OP_ITEM_END:
+      t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_BEGIN});
+      t_emit(unit, (IR_Inst){.op = op});
+      break;
+    case IR_OP_ITEM_BEGIN:
+    case IR_OP_ITEM_BEGIN_REL:
+      t_emit(unit, (IR_Inst){.op = op});
+      t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_END});
       break;
     default:
       t_emit(unit, (IR_Inst){.op = op});
@@ -63,6 +89,7 @@ void test_emitbc_opcode_map(void) {
       {"halt", IR_OP_HALT, 'h', 0},
       {"push_int", IR_OP_PUSH_INT, 'p', 0},
       {"push_float", IR_OP_PUSH_FLOAT, 'P', 0},
+      {"push_bool", IR_OP_PUSH_BOOL, 'b', 0},
       {"push_string", IR_OP_PUSH_STRING, 'l', 0},
       {"add", IR_OP_ADD, 'a', 0},
       {"sub", IR_OP_SUB, 's', 0},
@@ -85,9 +112,11 @@ void test_emitbc_opcode_map(void) {
       {"jump", IR_OP_JUMP, 'j', 0},
       {"jump_if_false", IR_OP_JUMP_IF_FALSE, 'k', 0},
       {"item_begin", IR_OP_ITEM_BEGIN, 'I', 0},
-      {"item_push_layer", IR_OP_ITEM_PUSH_LAYER, 'L', 0},
-      {"item_push_deref", IR_OP_ITEM_PUSH_DEREF, 'D', 0},
-      {"item_end", IR_OP_ITEM_END, 'E', 0},
+      {"item_begin_rel", IR_OP_ITEM_BEGIN_REL, 'R', 0},
+      {"item_push_layer", IR_OP_ITEM_PUSH_LAYER, 'L', 1},
+      {"item_push_deref", IR_OP_ITEM_PUSH_DEREF, 'D', 1},
+      {"item_push_deref_local", IR_OP_ITEM_PUSH_DEREF_LOCAL, 'V', 2},
+      {"item_end", IR_OP_ITEM_END, 'E', 1},
       {"item_deref", IR_OP_ITEM_DEREF, 'F', 0},
       {"item_save", IR_OP_ITEM_SAVE, 'C', 0},
       {"exists", IR_OP_EXISTS, 'X', 0},
@@ -104,6 +133,9 @@ void test_emitbc_opcode_map(void) {
     IR_Unit *unit = t_new_unit();
     ASSERT_NOT_NULL(unit);
     emit_case_inst(unit, tc->op);
+    if (tc->op != IR_OP_HALT) {
+      t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
+    }
 
     OUTPUT_t out = {0};
     out.maxsize = 8;
@@ -112,8 +144,11 @@ void test_emitbc_opcode_map(void) {
     ASSERT_NOT_NULL(out.bytecode);
 
     char *errdetail = NULL;
-    int8_t rc = t_emit_bytecode(unit, 0, 0, &out, &errdetail);
-    ASSERT_EQ_INT(0, rc);
+    int8_t rc = t_emit_bytecode(unit, 8, 8, &out, &errdetail);
+    if (rc != ERR_NOERROR) {
+      TEST_FAILF("opcode case %s failed: %s", tc->name,
+                 errdetail ? errdetail : "<no diagnostic>");
+    }
     ASSERT_TRUE(errdetail == NULL);
     ASSERT_TRUE((size_t)(out.nextbyte - out.bytecode) > 2 + tc->offset);
     ASSERT_EQ_INT((int)tc->expected_opcode, out.bytecode[2 + tc->offset]);
@@ -139,6 +174,7 @@ void test_emitbc_push_float_immediate_layout(void) {
   for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
     t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_FLOAT, .imm = (int64_t)values[i]});
   }
+  t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
 
   OUTPUT_t out = {0};
   out.maxsize = 8;
@@ -159,6 +195,7 @@ void test_emitbc_push_float_immediate_layout(void) {
     ASSERT_TRUE(memcmp(out.bytecode + pos, expected, sizeof(expected)) == 0);
     pos += sizeof(expected);
   }
+  ASSERT_EQ_INT('h', out.bytecode[pos++]);
   ASSERT_EQ_INT((int)pos, (int)(out.nextbyte - out.bytecode));
 
   free(out.bytecode);
@@ -179,6 +216,7 @@ void test_emitbc_push_int_immediate_layout(void) {
   for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
     t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = values[i]});
   }
+  t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
 
   OUTPUT_t out = {0};
   out.maxsize = 8;
@@ -199,6 +237,7 @@ void test_emitbc_push_int_immediate_layout(void) {
     ASSERT_TRUE(memcmp(out.bytecode + pos, expected, sizeof(expected)) == 0);
     pos += sizeof(expected);
   }
+  ASSERT_EQ_INT('h', out.bytecode[pos++]);
   ASSERT_EQ_INT((int)pos, (int)(out.nextbyte - out.bytecode));
 
   free(out.bytecode);
@@ -211,6 +250,7 @@ void test_emitbc_opcode_map_call_item_deref_alias_layout(void) {
 
   t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_DEREF});
   t_emit(unit, (IR_Inst){.op = IR_OP_CALL, .a = 2});
+  t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
 
   OUTPUT_t out = {0};
   out.maxsize = 8;
@@ -219,15 +259,19 @@ void test_emitbc_opcode_map_call_item_deref_alias_layout(void) {
   ASSERT_NOT_NULL(out.bytecode);
 
   char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, 0, 0, &out, &errdetail);
+  int8_t rc = t_emit_bytecode(unit, 3, 3, &out, &errdetail);
   ASSERT_EQ_INT(0, rc);
   ASSERT_TRUE(errdetail == NULL);
 
-  /* header[2], ITEM_DEREF('F'), CALL('F'), CALL argc byte */
-  ASSERT_TRUE((size_t)(out.nextbyte - out.bytecode) >= 5);
+  /* header[2], ITEM_DEREF('F', argc=0), CALL('F', argc=2), HALT */
+  ASSERT_TRUE((size_t)(out.nextbyte - out.bytecode) >= 9);
   ASSERT_EQ_INT('F', out.bytecode[2]);
-  ASSERT_EQ_INT('F', out.bytecode[3]);
-  ASSERT_EQ_INT(2, out.bytecode[4]);
+  ASSERT_EQ_INT(0, out.bytecode[3]);
+  ASSERT_EQ_INT(0, out.bytecode[4]);
+  ASSERT_EQ_INT('F', out.bytecode[5]);
+  ASSERT_EQ_INT(2, out.bytecode[6]);
+  ASSERT_EQ_INT(0, out.bytecode[7]);
+  ASSERT_EQ_INT('h', out.bytecode[8]);
 
   free(out.bytecode);
   ir_destroy_unit(unit);
