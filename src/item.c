@@ -18,6 +18,7 @@
 static uint64_t itemstore_generation = 1;
 #define FETCHITEM_CACHE_SIZE 64
 #define ITEMSTORE_MAX_STRING_BYTES UINT32_MAX
+#define ITEMSTORE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
 #define ITEMSTORE_VALUE_TAG_INT 0
 #define ITEMSTORE_VALUE_TAG_FLOAT 1
 #define ITEMSTORE_VALUE_TAG_STR 2
@@ -34,6 +35,14 @@ typedef struct {
 static FETCHITEM_CACHE_ENTRY_t fetchitem_cache[FETCHITEM_CACHE_SIZE];
 static uint64_t fetchitem_cache_hits = 0;
 static uint64_t fetchitem_cache_misses = 0;
+
+static bool write_checked_byte(FILE *file, uint8_t value) {
+  return fwrite(&value, sizeof(value), 1, file) == 1;
+}
+
+static bool read_checked_byte(FILE *file, uint8_t *value) {
+  return fread(value, sizeof(*value), 1, file) == 1;
+}
 
 static void write_u32_le(FILE *file, uint32_t value) {
   uint8_t bytes[4] = {
@@ -851,8 +860,18 @@ void write_item(FILE *file, ITEM_t *item) {
       }
     }
   } else if (item->type == ITEM_code) {
-    fwrite(&(item->bytecode_len), sizeof(item->bytecode_len), 1, file);
-    fwrite(item->bytecode, sizeof(uint8_t), item->bytecode_len, file);
+    if (item->bytecode_len > 0 && item->bytecode == NULL) {
+      logerr("Cannot write item '%s': bytecode length is %u but bytecode is NULL.\n",
+             item->name, item->bytecode_len);
+      return;
+    }
+    write_u32_le(file, item->bytecode_len);
+    for (uint32_t i = 0; i < item->bytecode_len; i++) {
+      if (!write_checked_byte(file, item->bytecode[i])) {
+        logerr("Failed to write bytecode for item '%s'.\n", item->name);
+        return;
+      }
+    }
   }
   // Write the number of children
   uint32_t numchildren = 0;
@@ -990,10 +1009,35 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent) {
         logerr("Unknown value tag in itemstore: %u.\n", value_tag);
         return NULL;
     }
-  } else if(type == ITEM_code) {
-    fread(&bytecode_len, sizeof(bytecode_len), 1, file);
-    bytecode = (uint8_t*)malloc(bytecode_len);
-    fread(bytecode, sizeof(uint8_t), bytecode_len, file);
+  } else if (type == ITEM_code) {
+    if (!read_u32_le(file, &bytecode_len)) {
+      logerr("Failed to read bytecode length from itemstore.\n");
+      return NULL;
+    }
+    if (bytecode_len > ITEMSTORE_MAX_BYTECODE_LEN) {
+      logerr("Invalid itemstore bytecode length: %u.\n", bytecode_len);
+      return NULL;
+    }
+    if (bytecode_len > 0) {
+      bytecode = (uint8_t*)malloc(bytecode_len);
+      if (bytecode == NULL) {
+        logerr("Failed to allocate itemstore bytecode of length %u.\n",
+               bytecode_len);
+        return NULL;
+      }
+      for (uint32_t i = 0; i < bytecode_len; i++) {
+        if (!read_checked_byte(file, &bytecode[i])) {
+          logerr("Failed to read bytecode payload from itemstore.\n");
+          free(bytecode);
+          return NULL;
+        }
+      }
+    } else {
+      bytecode = NULL;
+    }
+  } else {
+    logerr("Unknown item type in itemstore: %d.\n", type);
+    return NULL;
   }
   uint32_t numchildren;
   fread(&numchildren, sizeof(numchildren), 1, file);
