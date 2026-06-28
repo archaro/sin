@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "compiler/ir/opcode_schema.h"
+#include "bytecode_verify.h"
 #include "error.h"
 #include "test_assert.h"
 
@@ -31,4 +32,41 @@ void test_opcode_schema_consistency(void) {
 
   free(err_a);
   free(err_b);
+}
+
+void test_bytecode_verify_item_expression_streams(void) {
+  const uint8_t valid[] = {
+      0, 0,
+      'I', 'L', 3, 'f', 'o', 'o',
+           'D', 'V', 0,
+           'D', 'I', 'L', 3, 'b', 'a', 'r', 'E',
+      'E',
+      'h'};
+  BC_VerifyResult result = bc_verify_bytecode(valid, sizeof(valid), "valid", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+
+  const uint8_t missing_end[] = {0, 0, 'I', 'L', 1, 'x'};
+  result = bc_verify_bytecode(missing_end, sizeof(missing_end), "missing_end", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  ASSERT_TRUE(strstr(result.diagnostic.message, "unterminated item stream") != NULL);
+
+  const uint8_t truncated_layer[] = {0, 0, 'I', 'L', 4, 'x', 'E', 'h'};
+  result = bc_verify_bytecode(truncated_layer, sizeof(truncated_layer), "truncated_layer", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  ASSERT_TRUE(strstr(result.diagnostic.message, "truncated layer string") != NULL);
+
+  const uint8_t bad_deref_type[] = {0, 0, 'I', 'D', 'Q', 'E', 'h'};
+  result = bc_verify_bytecode(bad_deref_type, sizeof(bad_deref_type), "bad_deref_type", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  ASSERT_TRUE(strstr(result.diagnostic.message, "unknown dereference type") != NULL);
+
+  const uint8_t missing_local_index[] = {0, 0, 'I', 'D', 'V'};
+  result = bc_verify_bytecode(missing_local_index, sizeof(missing_local_index), "missing_local_index", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  ASSERT_TRUE(strstr(result.diagnostic.message, "truncated dereference local index") != NULL);
+
+  const uint8_t unknown_layer[] = {0, 0, 'I', 'Q', 'E', 'h'};
+  result = bc_verify_bytecode(unknown_layer, sizeof(unknown_layer), "unknown_layer", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  ASSERT_TRUE(strstr(result.diagnostic.message, "unknown item-layer opcode") != NULL);
 }

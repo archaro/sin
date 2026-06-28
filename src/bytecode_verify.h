@@ -63,11 +63,20 @@ typedef struct {
   BC_VerifyError diagnostic;
 } BC_VerifyResult;
 
+typedef enum {
+  BC_ITEM_EXPR_ABSOLUTE = 0,
+  BC_ITEM_EXPR_RELATIVE = 1
+} BC_ItemExprKind;
+
 BC_VerifyOptions bc_verify_default_options(void);
 BC_VerifyOptions bc_verify_disassembly_options(void);
 BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
                                    uint32_t bytecode_len,
                                    const char *source_label,
                                    const BC_VerifyOptions *options);
+bool bc_decode_item_expression(const uint8_t *item_payload,
+                               const uint8_t *bytecode_end,
+                               BC_ItemExprKind kind,
+                               const uint8_t **after_item,
+                               BC_VerifyError *diagnostic);
 const char *bc_verify_status_name(BC_VerifyStatus status);
-
