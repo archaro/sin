@@ -617,3 +617,66 @@ void test_interpreter_truncated_single_byte_operands(void) {
   assert_truncated_bytecode_for_opcode("test.truncated_libcall_token", 'M', "OP_LIBCALL");
   teardown_runtime();
 }
+
+void test_strict_validation_runtime_opt_in(void) {
+  setup_runtime();
+  uint8_t code[] = {0, 0, 'e', 1, 'h'};
+  uint8_t *bytecode = malloc(sizeof(code));
+  ASSERT_NOT_NULL(bytecode);
+  memcpy(bytecode, code, sizeof(code));
+  ITEM_t *item = insert_code_item(config.itemroot, "test.strict_invalid_local", sizeof(code), bytecode);
+  ASSERT_NOT_NULL(item);
+
+  config.strict_validation = false;
+  VALUE_t result = interpret(item);
+  (void)result;
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(VALUE_nil, err->value.type);
+
+  teardown_runtime();
+  setup_runtime();
+  bytecode = malloc(sizeof(code));
+  ASSERT_NOT_NULL(bytecode);
+  memcpy(bytecode, code, sizeof(code));
+  item = insert_code_item(config.itemroot, "test.strict_invalid_local", sizeof(code), bytecode);
+  ASSERT_NOT_NULL(item);
+  config.strict_validation = true;
+  int32_t before_current = config.vm->stack->current;
+  uint8_t before_locals = config.vm->stack->locals;
+  uint8_t before_params = config.vm->stack->params;
+  result = interpret(item);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_TRUE(!item->inuse);
+  ASSERT_EQ_INT(before_current, config.vm->stack->current);
+  ASSERT_EQ_INT(before_locals, config.vm->stack->locals);
+  ASSERT_EQ_INT(before_params, config.vm->stack->params);
+
+  err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, err->value.i);
+  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_EQ_INT(VALUE_str, msg->value.type);
+  ASSERT_TRUE(strstr(msg->value.s, "test.strict_invalid_local") != NULL);
+  ASSERT_TRUE(strstr(msg->value.s, "offset") != NULL);
+  ASSERT_TRUE(strstr(msg->value.s, "local index") != NULL);
+  teardown_runtime();
+}
+
+void test_strict_validation_rejects_null_bytecode(void) {
+  setup_runtime();
+  ITEM_t *item = make_item("nullcode", config.itemroot, ITEM_code, VALUE_NIL, NULL, 0);
+  ASSERT_NOT_NULL(item);
+  config.strict_validation = true;
+  VALUE_t result = interpret(item);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_TRUE(!item->inuse);
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, err->value.i);
+  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_TRUE(strstr(msg->value.s, "null bytecode") != NULL);
+  teardown_runtime();
+}

@@ -5,7 +5,7 @@
 #pragma once
 
 // How big should the error message table be?
-#define MAXERRORS                 31
+#define MAXERRORS                 32
 
 #define ERR_NOERROR               0
 
@@ -26,6 +26,7 @@
 #define ERR_RUNTIME_NOSUCHITEM    22
 #define ERR_RUNTIME_TRUNCATED     23
 #define ERR_RUNTIME_INVLIB        24
+#define ERR_RUNTIME_BYTECODE      25
 
 extern const char *errmsg[];
 

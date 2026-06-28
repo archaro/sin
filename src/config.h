@@ -29,4 +29,5 @@ typedef struct {
   uint8_t maxconns;     // Maximum number of connected players
   uint8_t lastconn;     // Last connection processed by net.input
   bool safe_shutdown;   // Determins how to shut down.
+  bool strict_validation; // Verify bytecode at runtime before execution.
 } CONFIG_t;
