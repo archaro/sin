@@ -17,6 +17,13 @@ typedef struct {
 } BC_JumpRef;
 
 typedef struct {
+  uint8_t opcode;
+  IR_Op op;
+  uint32_t next_offset;
+  uint16_t operand_u16;
+} BC_InstructionMeta;
+
+typedef struct {
   const uint8_t *base;
   const uint8_t *end;
   const char *label;
@@ -26,6 +33,7 @@ typedef struct {
   bool validate_local_indices;
   bool *top_level_instruction_starts;
   uint32_t top_level_instruction_start_capacity;
+  BC_InstructionMeta *instructions;
   BC_JumpRef *jumps;
   uint32_t jump_count;
   uint32_t jump_capacity;
@@ -139,6 +147,141 @@ static int bc_record_jump(BC_Decoder *d, const uint8_t *operand_start,
   return 1;
 }
 
+
+#define BC_MAX_ABSTRACT_STACK_DEPTH 1024
+
+static bool bc_stack_effect(const BC_InstructionMeta *meta, int *pops,
+                            int *pushes) {
+  *pops = 0;
+  *pushes = 0;
+  switch (meta->op) {
+    case IR_OP_PUSH_INT: case IR_OP_PUSH_FLOAT: case IR_OP_PUSH_BOOL:
+    case IR_OP_PUSH_STRING: case IR_OP_LOAD_LOCAL: case IR_OP_ITEM_BEGIN:
+    case IR_OP_ITEM_BEGIN_REL: case IR_OP_LIBCALL_TOKEN:
+      *pushes = 1;
+      return true;
+    case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV:
+    case IR_OP_EQ: case IR_OP_NEQ: case IR_OP_LT: case IR_OP_GT:
+    case IR_OP_LE: case IR_OP_GE: case IR_OP_AND: case IR_OP_OR:
+    case IR_OP_NTHNAME:
+      *pops = 2;
+      *pushes = 1;
+      return true;
+    case IR_OP_NEG: case IR_OP_NOT: case IR_OP_EXISTS: case IR_OP_ROOTNAME:
+    case IR_OP_ITEM_DEREF:
+      *pops = 1;
+      *pushes = 1;
+      return true;
+    case IR_OP_STORE_LOCAL: case IR_OP_JUMP_IF_FALSE: case IR_OP_DELETE:
+    case IR_OP_ITEM_SAVE_CODE:
+      *pops = 1;
+      return true;
+    case IR_OP_ITEM_SAVE:
+      *pops = 2;
+      return true;
+    case IR_OP_CALL:
+      *pops = (int)meta->operand_u16 + 1;
+      *pushes = 1;
+      return true;
+    case IR_OP_HALT:
+      return true;
+    case IR_OP_INC_LOCAL: case IR_OP_DEC_LOCAL: case IR_OP_JUMP:
+      return true;
+    case IR_OP_LABEL: case IR_OP_ITEM_PUSH_LAYER: case IR_OP_ITEM_PUSH_DEREF:
+    case IR_OP_ITEM_END:
+      return true;
+  }
+  return false;
+}
+
+static int bc_enqueue_stack_depth(BC_Decoder *d, int *depths, uint32_t *work,
+                                  uint32_t *work_count, uint32_t offset,
+                                  int depth, const uint8_t *from,
+                                  uint8_t opcode) {
+  if (offset >= d->top_level_instruction_start_capacity ||
+      !d->top_level_instruction_starts[offset]) {
+    return bc_fail(d, from, opcode,
+                   "control-flow edge does not target an instruction boundary");
+  }
+  if (depths[offset] == -1) {
+    depths[offset] = depth;
+    work[(*work_count)++] = offset;
+    return 1;
+  }
+  if (depths[offset] != depth) {
+    char msg[128];
+    snprintf(msg, sizeof(msg), "conflicting stack depths at byte %u (%d vs %d)",
+             offset, depths[offset], depth);
+    return bc_fail(d, d->base + offset, d->instructions[offset].opcode, msg);
+  }
+  return 1;
+}
+
+static int bc_verify_stack_flow(BC_Decoder *d, uint8_t params) {
+  uint32_t cap = d->top_level_instruction_start_capacity;
+  int *depths = malloc((size_t)cap * sizeof(*depths));
+  uint32_t *work = malloc((size_t)cap * sizeof(*work));
+  if (!depths || !work) {
+    free(depths);
+    free(work);
+    return bc_fail(d, d->base, 0, "out of memory verifying stack flow");
+  }
+  for (uint32_t i = 0; i < cap; i++) depths[i] = -1;
+  uint32_t work_count = 0;
+  depths[2] = params;
+  work[work_count++] = 2;
+
+  while (work_count > 0) {
+    uint32_t offset = work[--work_count];
+    BC_InstructionMeta *meta = &d->instructions[offset];
+    int pops, pushes;
+    if (!bc_stack_effect(meta, &pops, &pushes)) {
+      free(depths);
+      free(work);
+      return bc_fail(d, d->base + offset, meta->opcode, "missing stack-effect metadata");
+    }
+    int in_depth = depths[offset];
+    if (in_depth < pops) {
+      char msg[96];
+      snprintf(msg, sizeof(msg), "stack underflow (depth %d, needs %d)", in_depth, pops);
+      free(depths);
+      free(work);
+      return bc_fail(d, d->base + offset, meta->opcode, msg);
+    }
+    int out_depth = in_depth - pops + pushes;
+    if (out_depth > BC_MAX_ABSTRACT_STACK_DEPTH) {
+      free(depths);
+      free(work);
+      return bc_fail(d, d->base + offset, meta->opcode,
+                     "abstract stack depth exceeds verifier limit");
+    }
+    if (meta->op == IR_OP_HALT) continue;
+    if (meta->op == IR_OP_JUMP || meta->op == IR_OP_JUMP_IF_FALSE) {
+      int16_t rel = (int16_t)meta->operand_u16;
+      uint32_t operand_offset = offset + 1;
+      uint32_t target = (uint32_t)((int64_t)operand_offset + rel);
+      if (!bc_enqueue_stack_depth(d, depths, work, &work_count, target, out_depth,
+                                  d->base + offset, meta->opcode)) {
+        free(depths);
+        free(work);
+        return 0;
+      }
+      if (meta->op == IR_OP_JUMP) continue;
+    }
+    if (meta->next_offset < (uint32_t)(d->end - d->base)) {
+      if (!bc_enqueue_stack_depth(d, depths, work, &work_count, meta->next_offset,
+                                  out_depth, d->base + offset, meta->opcode)) {
+        free(depths);
+        free(work);
+        return 0;
+      }
+    }
+  }
+  free(depths);
+  free(work);
+  return 1;
+}
+
 static int bc_validate_recorded_jumps(BC_Decoder *d) {
   uint32_t bytecode_len = (uint32_t)(d->end - d->base);
   for (uint32_t i = 0; i < d->jump_count; i++) {
@@ -193,9 +336,20 @@ static int bc_decode_deref(BC_Decoder *d, const uint8_t **cursor) {
   return bc_fail(d, start, type, "unknown dereference type");
 }
 
+static void bc_record_instruction_meta(BC_Decoder *d, const uint8_t *start,
+                                       const uint8_t *cursor, uint8_t opcode,
+                                       IR_Op op, uint16_t operand_u16) {
+  uint32_t offset = bc_offset(d, start);
+  if (d->instructions && offset < d->top_level_instruction_start_capacity) {
+    d->instructions[offset] = (BC_InstructionMeta){
+        opcode, op, bc_offset(d, cursor), operand_u16};
+  }
+}
+
 static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
                          BC_DecodeContext ctx) {
   const uint8_t *start = *cursor;
+  uint16_t operand_u16 = 0;
   if (!bc_need(d, start, 1, 0, "opcode")) return 0;
   uint8_t op = *(*cursor)++;
   const IR_OpSchema *schema = bc_schema_for(op, ctx);
@@ -209,33 +363,40 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
     case IR_OP_NOT: case IR_OP_AND: case IR_OP_OR:
     case IR_OP_ITEM_DEREF: case IR_OP_ITEM_SAVE: case IR_OP_EXISTS: case IR_OP_DELETE:
     case IR_OP_NTHNAME: case IR_OP_ROOTNAME: case IR_OP_ITEM_END:
+      bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
       return 1;
     case IR_OP_PUSH_BOOL:
     case IR_OP_LIBCALL_TOKEN:
       if (!bc_need(d, *cursor, 1, op, schema->name)) return 0;
       (*cursor)++;
+      bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
       return 1;
     case IR_OP_LOAD_LOCAL: case IR_OP_STORE_LOCAL: case IR_OP_INC_LOCAL: case IR_OP_DEC_LOCAL: {
       if (!bc_need(d, *cursor, 1, op, schema->name)) return 0;
       const uint8_t *index_p = *cursor;
       uint8_t index = *(*cursor)++;
-      return bc_validate_local_index(d, index_p, op, index);
+      if (!bc_validate_local_index(d, index_p, op, index)) return 0;
+      bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
+      return 1;
     }
     case IR_OP_CALL:
       if (!bc_need(d, *cursor, 2, op, schema->name)) return 0;
+      operand_u16 = (uint16_t)(*cursor)[0] | ((uint16_t)(*cursor)[1] << 8);
       *cursor += 2;
-      return 1;
+      break;
     case IR_OP_JUMP: case IR_OP_JUMP_IF_FALSE: {
       if (!bc_need(d, *cursor, 2, op, schema->name)) return 0;
       const uint8_t *operand_start = *cursor;
+      operand_u16 = (uint16_t)(*cursor)[0] | ((uint16_t)(*cursor)[1] << 8);
       if (ctx == BC_CTX_STMT && !bc_record_jump(d, operand_start, op)) return 0;
       *cursor += 2;
-      return 1;
+      break;
     }
     case IR_OP_PUSH_INT:
     case IR_OP_PUSH_FLOAT:
       if (!bc_need(d, *cursor, 8, op, schema->name)) return 0;
       *cursor += 8;
+      bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
       return 1;
     case IR_OP_PUSH_STRING:
     case IR_OP_ITEM_SAVE_CODE: {
@@ -245,6 +406,7 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
       *cursor += 2;
       if (!bc_need(d, *cursor, len, op, schema->name)) return 0;
       *cursor += len;
+      bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
       return 1;
     }
     case IR_OP_ITEM_PUSH_LAYER: {
@@ -252,17 +414,23 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
       uint8_t len = *(*cursor)++;
       if (!bc_need(d, *cursor, len, op, "layer string")) return 0;
       *cursor += len;
+      bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
       return 1;
     }
     case IR_OP_ITEM_PUSH_DEREF:
-      return bc_decode_deref(d, cursor);
+      if (!bc_decode_deref(d, cursor)) return 0;
+      bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
+      return 1;
     case IR_OP_ITEM_BEGIN:
     case IR_OP_ITEM_BEGIN_REL:
-      return bc_decode_item(d, cursor);
+      if (!bc_decode_item(d, cursor)) return 0;
+      bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
+      return 1;
     case IR_OP_LABEL:
       break;
   }
-  return bc_fail(d, start, op, "unsupported opcode schema entry");
+  bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
+  return 1;
 }
 
 bool bc_decode_item_expression(const uint8_t *item_payload,
@@ -322,9 +490,12 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
   }
 
   d.top_level_instruction_starts = calloc((size_t)bytecode_len + 1, sizeof(bool));
+  d.instructions = calloc((size_t)bytecode_len + 1, sizeof(*d.instructions));
   d.top_level_instruction_start_capacity = bytecode_len + 1;
-  if (!d.top_level_instruction_starts) {
+  if (!d.top_level_instruction_starts || !d.instructions) {
     bc_fail(&d, d.base, 0, "out of memory recording instruction starts");
+    free(d.top_level_instruction_starts);
+    free(d.instructions);
     return d.result;
   }
 
@@ -334,6 +505,7 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
     d.top_level_instruction_starts[bc_offset(&d, start)] = true;
     if (!bc_decode_one(&d, &cursor, BC_CTX_STMT)) {
       free(d.top_level_instruction_starts);
+      free(d.instructions);
       free(d.jumps);
       return d.result;
     }
@@ -341,6 +513,13 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
       d.result.halt_offset = bc_offset(&d, start);
       if (!bc_validate_recorded_jumps(&d)) {
         free(d.top_level_instruction_starts);
+        free(d.instructions);
+        free(d.jumps);
+        return d.result;
+      }
+      if (!bc_verify_stack_flow(&d, params)) {
+        free(d.top_level_instruction_starts);
+        free(d.instructions);
         free(d.jumps);
         return d.result;
       }
@@ -352,6 +531,7 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
         }
       }
       free(d.top_level_instruction_starts);
+      free(d.instructions);
       free(d.jumps);
       return d.result;
     }
@@ -359,6 +539,7 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
 
   bc_fail(&d, d.end, 0, "missing terminating HALT opcode");
   free(d.top_level_instruction_starts);
+  free(d.instructions);
   free(d.jumps);
   return d.result;
 }

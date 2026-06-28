@@ -146,3 +146,36 @@ void test_bytecode_verify_jump_targets(void) {
                               "backward_conditional_jump", NULL);
   ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
 }
+
+void test_bytecode_verify_stack_flow(void) {
+  const uint8_t underflow[] = {0, 0, 'a', 'h'};
+  BC_VerifyResult result = bc_verify_bytecode(underflow, sizeof(underflow),
+                                              "stack_underflow", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  ASSERT_TRUE(strstr(result.diagnostic.message, "stack underflow") != NULL);
+
+  const uint8_t valid_linear[] = {0, 0, 'p', 1, 0, 0, 0, 0, 0, 0, 0,
+                                        'p', 2, 0, 0, 0, 0, 0, 0, 0,
+                                        'a', 'h'};
+  result = bc_verify_bytecode(valid_linear, sizeof(valid_linear),
+                              "valid_linear", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+
+  const uint8_t valid_branch[] = {0, 0, 'b', 1, 'k', 0x0E, 0x00,
+                                        'p', 7, 0, 0, 0, 0, 0, 0, 0,
+                                        'j', 0x0B, 0x00,
+                                        'p', 8, 0, 0, 0, 0, 0, 0, 0,
+                                        'h'};
+  result = bc_verify_bytecode(valid_branch, sizeof(valid_branch),
+                              "valid_branch", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+
+  const uint8_t invalid_branch[] = {0, 0, 'b', 1, 'k', 0x0B, 0x00,
+                                          'p', 7, 0, 0, 0, 0, 0, 0, 0,
+                                          'p', 8, 0, 0, 0, 0, 0, 0, 0,
+                                          'h'};
+  result = bc_verify_bytecode(invalid_branch, sizeof(invalid_branch),
+                              "invalid_branch", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  ASSERT_TRUE(strstr(result.diagnostic.message, "conflicting stack depths") != NULL);
+}
