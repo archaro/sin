@@ -17,6 +17,13 @@
 
 static uint64_t itemstore_generation = 1;
 #define FETCHITEM_CACHE_SIZE 64
+#define ITEMSTORE_MAX_STRING_BYTES UINT32_MAX
+#define ITEMSTORE_VALUE_TAG_INT 0
+#define ITEMSTORE_VALUE_TAG_FLOAT 1
+#define ITEMSTORE_VALUE_TAG_STR 2
+#define ITEMSTORE_VALUE_TAG_NIL 3
+#define ITEMSTORE_VALUE_TAG_BOOL 4
+
 typedef struct {
   bool valid;
   bool found;
@@ -27,6 +34,55 @@ typedef struct {
 static FETCHITEM_CACHE_ENTRY_t fetchitem_cache[FETCHITEM_CACHE_SIZE];
 static uint64_t fetchitem_cache_hits = 0;
 static uint64_t fetchitem_cache_misses = 0;
+
+static void write_u32_le(FILE *file, uint32_t value) {
+  uint8_t bytes[4] = {
+    (uint8_t)(value & 0xffu),
+    (uint8_t)((value >> 8) & 0xffu),
+    (uint8_t)((value >> 16) & 0xffu),
+    (uint8_t)((value >> 24) & 0xffu)
+  };
+  fwrite(bytes, sizeof(bytes), 1, file);
+}
+
+static bool read_u32_le(FILE *file, uint32_t *value) {
+  uint8_t bytes[4];
+  if (fread(bytes, sizeof(bytes), 1, file) != 1) return false;
+  *value = ((uint32_t)bytes[0])
+         | ((uint32_t)bytes[1] << 8)
+         | ((uint32_t)bytes[2] << 16)
+         | ((uint32_t)bytes[3] << 24);
+  return true;
+}
+
+static void write_u64_le(FILE *file, uint64_t value) {
+  uint8_t bytes[8];
+  for (size_t i = 0; i < sizeof(bytes); i++) {
+    bytes[i] = (uint8_t)((value >> (i * 8)) & 0xffu);
+  }
+  fwrite(bytes, sizeof(bytes), 1, file);
+}
+
+static bool read_u64_le(FILE *file, uint64_t *value) {
+  uint8_t bytes[8];
+  if (fread(bytes, sizeof(bytes), 1, file) != 1) return false;
+  *value = 0;
+  for (size_t i = 0; i < sizeof(bytes); i++) {
+    *value |= ((uint64_t)bytes[i]) << (i * 8);
+  }
+  return true;
+}
+
+static bool itemstore_value_tag(VALUE_e type, uint8_t *tag) {
+  switch (type) {
+    case VALUE_int: *tag = ITEMSTORE_VALUE_TAG_INT; return true;
+    case VALUE_float: *tag = ITEMSTORE_VALUE_TAG_FLOAT; return true;
+    case VALUE_str: *tag = ITEMSTORE_VALUE_TAG_STR; return true;
+    case VALUE_nil: *tag = ITEMSTORE_VALUE_TAG_NIL; return true;
+    case VALUE_bool: *tag = ITEMSTORE_VALUE_TAG_BOOL; return true;
+  }
+  return false;
+}
 
 static void invalidate_fetchitem_cache(void) {
   memset(fetchitem_cache, 0, sizeof(fetchitem_cache));
@@ -753,13 +809,46 @@ void write_item(FILE *file, ITEM_t *item) {
   // from disk, the item type determines how exactly it is created.
   fwrite(&(item->type), sizeof(item->type), 1, file);
   if (item->type == ITEM_value) {
-    fwrite(&(item->value.type), sizeof(item->value.type), 1, file);
-    if (item->value.type == VALUE_str) {
-      int l = strlen(item->value.s);
-      fwrite(&(l), sizeof(l), 1, file);
-      fwrite(item->value.s, sizeof(char), l, file);
-    } else {
-      fwrite(&(item->value.i), sizeof(item->value.i), 1, file);
+    uint8_t value_tag;
+    if (!itemstore_value_tag(item->value.type, &value_tag)) {
+      logerr("Cannot write item '%s': unknown value type %d.\n",
+             item->name, item->value.type);
+      return;
+    }
+    fwrite(&value_tag, sizeof(value_tag), 1, file);
+    switch (item->value.type) {
+      case VALUE_nil:
+        break;
+      case VALUE_bool:
+      {
+        uint8_t value = item->value.i ? 1 : 0;
+        fwrite(&value, sizeof(value), 1, file);
+        break;
+      }
+      case VALUE_int:
+      {
+        uint64_t payload;
+        memcpy(&payload, &item->value.i, sizeof(payload));
+        write_u64_le(file, payload);
+        break;
+      }
+      case VALUE_float:
+      {
+        write_u64_le(file, item->value.f_bits);
+        break;
+      }
+      case VALUE_str:
+      {
+        size_t len = strlen(item->value.s);
+        if (len > ITEMSTORE_MAX_STRING_BYTES) {
+          logerr("Cannot write item '%s': string is longer than %u bytes.\n",
+                 item->name, ITEMSTORE_MAX_STRING_BYTES);
+          return;
+        }
+        write_u32_le(file, (uint32_t)len);
+        fwrite(item->value.s, sizeof(char), len, file);
+        break;
+      }
     }
   } else if (item->type == ITEM_code) {
     fwrite(&(item->bytecode_len), sizeof(item->bytecode_len), 1, file);
@@ -822,42 +911,84 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent) {
 
   ITEM_e type;
   fread(&type, sizeof(ITEM_e), 1, file);
-  int64_t value;
-  char *strvalue;
   uint8_t *bytecode = NULL;
   uint32_t bytecode_len = 0;
-  VALUE_e valtype;
   VALUE_t itemval = VALUE_NIL;
   if (type == ITEM_value) {
-    fread(&valtype, sizeof(valtype), 1, file);
-    itemval.type = valtype;
-    switch (valtype) {
-      // These types are all represented as an int - only the type differs
-      case VALUE_nil:
-      case VALUE_int:
-      case VALUE_bool:
+    uint8_t value_tag;
+    if (fread(&value_tag, sizeof(value_tag), 1, file) != 1) {
+      logerr("Failed to read value tag from itemstore.\n");
+      return NULL;
+    }
+    switch (value_tag) {
+      case ITEMSTORE_VALUE_TAG_NIL:
+        break;
+      case ITEMSTORE_VALUE_TAG_BOOL:
       {
-        fread(&value, sizeof(value), 1, file);
+        uint8_t value;
+        if (fread(&value, sizeof(value), 1, file) != 1) {
+          logerr("Failed to read boolean payload from itemstore.\n");
+          return NULL;
+        }
+        if (value != 0 && value != 1) {
+          logerr("Invalid boolean payload in itemstore: %u.\n", value);
+          return NULL;
+        }
+        itemval.type = VALUE_bool;
         itemval.i = value;
         break;
       }
-      case VALUE_float:
+      case ITEMSTORE_VALUE_TAG_INT:
       {
-        uint64_t bits;
-        fread(&bits, sizeof(bits), 1, file);
-        itemval.f_bits = bits;
+        uint64_t payload;
+        if (!read_u64_le(file, &payload)) {
+          logerr("Failed to read integer payload from itemstore.\n");
+          return NULL;
+        }
+        itemval.type = VALUE_int;
+        memcpy(&itemval.i, &payload, sizeof(itemval.i));
         break;
       }
-      case VALUE_str:
+      case ITEMSTORE_VALUE_TAG_FLOAT:
       {
-        int l;
-        fread(&l, sizeof(l), 1, file); // length of string
-        strvalue = (char*)malloc(l+1); // +1 for terminator
-        fread(strvalue, sizeof(char), l, file);
-        strvalue[l] = '\0';
+        uint64_t bits;
+        if (!read_u64_le(file, &bits)) {
+          logerr("Failed to read float payload from itemstore.\n");
+          return NULL;
+        }
+        itemval.type = VALUE_float;
+        itemval.f = value_float_from_bits(bits);
+        break;
+      }
+      case ITEMSTORE_VALUE_TAG_STR:
+      {
+        uint32_t len;
+        if (!read_u32_le(file, &len)) {
+          logerr("Failed to read string length from itemstore.\n");
+          return NULL;
+        }
+        if (len > ITEMSTORE_MAX_STRING_BYTES) {
+          logerr("Invalid itemstore string length: %u.\n", len);
+          return NULL;
+        }
+        char *strvalue = (char*)malloc((size_t)len + 1); // +1 for terminator
+        if (strvalue == NULL) {
+          logerr("Failed to allocate itemstore string of length %u.\n", len);
+          return NULL;
+        }
+        if (fread(strvalue, sizeof(char), len, file) != len) {
+          logerr("Failed to read string payload from itemstore.\n");
+          free(strvalue);
+          return NULL;
+        }
+        strvalue[len] = '\0';
+        itemval.type = VALUE_str;
         itemval.s = strvalue;
         break;
       }
+      default:
+        logerr("Unknown value tag in itemstore: %u.\n", value_tag);
+        return NULL;
     }
   } else if(type == ITEM_code) {
     fread(&bytecode_len, sizeof(bytecode_len), 1, file);
