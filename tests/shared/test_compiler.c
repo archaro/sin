@@ -71,6 +71,9 @@ void test_itemstore_value_and_code_roundtrip(void);
 void test_itemstore_nested_depth_roundtrip(void);
 void test_itemstore_loads_generated_v1_wire_fixture(void);
 void test_load_itemstore_rejects_bad_headers(void);
+void test_load_itemstore_rejects_malformed_code_bytecode(void);
+void test_load_itemstore_allows_malformed_code_when_strict_validation_disabled(
+    void);
 void test_load_itemstore_rejects_invalid_wire_tags(void);
 void test_load_itemstore_rejects_structural_corruption(void);
 void test_load_itemstore_rejects_resource_limit_violations(void);
@@ -185,6 +188,9 @@ static const test_case_t core_tests[] = {
     {"test_itemstore_nested_depth_roundtrip", test_itemstore_nested_depth_roundtrip},
     {"test_itemstore_loads_generated_v1_wire_fixture", test_itemstore_loads_generated_v1_wire_fixture},
     {"test_load_itemstore_rejects_bad_headers", test_load_itemstore_rejects_bad_headers},
+    {"test_load_itemstore_rejects_malformed_code_bytecode", test_load_itemstore_rejects_malformed_code_bytecode},
+    {"test_load_itemstore_allows_malformed_code_when_strict_validation_disabled",
+     test_load_itemstore_allows_malformed_code_when_strict_validation_disabled},
     {"test_load_itemstore_rejects_invalid_wire_tags", test_load_itemstore_rejects_invalid_wire_tags},
     {"test_load_itemstore_rejects_structural_corruption", test_load_itemstore_rejects_structural_corruption},
     {"test_load_itemstore_rejects_resource_limit_violations", test_load_itemstore_rejects_resource_limit_violations},

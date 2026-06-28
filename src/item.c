@@ -20,6 +20,7 @@
 #include "memory.h"
 #include "log.h"
 #include "item.h"
+#include "bytecode_verify.h"
 
 static uint64_t itemstore_generation = 1;
 
@@ -1276,6 +1277,20 @@ static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
         return NULL;
       }
       if (!read_bytes(file, bytecode, bytecode_len, "bytecode payload")) {
+        goto fail_before_item;
+      }
+    }
+
+    if (config.strict_validation) {
+      BC_VerifyOptions verify_options = bc_verify_default_options();
+      verify_options.mode = BC_VERIFY_MODE_ITEMSTORE;
+      verify_options.strict_trailing_bytes = true;
+      BC_VerifyResult verify = bc_verify_bytecode(bytecode, bytecode_len,
+                                                  name, &verify_options);
+      if (verify.status != BC_VERIFY_OK) {
+        logerr("Corrupt itemstore '%s': bytecode verification failed for "
+               "'%s': %s\n", ctx->filename, name,
+               verify.diagnostic.message);
         goto fail_before_item;
       }
     }
