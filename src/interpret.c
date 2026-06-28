@@ -1039,7 +1039,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
   // assembled, push the full item name onto the stack as a string.
   // Return a pointer to the bytecode after the item assembly.
   // May recurse - necessary for the handling of nested derefs.
-  if (current_frame_end) {
+  if (config.strict_validation && current_frame_end) {
     const uint8_t *validated_end = NULL;
     BC_VerifyError diagnostic;
     if (!bc_decode_item_expression(nextop, current_frame_end,

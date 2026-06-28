@@ -98,6 +98,13 @@ static ITEM_t *load_or_create_itemstore(const char *filename) {
   return make_root_item("root");
 }
 
+static bool strict_validation_requested(int argc, char **argv) {
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "--strict-validation") == 0) return true;
+  }
+  return false;
+}
+
 int main(int argc, char **argv) {
   FILE *in;
   int filesize = 0, listener_port = LISTENER_PORT;
@@ -120,7 +127,10 @@ int main(int argc, char **argv) {
   sprintf(config.inputline, "%s.line", config.input);
   sprintf(config.inputtext, "%s.text", config.input);
   config.safe_shutdown = true;
-  config.strict_validation = false;
+  /* Itemstores named with -i are loaded while options are processed. Detect
+   * this global validation policy first so its effect is independent of
+   * command-line option order. */
+  config.strict_validation = strict_validation_requested(argc, argv);
 
   // Do the very early preparations, for things which are needed
   // before even the options are processed.
