@@ -738,11 +738,16 @@ bool save_itemsource(ITEM_t *item, char *source) {
 }
 
 void write_item(FILE *file, ITEM_t *item) {
-  // Write the item name as a fixed size of 32 bytes
-  char name[33]; // 32 characters + 1 for null-terminator
-  strncpy(name, item->name, 32);
-  name[32] = '\0'; // Ensure null-termination
-  fwrite(name, sizeof(char), 33, file); // Write the fixed size name
+  // Write the item name as a length-prefixed byte sequence.
+  size_t name_len = strlen(item->name);
+  if (name_len > 32) {
+    logerr("Cannot write item '%s': item name is longer than 32 bytes.\n",
+                                                             item->name);
+    return;
+  }
+  uint8_t serialized_name_len = (uint8_t)name_len;
+  fwrite(&serialized_name_len, sizeof(serialized_name_len), 1, file);
+  fwrite(item->name, sizeof(char), name_len, file);
   // Write the type of the item - there are several types but on disk they
   // degrade to either an int or a string.  When reading the item back
   // from disk, the item type determines how exactly it is created.
@@ -793,17 +798,36 @@ void save_itemstore(const char *filename, ITEM_t *root) {
 }
 
 ITEM_t *read_item(FILE *file, ITEM_t *parent) {
+  uint8_t name_len;
+  if (fread(&name_len, sizeof(name_len), 1, file) != 1) {
+    logerr("Failed to read item name length from itemstore.\n");
+    return NULL;
+  }
+  if (name_len > 32) {
+    logerr("Invalid itemstore item name length: %u.\n", name_len);
+    return NULL;
+  }
+
   char name[33];
-  fread(name, sizeof(char), 33, file);
-  name[32] = '\0'; // Ensure null-termination
+  if (fread(name, sizeof(char), name_len, file) != name_len) {
+    logerr("Failed to read item name from itemstore.\n");
+    return NULL;
+  }
+  name[name_len] = '\0';
+
+  if (parent != NULL && !is_valid_layer(name)) {
+    logerr("Invalid itemstore item name: '%s'.\n", name);
+    return NULL;
+  }
+
   ITEM_e type;
   fread(&type, sizeof(ITEM_e), 1, file);
   int64_t value;
   char *strvalue;
-  uint8_t *bytecode;
-  uint32_t bytecode_len;
+  uint8_t *bytecode = NULL;
+  uint32_t bytecode_len = 0;
   VALUE_e valtype;
-  VALUE_t itemval;
+  VALUE_t itemval = VALUE_NIL;
   if (type == ITEM_value) {
     fread(&valtype, sizeof(valtype), 1, file);
     itemval.type = valtype;
@@ -847,7 +871,9 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent) {
          : make_item(name, parent, type, itemval, bytecode, bytecode_len);
   // Read children if they exist
   for (uint32_t i = 0; i < numchildren; i++) {
-    read_item(file, item);
+    if (read_item(file, item) == NULL) {
+      return NULL;
+    }
   }
   return item;
 }
