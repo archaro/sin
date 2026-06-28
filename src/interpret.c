@@ -33,6 +33,45 @@ static uint8_t *current_frame_end = NULL;
 static ITEM_t *current_item = NULL;
 static ITEM_t *pending_call_item = NULL;
 
+static const char *runtime_item_label(ITEM_t *item, char *buffer, size_t size) {
+  if (!item) return "<null>";
+  if (item->parent && item->parent->parent && size >= MAX_ITEM_NAME) {
+    buffer[0] = '\0';
+    get_itemname(item, buffer);
+    return buffer;
+  }
+  return item->name;
+}
+
+static bool verify_runtime_bytecode(ITEM_t *item) {
+  if (!config.strict_validation || !item || item->type != ITEM_code) return true;
+
+  char item_name[MAX_ITEM_NAME] = {0};
+  const char *label = runtime_item_label(item, item_name, sizeof(item_name));
+  if (!item->bytecode) {
+    char detail[320];
+    snprintf(detail, sizeof(detail),
+             "Runtime bytecode validation failed for item '%s' at offset 0: null bytecode pointer",
+             label);
+    logerr("%s.\n", detail);
+    set_error_item(ERR_RUNTIME_BYTECODE, detail);
+    return false;
+  }
+  BC_VerifyOptions options = bc_verify_default_options();
+  options.mode = BC_VERIFY_MODE_RUNTIME;
+  BC_VerifyResult result = bc_verify_bytecode(item->bytecode,
+      (uint32_t)item->bytecode_len, label, &options);
+  if (result.status == BC_VERIFY_OK) return true;
+
+  char detail[320];
+  snprintf(detail, sizeof(detail),
+           "Runtime bytecode validation failed for item '%s' at offset %u: %s",
+           label, result.diagnostic.offset, result.diagnostic.message);
+  logerr("%s.\n", detail);
+  set_error_item(ERR_RUNTIME_BYTECODE, detail);
+  return false;
+}
+
 static inline bool require_bytes(uint8_t *nextop, size_t bytes, const char *opname) {
   if (!current_frame_start || !current_frame_end) return true;
   if (nextop > current_frame_end || (size_t)(current_frame_end - nextop) < bytes) {
@@ -940,6 +979,10 @@ uint8_t *op_fetchitem(uint8_t *nextop, ITEM_t *item) {
         VALUE_t v = value_clone(&i->value);
         push_stack(VM->stack, v);
       } else {
+        if (!verify_runtime_bytecode(i)) {
+          FREE_STR(itemname);
+          return NULL;
+        }
         // Are there any arguments in excess of what this item takes?
         // If so, lose 'em.
         while (arg_count > i->bytecode[1]) {
@@ -1388,6 +1431,13 @@ VALUE_t interpret(ITEM_t *item) {
 
   current_item = item;
   pending_call_item = NULL;
+
+  if (!verify_runtime_bytecode(current_item)) {
+    current_item = NULL;
+    current_frame_start = NULL;
+    current_frame_end = NULL;
+    return VALUE_NIL;
+  }
 
   // Enter initial frame.
   current_item->inuse = true;

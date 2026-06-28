@@ -116,6 +116,8 @@ void test_value_comparison_string_helpers(void);
 void test_value_comparison_mismatched_type_equality_quirk(void);
 void test_value_comparison_unsupported_ordering_is_false(void);
 void test_interpreter_truncated_single_byte_operands(void);
+void test_strict_validation_runtime_opt_in(void);
+void test_strict_validation_rejects_null_bytecode(void);
 
 /* Compiler component tests. */
 void test_emitbc_header(void);
@@ -216,6 +218,8 @@ static const test_case_t core_tests[] = {
     {"test_value_comparison_mismatched_type_equality_quirk", test_value_comparison_mismatched_type_equality_quirk},
     {"test_value_comparison_unsupported_ordering_is_false", test_value_comparison_unsupported_ordering_is_false},
     {"test_interpreter_truncated_single_byte_operands", test_interpreter_truncated_single_byte_operands},
+    {"test_strict_validation_runtime_opt_in", test_strict_validation_runtime_opt_in},
+    {"test_strict_validation_rejects_null_bytecode", test_strict_validation_rejects_null_bytecode},
 };
 
 static const test_case_t compiler_tests[] = {

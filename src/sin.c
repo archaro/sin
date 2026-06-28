@@ -72,6 +72,8 @@ void usage() {
   logmsg("\t\t\t  './srcroot' is used, which will be created if it does\n");
   logmsg("\t\t\t  not exist.  If this option is supplied the directory\n");
   logmsg("\t\t\t  given must exist or the interpreter will not run.\n");
+  logmsg("     --strict-validation\n");
+  logmsg("\t\t\t  Verify bytecode before runtime execution.\n");
 }
 
 static ITEM_t *load_or_create_itemstore(const char *filename) {
@@ -118,6 +120,7 @@ int main(int argc, char **argv) {
   sprintf(config.inputline, "%s.line", config.input);
   sprintf(config.inputtext, "%s.text", config.input);
   config.safe_shutdown = true;
+  config.strict_validation = false;
 
   // Do the very early preparations, for things which are needed
   // before even the options are processed.
@@ -144,6 +147,7 @@ int main(int argc, char **argv) {
     {"object", required_argument, 0, 'o'},
     {"port", optional_argument, 0, 'p'},
     {"srcroot", required_argument, 0, 's'},
+    {"strict-validation", no_argument, 0, 1000},
     {NULL, 0, 0, '\0'}
   };
   while ((opt = getopt_long(argc, argv, "bd:hi:l::n:o:p:s:", options, NULL)) != -1) {
@@ -233,6 +237,10 @@ int main(int argc, char **argv) {
       case 's': {
         // Optional: root directory of the source tree.
         config.srcroot = strdup(optarg);
+        break;
+      }
+      case 1000: {
+        config.strict_validation = true;
         break;
       }
       default: {
