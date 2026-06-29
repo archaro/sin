@@ -6,7 +6,11 @@ LIBS = -luv
 SANITIZE ?= 0
 STRICT_WARNINGS ?= 0
 SANITIZE_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
-STRICT_WARNING_FLAGS := -Werror
+STRICT_WARNING_FLAGS := -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 \
+	-Wno-error=unused-parameter -Wno-error=sign-compare \
+	-Wno-error=implicit-fallthrough -Wno-error=missing-field-initializers \
+	-Wno-error=pedantic -Wno-error=shadow -Wno-error=type-limits -Wno-error=format-nonliteral
+GENERATED_WARNING_FLAGS :=
 
 ifeq ($(SANITIZE),1)
 CFLAGS += $(SANITIZE_FLAGS)
@@ -15,6 +19,7 @@ endif
 
 ifeq ($(STRICT_WARNINGS),1)
 CFLAGS += $(STRICT_WARNING_FLAGS)
+GENERATED_WARNING_FLAGS += -Wno-error=format -Wno-error=format-nonliteral
 endif
 YACC = bison
 LEX = flex
@@ -134,10 +139,10 @@ $(LEXER_GENERATED): $(LEXER_SOURCES) $(PARSER_GENERATED)
 # Make sure parser.o and lexer.o dependences are tracked
 $(OBJ_DIR)/parser.o: $(SRC_DIR)/parser.c $(SRC_DIR)/parser.h
 	@mkdir -p $(@D)
-	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
+	$(CC) -c $(CFLAGS) $(GENERATED_WARNING_FLAGS) $(DEBUG) $< -o $@
 $(OBJ_DIR)/lexer.o: $(SRC_DIR)/lexer.c
 	@mkdir -p $(@D)
-	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
+	$(CC) -c $(CFLAGS) $(GENERATED_WARNING_FLAGS) $(DEBUG) $< -o $@
 
 # Include dependency files
 -include $(DEPS)
