@@ -60,15 +60,15 @@ LINE_t *add_line(uv_tcp_t *line_handle) {
   return &line[l];
 }
 
-void destroy_line(LINE_t *line) {
+void destroy_line(LINE_t *linep) {
   // Clean up the line object
-  telnet_free(line->telnet);
-  free(line->line_handle);
-  free(line->outbuf->buf.base);
-  free(line->outbuf);
-  free(line->inbuf->buf.base);
-  free(line->inbuf);
-  line->status = LINE_empty;
+  telnet_free(linep->telnet);
+  free(linep->line_handle);
+  free(linep->outbuf->buf.base);
+  free(linep->outbuf);
+  free(linep->inbuf->buf.base);
+  free(linep->inbuf);
+  linep->status = LINE_empty;
 }
 
 LINE_t *find_line(uv_tcp_t *client) {
@@ -86,83 +86,88 @@ LINE_t *find_line(uv_tcp_t *client) {
 }
 
 void client_on_close(uv_handle_t *handle) {
-  LINE_t *line = find_line((uv_tcp_t *)handle);
-  logmsg("Line %d: %s disconnected.\n", line->linenum, line->address);
-  line->status = LINE_disconnecting;
+  LINE_t *linep = find_line((uv_tcp_t *)handle);
+  logmsg("Line %d: %s disconnected.\n", linep->linenum, linep->address);
+  linep->status = LINE_disconnecting;
 }
 
-void append_output(LINE_t *line, const char *msg, const ssize_t len) {
+void append_output(LINE_t *linep, const char *msg, const ssize_t len) {
   // Append output to the buffer for this line, ready for sending later.
   // If the buffer is too small, embiggen it.
-  if (line->status != LINE_empty && line->status != LINE_disconnecting) {
+  if (len <= 0) return;
+  size_t msg_len = (size_t)len;
+  if (linep->status != LINE_empty && linep->status != LINE_disconnecting) {
   // No point in doing this if there is no connection.
-    while (line->outbuf->buf.len + len + 1 >= line->outbuf->length) {
-      line->outbuf->length += OUTBUF_LENGTH;
-      line->outbuf->buf.base = (char *)realloc(line->outbuf->buf.base,
-                                                      line->outbuf->length);
+    while (linep->outbuf->buf.len + msg_len + 1 >= linep->outbuf->length) {
+      linep->outbuf->length += OUTBUF_LENGTH;
+      linep->outbuf->buf.base = (char *)realloc(linep->outbuf->buf.base,
+                                                      linep->outbuf->length);
     }
-    memcpy(line->outbuf->buf.base + line->outbuf->buf.len, msg, len);
-    line->outbuf->buf.len += len;
+    memcpy(linep->outbuf->buf.base + linep->outbuf->buf.len, msg, msg_len);
+    linep->outbuf->buf.len += msg_len;
   }
 }
 
-void append_input(LINE_t *line, const char *msg, const ssize_t len) {
+void append_input(LINE_t *linep, const char *msg, const ssize_t len) {
   // Append input to the input buffer, ready for processing later.
   // Embiggen the buffer if too small.
   // This is where telnet processing will happen.
-  if (line->status != LINE_empty && line->status != LINE_disconnecting) {
+  if (len <= 0) return;
+  size_t msg_len = (size_t)len;
+  if (linep->status != LINE_empty && linep->status != LINE_disconnecting) {
     // No point in doing this if there is no connection.
     // If there is a newline in the input, we have received
     // a complete line of input.
-    if (memchr(msg, '\n', len)) {
-      line->status = LINE_data;
+    if (memchr(msg, '\n', msg_len)) {
+      linep->status = LINE_data;
     }
-    while (line->inbuf->buf.len + len + 1 >= line->inbuf->length) {
-      line->inbuf->length += INBUF_LENGTH;
-      line->inbuf->buf.base = (char *)realloc(line->inbuf->buf.base,
-                                                    line->inbuf->length);
+    while (linep->inbuf->buf.len + msg_len + 1 >= linep->inbuf->length) {
+      linep->inbuf->length += INBUF_LENGTH;
+      linep->inbuf->buf.base = (char *)realloc(linep->inbuf->buf.base,
+                                                    linep->inbuf->length);
     }
-    memcpy(line->inbuf->buf.base + line->inbuf->buf.len, msg, len);
-    line->inbuf->buf.len += len;
-    line->inbuf->buf.base[line->inbuf->buf.len] = '\0';
+    memcpy(linep->inbuf->buf.base + linep->inbuf->buf.len, msg, msg_len);
+    linep->inbuf->buf.len += msg_len;
+    linep->inbuf->buf.base[linep->inbuf->buf.len] = '\0';
   }
 }
 
-char *get_input(LINE_t *line) {
+char *get_input(LINE_t *linep) {
   // Extract a line of input from the input buffer.  Should only be called
   // when the line status is LINE_data.  If there is nothing left in the
   // input buffer, set the status to LINE_idle, otherwise leave it
   // unchanged.  The buffer allocated by this function will need to be
   // freed by the calling function when it is no longer needed.
   // If there isn't a newline in the input buffer, explode messily.
-  char *eol = strchr(line->inbuf->buf.base, '\n');
+  char *eol = strchr(linep->inbuf->buf.base, '\n');
   *eol = '\0';
-  char *data = strdup(line->inbuf->buf.base);
+  char *data = strdup(linep->inbuf->buf.base);
   // Ok, we have the line of data, now take it out of the input buffer.
   eol++;
   char *newbuffer = malloc(INBUF_LENGTH);
   strcpy(newbuffer, eol);
-  free(line->inbuf->buf.base);
-  line->inbuf->length = INBUF_LENGTH;
-  line->inbuf->buf.base = newbuffer;
-  line->inbuf->buf.len = strlen(newbuffer);
-  if (!strchr(line->inbuf->buf.base, '\n')) {
-    line->status = LINE_idle;
+  free(linep->inbuf->buf.base);
+  linep->inbuf->length = INBUF_LENGTH;
+  linep->inbuf->buf.base = newbuffer;
+  linep->inbuf->buf.len = strlen(newbuffer);
+  if (!strchr(linep->inbuf->buf.base, '\n')) {
+    linep->status = LINE_idle;
   }
   return data;
 }
 
 void telnet_event_handler(telnet_t *telnet, telnet_event_t *ev,
                                                     		void *user_data) {
-	LINE_t *line = (LINE_t *)user_data;
+  (void)telnet;
+	LINE_t *linep = (LINE_t *)user_data;
 	switch (ev->type) {
 	case TELNET_EV_DATA:
 	  // Data received from client - process it.
-    append_input(line, ev->data.buffer, ev->data.size);
+    append_input(linep, ev->data.buffer, ev->data.size);
 		break;
 	case TELNET_EV_SEND:
 	  // Data to be sent to client - process it, too.
-    append_output(line, ev->data.buffer, ev->data.size);
+    append_output(linep, ev->data.buffer, ev->data.size);
 		break;
 	case TELNET_EV_DO:
     // Here is where we negotiate requests to do something
@@ -170,7 +175,7 @@ void telnet_event_handler(telnet_t *telnet, telnet_event_t *ev,
 	case TELNET_EV_ERROR:
     // If there is a telnet error, it is essentially impossible to recover.
     logerr("Telnet negotiation error.\n");
-    uv_close((uv_handle_t *)line->line_handle, client_on_close);
+    uv_close((uv_handle_t *)linep->line_handle, client_on_close);
 		break;
 	default:
 		// I don't know you
@@ -178,27 +183,28 @@ void telnet_event_handler(telnet_t *telnet, telnet_event_t *ev,
 	}
 }
 
-void flush_output(LINE_t *line) {
+void flush_output(LINE_t *linep) {
   // Send the output to the line, and reset the buffer.
-  if (line->outbuf->buf.len > 0) {
-    uv_write((uv_write_t*) &line->outbuf->req,
-            (uv_stream_t*)line->line_handle, &line->outbuf->buf, 1, NULL);
-    line->outbuf->buf.len = 0;
-    line->outbuf->buf.base[0] = '\0';
+  if (linep->outbuf->buf.len > 0) {
+    uv_write((uv_write_t*) &linep->outbuf->req,
+            (uv_stream_t*)linep->line_handle, &linep->outbuf->buf, 1, NULL);
+    linep->outbuf->buf.len = 0;
+    linep->outbuf->buf.base[0] = '\0';
   }
 }
 
 void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
   // Buffer for input from connected client
+  (void)handle;
   buf->base = (char*)calloc(suggested_size, 1);
   buf->len = suggested_size;
 }
 
 void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
   if (nread > 0) {
-    LINE_t *line = find_line((uv_tcp_t *)client);
-    if (line) {
-      telnet_recv(line->telnet, buf->base, nread);
+    LINE_t *linep = find_line((uv_tcp_t *)client);
+    if (linep) {
+      telnet_recv(linep->telnet, buf->base, nread);
     }
     free(buf->base);
     return;
@@ -212,6 +218,7 @@ void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
 }
 
 void on_new_connection(uv_stream_t *server, int status) {
+  (void)server;
   if (status < 0) {
     logerr("Error on new connection: %s\n", uv_strerror(status));
     return;
@@ -262,6 +269,7 @@ void init_listener(uint32_t port) {
 
 void input_processor(uv_idle_t* handle) {
   // Called once per iteration of the game loop
+  (void)handle;
   config.vm = config.input_vm;
   ITEM_t *input = find_item(config.itemroot, config.input);
   if (!input) {
@@ -290,4 +298,3 @@ void shutdown_networking() {
   // All the lines will have been disconnected by this point.
   FREE_ARRAY(LINE_t, line, config.maxconns);
 }
-

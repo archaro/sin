@@ -54,6 +54,8 @@ void* reallocate(void* ptr, size_t oldcount, size_t newcount) {
   // not 0      > oldcount 	grow existing allocation (realloc)
   // everything else is undefined
 
+  (void)oldcount;
+
   if (newcount == 0) {
     free(ptr);
     return NULL;

@@ -198,7 +198,7 @@ HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize) {
   HASHTABLE_t *newhashtable = create_hashtable(newsize);
   newhashtable->entry_count = oldhashtable->entry_count;
   // Rehash all the existing entries
-  for (int i = 0; i < (oldhashtable)->size; i++) {
+  for (uint32_t i = 0; i < (oldhashtable)->size; i++) {
     ENTRY_t *current_entry = (oldhashtable)->table[i];
     while (current_entry != NULL) {
       // Save the next entry before we move this one
@@ -342,7 +342,7 @@ void delete_hashtable(HASHTABLE_t *hashtable, const char *key) {
 }
 
 void free_hashtable(HASHTABLE_t* hashtable) {
-  for (int i = 0; i < hashtable->size; i++) {
+  for (uint32_t i = 0; i < hashtable->size; i++) {
     ENTRY_t *current = hashtable->table[i];
     while (current) {
       ENTRY_t *temp = current;
@@ -381,8 +381,10 @@ uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
   switch (len & 3) {
     case 3:
       k1 ^= tail[2] << 16;
+      __attribute__((fallthrough));
     case 2:
       k1 ^= tail[1] << 8;
+      __attribute__((fallthrough));
     case 1:
       k1 ^= tail[0];
       k1 *= c1;

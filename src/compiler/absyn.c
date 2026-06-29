@@ -167,7 +167,7 @@ void as_delete(AS_NODE *root) {
     }
     case N_STMTLIST: {
       AS_STMTLIST *stmtlist = (AS_STMTLIST*)root->lhs;
-      for (int i = 0; i < stmtlist->count; i++) {
+      for (uint32_t i = 0; i < stmtlist->count; i++) {
         as_delete(stmtlist->stmts[i]);
       }
       FREE_ARRAY(AS_NODE*, stmtlist->stmts, stmtlist->capacity);
@@ -395,7 +395,7 @@ static void as_walk_internal(AS_NODE *root, int tree_depth) {
       AS_STMTLIST *stmtlist = (AS_STMTLIST*)root->lhs;
       logmsg("Node type: %s (%u statements)\n",
              nodename[root->nodetype], stmtlist->count);
-      for (int i = 0; i < stmtlist->count; i++) {
+      for (uint32_t i = 0; i < stmtlist->count; i++) {
         as_pretty_print(tree_depth);
         logmsg("Statement %u:\n", i + 1);
         as_walk_internal(stmtlist->stmts[i], tree_depth + 1);

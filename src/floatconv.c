@@ -66,19 +66,19 @@ static bool parse_binary64_bits_noerr(const char *text, uint64_t *out_bits) {
   return true;
 }
 
-static bool c_locale_snprintf(char *buf, size_t cap, const char *fmt, double value) {
+static bool c_locale_snprintf(char *buf, size_t cap, int precision, double value) {
   if (cap == 0) return false;
 #if defined(__GLIBC__) || defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
   locale_t c_locale = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
   if (c_locale == (locale_t)0) return false;
   locale_t old_locale = uselocale(c_locale);
-  int n = snprintf(buf, cap, fmt, value);
+  int n = snprintf(buf, cap, "%.*g", precision, value);
   uselocale(old_locale);
   freelocale(c_locale);
 #else
   struct lconv *lc = localeconv();
   if (lc == NULL || lc->decimal_point == NULL || strcmp(lc->decimal_point, ".") != 0) return false;
-  int n = snprintf(buf, cap, fmt, value);
+  int n = snprintf(buf, cap, "%.*g", precision, value);
 #endif
   return n >= 0 && (size_t)n < cap;
 }
@@ -128,9 +128,7 @@ bool sin_format_binary64_buf(double value, char *buf, size_t cap) {
   char candidate[64];
   uint64_t target = double_bits(value);
   for (int precision = 1; precision <= DBL_DECIMAL_DIG; precision++) {
-    char fmt[16];
-    snprintf(fmt, sizeof(fmt), "%%.%dg", precision);
-    if (!c_locale_snprintf(candidate, sizeof(candidate), fmt, value)) return false;
+    if (!c_locale_snprintf(candidate, sizeof(candidate), precision, value)) return false;
     if (!add_decimal_marker(candidate, sizeof(candidate))) return false;
     uint64_t parsed = 0;
     if (parse_binary64_bits_noerr(candidate, &parsed) && parsed == target) {
@@ -140,7 +138,7 @@ bool sin_format_binary64_buf(double value, char *buf, size_t cap) {
     }
   }
 
-  if (!c_locale_snprintf(candidate, sizeof(candidate), "%.17g", value)) return false;
+  if (!c_locale_snprintf(candidate, sizeof(candidate), 17, value)) return false;
   if (!add_decimal_marker(candidate, sizeof(candidate))) return false;
   if (strlen(candidate) + 1 > cap) return false;
   memcpy(buf, candidate, strlen(candidate) + 1);

@@ -16,7 +16,7 @@
 typedef struct {
     uv_write_t req;
     uv_buf_t buf;
-    int length; // Allocated size of buffer
+    size_t length; // Allocated size of buffer
 } write_req_t;
 
 typedef struct {
@@ -37,4 +37,3 @@ void input_processor(uv_idle_t* handle);
 char *get_input(LINE_t *line);
 void shutdown_listener();
 void shutdown_networking();
-

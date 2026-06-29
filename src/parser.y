@@ -56,6 +56,7 @@ void yy_delete_buffer(YY_BUFFER_STATE b, yyscan_t yyscanner);
 void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
   // yyerror() is called whenever there is a syntax error, so we need to
   // set the error number in the state appropriately.
+  (void)locp;
   if (state->errnum == ERR_NOERROR) {
     // This might have been set already so don't clobber it if it has
     state->errnum = ERR_COMP_SYNTAX;

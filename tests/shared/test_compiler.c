@@ -334,9 +334,9 @@ static test_suite_summary_t run_suite(const char *suite_name, const test_case_t 
 
 int main(void) {
   test_suite_summary_t suites[] = {
-      {"core", sizeof(core_tests) / sizeof(core_tests[0])},
-      {"compiler", sizeof(compiler_tests) / sizeof(compiler_tests[0])},
-      {"runtime", sizeof(runtime_tests) / sizeof(runtime_tests[0])},
+      {"core", sizeof(core_tests) / sizeof(core_tests[0]), 0.0},
+      {"compiler", sizeof(compiler_tests) / sizeof(compiler_tests[0]), 0.0},
+      {"runtime", sizeof(runtime_tests) / sizeof(runtime_tests[0]), 0.0},
   };
   const size_t suite_count = sizeof(suites) / sizeof(suites[0]);
   const int strict_bench = env_flag_enabled("SIN_STRICT_BENCH");

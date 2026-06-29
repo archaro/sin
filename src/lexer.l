@@ -146,7 +146,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                 }
   \\0[0-7]{2}   {
                   /* octal escape sequence */
-                  int result;
+                  unsigned int result;
                   (void) sscanf( yytext + 1, "%o", &result );
                   if ( result > 0xff ) {
                     BEGIN(INITIAL);
@@ -155,7 +155,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                     return TUNKNOWNCHAR;
                   }
                   str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
-                                                 &strbuf_capacity, result);
+                                                 &strbuf_capacity, (int)result);
                 }
   \\n           { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
                                                 &strbuf_capacity, '\n'); }
@@ -270,5 +270,4 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   return TUNKNOWNCHAR;
 }
 %%
-
 

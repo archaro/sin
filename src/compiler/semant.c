@@ -293,11 +293,6 @@ bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out) {
   sem_find_local_index_slot(ctx, name, &slot, &found);
   if (!found) return false;
 
-  if (ctx->local_index[slot].index > UINT8_MAX) {
-    sem_set_error(ctx, ERR_COMP_TOOMANYLOCALS, name);
-    return false;
-  }
-
   if (index_out) *index_out = ctx->local_index[slot].index;
   return true;
 }

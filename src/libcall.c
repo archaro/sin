@@ -64,6 +64,7 @@ static inline void lc_cleanup_cstr(char *s) {
 uint8_t *lc_sys_backup(uint8_t *nextop, ITEM_t *item) {
   // Create a backup of the itemstore.
   // All of the following is a long-winded way to get a backup filename.
+  (void)item;
   char timestamp[64];
   time_t now = time(NULL);
   struct tm *tm_now = localtime(&now);
@@ -83,6 +84,7 @@ uint8_t *lc_sys_backup(uint8_t *nextop, ITEM_t *item) {
 uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
   // Pop the top of the stack and write it to the syslog
   // Try to do something sensible if the type is not a string.
+  (void)item;
   VALUE_t val = pop_stack(VM->stack);
   switch (val.type) {
     case VALUE_str:
@@ -92,7 +94,7 @@ uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
     case VALUE_int:
       logmsg("%ld", val.i);
       break;
-    case VALUE_float:
+    case VALUE_float: {
       char fbuffer[64];
       if (sin_format_binary64_buf(val.f, fbuffer, sizeof(fbuffer))) {
         logmsg("%s", fbuffer);
@@ -100,6 +102,7 @@ uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
         logmsg("<float-format-error>");
       }
       break;
+    }
     case VALUE_nil:
       // One cannot logically output nil.
       break;
@@ -118,6 +121,7 @@ uint8_t *lc_sys_shutdown(uint8_t *nextop, ITEM_t *item) {
   // End the game loop, thereby shutting down neatly, and
   // saving the itemstore.
   // This call takes no parameters.
+  (void)item;
   logmsg("Sys.shutdown called.  Shutting down.\n");
   config.safe_shutdown = true;
   uv_stop(config.loop);
@@ -130,6 +134,7 @@ uint8_t *lc_sys_abort(uint8_t *nextop, ITEM_t *item) {
   // End the game loop, thereby aborting, and not
   // saving the itemstore.
   // This call takes no parameters.
+  (void)item;
   logmsg("Sys.abort called.  Immediate (and messy) shutdown.\n");
   config.safe_shutdown = false;
   uv_stop(config.loop);
@@ -141,6 +146,7 @@ uint8_t *lc_sys_abort(uint8_t *nextop, ITEM_t *item) {
 uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   // Compile and execute some Sinistra code.
   // This call takes one parameter, expected to be a string.
+  (void)item;
   VALUE_t val = pop_stack(VM->stack);
 
   if (!lc_value_is_type(val, VALUE_str)) {
@@ -269,6 +275,7 @@ uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
   // intervals are 0 then the item is executed once immediately, and
   // not again.
   // Validate the parameters before creating the task.
+  (void)item;
   VALUE_t repeatin = pop_stack(VM->stack);
   VALUE_t startin = pop_stack(VM->stack);
   VALUE_t itemname = pop_stack(VM->stack);
@@ -314,6 +321,7 @@ uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
 uint8_t *lc_task_killtask(uint8_t *nextop, ITEM_t *item) {
   // Given a task id, kill it.
   // First validate the argument
+  (void)item;
   VALUE_t taskid = pop_stack(VM->stack);
   if (!lc_value_is_type(taskid, VALUE_int)) {
     // taskid may only own heap memory when it is a string; FREE_STR is a safe no-op otherwise.
@@ -339,6 +347,7 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
   // Called by the task which checks for player input.
   // We operate a fair queuing process here.  Everyone
   // gets a turn.  Find the next activity.
+  (void)item;
   config.lastconn++;
   if (config.lastconn >= config.maxconns) {
     config.lastconn = 0;
@@ -388,6 +397,7 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
 uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
   // Write data out to a line
   // Validate the parameters before creating the task.
+  (void)item;
   VALUE_t out = pop_stack(VM->stack);
   VALUE_t linenum = pop_stack(VM->stack);
 
@@ -410,26 +420,29 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
         telnet_send_text(line[linenum.i].telnet, out.s, strlen(out.s));
         FREE_STR(out);
         break;
-      case VALUE_int:
+      case VALUE_int: {
         char buffer[22];
         itoa(out.i, buffer, 10);
         telnet_send_text(line[linenum.i].telnet, buffer, strlen(buffer));
         break;
-      case VALUE_float:
+      }
+      case VALUE_float: {
         char fbuffer[64];
         if (sin_format_binary64_buf(out.f, fbuffer, sizeof(fbuffer))) {
           telnet_send_text(line[linenum.i].telnet, fbuffer, strlen(fbuffer));
         }
         break;
+      }
       case VALUE_nil:
         // Nothing to output
         break;
-      case VALUE_bool:
+      case VALUE_bool: {
         char *t = "true";
         char *f = "false";
         telnet_send_text(line[linenum.i].telnet, out.i?t:f,
                                                         strlen(out.i?t:f));
         break;
+      }
     }
   }
   // Libcalls always return a value
@@ -440,6 +453,7 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
 uint8_t *lc_str_capitalise(uint8_t *nextop, ITEM_t *item) {
   // If the value on the top of the stack is a string, capitalise the
   // first letter.  Otherwise pop the top of the stack and push nil.
+  (void)item;
 
   if (VM->stack->stack[VM->stack->current].type == VALUE_str) {
     VM->stack->stack[VM->stack->current].s[0] =
@@ -454,6 +468,7 @@ uint8_t *lc_str_capitalise(uint8_t *nextop, ITEM_t *item) {
 uint8_t *lc_str_upper(uint8_t *nextop, ITEM_t *item) {
   // If the value on the top of the stack is a string, make it
   // uppercase.  Otherwise pop the top of the stack and push nil.
+  (void)item;
 
   if (VM->stack->stack[VM->stack->current].type == VALUE_str) {
     char *c = VM->stack->stack[VM->stack->current].s;
@@ -471,6 +486,7 @@ uint8_t *lc_str_upper(uint8_t *nextop, ITEM_t *item) {
 uint8_t *lc_str_lower(uint8_t *nextop, ITEM_t *item) {
   // If the value on the top of the stack is a string, make it
   // lowercase.  Otherwise pop the top of the stack and push nil.
+  (void)item;
 
   if (VM->stack->stack[VM->stack->current].type == VALUE_str) {
     char *c = VM->stack->stack[VM->stack->current].s;

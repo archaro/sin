@@ -251,8 +251,8 @@ typedef enum {
 } CMP_MODE_t;
 
 static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const char *opcode_tag) {
-  VALUE_t v1 = pop_stack(VM->stack);
-  VALUE_t v2 = pop_stack(VM->stack);
+  VALUE_t v1 = pop_stack(vm->stack);
+  VALUE_t v2 = pop_stack(vm->stack);
   VALUE_t result = {VALUE_bool, {.i = 0}};
   VALUE_e v1_type = v1.type;
   VALUE_e v2_type = v2.type;
@@ -282,7 +282,8 @@ static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const cha
 
   value_free_runtime(&v1);
   value_free_runtime(&v2);
-  push_stack(VM->stack, result);
+  push_stack(vm->stack, result);
+  (void)opcode_tag;
   if (!result.i) {
     DISASS_LOG("%s: types %d and %d\n", opcode_tag, v1_type, v2_type);
   }
@@ -328,10 +329,12 @@ static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const cha
   OP('Z', op_rootname)
 
 uint8_t *op_nop(uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   return nextop;
 }
 
 uint8_t *op_undefined(uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   logerr("Undefined opcode: %c\n", *(nextop-1));
   return nextop;
 }
@@ -339,6 +342,7 @@ uint8_t *op_undefined(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_pushint(uint8_t *nextop, ITEM_t *item) {
   // Push an int64 onto the stack.
   // Read the next 8 bytes and make an VALUE_t
+  (void)item;
   VALUE_t v;
   v.type = VALUE_int;
   nextop = bc_read_i64(nextop, &v.i, "OP_PUSHINT");
@@ -349,6 +353,7 @@ uint8_t *op_pushint(uint8_t *nextop, ITEM_t *item) {
 }
 
 uint8_t *op_pushfloat(uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   VALUE_t v;
   v.type = VALUE_float;
   uint64_t bits;
@@ -361,6 +366,7 @@ uint8_t *op_pushfloat(uint8_t *nextop, ITEM_t *item) {
 }
 
 uint8_t *op_pushbool(uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   uint8_t raw;
   nextop = bc_read_u8(nextop, &raw, "OP_PUSHBOOL");
   if (!nextop) return NULL;
@@ -375,6 +381,7 @@ uint8_t *op_pushbool(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_inclocal(uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the locals.
   // If that local is an int, increment it.  Otherwise complain.
+  (void)item;
   uint8_t raw_index;
   nextop = bc_read_u8(nextop, &raw_index, "OP_INCLOCAL");
   if (!nextop) return NULL;
@@ -391,6 +398,7 @@ uint8_t *op_inclocal(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_declocal(uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the locals.
   // If that local is an int, decrement it.  Otherwise complain.
+  (void)item;
   uint8_t raw_index;
   nextop = bc_read_u8(nextop, &raw_index, "OP_DECLOCAL");
   if (!nextop) return NULL;
@@ -407,6 +415,7 @@ uint8_t *op_declocal(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_jump(uint8_t *nextop, ITEM_t *item) {
   // Unconditional jump.  Interpret the next two bytes as a
   // SIGNED int, and then modify the bytecode pointer by that amount.
+  (void)item;
   int16_t offset;
   nextop = bc_read_i16(nextop, &offset, "OP_JUMP");
   if (!nextop) return NULL;
@@ -420,6 +429,7 @@ uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
   // by that amount.  Alternatively, if true, simply skip the next
   // two bytes and go on to the next instruction.
 
+  (void)item;
   int16_t offset;
   uint8_t *offset_start = nextop;
   nextop = bc_read_i16(nextop, &offset, "OP_JUMPFALSE");
@@ -443,6 +453,7 @@ uint8_t *op_jumpfalse(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_savelocal(uint8_t *nextop, ITEM_t *item) {
   // This is the quickest way, without extra pushes and pops.
   // Interpret the next byte as an index into the stack.
+  (void)item;
   uint8_t raw_index;
   nextop = bc_read_u8(nextop, &raw_index, "OP_SAVELOCAL");
   if (!nextop) return NULL;
@@ -457,6 +468,7 @@ uint8_t *op_savelocal(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_getlocal(uint8_t *nextop, ITEM_t *item) {
   // This is the quickest way, without extra pushes and pops.
   // Interpret the next byte as an index into the stack.
+  (void)item;
   uint8_t raw_index;
   nextop = bc_read_u8(nextop, &raw_index, "OP_GETLOCAL");
   if (!nextop) return NULL;
@@ -482,6 +494,7 @@ uint8_t *op_getlocal(uint8_t *nextop, ITEM_t *item) {
 
 uint8_t *op_pushstr(uint8_t *nextop, ITEM_t *item) {
   // Push a string literal onto the stack.
+  (void)item;
   VALUE_t v;
   v.type = VALUE_str;
   uint16_t len;
@@ -501,6 +514,7 @@ uint8_t *op_add(uint8_t *nextop, ITEM_t *item) {
   // Pop two values from the stack.  If both ints, add them and push the
   // result onto the stack.  If both strings, concatenate them and do same.
   // If disparate types, push NIL onto the stack.
+  (void)item;
   VALUE_t v1, v2;
   v1 = pop_stack(VM->stack);
   v2 = pop_stack(VM->stack);
@@ -528,6 +542,7 @@ uint8_t *op_subtract(uint8_t *nextop, ITEM_t *item) {
   // Pop two values, subtract the last from the first, then push the result
   // onto the stack. If either of the values is not an int, the result
   // is nil.
+  (void)item;
   VALUE_t v1, v2;
   v1 = pop_stack(VM->stack);
   v2 = pop_stack(VM->stack);
@@ -549,6 +564,7 @@ uint8_t *op_divide(uint8_t *nextop, ITEM_t *item) {
   // onto the stack. If either of the values is not an int, the result
   // is nil.
   // Trap divide by zero and substitute a result of zero.
+  (void)item;
   VALUE_t v1, v2;
   v1 = pop_stack(VM->stack);
   v2 = pop_stack(VM->stack);
@@ -571,6 +587,7 @@ uint8_t *op_divide(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_multiply(uint8_t *nextop, ITEM_t *item) {
   // Pop two values, multiply them together, then push the result onto the
   // stack.  If either of the values is not an int, the result is nil.
+  (void)item;
   VALUE_t v1, v2;
   v1 = pop_stack(VM->stack);
   v2 = pop_stack(VM->stack);
@@ -590,6 +607,7 @@ uint8_t *op_multiply(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_negate(uint8_t *nextop, ITEM_t *item) {
   // If the top value on the stack is an int, negate it.
   //  Complain bitterly if not.
+  (void)item;
   if (!value_neg(&VM->stack->stack[VM->stack->current])) {
     logerr("Attempt to negate a value of type '%d'.\n",
                                  VM->stack->stack[VM->stack->current].type);
@@ -599,37 +617,44 @@ uint8_t *op_negate(uint8_t *nextop, ITEM_t *item) {
 }
 
 uint8_t *op_equal(uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   pop_compare_and_push_bool(VM, CMP_EQ, "OP_EQUAL");
   return nextop;
 }
 
 uint8_t *op_notequal(uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   pop_compare_and_push_bool(VM, CMP_NE, "OP_NOTEQUAL");
   return nextop;
 }
 
 uint8_t *op_lessthan(uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   pop_compare_and_push_bool(VM, CMP_LT, "OP_LESSTHAN");
   return nextop;
 }
 
 uint8_t *op_lessthanorequal(uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   pop_compare_and_push_bool(VM, CMP_LTE, "OP_LTEQ");
   return nextop;
 }
 
 uint8_t *op_greaterthan(uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   pop_compare_and_push_bool(VM, CMP_GT, "OP_GREATERTHAN");
   return nextop;
 }
 
 uint8_t *op_greaterthanorequal(uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   pop_compare_and_push_bool(VM, CMP_GTE, "OP_GTEQ");
   return nextop;
 }
 
 uint8_t *op_logicalnot(uint8_t *nextop, ITEM_t *item) {
   // Logically negate the value on top of the stack.
+  (void)item;
   VALUE_t *v = &VM->stack->stack[VM->stack->current];
   value_to_bool_inplace(v);
   v->i = !v->i;
@@ -639,6 +664,7 @@ uint8_t *op_logicalnot(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_logicaland(uint8_t *nextop, ITEM_t *item) {
   // Pop two values from the stack, convert to bools
   // AND the result and push it.
+  (void)item;
   VALUE_t v1 = pop_stack(VM->stack);
   VALUE_t v2 = pop_stack(VM->stack);
   value_to_bool_inplace(&v1);
@@ -652,6 +678,7 @@ uint8_t *op_logicaland(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_logicalor(uint8_t *nextop, ITEM_t *item) {
   // Pop two values from the stack, convert to bools
   // OR the result and push it.
+  (void)item;
   VALUE_t v1 = pop_stack(VM->stack);
   VALUE_t v2 = pop_stack(VM->stack);
   value_to_bool_inplace(&v1);
@@ -703,16 +730,16 @@ void assignitem(VALUE_t *itemname, VALUE_t val) {
   FREE_STR(*itemname);
 }
 
-static bool canonicalize_itemname(const char *assembled_name, ITEM_t *current_item, char *out_name) {
+static bool canonicalize_itemname(const char *assembled_name, ITEM_t *context_item, char *out_name) {
   if (!assembled_name || assembled_name[0] == '\0') return false;
 
   if (assembled_name[0] == '.') {
-    if (!current_item) {
+    if (!context_item) {
       logerr("Relative item name '%s' cannot be resolved without current item context.\n", assembled_name);
       return false;
     }
     char parent[MAX_ITEM_NAME];
-    get_itemname(current_item, parent);
+    get_itemname(context_item, parent);
     if (snprintf(out_name, MAX_ITEM_NAME, "%s%s", parent, assembled_name) >= MAX_ITEM_NAME) {
       logerr("Resolved item name exceeds MAX_ITEM_NAME: %s%s\n", parent, assembled_name);
       return false;
@@ -779,23 +806,23 @@ typedef struct {
   uint16_t source_len;
 } CODEITEM_INPUT_t;
 
-static bool decode_assigncode_params(uint8_t **opcode, CODEITEM_INPUT_t *in) {
+static bool decode_assigncode_params(uint8_t **opcodep, CODEITEM_INPUT_t *in) {
   // Format assumption for params block: <u16 len><bytes> repeated, terminated by <u16 0>.
   const size_t MAX_ASSIGNCODE_PARAMS = 1024;
   const size_t MAX_ASSIGNCODE_PARAM_BYTES = 65535;
   while (1) {
-    REQUIRE_BYTES(*opcode, 2, "OP_ASSIGNCODEITEM param-len");
+    REQUIRE_BYTES(*opcodep, 2, "OP_ASSIGNCODEITEM param-len");
     uint16_t param_len = 0;
-    memcpy(&param_len, *opcode, 2);
-    *opcode += 2;
+    memcpy(&param_len, *opcodep, 2);
+    *opcodep += 2;
     if (param_len == 0) break;
     if (in->param_count >= MAX_ASSIGNCODE_PARAMS) return false;
     if ((in->total_param_len + param_len) > MAX_ASSIGNCODE_PARAM_BYTES) return false;
-    REQUIRE_BYTES(*opcode, param_len, "OP_ASSIGNCODEITEM param-bytes");
+    REQUIRE_BYTES(*opcodep, param_len, "OP_ASSIGNCODEITEM param-bytes");
     char *param = GROW_ARRAY(char, NULL, 0, param_len + 1);
-    memcpy(param, *opcode, param_len);
+    memcpy(param, *opcodep, param_len);
     param[param_len] = '\0';
-    *opcode += param_len;
+    *opcodep += param_len;
     in->params = GROW_ARRAY(const char *, (char **)in->params, in->param_count, in->param_count + 1);
     in->param_lens = GROW_ARRAY(uint16_t, in->param_lens, in->param_count, in->param_count + 1);
     in->params[in->param_count] = param;
@@ -806,15 +833,15 @@ static bool decode_assigncode_params(uint8_t **opcode, CODEITEM_INPUT_t *in) {
   return true;
 }
 
-static bool decode_assigncode_source(uint8_t **opcode, CODEITEM_INPUT_t *in) {
-  REQUIRE_BYTES(*opcode, 2, "OP_ASSIGNCODEITEM source-len");
-  memcpy(&in->source_len, *opcode, 2);
-  *opcode += 2;
-  REQUIRE_BYTES(*opcode, in->source_len, "OP_ASSIGNCODEITEM source-bytes");
+static bool decode_assigncode_source(uint8_t **opcodep, CODEITEM_INPUT_t *in) {
+  REQUIRE_BYTES(*opcodep, 2, "OP_ASSIGNCODEITEM source-len");
+  memcpy(&in->source_len, *opcodep, 2);
+  *opcodep += 2;
+  REQUIRE_BYTES(*opcodep, in->source_len, "OP_ASSIGNCODEITEM source-bytes");
   in->source = GROW_ARRAY(char, NULL, 0, in->source_len + 1);
-  memcpy(in->source, *opcode, in->source_len);
+  memcpy(in->source, *opcodep, in->source_len);
   in->source[in->source_len] = '\0';
-  *opcode += in->source_len;
+  *opcodep += in->source_len;
   return true;
 }
 
@@ -1338,6 +1365,7 @@ uint8_t *op_nthname(uint8_t *nextop, ITEM_t *item) {
   // of an item.  Pop the index, then pop the item.  Find the indexed
   // child of the item and return its name as a string.  If the child
   // is not found, return nil.  There has to be a better way.
+  (void)item;
   VALUE_t index = pop_stack(VM->stack);
   VALUE_t itemname = pop_stack(VM->stack);
   bool found = false;
@@ -1364,6 +1392,7 @@ uint8_t *op_nthname(uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_rootname(uint8_t *nextop, ITEM_t *item) {
   // Identical to op_nthname, except it only pops an index from the stack
   // and then uses it to index the itemroot.
+  (void)item;
   VALUE_t index = pop_stack(VM->stack);
   bool found = false;
   if (index.type == VALUE_int && index.i >= 0) {

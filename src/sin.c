@@ -33,6 +33,7 @@ jmp_buf recovery;
 CONFIG_t config;
 
 void close_all_tasks(uv_handle_t* handle, void* arg) {
+  (void)arg;
   if (!uv_is_closing(handle)) { //FALSE, handle is closing
     uv_close(handle, NULL);
   }
@@ -41,6 +42,7 @@ void close_all_tasks(uv_handle_t* handle, void* arg) {
 void handle_sigusr1(int sig) {
   // SIGUSR1 is raised in various places, and should cause the interpret()
   // function to terminate.
+  (void)sig;
   logerr(errmsg[ERR_RUNTIME_SIGUSR1]);
   longjmp(recovery, ERR_RUNTIME_SIGUSR1);
 }
