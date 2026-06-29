@@ -869,6 +869,15 @@ bool libcall_lookup_token(const char *libname, const char *callname, uint8_t *to
   return true;
 }
 
+bool libcall_token_arg_count(uint8_t token, uint8_t *args) {
+  for (size_t i = 0; libcalls[i].libname != NULL; i++) {
+    if (i != token) continue;
+    if (args) *args = libcalls[i].args;
+    return true;
+  }
+  return false;
+}
+
 bool libcall_names_unique(const LIBCALL_t *calls) {
   for (size_t i = 0; calls[i].libname != NULL; i++) {
     for (size_t j = i + 1; calls[j].libname != NULL; j++) {

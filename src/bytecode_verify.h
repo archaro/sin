@@ -6,6 +6,8 @@
 
 #include "compiler/ir/opcode_schema.h"
 
+#define BC_MAX_ITEM_EXPRESSION_DEPTH 8u
+
 
 typedef enum {
   BC_VERIFY_OK = 0,

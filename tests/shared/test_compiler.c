@@ -140,6 +140,7 @@ void test_bytecode_verify_opcode_halt_and_trailing_bytes(void);
 void test_bytecode_verify_truncated_operand_widths(void);
 void test_bytecode_verify_local_indexes_and_items(void);
 void test_bytecode_verify_jumps_and_stack_flow(void);
+void test_bytecode_verify_nesting_and_vm_stack_limits(void);
 void test_bytecode_verify_pipeline_fixture_bytecode(void);
 void test_bytecode_verify_compiler_emitted_bytecode(void);
 void test_pipeline_golden(void);
@@ -257,6 +258,7 @@ static const test_case_t compiler_tests[] = {
     {"test_bytecode_verify_truncated_operand_widths", test_bytecode_verify_truncated_operand_widths},
     {"test_bytecode_verify_local_indexes_and_items", test_bytecode_verify_local_indexes_and_items},
     {"test_bytecode_verify_jumps_and_stack_flow", test_bytecode_verify_jumps_and_stack_flow},
+    {"test_bytecode_verify_nesting_and_vm_stack_limits", test_bytecode_verify_nesting_and_vm_stack_limits},
     {"test_bytecode_verify_pipeline_fixture_bytecode", test_bytecode_verify_pipeline_fixture_bytecode},
     {"test_bytecode_verify_compiler_emitted_bytecode", test_bytecode_verify_compiler_emitted_bytecode},
     {"test_pipeline_golden", test_pipeline_golden},

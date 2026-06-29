@@ -54,7 +54,8 @@ and byte order assumptions.
 * **Item names** are assembled between `I` or `R` and `E`. Literal layers use
   `L`, a one-byte unsigned length, and the layer-name bytes. Dereferenced layers
   use `D` followed by the nested dereference kind, currently `V` plus a one-byte
-  local index for a local variable layer, or another item assembly.
+  local index for a local variable layer, or another item assembly. Nested item
+  assemblies are limited to eight levels.
 * **Embedded code** (`B`) optionally begins with a parameter block: `P`, zero or
   more parameter names as `u16 length + bytes`, then a terminating zero `u16`
   length. The parameter block is followed by the mandatory source block encoded

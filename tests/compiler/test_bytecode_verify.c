@@ -112,7 +112,63 @@ void test_bytecode_verify_truncated_operand_widths(void) {
   assert_verify_status(truncated_embedded_code_blob,
                        sizeof(truncated_embedded_code_blob), BC_VERIFY_ERROR,
                        "truncated_embedded_code_blob",
-                       "truncated ITEM_SAVE_CODE");
+                       "truncated embedded source");
+
+  const uint8_t truncated_parameter_block[] = {0, 0, 'B', 'P', 1};
+  assert_verify_status(truncated_parameter_block,
+                       sizeof(truncated_parameter_block), BC_VERIFY_ERROR,
+                       "truncated_parameter_block",
+                       "truncated embedded parameter length");
+
+  const size_t too_many_param_count = 1025;
+  const size_t too_many_len = 2 + 2 + too_many_param_count * 3 + 2 + 2;
+  uint8_t *too_many_params = malloc(too_many_len);
+  ASSERT_NOT_NULL(too_many_params);
+  size_t pos = 0;
+  too_many_params[pos++] = 0;
+  too_many_params[pos++] = 0;
+  too_many_params[pos++] = 'B';
+  too_many_params[pos++] = 'P';
+  for (size_t i = 0; i < too_many_param_count; i++) {
+    too_many_params[pos++] = 1;
+    too_many_params[pos++] = 0;
+    too_many_params[pos++] = 'a';
+  }
+  too_many_params[pos++] = 0;
+  too_many_params[pos++] = 0;
+  too_many_params[pos++] = 0;
+  too_many_params[pos++] = 0;
+  ASSERT_EQ_INT(too_many_len, pos);
+  assert_verify_status(too_many_params, (uint32_t)too_many_len,
+                       BC_VERIFY_ERROR, "too_many_embedded_parameters",
+                       "embedded parameter count exceeds maximum 1024");
+  free(too_many_params);
+
+  const size_t excessive_param_bytes_len = 2 + 2 + 2 + 65535 + 2 + 1 + 2 + 2;
+  uint8_t *excessive_param_bytes = malloc(excessive_param_bytes_len);
+  ASSERT_NOT_NULL(excessive_param_bytes);
+  pos = 0;
+  excessive_param_bytes[pos++] = 0;
+  excessive_param_bytes[pos++] = 0;
+  excessive_param_bytes[pos++] = 'B';
+  excessive_param_bytes[pos++] = 'P';
+  excessive_param_bytes[pos++] = 0xFF;
+  excessive_param_bytes[pos++] = 0xFF;
+  memset(excessive_param_bytes + pos, 'a', 65535);
+  pos += 65535;
+  excessive_param_bytes[pos++] = 1;
+  excessive_param_bytes[pos++] = 0;
+  excessive_param_bytes[pos++] = 'b';
+  excessive_param_bytes[pos++] = 0;
+  excessive_param_bytes[pos++] = 0;
+  excessive_param_bytes[pos++] = 0;
+  excessive_param_bytes[pos++] = 0;
+  ASSERT_EQ_INT(excessive_param_bytes_len, pos);
+  assert_verify_status(excessive_param_bytes,
+                       (uint32_t)excessive_param_bytes_len,
+                       BC_VERIFY_ERROR, "excessive_embedded_parameter_bytes",
+                       "embedded parameter bytes exceed maximum 65535");
+  free(excessive_param_bytes);
 }
 
 void test_bytecode_verify_local_indexes_and_items(void) {
@@ -158,6 +214,72 @@ void test_bytecode_verify_jumps_and_stack_flow(void) {
   assert_verify_status(branch_stack_mismatch, sizeof(branch_stack_mismatch),
                        BC_VERIFY_ERROR, "branch_stack_mismatch",
                        "conflicting stack depths");
+
+  const uint8_t libcall_underflow[] = {0, 0, 'M', 1, 'h'};
+  assert_verify_status(libcall_underflow, sizeof(libcall_underflow),
+                       BC_VERIFY_ERROR, "libcall_underflow",
+                       "stack underflow");
+
+  const uint8_t valid_libcall[] = {0, 0, 'l', 1, 0, 'x', 'M', 1, 'h'};
+  assert_verify_status(valid_libcall, sizeof(valid_libcall), BC_VERIFY_OK,
+                       "valid_libcall", NULL);
+}
+
+void test_bytecode_verify_nesting_and_vm_stack_limits(void) {
+  uint8_t valid_nesting[2 + 1 + (BC_MAX_ITEM_EXPRESSION_DEPTH - 1) * 2 +
+                        BC_MAX_ITEM_EXPRESSION_DEPTH + 1];
+  size_t pos = 0;
+  valid_nesting[pos++] = 0;
+  valid_nesting[pos++] = 0;
+  valid_nesting[pos++] = 'I';
+  for (uint32_t i = 1; i < BC_MAX_ITEM_EXPRESSION_DEPTH; i++) {
+    valid_nesting[pos++] = 'D';
+    valid_nesting[pos++] = 'I';
+  }
+  for (uint32_t i = 0; i < BC_MAX_ITEM_EXPRESSION_DEPTH; i++) {
+    valid_nesting[pos++] = 'E';
+  }
+  valid_nesting[pos++] = 'h';
+  ASSERT_EQ_INT(sizeof(valid_nesting), pos);
+  assert_verify_status(valid_nesting, sizeof(valid_nesting), BC_VERIFY_OK,
+                       "valid maximum item nesting", NULL);
+
+  uint8_t excessive_nesting[2 + 1 + BC_MAX_ITEM_EXPRESSION_DEPTH * 2 +
+                            BC_MAX_ITEM_EXPRESSION_DEPTH + 1 + 1];
+  pos = 0;
+  excessive_nesting[pos++] = 0;
+  excessive_nesting[pos++] = 0;
+  excessive_nesting[pos++] = 'I';
+  for (uint32_t i = 0; i < BC_MAX_ITEM_EXPRESSION_DEPTH; i++) {
+    excessive_nesting[pos++] = 'D';
+    excessive_nesting[pos++] = 'I';
+  }
+  for (uint32_t i = 0; i <= BC_MAX_ITEM_EXPRESSION_DEPTH; i++) {
+    excessive_nesting[pos++] = 'E';
+  }
+  excessive_nesting[pos++] = 'h';
+  ASSERT_EQ_INT(sizeof(excessive_nesting), pos);
+  assert_verify_status(excessive_nesting, sizeof(excessive_nesting),
+                       BC_VERIFY_ERROR, "excessive item nesting",
+                       "item-expression nesting exceeds maximum depth");
+
+  const size_t push_count = 770;
+  const size_t bytecode_len = 2 + push_count * 2 + 1;
+  uint8_t *excessive_stack = malloc(bytecode_len);
+  ASSERT_NOT_NULL(excessive_stack);
+  pos = 0;
+  excessive_stack[pos++] = 255;
+  excessive_stack[pos++] = 0;
+  for (size_t i = 0; i < push_count; i++) {
+    excessive_stack[pos++] = 'b';
+    excessive_stack[pos++] = 1;
+  }
+  excessive_stack[pos++] = 'h';
+  ASSERT_EQ_INT(bytecode_len, pos);
+  assert_verify_status(excessive_stack, (uint32_t)bytecode_len,
+                       BC_VERIFY_ERROR, "locals plus operand stack",
+                       "reserved local slots exceeds VM capacity");
+  free(excessive_stack);
 }
 
 void test_bytecode_verify_pipeline_fixture_bytecode(void) {
@@ -181,6 +303,7 @@ void test_bytecode_verify_compiler_emitted_bytecode(void) {
       "@x = 7; @x;",
       "if 1 < 2 then 9; else 7; endif;",
       "foo.12;",
+      "add = code {@a, @b} ( @a + @b; );",
   };
   for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
     OUTPUT_t *out = NULL;

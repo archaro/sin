@@ -24,6 +24,7 @@ typedef struct {
 extern const LIBCALL_t libcalls[];
 
 bool libcall_lookup_token(const char *libname, const char *callname, uint8_t *token, uint8_t *args);
+bool libcall_token_arg_count(uint8_t token, uint8_t *args);
 bool libcall_init_registry(void);
 void libcall_free_registry(void);
 void libcall_reset_registry_for_tests(void);
