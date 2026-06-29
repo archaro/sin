@@ -1,9 +1,12 @@
 #include <stdarg.h>
+#include <setjmp.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "ir.h"
 #include "test_assert.h"
@@ -24,9 +27,38 @@ typedef struct {
 
 static const char *current_suite_name = "<startup>";
 static const char *current_test_name = "<startup>";
+static jmp_buf test_failure_jmp;
+static bool test_failure_jmp_active = false;
+static char test_failure_message[1024];
 
 const char *test_harness_current_suite(void) { return current_suite_name; }
 const char *test_harness_current_test(void) { return current_test_name; }
+
+void test_harness_failf(const char *file, int line, const char *fmt, ...) {
+  va_list args;
+  size_t used = 0;
+  int n = snprintf(test_failure_message, sizeof(test_failure_message),
+                   "ASSERTION FAILED in [%s] %s at %s:%d: ",
+                   test_harness_current_suite(), test_harness_current_test(),
+                   file, line);
+  if (n > 0) {
+    used = (size_t)n;
+    if (used >= sizeof(test_failure_message)) {
+      used = sizeof(test_failure_message) - 1;
+    }
+  }
+  va_start(args, fmt);
+  vsnprintf(test_failure_message + used, sizeof(test_failure_message) - used,
+            fmt, args);
+  va_end(args);
+
+  if (test_failure_jmp_active) {
+    longjmp(test_failure_jmp, 1);
+  }
+
+  fprintf(stderr, "%s\n", test_failure_message);
+  exit(1);
+}
 
 static double elapsed_ms_since(clock_t start) {
   return ((double)(clock() - start) * 1000.0) / (double)CLOCKS_PER_SEC;
@@ -301,6 +333,95 @@ static void harness_printf(const char *fmt, ...) {
   fflush(stdout);
 }
 
+typedef struct {
+  FILE *stdout_file;
+  FILE *stderr_file;
+  int saved_stdout_fd;
+  int saved_stderr_fd;
+  bool active;
+} test_output_capture_t;
+
+static void capture_abort(const char *operation) {
+  perror(operation);
+  exit(1);
+}
+
+static void capture_start(test_output_capture_t *capture) {
+  memset(capture, 0, sizeof(*capture));
+  capture->saved_stdout_fd = -1;
+  capture->saved_stderr_fd = -1;
+
+  fflush(stdout);
+  fflush(stderr);
+
+  capture->stdout_file = tmpfile();
+  if (!capture->stdout_file) capture_abort("tmpfile stdout");
+  capture->stderr_file = tmpfile();
+  if (!capture->stderr_file) capture_abort("tmpfile stderr");
+
+  capture->saved_stdout_fd = dup(STDOUT_FILENO);
+  if (capture->saved_stdout_fd < 0) capture_abort("dup stdout");
+  capture->saved_stderr_fd = dup(STDERR_FILENO);
+  if (capture->saved_stderr_fd < 0) capture_abort("dup stderr");
+
+  if (dup2(fileno(capture->stdout_file), STDOUT_FILENO) < 0) {
+    capture_abort("redirect stdout");
+  }
+  if (dup2(fileno(capture->stderr_file), STDERR_FILENO) < 0) {
+    capture_abort("redirect stderr");
+  }
+
+  capture->active = true;
+}
+
+static void capture_stop(test_output_capture_t *capture) {
+  if (!capture->active) return;
+
+  fflush(stdout);
+  fflush(stderr);
+
+  if (dup2(capture->saved_stdout_fd, STDOUT_FILENO) < 0) {
+    capture_abort("restore stdout");
+  }
+  if (dup2(capture->saved_stderr_fd, STDERR_FILENO) < 0) {
+    capture_abort("restore stderr");
+  }
+
+  close(capture->saved_stdout_fd);
+  close(capture->saved_stderr_fd);
+  capture->saved_stdout_fd = -1;
+  capture->saved_stderr_fd = -1;
+  capture->active = false;
+}
+
+static void capture_close(test_output_capture_t *capture) {
+  if (capture->active) capture_stop(capture);
+  if (capture->stdout_file) fclose(capture->stdout_file);
+  if (capture->stderr_file) fclose(capture->stderr_file);
+  capture->stdout_file = NULL;
+  capture->stderr_file = NULL;
+}
+
+static void replay_captured_stream(const char *label, FILE *stream) {
+  fflush(stream);
+  rewind(stream);
+
+  int ch = fgetc(stream);
+  if (ch == EOF) return;
+
+  harness_printf("[test-harness][captured %s]\n", label);
+  int last = '\n';
+  do {
+    fputc(ch, stdout);
+    last = ch;
+    ch = fgetc(stream);
+  } while (ch != EOF);
+  if (last != '\n') {
+    fputc('\n', stdout);
+  }
+  fflush(stdout);
+}
+
 static int env_flag_enabled(const char *name) {
   const char *value = getenv(name);
   if (value == NULL) {
@@ -319,9 +440,33 @@ static test_suite_summary_t run_suite(const char *suite_name, const test_case_t 
     clock_t test_start = clock();
     harness_printf("[test-harness][%s][START] index=%zu/%zu test=%s\n", suite_name, i + 1,
                    count, cases[i].name);
-    cases[i].fn();
-    harness_printf("[test-harness][%s][PASS] index=%zu/%zu test=%s elapsed_ms=%.2f\n", suite_name, i + 1,
-                   count, cases[i].name, elapsed_ms_since(test_start));
+
+    test_output_capture_t capture;
+    capture_start(&capture);
+    test_failure_message[0] = '\0';
+    test_failure_jmp_active = true;
+    int failed = setjmp(test_failure_jmp);
+    if (failed == 0) {
+      cases[i].fn();
+    }
+    test_failure_jmp_active = false;
+    capture_stop(&capture);
+
+    if (failed != 0) {
+      harness_printf("[test-harness][%s][FAIL] index=%zu/%zu test=%s elapsed_ms=%.2f\n",
+                     suite_name, i + 1, count, cases[i].name,
+                     elapsed_ms_since(test_start));
+      harness_printf("%s\n", test_failure_message);
+      replay_captured_stream("stdout", capture.stdout_file);
+      replay_captured_stream("stderr", capture.stderr_file);
+      capture_close(&capture);
+      exit(1);
+    }
+
+    capture_close(&capture);
+    harness_printf("[test-harness][%s][PASS] index=%zu/%zu test=%s elapsed_ms=%.2f\n",
+                   suite_name, i + 1, count, cases[i].name,
+                   elapsed_ms_since(test_start));
     summary.count++;
   }
   summary.elapsed_ms = elapsed_ms_since(suite_start);
