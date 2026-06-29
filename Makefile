@@ -111,7 +111,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
-.PHONY: all clean lib test teststrict test-sanitize
+.PHONY: all clean lib test teststrict test-asan test-lsan
 
 all: $(LIB) scomp sdiss sin
 
@@ -153,9 +153,13 @@ test: $(TEST_BIN)
 teststrict: $(TEST_BIN)
 	SIN_STRICT_BENCH=1 ./$(TEST_BIN)
 
-test-sanitize:
+test-asan:
 	$(MAKE) clean
-	$(MAKE) SANITIZE=1 STRICT_WARNINGS=1 test
+	ASAN_OPTIONS=detect_leaks=0 $(MAKE) SANITIZE=1 STRICT_WARNINGS=1 test
+
+test-lsan:
+	$(MAKE) clean
+	ASAN_OPTIONS=detect_leaks=1 $(MAKE) SANITIZE=1 STRICT_WARNINGS=1 test
 
 $(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
 	$(CC) $(CFLAGS) $(DEBUG) -Isrc -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
