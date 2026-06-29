@@ -2,6 +2,20 @@ CC = gcc
 CFLAGS = -g -Wall -MMD -MP -Isrc -Isrc/compiler
 LDFLAGS = -g
 LIBS = -luv
+
+SANITIZE ?= 0
+STRICT_WARNINGS ?= 0
+SANITIZE_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
+STRICT_WARNING_FLAGS := -Werror
+
+ifeq ($(SANITIZE),1)
+CFLAGS += $(SANITIZE_FLAGS)
+LDFLAGS += $(SANITIZE_FLAGS)
+endif
+
+ifeq ($(STRICT_WARNINGS),1)
+CFLAGS += $(STRICT_WARNING_FLAGS)
+endif
 YACC = bison
 LEX = flex
 DEBUG = -DDEBUG=1 #-DSTRINGDEBUG=1 -DDISASS=1
@@ -92,7 +106,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
-.PHONY: all clean lib test teststrict
+.PHONY: all clean lib test teststrict test-sanitize
 
 all: $(LIB) scomp sdiss sin
 
@@ -134,9 +148,13 @@ test: $(TEST_BIN)
 teststrict: $(TEST_BIN)
 	SIN_STRICT_BENCH=1 ./$(TEST_BIN)
 
+test-sanitize:
+	$(MAKE) clean
+	$(MAKE) SANITIZE=1 STRICT_WARNINGS=1 test
+
 $(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
 	$(CC) $(CFLAGS) $(DEBUG) -Isrc -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
 clean:
-	rm -rf $(OBJ_DIR)/*.o $(OBJ_DIR)/*.d $(LIB) $(LIB_DIR) \
+	rm -rf $(OBJ_DIR) $(LIB) $(LIB_DIR) \
          $(PARSER_GENERATED) $(LEXER_GENERATED) $(TEST_BIN)
