@@ -14,6 +14,16 @@ Run `make teststrict` when you also want the benchmark budget checks enforced. T
 
 The harness prints the selected mode and a final summary with per-suite and total test counts, so the output should identify whether strict benchmark checks were enabled regardless of which make target launched it.
 
+### Strict warning builds
+
+Strict compiler warnings are opt-in for local development and CI gates that want warnings to fail the build. Run:
+
+```bash
+make STRICT_WARNINGS=1 test
+```
+
+The `test-sanitize` target also enables strict warnings automatically, so sanitizer runs use the same warning gate in addition to address/undefined-behavior sanitizers.
+
 ## Core language gate
 
 Run this gate when changing any code in the compiler or interpreter paths:
