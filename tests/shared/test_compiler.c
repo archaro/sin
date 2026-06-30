@@ -89,6 +89,7 @@ void test_bytecode_verify_stack_flow(void);
 void test_parser_input_api(void);
 void test_parser_float_literals_decimal_forms(void);
 void test_parser_float_literals_integer_still_int(void);
+void test_parser_float_literals_unary_minus_preserves_float_literals(void);
 void test_parser_float_literals_item_layers_unchanged(void);
 void test_parser_float_literals_malformed_rejected(void);
 void test_floatconv_binary64_edge_cases(void);
@@ -218,6 +219,7 @@ static const test_case_t core_tests[] = {
     {"test_parser_input_api", test_parser_input_api},
     {"test_parser_float_literals_decimal_forms", test_parser_float_literals_decimal_forms},
     {"test_parser_float_literals_integer_still_int", test_parser_float_literals_integer_still_int},
+    {"test_parser_float_literals_unary_minus_preserves_float_literals", test_parser_float_literals_unary_minus_preserves_float_literals},
     {"test_parser_float_literals_item_layers_unchanged", test_parser_float_literals_item_layers_unchanged},
     {"test_parser_float_literals_malformed_rejected", test_parser_float_literals_malformed_rejected},
     {"test_floatconv_binary64_edge_cases", test_floatconv_binary64_edge_cases},

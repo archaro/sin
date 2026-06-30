@@ -96,6 +96,31 @@ void test_parser_float_literals_decimal_forms(void) {
   as_delete(root);
 }
 
+void test_parser_float_literals_unary_minus_preserves_float_literals(void) {
+  AS_NODE *root = parse_ok("-1.5; -0.0;");
+  ASSERT_EQ_INT(N_STMTLIST, root->nodetype);
+  AS_STMTLIST *list = (AS_STMTLIST *)root->lhs;
+  ASSERT_EQ_INT(2, list->count);
+
+  AS_NODE *stmt = list->stmts[0];
+  ASSERT_EQ_INT(N_EXPRSTMT, stmt->nodetype);
+  AS_NODE *value_node = (AS_NODE *)stmt->lhs;
+  ASSERT_EQ_INT(N_VALUE, value_node->nodetype);
+  AS_VALUE *value = (AS_VALUE *)value_node->lhs;
+  ASSERT_EQ_INT(V_FLOAT, value->valtype);
+  ASSERT_TRUE(value->value.f_bits == bits_for_double(-1.5));
+
+  stmt = list->stmts[1];
+  ASSERT_EQ_INT(N_EXPRSTMT, stmt->nodetype);
+  value_node = (AS_NODE *)stmt->lhs;
+  ASSERT_EQ_INT(N_VALUE, value_node->nodetype);
+  value = (AS_VALUE *)value_node->lhs;
+  ASSERT_EQ_INT(V_FLOAT, value->valtype);
+  ASSERT_TRUE(value->value.f_bits == UINT64_C(0x8000000000000000));
+
+  as_delete(root);
+}
+
 void test_parser_float_literals_integer_still_int(void) {
   AS_NODE *root = parse_ok("42;");
   AS_NODE *stmt = single_stmt(root);
