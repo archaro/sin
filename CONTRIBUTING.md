@@ -8,9 +8,9 @@ Sinistra is released under the MIT license, and contributions must be made under
 
 Build with `make`.
 
-Run `make test` for the standard test harness. It builds the same test binary as `make teststrict` and runs every registered core, compiler, and runtime test; benchmark-style tests still execute and print timings, but performance budget assertions are disabled.
+Run `make test` for the standard test harness. It builds the same test binary as `make test-strict` and runs every registered core, compiler, and runtime test; benchmark-style tests still execute and print timings, but performance budget assertions are disabled.
 
-Run `make teststrict` when you also want the benchmark budget checks enforced. This target runs the same registered tests as `make test`, but invokes the harness with `SIN_STRICT_BENCH=1`, causing the runtime benchmark test to fail if the lookup or dispatch timings exceed their strict thresholds.
+Run `make test-strict` when you also want the benchmark budget checks enforced. This target runs the same registered tests as `make test`, but invokes the harness with `SIN_STRICT_BENCH=1`, causing the runtime benchmark test to fail if the lookup or dispatch timings exceed their strict thresholds.
 
 The harness prints the selected mode and a final summary with per-suite and total test counts, so the output should identify whether strict benchmark checks were enabled regardless of which make target launched it.
 
@@ -19,10 +19,10 @@ The harness prints the selected mode and a final summary with per-suite and tota
 Strict compiler warnings are opt-in for local development and CI gates that want warnings to fail the build. Run:
 
 ```bash
-make STRICT_WARNINGS=1 test
+make test-warnings
 ```
 
-The `test-sanitize` target also enables strict warnings automatically, so sanitizer runs use the same warning gate in addition to address/undefined-behavior sanitizers.
+The `test-asan` and `test-lsan` targets also enable strict warnings automatically. Both rebuild with address/undefined-behavior sanitizers; `test-asan` disables leak detection for ptrace-constrained environments, while `test-lsan` enables it.
 
 
 ## Sanitizer and fuzzing gates
@@ -33,7 +33,7 @@ Run the same P0 gates locally before opening a PR that touches compiler, runtime
 ./ci/gate_sanitizers_fuzz.sh
 ```
 
-The script exports the same sanitizer defaults used by CI and then runs the Makefile gates in this order: `make STRICT_WARNINGS=1 test`, `make test-sanitize`, `make fuzz-build`, and `make fuzz-smoke-run` with `FUZZ_SEED=1`. Use `make fuzz-smoke` when you want the Makefile to build and run the fuzz smoke gate in one step.
+The script exports the same sanitizer defaults used by CI and then runs the Makefile gates in this order: `make test-warnings`, `make test-asan`, `make test-lsan`, `make fuzz-build`, and `make fuzz-smoke-run` with `FUZZ_SEED=1`. Use `make fuzz-smoke` when you want the Makefile to build and run the fuzz smoke gate in one step.
 
 ### Local gate commands
 
@@ -41,8 +41,9 @@ Use these commands to run each gate directly:
 
 ```bash
 make test
-make STRICT_WARNINGS=1 test
-make test-sanitize
+make test-warnings
+make test-asan
+make test-lsan
 make fuzz-smoke
 make fuzz-scomp
 make fuzz-sdiss
@@ -50,8 +51,9 @@ make fuzz-sin-object
 ```
 
 - `make test` runs the normal test harness.
-- `make STRICT_WARNINGS=1 test` treats strict-warning regressions as build failures.
-- `make test-sanitize` rebuilds and runs tests with address/undefined-behavior sanitizers and strict warnings enabled.
+- `make test-warnings` performs a clean rebuild and treats strict-warning regressions as build failures.
+- `make test-asan` rebuilds and runs tests with address/undefined-behavior sanitizers and strict warnings, with leak detection disabled.
+- `make test-lsan` performs the same rebuild with leak detection enabled and must run outside ptrace-constrained environments.
 - `make fuzz-smoke` builds the fuzz harnesses and runs seeded smoke coverage for the `scomp`, `sdiss`, and `sin` object input paths.
 - `make fuzz-scomp`, `make fuzz-sdiss`, and `make fuzz-sin-object` build individual libFuzzer targets and print the command to run each target against its corpus.
 
@@ -117,4 +119,3 @@ Fixture conventions and regeneration guidance are documented in:
 
 - Any new or changed language components must include validator, emitter mapping, opcode-spec update, and positive/negative tests.
 - Any bytecode format change updates should update `docs/bytecode.md` and related encoding/header tests.
-
