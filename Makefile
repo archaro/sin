@@ -32,6 +32,12 @@ LIB_DIR := lib
 # Test runner
 TEST_DIR := tests
 TEST_BIN := $(TEST_DIR)/test-compiler
+FUZZ_CC ?= clang
+FUZZ_DIR := $(TEST_DIR)/fuzz
+FUZZ_BIN := $(FUZZ_DIR)/fuzz_scomp
+FUZZ_CORPUS_DIR := $(FUZZ_DIR)/corpus/scomp
+FUZZ_SANITIZE_FLAGS := -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
+FUZZ_LINK_FLAGS := -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
 TEST_SHARED_SOURCES := \
 	$(TEST_DIR)/shared/test_compiler.c \
 	$(TEST_DIR)/shared/test_helpers.c \
@@ -111,7 +117,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
-.PHONY: all clean lib test teststrict test-asan test-lsan
+.PHONY: all clean lib test teststrict test-asan test-lsan fuzz-scomp
 
 all: $(LIB) scomp sdiss sin
 
@@ -164,6 +170,18 @@ test-lsan:
 $(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
 	$(CC) $(CFLAGS) $(DEBUG) -Isrc -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
+$(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
+	@mkdir -p $(@D)
+	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
+
+$(FUZZ_BIN): $(OBJ_DIR)/tests/fuzz/fuzz_scomp.o $(LIB)
+	$(CC) -o $@ $^ $(FUZZ_LINK_FLAGS) $(LIBS)
+
+fuzz-scomp:
+	$(MAKE) clean
+	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(CFLAGS) $(FUZZ_SANITIZE_FLAGS)" LDFLAGS="$(LDFLAGS) $(FUZZ_SANITIZE_FLAGS)" $(FUZZ_BIN)
+	@printf 'Built %s. Run with: %s %s\n' "$(FUZZ_BIN)" "$(FUZZ_BIN)" "$(FUZZ_CORPUS_DIR)"
+
 clean:
 	rm -rf $(OBJ_DIR) $(LIB) $(LIB_DIR) \
-         $(PARSER_GENERATED) $(LEXER_GENERATED) $(TEST_BIN)
+         $(PARSER_GENERATED) $(LEXER_GENERATED) $(TEST_BIN) $(FUZZ_BIN)
