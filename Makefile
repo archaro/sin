@@ -36,6 +36,8 @@ FUZZ_CC ?= clang
 FUZZ_DIR := $(TEST_DIR)/fuzz
 FUZZ_BIN := $(FUZZ_DIR)/fuzz_scomp
 FUZZ_CORPUS_DIR := $(FUZZ_DIR)/corpus/scomp
+FUZZ_SDISS_BIN := $(FUZZ_DIR)/fuzz_sdiss
+FUZZ_SDISS_CORPUS_DIR := $(FUZZ_DIR)/corpus/sdiss
 FUZZ_SANITIZE_FLAGS := -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
 FUZZ_LINK_FLAGS := -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
 TEST_SHARED_SOURCES := \
@@ -81,7 +83,7 @@ TEST_SOURCES := $(TEST_SHARED_SOURCES) $(TEST_CORE_SOURCES) $(TEST_COMPILER_SOUR
 
 # Library of shared functions
 LIB := $(LIB_DIR)/libsinshared.a
-LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/bytecode_verify.o $(OBJ_DIR)/floatconv.o $(OBJ_DIR)/parser.o \
+LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/bytecode_verify.o $(OBJ_DIR)/sdiss_core.o $(OBJ_DIR)/floatconv.o $(OBJ_DIR)/parser.o \
                $(OBJ_DIR)/lexer.o $(OBJ_DIR)/compiler/absyn.o $(OBJ_DIR)/compiler/semant.o \
                $(OBJ_DIR)/compiler/ir.o $(OBJ_DIR)/compiler/lower.o $(OBJ_DIR)/compiler/compiler_context.o $(OBJ_DIR)/compiler/compiler_pipeline.o $(OBJ_DIR)/compiler/emitbc.o \
                $(OBJ_DIR)/compiler/compdiag.o $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcall.o \
@@ -117,7 +119,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
-.PHONY: all clean lib test teststrict test-asan test-lsan fuzz-scomp
+.PHONY: all clean lib test teststrict test-asan test-lsan fuzz-scomp fuzz-sdiss seed-fuzz-sdiss-corpus
 
 all: $(LIB) scomp sdiss sin
 
@@ -177,11 +179,30 @@ $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 $(FUZZ_BIN): $(OBJ_DIR)/tests/fuzz/fuzz_scomp.o $(LIB)
 	$(CC) -o $@ $^ $(FUZZ_LINK_FLAGS) $(LIBS)
 
+$(FUZZ_SDISS_BIN): $(OBJ_DIR)/tests/fuzz/fuzz_sdiss.o $(LIB)
+	$(CC) -o $@ $^ $(FUZZ_LINK_FLAGS) $(LIBS)
+
+seed-fuzz-sdiss-corpus:
+	@mkdir -p $(FUZZ_SDISS_CORPUS_DIR)
+	@if command -v xxd >/dev/null 2>&1; then \
+		for hex in $(TEST_DIR)/fixtures/sdiss/*.hex; do \
+			[ -e "$$hex" ] || continue; \
+			xxd -r -p "$$hex" "$(FUZZ_SDISS_CORPUS_DIR)/$$(basename "$$hex" .hex).obj"; \
+		done; \
+	else \
+		printf 'xxd not found; skipping sdiss fixture corpus seeding\n'; \
+	fi
+
 fuzz-scomp:
 	$(MAKE) clean
 	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(CFLAGS) $(FUZZ_SANITIZE_FLAGS)" LDFLAGS="$(LDFLAGS) $(FUZZ_SANITIZE_FLAGS)" $(FUZZ_BIN)
 	@printf 'Built %s. Run with: %s %s\n' "$(FUZZ_BIN)" "$(FUZZ_BIN)" "$(FUZZ_CORPUS_DIR)"
 
+fuzz-sdiss: seed-fuzz-sdiss-corpus
+	$(MAKE) clean
+	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(CFLAGS) $(FUZZ_SANITIZE_FLAGS)" LDFLAGS="$(LDFLAGS) $(FUZZ_SANITIZE_FLAGS)" seed-fuzz-sdiss-corpus $(FUZZ_SDISS_BIN)
+	@printf 'Built %s. Run with: %s %s\n' "$(FUZZ_SDISS_BIN)" "$(FUZZ_SDISS_BIN)" "$(FUZZ_SDISS_CORPUS_DIR)"
+
 clean:
 	rm -rf $(OBJ_DIR) $(LIB) $(LIB_DIR) \
-         $(PARSER_GENERATED) $(LEXER_GENERATED) $(TEST_BIN) $(FUZZ_BIN)
+         $(PARSER_GENERATED) $(LEXER_GENERATED) $(TEST_BIN) $(FUZZ_BIN) $(FUZZ_SDISS_BIN)
