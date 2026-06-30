@@ -417,18 +417,40 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
     }
     switch(out.type) {
       case VALUE_str:
+        if (line[linenum.i].outbuf &&
+            !line_can_accept_output(&line[linenum.i], strlen(out.s))) {
+          logerr("net.write rejected for line %ld: output buffer limit or backpressure.\n",
+                 linenum.i);
+          FREE_STR(out);
+          push_stack(VM->stack, VALUE_FALSE);
+          return nextop;
+        }
         telnet_send_text(line[linenum.i].telnet, out.s, strlen(out.s));
         FREE_STR(out);
         break;
       case VALUE_int: {
         char buffer[22];
         itoa(out.i, buffer, 10);
+        if (line[linenum.i].outbuf &&
+            !line_can_accept_output(&line[linenum.i], strlen(buffer))) {
+          logerr("net.write rejected for line %ld: output buffer limit or backpressure.\n",
+                 linenum.i);
+          push_stack(VM->stack, VALUE_FALSE);
+          return nextop;
+        }
         telnet_send_text(line[linenum.i].telnet, buffer, strlen(buffer));
         break;
       }
       case VALUE_float: {
         char fbuffer[64];
         if (sin_format_binary64_buf(out.f, fbuffer, sizeof(fbuffer))) {
+          if (line[linenum.i].outbuf &&
+              !line_can_accept_output(&line[linenum.i], strlen(fbuffer))) {
+            logerr("net.write rejected for line %ld: output buffer limit or backpressure.\n",
+                   linenum.i);
+            push_stack(VM->stack, VALUE_FALSE);
+            return nextop;
+          }
           telnet_send_text(line[linenum.i].telnet, fbuffer, strlen(fbuffer));
         }
         break;
@@ -439,11 +461,22 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
       case VALUE_bool: {
         char *t = "true";
         char *f = "false";
+        if (line[linenum.i].outbuf &&
+            !line_can_accept_output(&line[linenum.i], strlen(out.i?t:f))) {
+          logerr("net.write rejected for line %ld: output buffer limit or backpressure.\n",
+                 linenum.i);
+          push_stack(VM->stack, VALUE_FALSE);
+          return nextop;
+        }
         telnet_send_text(line[linenum.i].telnet, out.i?t:f,
                                                         strlen(out.i?t:f));
         break;
       }
     }
+  }
+  if (line[linenum.i].status == LINE_disconnecting) {
+    push_stack(VM->stack, VALUE_FALSE);
+    return nextop;
   }
   // Libcalls always return a value
   push_stack(VM->stack, VALUE_NIL);

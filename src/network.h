@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <sys/socket.h>
 #include <uv.h>
 
@@ -29,6 +30,9 @@ typedef struct {
   telnet_t *telnet;
   write_req_t *outbuf;
   write_req_t *inbuf;
+  bool output_write_in_flight;
+  size_t output_in_flight_length;
+  uint32_t output_backpressure_ticks;
   size_t input_line_length; // Bytes buffered since the last newline
 } LINE_t;
 
@@ -39,3 +43,4 @@ void input_processor(uv_idle_t* handle);
 char *get_input(LINE_t *line);
 void shutdown_listener();
 void shutdown_networking();
+bool line_can_accept_output(LINE_t *linep, size_t len);
