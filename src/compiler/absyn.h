@@ -49,6 +49,7 @@ typedef struct AS_IF_s AS_IF;
 
 AS_VALUE *as_new_value(ENUM_VALUE valtype, uint64_t ival, char *sval);
 AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval);
+AS_NODE *as_new_intnode(int64_t value);
 AS_STMTLIST *as_new_stmtlist(void);
 AS_NODE *as_new_stmtlist_node(void);
 AS_NODE *as_stmtlist_append(AS_NODE *stmtlist_node, AS_NODE *stmt);

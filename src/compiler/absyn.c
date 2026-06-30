@@ -28,6 +28,10 @@ AS_VALUE *as_new_value(ENUM_VALUE valtype, uint64_t ival, char *sval) {
   return newval;
 }
 
+AS_NODE *as_new_intnode(int64_t value) {
+  return as_new_node(N_VALUE, as_new_value(V_INT, (uint64_t)value, NULL), NULL);
+}
+
 AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval) {
   // Create a new node of type N_VALUE
   // Like as_new_value(), but puts the value into a node and returns that.
@@ -133,6 +137,7 @@ void as_delete_if(AS_IF *asif) {
   // Internal helper for deleting an AS_IF node
   // asif: the node to delete
   // WARNING: the pointer passed to this function is freed!
+  if (!asif) return;
   if (asif->condition) {
     as_delete(asif->condition);
   }

@@ -34,6 +34,11 @@ void init_networking() {
   for (int l = 0; l < config.maxconns; l++) {
     line[l].status = LINE_empty;
     line[l].linenum = l;
+    line[l].address[0] = '\0';
+    line[l].line_handle = NULL;
+    line[l].telnet = NULL;
+    line[l].outbuf = NULL;
+    line[l].inbuf = NULL;
   }
 }
 
@@ -45,29 +50,75 @@ LINE_t *add_line(uv_tcp_t *line_handle) {
       return NULL;
     }
   }
+
+  write_req_t *outbuf = (write_req_t *)malloc(sizeof(write_req_t));
+  char *outbase = NULL;
+  write_req_t *inbuf = NULL;
+  char *inbase = NULL;
+
+  if (outbuf) {
+    outbase = (char *)calloc(OUTBUF_LENGTH, 1);
+  }
+  if (outbuf && outbase) {
+    inbuf = (write_req_t *)malloc(sizeof(write_req_t));
+  }
+  if (outbuf && outbase && inbuf) {
+    inbase = (char *)calloc(INBUF_LENGTH, 1);
+  }
+
+  if (!outbuf || !outbase || !inbuf || !inbase) {
+    logerr("Failed to allocate buffers for new connection.\n");
+    free(inbase);
+    free(inbuf);
+    free(outbase);
+    free(outbuf);
+    line[l].line_handle = NULL;
+    line[l].outbuf = NULL;
+    line[l].inbuf = NULL;
+    line[l].telnet = NULL;
+    line[l].status = LINE_empty;
+    return NULL;
+  }
+
+  outbuf->buf.len = 0;
+  outbuf->buf.base = outbase;
+  outbuf->buf.base[0] = '\0';
+  outbuf->length = OUTBUF_LENGTH;
+
+  inbuf->buf.len = 0;
+  inbuf->buf.base = inbase;
+  inbuf->buf.base[0] = '\0';
+  inbuf->length = INBUF_LENGTH;
+
   line[l].line_handle = line_handle;
   line[l].status = LINE_connecting;
-  line[l].outbuf = (write_req_t *) malloc(sizeof(write_req_t));
-  line[l].outbuf->buf.len = 0;
-  line[l].outbuf->buf.base = (char *)calloc(OUTBUF_LENGTH, 1);
-  line[l].outbuf->buf.base[0] = '\0';
-  line[l].outbuf->length = OUTBUF_LENGTH;
-  line[l].inbuf = (write_req_t *) malloc(sizeof(write_req_t));
-  line[l].inbuf->buf.len = 0;
-  line[l].inbuf->buf.base = (char *)calloc(INBUF_LENGTH, 1);
-  line[l].inbuf->buf.base[0] = '\0';
-  line[l].inbuf->length = INBUF_LENGTH;
+  line[l].telnet = NULL;
+  line[l].address[0] = '\0';
+  line[l].outbuf = outbuf;
+  line[l].inbuf = inbuf;
   return &line[l];
+}
+
+static void free_client_on_close(uv_handle_t *handle) {
+  free(handle);
 }
 
 void destroy_line(LINE_t *linep) {
   // Clean up the line object
   telnet_free(linep->telnet);
   free(linep->line_handle);
-  free(linep->outbuf->buf.base);
-  free(linep->outbuf);
-  free(linep->inbuf->buf.base);
-  free(linep->inbuf);
+  if (linep->outbuf) {
+    free(linep->outbuf->buf.base);
+    free(linep->outbuf);
+  }
+  if (linep->inbuf) {
+    free(linep->inbuf->buf.base);
+    free(linep->inbuf);
+  }
+  linep->line_handle = NULL;
+  linep->telnet = NULL;
+  linep->outbuf = NULL;
+  linep->inbuf = NULL;
   linep->status = LINE_empty;
 }
 
@@ -87,6 +138,10 @@ LINE_t *find_line(uv_tcp_t *client) {
 
 void client_on_close(uv_handle_t *handle) {
   LINE_t *linep = find_line((uv_tcp_t *)handle);
+  if (!linep) {
+    free(handle);
+    return;
+  }
   logmsg("Line %d: %s disconnected.\n", linep->linenum, linep->address);
   linep->status = LINE_disconnecting;
 }
@@ -142,9 +197,27 @@ char *get_input(LINE_t *linep) {
   char *eol = strchr(linep->inbuf->buf.base, '\n');
   *eol = '\0';
   char *data = strdup(linep->inbuf->buf.base);
+  if (!data) {
+    logerr("Failed to allocate input line for line %d.\n", linep->linenum);
+    linep->status = LINE_disconnecting;
+    if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
+      uv_close((uv_handle_t *)linep->line_handle, client_on_close);
+    }
+    return NULL;
+  }
   // Ok, we have the line of data, now take it out of the input buffer.
   eol++;
   char *newbuffer = malloc(INBUF_LENGTH);
+  if (!newbuffer) {
+    logerr("Failed to allocate replacement input buffer for line %d.\n",
+           linep->linenum);
+    free(data);
+    linep->status = LINE_disconnecting;
+    if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
+      uv_close((uv_handle_t *)linep->line_handle, client_on_close);
+    }
+    return NULL;
+  }
   strcpy(newbuffer, eol);
   free(linep->inbuf->buf.base);
   linep->inbuf->length = INBUF_LENGTH;
@@ -197,11 +270,21 @@ void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
   // Buffer for input from connected client
   (void)handle;
   buf->base = (char*)calloc(suggested_size, 1);
+  if (!buf->base) {
+    logerr("Failed to allocate read buffer of %zu bytes.\n", suggested_size);
+    buf->len = 0;
+    return;
+  }
   buf->len = suggested_size;
 }
 
 void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
   if (nread > 0) {
+    if (!buf->base) {
+      logerr("Read failed: input buffer allocation failed.\n");
+      uv_close((uv_handle_t *) client, client_on_close);
+      return;
+    }
     LINE_t *linep = find_line((uv_tcp_t *)client);
     if (linep) {
       telnet_recv(linep->telnet, buf->base, nread);
@@ -224,32 +307,75 @@ void on_new_connection(uv_stream_t *server, int status) {
     return;
   }
   uv_tcp_t *client = (uv_tcp_t *) malloc(sizeof(uv_tcp_t));
-  uv_tcp_init(config.loop, client);
-  if (uv_accept((uv_stream_t *)&config.listener,
-                                              (uv_stream_t *)client) == 0) {
-    LINE_t *newline = add_line(client);
-    if (!newline) {
-      // We have no line setup here, so this has to be done differently
-      uv_buf_t gamefull = {"Too many connections.\r\n", 23};
-      uv_try_write((uv_stream_t *)client, &gamefull, 1);
-      logmsg("Maximum connections (%d) exceeded.\n", config.maxconns);
-      uv_close((uv_handle_t *)client, client_on_close);
-    }
-    newline->telnet = telnet_init(telopts, telnet_event_handler, 
-                                              TELNET_FLAG_NVT_EOL, newline);
-    telnet_printf(newline->telnet, "Connected.\n");
-    flush_output(newline);
-    struct sockaddr_storage peername = {0};
-    int peernamelen = sizeof(peername);
-    uv_tcp_getpeername(client, (struct sockaddr *)&peername, &peernamelen);
-    uv_ip_name((struct sockaddr *)&peername, newline->address, 40);
-    uv_read_start((uv_stream_t *)client, alloc_buffer, client_read);
-    logmsg("Line %d: %s connected.\n", newline->linenum,
-                                                          newline->address);
+  if (!client) {
+    logerr("Rejected connection: failed to allocate client handle.\n");
+    return;
   }
-  else {
+
+  int err = uv_tcp_init(config.loop, client);
+  if (err < 0) {
+    logerr("Rejected connection: uv_tcp_init failed: %s\n", uv_strerror(err));
+    free(client);
+    return;
+  }
+
+  err = uv_accept((uv_stream_t *)&config.listener, (uv_stream_t *)client);
+  if (err < 0) {
+    logerr("Rejected connection: uv_accept failed: %s\n", uv_strerror(err));
+    uv_close((uv_handle_t *)client, free_client_on_close);
+    return;
+  }
+
+  LINE_t *newline = add_line(client);
+  if (!newline) {
+    uv_buf_t gamefull = {"Too many connections.\r\n", 23};
+    uv_try_write((uv_stream_t *)client, &gamefull, 1);
+    logmsg("Rejected connection: maximum connections (%d) exceeded or allocation failed.\n",
+           config.maxconns);
+    uv_close((uv_handle_t *)client, free_client_on_close);
+    return;
+  }
+
+  newline->telnet = telnet_init(telopts, telnet_event_handler,
+                                TELNET_FLAG_NVT_EOL, newline);
+  if (!newline->telnet) {
+    logerr("Rejected connection: telnet_init failed for line %d.\n",
+           newline->linenum);
+    newline->status = LINE_disconnecting;
     uv_close((uv_handle_t *)client, client_on_close);
+    return;
   }
+
+  struct sockaddr_storage peername = {0};
+  int peernamelen = sizeof(peername);
+  err = uv_tcp_getpeername(client, (struct sockaddr *)&peername, &peernamelen);
+  if (err < 0) {
+    logerr("Rejected connection: uv_tcp_getpeername failed: %s\n",
+           uv_strerror(err));
+    newline->status = LINE_disconnecting;
+    uv_close((uv_handle_t *)client, client_on_close);
+    return;
+  }
+
+  err = uv_ip_name((struct sockaddr *)&peername, newline->address, 40);
+  if (err < 0) {
+    logerr("Rejected connection: uv_ip_name failed: %s\n", uv_strerror(err));
+    newline->status = LINE_disconnecting;
+    uv_close((uv_handle_t *)client, client_on_close);
+    return;
+  }
+
+  err = uv_read_start((uv_stream_t *)client, alloc_buffer, client_read);
+  if (err < 0) {
+    logerr("Rejected connection: uv_read_start failed: %s\n", uv_strerror(err));
+    newline->status = LINE_disconnecting;
+    uv_close((uv_handle_t *)client, client_on_close);
+    return;
+  }
+
+  telnet_printf(newline->telnet, "Connected.\n");
+  flush_output(newline);
+  logmsg("Line %d: %s connected.\n", newline->linenum, newline->address);
 }
 
 void init_listener(uint32_t port) {
