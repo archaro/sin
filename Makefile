@@ -38,6 +38,8 @@ FUZZ_BIN := $(FUZZ_DIR)/fuzz_scomp
 FUZZ_CORPUS_DIR := $(FUZZ_DIR)/corpus/scomp
 FUZZ_SDISS_BIN := $(FUZZ_DIR)/fuzz_sdiss
 FUZZ_SDISS_CORPUS_DIR := $(FUZZ_DIR)/corpus/sdiss
+FUZZ_SIN_OBJECT_BIN := $(FUZZ_DIR)/fuzz_sin_object
+FUZZ_SIN_OBJECT_CORPUS_DIR := $(FUZZ_DIR)/corpus/sin-object
 FUZZ_SANITIZE_FLAGS := -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
 FUZZ_LINK_FLAGS := -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
 TEST_SHARED_SOURCES := \
@@ -103,6 +105,8 @@ LEXER_GENERATED := $(SRC_DIR)/lexer.c
 SCOMP_SOURCES := $(SRC_DIR)/scomp.c
 SCOMP_OBJECTS := $(SCOMP_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
+$(OBJ_DIR)/scomp.o: $(PARSER_GENERATED)
+
 # Source files for sdiss
 SDISS_SOURCES := $(SRC_DIR)/sdiss.c
 SDISS_OBJECTS := $(SDISS_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
@@ -119,7 +123,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
-.PHONY: all clean lib test teststrict test-asan test-lsan fuzz-scomp fuzz-sdiss seed-fuzz-sdiss-corpus
+.PHONY: all clean lib test teststrict test-asan test-lsan fuzz-scomp fuzz-sdiss fuzz-sin-object seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
 
 all: $(LIB) scomp sdiss sin
 
@@ -182,6 +186,9 @@ $(FUZZ_BIN): $(OBJ_DIR)/tests/fuzz/fuzz_scomp.o $(LIB)
 $(FUZZ_SDISS_BIN): $(OBJ_DIR)/tests/fuzz/fuzz_sdiss.o $(LIB)
 	$(CC) -o $@ $^ $(FUZZ_LINK_FLAGS) $(LIBS)
 
+$(FUZZ_SIN_OBJECT_BIN): $(OBJ_DIR)/tests/fuzz/fuzz_sin_object.o $(LIB)
+	$(CC) -o $@ $^ $(FUZZ_LINK_FLAGS) $(LIBS)
+
 seed-fuzz-sdiss-corpus:
 	@mkdir -p $(FUZZ_SDISS_CORPUS_DIR)
 	@if command -v xxd >/dev/null 2>&1; then \
@@ -203,6 +210,21 @@ fuzz-sdiss: seed-fuzz-sdiss-corpus
 	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(CFLAGS) $(FUZZ_SANITIZE_FLAGS)" LDFLAGS="$(LDFLAGS) $(FUZZ_SANITIZE_FLAGS)" seed-fuzz-sdiss-corpus $(FUZZ_SDISS_BIN)
 	@printf 'Built %s. Run with: %s %s\n' "$(FUZZ_SDISS_BIN)" "$(FUZZ_SDISS_BIN)" "$(FUZZ_SDISS_CORPUS_DIR)"
 
+seed-fuzz-sin-object-corpus: scomp
+	@mkdir -p $(FUZZ_SIN_OBJECT_CORPUS_DIR)
+	@for src in examples/chat-boot.src examples/chat-load.src examples/echo-boot.src examples/echo-load.src; do \
+		[ -e "$$src" ] || continue; \
+		obj="$(FUZZ_SIN_OBJECT_CORPUS_DIR)/$$(basename "$$src" .src).obj"; \
+		./scomp "$$src" "$$obj" >/dev/null 2>&1 || rm -f "$$obj"; \
+	done
+
+# Builds a libFuzzer harness for sin object/itemstore loading and strict bytecode validation.
+fuzz-sin-object:
+	$(MAKE) clean
+	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(CFLAGS) $(FUZZ_SANITIZE_FLAGS)" LDFLAGS="$(LDFLAGS) $(FUZZ_SANITIZE_FLAGS)" seed-fuzz-sin-object-corpus $(FUZZ_SIN_OBJECT_BIN)
+	@printf 'Built %s. Run with: %s %s\n' "$(FUZZ_SIN_OBJECT_BIN)" "$(FUZZ_SIN_OBJECT_BIN)" "$(FUZZ_SIN_OBJECT_CORPUS_DIR)"
+
 clean:
 	rm -rf $(OBJ_DIR) $(LIB) $(LIB_DIR) \
-         $(PARSER_GENERATED) $(LEXER_GENERATED) $(TEST_BIN) $(FUZZ_BIN) $(FUZZ_SDISS_BIN)
+         $(PARSER_GENERATED) $(LEXER_GENERATED) $(TEST_BIN) $(FUZZ_BIN) $(FUZZ_SDISS_BIN) $(FUZZ_SIN_OBJECT_BIN)
+
