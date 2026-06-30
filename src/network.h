@@ -5,6 +5,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 #include <sys/socket.h>
 #include <uv.h>
 
@@ -28,6 +29,7 @@ typedef struct {
   telnet_t *telnet;
   write_req_t *outbuf;
   write_req_t *inbuf;
+  size_t input_line_length; // Bytes buffered since the last newline
 } LINE_t;
 
 void init_networking();
