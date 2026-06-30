@@ -23,6 +23,11 @@ extern CONFIG_t config;
 #define INBUF_LENGTH 16384
 #define MAX_INPUT_BUFFER_LENGTH 65536
 #define MAX_INPUT_LINE_LENGTH 4096
+#define MAX_OUTPUT_BUFFER_LENGTH 65536
+#define MAX_OUTPUT_IN_FLIGHT_LENGTH 65536
+#define MAX_OUTPUT_PENDING_LENGTH \
+  (MAX_OUTPUT_BUFFER_LENGTH + MAX_OUTPUT_IN_FLIGHT_LENGTH)
+#define MAX_OUTPUT_BACKPRESSURE_TICKS 128
 
 static const telnet_telopt_t telopts[] = {
   { TELNET_TELOPT_ECHO, TELNET_WONT, TELNET_DO },
@@ -30,6 +35,8 @@ static const telnet_telopt_t telopts[] = {
 };
 
 LINE_t *line;
+
+void flush_output(LINE_t *linep);
 
 void init_networking() {
   // Do that which needs to be done before starting the network interface
@@ -43,6 +50,9 @@ void init_networking() {
     line[l].telnet = NULL;
     line[l].outbuf = NULL;
     line[l].inbuf = NULL;
+    line[l].output_write_in_flight = false;
+    line[l].output_in_flight_length = 0;
+    line[l].output_backpressure_ticks = 0;
     line[l].input_line_length = 0;
   }
 }
@@ -101,6 +111,9 @@ LINE_t *add_line(uv_tcp_t *line_handle) {
   line[l].address[0] = '\0';
   line[l].outbuf = outbuf;
   line[l].inbuf = inbuf;
+  line[l].output_write_in_flight = false;
+  line[l].output_in_flight_length = 0;
+  line[l].output_backpressure_ticks = 0;
   line[l].input_line_length = 0;
   return &line[l];
 }
@@ -125,6 +138,9 @@ void destroy_line(LINE_t *linep) {
   linep->telnet = NULL;
   linep->outbuf = NULL;
   linep->inbuf = NULL;
+  linep->output_write_in_flight = false;
+  linep->output_in_flight_length = 0;
+  linep->output_backpressure_ticks = 0;
   linep->input_line_length = 0;
   linep->status = LINE_empty;
 }
@@ -153,20 +169,84 @@ void client_on_close(uv_handle_t *handle) {
   linep->status = LINE_disconnecting;
 }
 
+static void disconnect_line_for_output_limit(LINE_t *linep, const char *reason) {
+  logerr("Line %d (%s) exceeded output limits: %s. Disconnecting.\n",
+         linep->linenum, linep->address[0] ? linep->address : "unknown", reason);
+  if (linep->outbuf && linep->outbuf->buf.base) {
+    linep->outbuf->buf.len = 0;
+    linep->outbuf->buf.base[0] = '\0';
+  }
+  linep->status = LINE_disconnecting;
+  if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
+    uv_close((uv_handle_t *)linep->line_handle, client_on_close);
+  }
+}
+
+bool line_can_accept_output(LINE_t *linep, size_t len) {
+  if (!linep || !linep->outbuf || !linep->outbuf->buf.base ||
+      linep->status == LINE_empty || linep->status == LINE_disconnecting) {
+    return false;
+  }
+  if (len > MAX_OUTPUT_PENDING_LENGTH) {
+    return false;
+  }
+  size_t pending = linep->outbuf->buf.len;
+  if (pending > MAX_OUTPUT_BUFFER_LENGTH ||
+      linep->output_in_flight_length > MAX_OUTPUT_IN_FLIGHT_LENGTH) {
+    return false;
+  }
+  if (pending > MAX_OUTPUT_PENDING_LENGTH - linep->output_in_flight_length) {
+    return false;
+  }
+  size_t queued = pending + linep->output_in_flight_length;
+  return queued <= MAX_OUTPUT_PENDING_LENGTH - len;
+}
+
 void append_output(LINE_t *linep, const char *msg, const ssize_t len) {
   // Append output to the buffer for this line, ready for sending later.
-  // If the buffer is too small, embiggen it.
   if (len <= 0) return;
   size_t msg_len = (size_t)len;
   if (linep->status != LINE_empty && linep->status != LINE_disconnecting) {
-  // No point in doing this if there is no connection.
-    while (linep->outbuf->buf.len + msg_len + 1 >= linep->outbuf->length) {
-      linep->outbuf->length += OUTBUF_LENGTH;
-      linep->outbuf->buf.base = (char *)realloc(linep->outbuf->buf.base,
-                                                      linep->outbuf->length);
+    // No point in doing this if there is no connection.
+    if (!linep->outbuf || !linep->outbuf->buf.base) {
+      disconnect_line_for_output_limit(linep, "missing output buffer");
+      return;
+    }
+
+    if (!line_can_accept_output(linep, msg_len)) {
+      disconnect_line_for_output_limit(linep, "output buffer too large");
+      return;
+    }
+
+    if (linep->outbuf->buf.len > SIZE_MAX - msg_len ||
+        linep->outbuf->buf.len + msg_len > SIZE_MAX - 1) {
+      disconnect_line_for_output_limit(linep, "output buffer length overflow");
+      return;
+    }
+
+    size_t required_len = linep->outbuf->buf.len + msg_len;
+    size_t required_capacity = required_len + 1;
+    if (required_capacity > MAX_OUTPUT_BUFFER_LENGTH) {
+      disconnect_line_for_output_limit(linep, "output buffer capacity too large");
+      return;
+    }
+
+    if (required_capacity > linep->outbuf->length) {
+      size_t new_capacity = ((required_capacity + OUTBUF_LENGTH - 1) / OUTBUF_LENGTH) * OUTBUF_LENGTH;
+      if (new_capacity < required_capacity || new_capacity > MAX_OUTPUT_BUFFER_LENGTH) {
+        new_capacity = required_capacity;
+      }
+      char *newbase = (char *)realloc(linep->outbuf->buf.base, new_capacity);
+      if (!newbase) {
+        disconnect_line_for_output_limit(linep, "output buffer allocation failed");
+        return;
+      }
+      linep->outbuf->buf.base = newbase;
+      linep->outbuf->length = new_capacity;
     }
     memcpy(linep->outbuf->buf.base + linep->outbuf->buf.len, msg, msg_len);
-    linep->outbuf->buf.len += msg_len;
+    linep->outbuf->buf.len = required_len;
+    linep->outbuf->buf.base[linep->outbuf->buf.len] = '\0';
   }
 }
 
@@ -361,13 +441,90 @@ void telnet_event_handler(telnet_t *telnet, telnet_event_t *ev,
 	}
 }
 
+static void output_write_cb(uv_write_t *req, int status) {
+  write_req_t *write_req = (write_req_t *)req;
+  LINE_t *linep = (LINE_t *)req->data;
+
+  if (status < 0 && linep) {
+    logerr("Line %d (%s) write error: %s. Disconnecting.\n",
+           linep->linenum, linep->address[0] ? linep->address : "unknown",
+           uv_strerror(status));
+  }
+
+  free(write_req->buf.base);
+  free(write_req);
+
+  if (!linep) {
+    return;
+  }
+
+  linep->output_write_in_flight = false;
+  linep->output_in_flight_length = 0;
+  linep->output_backpressure_ticks = 0;
+
+  if (status < 0) {
+    linep->status = LINE_disconnecting;
+    if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
+      uv_close((uv_handle_t *)linep->line_handle, client_on_close);
+    }
+    return;
+  }
+
+  flush_output(linep);
+}
+
 void flush_output(LINE_t *linep) {
-  // Send the output to the line, and reset the buffer.
-  if (linep->outbuf->buf.len > 0) {
-    uv_write((uv_write_t*) &linep->outbuf->req,
-            (uv_stream_t*)linep->line_handle, &linep->outbuf->buf, 1, NULL);
-    linep->outbuf->buf.len = 0;
-    linep->outbuf->buf.base[0] = '\0';
+  // Send the output to the line without reusing or mutating the write buffer
+  // until libuv reports completion through output_write_cb.
+  if (!linep || !linep->outbuf || !linep->outbuf->buf.base ||
+      linep->status == LINE_empty || linep->status == LINE_disconnecting) {
+    return;
+  }
+
+  if (linep->output_write_in_flight) {
+    if (linep->outbuf->buf.len > 0 &&
+        ++linep->output_backpressure_ticks > MAX_OUTPUT_BACKPRESSURE_TICKS) {
+      disconnect_line_for_output_limit(linep, "output backpressured too long");
+    }
+    return;
+  }
+
+  if (linep->outbuf->buf.len == 0) {
+    linep->output_backpressure_ticks = 0;
+    return;
+  }
+
+  if (linep->outbuf->buf.len > MAX_OUTPUT_IN_FLIGHT_LENGTH) {
+    disconnect_line_for_output_limit(linep, "output write too large");
+    return;
+  }
+
+  write_req_t *write_req = (write_req_t *)malloc(sizeof(write_req_t));
+  char *write_base = NULL;
+  if (write_req) {
+    write_base = (char *)malloc(linep->outbuf->buf.len);
+  }
+  if (!write_req || !write_base) {
+    free(write_base);
+    free(write_req);
+    disconnect_line_for_output_limit(linep, "output write allocation failed");
+    return;
+  }
+
+  memcpy(write_base, linep->outbuf->buf.base, linep->outbuf->buf.len);
+  write_req->buf = uv_buf_init(write_base, (unsigned int)linep->outbuf->buf.len);
+  write_req->length = linep->outbuf->buf.len;
+  write_req->req.data = linep;
+
+  linep->output_write_in_flight = true;
+  linep->output_in_flight_length = linep->outbuf->buf.len;
+  linep->outbuf->buf.len = 0;
+  linep->outbuf->buf.base[0] = '\0';
+
+  int err = uv_write(&write_req->req, (uv_stream_t *)linep->line_handle,
+                     &write_req->buf, 1, output_write_cb);
+  if (err < 0) {
+    output_write_cb(&write_req->req, err);
   }
 }
 
