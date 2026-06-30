@@ -12,10 +12,14 @@ export CC="${CC:-gcc}"
 export FUZZ_CC="${FUZZ_CC:-clang}"
 
 echo "==> strict warnings build/test"
+make clean
 make STRICT_WARNINGS=1 CC="${CC}" test
 
-echo "==> sanitizer build/test"
-make CC="${CC}" test-sanitize
+echo "==> address/undefined sanitizer build/test"
+make CC="${CC}" test-asan
+
+echo "==> leak sanitizer build/test"
+make CC="${CC}" test-lsan
 
 echo "==> fuzz build"
 make FUZZ_CC="${FUZZ_CC}" FUZZ_RUNS="${FUZZ_RUNS}" FUZZ_TIME="${FUZZ_TIME}" fuzz-build

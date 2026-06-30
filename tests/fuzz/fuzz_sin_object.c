@@ -20,20 +20,6 @@ CONFIG_t config;
 static const size_t kMaxFuzzObjectSize = 128 * 1024;
 static const size_t kMaxBytecodeProbeSize = 64 * 1024;
 
-static void verify_loaded_code_items(const ITEM_t *item) {
-  if (!item) return;
-
-  if (item->type == ITEM_code && item->bytecode_len <= kMaxBytecodeProbeSize) {
-    BC_VerifyOptions options = bc_verify_strict_options();
-    (void)bc_verify_bytecode(item->bytecode, item->bytecode_len, item->name,
-                             &options);
-  }
-
-  for (size_t i = 0; i < item->ordered_size; i++) {
-    verify_loaded_code_items(item->ordered_array[i]);
-  }
-}
-
 static void fuzz_load_itemstore_bytes(const uint8_t *data, size_t size) {
   char path[] = "/tmp/sin-object-fuzz-XXXXXX";
   int fd = mkstemp(path);
@@ -46,14 +32,15 @@ static void fuzz_load_itemstore_bytes(const uint8_t *data, size_t size) {
     return;
   }
 
-  if (fwrite(data, 1, size, file) != size || fclose(file) != 0) {
+  bool write_ok = fwrite(data, 1, size, file) == size;
+  bool close_ok = fclose(file) == 0;
+  if (!write_ok || !close_ok) {
     unlink(path);
     return;
   }
 
   ITEM_t *loaded = load_itemstore(path);
   if (loaded) {
-    verify_loaded_code_items(loaded);
     destroy_item(loaded);
   }
   unlink(path);

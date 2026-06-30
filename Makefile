@@ -128,7 +128,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
-.PHONY: all clean lib test teststrict test-sanitize test-asan test-lsan fuzz-build fuzz-smoke fuzz-smoke-run fuzz-scomp fuzz-sdiss fuzz-sin-object seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
+.PHONY: all clean lib test teststrict test-asan test-lsan fuzz-build fuzz-smoke fuzz-smoke-run fuzz-scomp fuzz-sdiss fuzz-sin-object seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
 
 all: $(LIB) scomp sdiss sin
 
@@ -169,10 +169,6 @@ test: $(TEST_BIN)
 
 teststrict: $(TEST_BIN)
 	SIN_STRICT_BENCH=1 ./$(TEST_BIN)
-
-test-sanitize:
-	$(MAKE) clean
-	$(MAKE) SANITIZE=1 STRICT_WARNINGS=1 test
 
 test-asan:
 	$(MAKE) clean
@@ -252,4 +248,3 @@ fuzz-sin-object:
 clean:
 	rm -rf $(OBJ_DIR) $(LIB) $(LIB_DIR) \
          $(PARSER_GENERATED) $(LEXER_GENERATED) $(TEST_BIN) $(FUZZ_BIN) $(FUZZ_SDISS_BIN) $(FUZZ_SIN_OBJECT_BIN)
-
