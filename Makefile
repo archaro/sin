@@ -128,7 +128,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
-.PHONY: all clean lib test teststrict test-sanitize test-asan test-lsan fuzz-build fuzz-smoke fuzz-scomp fuzz-sdiss fuzz-sin-object seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
+.PHONY: all clean lib test teststrict test-sanitize test-asan test-lsan fuzz-build fuzz-smoke fuzz-smoke-run fuzz-scomp fuzz-sdiss fuzz-sin-object seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
 
 all: $(LIB) scomp sdiss sin
 
@@ -213,14 +213,17 @@ fuzz-build:
 	$(MAKE) clean
 	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(FUZZ_CFLAGS)" LDFLAGS="$(FUZZ_LDFLAGS)" seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus $(FUZZ_BIN) $(FUZZ_SDISS_BIN) $(FUZZ_SIN_OBJECT_BIN)
 
-fuzz-smoke: fuzz-build
+fuzz-smoke: fuzz-build fuzz-smoke-run
+
+# Runs the already-built fuzz harnesses against seeded corpora.
+fuzz-smoke-run:
 	@set -eu; \
 	tmp="$$(mktemp -d)"; \
 	trap 'rm -rf "$$tmp"' EXIT; \
 	mkdir -p "$$tmp/scomp" "$$tmp/sdiss" "$$tmp/sin-object"; \
-	$(FUZZ_BIN) -runs=$(FUZZ_RUNS) -seed=$(FUZZ_SEED) "$$tmp/scomp" $(FUZZ_CORPUS_DIR); \
-	$(FUZZ_SDISS_BIN) -runs=$(FUZZ_RUNS) -seed=$(FUZZ_SEED) "$$tmp/sdiss" $(FUZZ_SDISS_CORPUS_DIR); \
-	$(FUZZ_SIN_OBJECT_BIN) -runs=$(FUZZ_RUNS) -seed=$(FUZZ_SEED) "$$tmp/sin-object" $(FUZZ_SIN_OBJECT_CORPUS_DIR)
+	$(FUZZ_BIN) -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) "$$tmp/scomp" $(FUZZ_CORPUS_DIR); \
+	$(FUZZ_SDISS_BIN) -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) "$$tmp/sdiss" $(FUZZ_SDISS_CORPUS_DIR); \
+	$(FUZZ_SIN_OBJECT_BIN) -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) "$$tmp/sin-object" $(FUZZ_SIN_OBJECT_CORPUS_DIR)
 
 fuzz-scomp:
 	$(MAKE) clean

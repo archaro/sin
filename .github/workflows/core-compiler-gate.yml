@@ -15,15 +15,5 @@ jobs:
           sudo apt-get install -y build-essential clang bison flex libuv1-dev
       - name: Run core compiler gate
         run: ./ci/gate_ir_absyn_emitbc.sh
-      - name: Run regular tests
-        run: make test
-      - name: Run sanitizer and strict warning tests
-        env:
-          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1:abort_on_error=1
-          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: make test-sanitize
-      - name: Run deterministic fuzz smoke gate
-        env:
-          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1:abort_on_error=1
-          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: make fuzz-smoke FUZZ_RUNS=1000 FUZZ_SEED=1
+      - name: Run sanitizer and fuzz gate
+        run: ./ci/gate_sanitizers_fuzz.sh

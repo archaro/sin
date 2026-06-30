@@ -24,6 +24,23 @@ make STRICT_WARNINGS=1 test
 
 The `test-sanitize` target also enables strict warnings automatically, so sanitizer runs use the same warning gate in addition to address/undefined-behavior sanitizers.
 
+
+## Sanitizer and fuzz gate
+
+Run the combined strict-warning, sanitizer, and fuzz smoke gate before opening a PR that touches compiler, runtime, parser, bytecode, or fuzz harness code:
+
+```bash
+./ci/gate_sanitizers_fuzz.sh
+```
+
+The script exports the same sanitizer defaults used by CI and then runs the Makefile gates in this order: `make STRICT_WARNINGS=1 test`, `make test-sanitize`, `make fuzz-build`, and `make fuzz-smoke-run` with `FUZZ_SEED=1`. Use `make fuzz-smoke` when you want the Makefile to build and run the fuzz smoke gate in one step.
+
+You can tune local or CI runs with environment variables without editing the script:
+
+```bash
+FUZZ_RUNS=5000 FUZZ_TIME=60 CC=gcc FUZZ_CC=clang ./ci/gate_sanitizers_fuzz.sh
+```
+
 ## Core language gate
 
 Run this gate when changing any code in the compiler or interpreter paths:
