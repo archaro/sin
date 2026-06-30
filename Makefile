@@ -33,6 +33,9 @@ LIB_DIR := lib
 TEST_DIR := tests
 TEST_BIN := $(TEST_DIR)/test-compiler
 FUZZ_CC ?= clang
+FUZZ_TIME ?= 30
+FUZZ_RUNS ?= 10000
+FUZZ_SEED ?= 1
 FUZZ_DIR := $(TEST_DIR)/fuzz
 FUZZ_BIN := $(FUZZ_DIR)/fuzz_scomp
 FUZZ_CORPUS_DIR := $(FUZZ_DIR)/corpus/scomp
@@ -42,6 +45,8 @@ FUZZ_SIN_OBJECT_BIN := $(FUZZ_DIR)/fuzz_sin_object
 FUZZ_SIN_OBJECT_CORPUS_DIR := $(FUZZ_DIR)/corpus/sin-object
 FUZZ_SANITIZE_FLAGS := -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
 FUZZ_LINK_FLAGS := -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
+FUZZ_CFLAGS ?= $(CFLAGS) $(FUZZ_SANITIZE_FLAGS)
+FUZZ_LDFLAGS ?= $(LDFLAGS) $(FUZZ_SANITIZE_FLAGS)
 TEST_SHARED_SOURCES := \
 	$(TEST_DIR)/shared/test_compiler.c \
 	$(TEST_DIR)/shared/test_helpers.c \
@@ -123,7 +128,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
-.PHONY: all clean lib test teststrict test-asan test-lsan fuzz-scomp fuzz-sdiss fuzz-sin-object seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
+.PHONY: all clean lib test teststrict test-asan test-lsan fuzz-build fuzz-smoke fuzz-scomp fuzz-sdiss fuzz-sin-object seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
 
 all: $(LIB) scomp sdiss sin
 
@@ -200,14 +205,27 @@ seed-fuzz-sdiss-corpus:
 		printf 'xxd not found; skipping sdiss fixture corpus seeding\n'; \
 	fi
 
+fuzz-build:
+	$(MAKE) clean
+	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(FUZZ_CFLAGS)" LDFLAGS="$(FUZZ_LDFLAGS)" seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus $(FUZZ_BIN) $(FUZZ_SDISS_BIN) $(FUZZ_SIN_OBJECT_BIN)
+
+fuzz-smoke: fuzz-build
+	@set -eu; \
+	tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	mkdir -p "$$tmp/scomp" "$$tmp/sdiss" "$$tmp/sin-object"; \
+	$(FUZZ_BIN) -runs=$(FUZZ_RUNS) -seed=$(FUZZ_SEED) "$$tmp/scomp" $(FUZZ_CORPUS_DIR); \
+	$(FUZZ_SDISS_BIN) -runs=$(FUZZ_RUNS) -seed=$(FUZZ_SEED) "$$tmp/sdiss" $(FUZZ_SDISS_CORPUS_DIR); \
+	$(FUZZ_SIN_OBJECT_BIN) -runs=$(FUZZ_RUNS) -seed=$(FUZZ_SEED) "$$tmp/sin-object" $(FUZZ_SIN_OBJECT_CORPUS_DIR)
+
 fuzz-scomp:
 	$(MAKE) clean
-	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(CFLAGS) $(FUZZ_SANITIZE_FLAGS)" LDFLAGS="$(LDFLAGS) $(FUZZ_SANITIZE_FLAGS)" $(FUZZ_BIN)
+	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(FUZZ_CFLAGS)" LDFLAGS="$(FUZZ_LDFLAGS)" $(FUZZ_BIN)
 	@printf 'Built %s. Run with: %s %s\n' "$(FUZZ_BIN)" "$(FUZZ_BIN)" "$(FUZZ_CORPUS_DIR)"
 
 fuzz-sdiss: seed-fuzz-sdiss-corpus
 	$(MAKE) clean
-	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(CFLAGS) $(FUZZ_SANITIZE_FLAGS)" LDFLAGS="$(LDFLAGS) $(FUZZ_SANITIZE_FLAGS)" seed-fuzz-sdiss-corpus $(FUZZ_SDISS_BIN)
+	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(FUZZ_CFLAGS)" LDFLAGS="$(FUZZ_LDFLAGS)" seed-fuzz-sdiss-corpus $(FUZZ_SDISS_BIN)
 	@printf 'Built %s. Run with: %s %s\n' "$(FUZZ_SDISS_BIN)" "$(FUZZ_SDISS_BIN)" "$(FUZZ_SDISS_CORPUS_DIR)"
 
 seed-fuzz-sin-object-corpus: scomp
@@ -221,7 +239,7 @@ seed-fuzz-sin-object-corpus: scomp
 # Builds a libFuzzer harness for sin object/itemstore loading and strict bytecode validation.
 fuzz-sin-object:
 	$(MAKE) clean
-	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(CFLAGS) $(FUZZ_SANITIZE_FLAGS)" LDFLAGS="$(LDFLAGS) $(FUZZ_SANITIZE_FLAGS)" seed-fuzz-sin-object-corpus $(FUZZ_SIN_OBJECT_BIN)
+	$(MAKE) CC=$(FUZZ_CC) CFLAGS="$(FUZZ_CFLAGS)" LDFLAGS="$(FUZZ_LDFLAGS)" seed-fuzz-sin-object-corpus $(FUZZ_SIN_OBJECT_BIN)
 	@printf 'Built %s. Run with: %s %s\n' "$(FUZZ_SIN_OBJECT_BIN)" "$(FUZZ_SIN_OBJECT_BIN)" "$(FUZZ_SIN_OBJECT_CORPUS_DIR)"
 
 clean:

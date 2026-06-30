@@ -12,6 +12,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bison flex libuv1-dev
+          sudo apt-get install -y build-essential clang bison flex libuv1-dev
       - name: Run core compiler gate
         run: ./ci/gate_ir_absyn_emitbc.sh
+      - name: Run deterministic fuzz smoke gate
+        run: make fuzz-smoke FUZZ_RUNS=1000 FUZZ_SEED=1
