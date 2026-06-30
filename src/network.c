@@ -2,6 +2,8 @@
 
 // Licensed under the MIT License - see LICENSE file for details.
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -19,6 +21,8 @@ extern CONFIG_t config;
 
 #define OUTBUF_LENGTH 16384
 #define INBUF_LENGTH 16384
+#define MAX_INPUT_BUFFER_LENGTH 65536
+#define MAX_INPUT_LINE_LENGTH 4096
 
 static const telnet_telopt_t telopts[] = {
   { TELNET_TELOPT_ECHO, TELNET_WONT, TELNET_DO },
@@ -39,6 +43,7 @@ void init_networking() {
     line[l].telnet = NULL;
     line[l].outbuf = NULL;
     line[l].inbuf = NULL;
+    line[l].input_line_length = 0;
   }
 }
 
@@ -96,6 +101,7 @@ LINE_t *add_line(uv_tcp_t *line_handle) {
   line[l].address[0] = '\0';
   line[l].outbuf = outbuf;
   line[l].inbuf = inbuf;
+  line[l].input_line_length = 0;
   return &line[l];
 }
 
@@ -119,6 +125,7 @@ void destroy_line(LINE_t *linep) {
   linep->telnet = NULL;
   linep->outbuf = NULL;
   linep->inbuf = NULL;
+  linep->input_line_length = 0;
   linep->status = LINE_empty;
 }
 
@@ -163,27 +170,100 @@ void append_output(LINE_t *linep, const char *msg, const ssize_t len) {
   }
 }
 
+static void disconnect_line_for_input_limit(LINE_t *linep, const char *reason) {
+  logerr("Line %d (%s) exceeded input limits: %s. Disconnecting.\n",
+         linep->linenum, linep->address[0] ? linep->address : "unknown", reason);
+  if (linep->inbuf && linep->inbuf->buf.base) {
+    linep->inbuf->buf.len = 0;
+    linep->inbuf->buf.base[0] = '\0';
+  }
+  linep->input_line_length = 0;
+  linep->status = LINE_disconnecting;
+  if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
+    uv_close((uv_handle_t *)linep->line_handle, client_on_close);
+  }
+}
+
+static bool input_line_would_exceed_limit(LINE_t *linep, const char *msg,
+                                          size_t msg_len) {
+  size_t current_line_length = linep->input_line_length;
+  for (size_t i = 0; i < msg_len; i++) {
+    if (msg[i] == '\n') {
+      current_line_length = 0;
+      continue;
+    }
+    if (current_line_length >= MAX_INPUT_LINE_LENGTH) {
+      return true;
+    }
+    current_line_length++;
+  }
+  return false;
+}
+
+static size_t unterminated_input_line_length(const char *buf, size_t len) {
+  for (size_t i = len; i > 0; i--) {
+    if (buf[i - 1] == '\n') {
+      return len - i;
+    }
+  }
+  return len;
+}
+
 void append_input(LINE_t *linep, const char *msg, const ssize_t len) {
   // Append input to the input buffer, ready for processing later.
-  // Embiggen the buffer if too small.
   // This is where telnet processing will happen.
   if (len <= 0) return;
   size_t msg_len = (size_t)len;
   if (linep->status != LINE_empty && linep->status != LINE_disconnecting) {
-    // No point in doing this if there is no connection.
-    // If there is a newline in the input, we have received
-    // a complete line of input.
+    if (!linep->inbuf || !linep->inbuf->buf.base) {
+      disconnect_line_for_input_limit(linep, "missing input buffer");
+      return;
+    }
+
+    if (msg_len > MAX_INPUT_BUFFER_LENGTH ||
+        linep->inbuf->buf.len > MAX_INPUT_BUFFER_LENGTH - msg_len) {
+      disconnect_line_for_input_limit(linep, "input buffer too large");
+      return;
+    }
+
+    size_t required_len = linep->inbuf->buf.len + msg_len;
+    if (required_len == SIZE_MAX) {
+      disconnect_line_for_input_limit(linep, "input buffer length overflow");
+      return;
+    }
+    size_t required_capacity = required_len + 1;
+    if (required_capacity > MAX_INPUT_BUFFER_LENGTH) {
+      disconnect_line_for_input_limit(linep, "input buffer capacity too large");
+      return;
+    }
+
+    if (input_line_would_exceed_limit(linep, msg, msg_len)) {
+      disconnect_line_for_input_limit(linep, "input line too long");
+      return;
+    }
+
+    if (required_capacity > linep->inbuf->length) {
+      size_t new_capacity = ((required_capacity + INBUF_LENGTH - 1) / INBUF_LENGTH) * INBUF_LENGTH;
+      if (new_capacity < required_capacity || new_capacity > MAX_INPUT_BUFFER_LENGTH) {
+        new_capacity = required_capacity;
+      }
+      char *newbase = (char *)realloc(linep->inbuf->buf.base, new_capacity);
+      if (!newbase) {
+        disconnect_line_for_input_limit(linep, "input buffer allocation failed");
+        return;
+      }
+      linep->inbuf->buf.base = newbase;
+      linep->inbuf->length = new_capacity;
+    }
+
+    memcpy(linep->inbuf->buf.base + linep->inbuf->buf.len, msg, msg_len);
+    linep->inbuf->buf.len = required_len;
+    linep->inbuf->buf.base[linep->inbuf->buf.len] = '\0';
+    linep->input_line_length = unterminated_input_line_length(
+        linep->inbuf->buf.base, linep->inbuf->buf.len);
     if (memchr(msg, '\n', msg_len)) {
       linep->status = LINE_data;
     }
-    while (linep->inbuf->buf.len + msg_len + 1 >= linep->inbuf->length) {
-      linep->inbuf->length += INBUF_LENGTH;
-      linep->inbuf->buf.base = (char *)realloc(linep->inbuf->buf.base,
-                                                    linep->inbuf->length);
-    }
-    memcpy(linep->inbuf->buf.base + linep->inbuf->buf.len, msg, msg_len);
-    linep->inbuf->buf.len += msg_len;
-    linep->inbuf->buf.base[linep->inbuf->buf.len] = '\0';
   }
 }
 
@@ -193,8 +273,26 @@ char *get_input(LINE_t *linep) {
   // input buffer, set the status to LINE_idle, otherwise leave it
   // unchanged.  The buffer allocated by this function will need to be
   // freed by the calling function when it is no longer needed.
-  // If there isn't a newline in the input buffer, explode messily.
-  char *eol = strchr(linep->inbuf->buf.base, '\n');
+  if (!linep->inbuf || !linep->inbuf->buf.base) {
+    logerr("Line %d (%s) has no input buffer. Disconnecting.\n",
+           linep->linenum, linep->address[0] ? linep->address : "unknown");
+    linep->status = LINE_disconnecting;
+    if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
+      uv_close((uv_handle_t *)linep->line_handle, client_on_close);
+    }
+    return NULL;
+  }
+
+  char *eol = memchr(linep->inbuf->buf.base, '\n', linep->inbuf->buf.len);
+  if (!eol) {
+    logerr("Line %d (%s) marked as data without a newline. Returning to idle.\n",
+           linep->linenum, linep->address[0] ? linep->address : "unknown");
+    linep->status = LINE_idle;
+    linep->input_line_length = unterminated_input_line_length(
+        linep->inbuf->buf.base, linep->inbuf->buf.len);
+    return NULL;
+  }
+
   *eol = '\0';
   char *data = strdup(linep->inbuf->buf.base);
   if (!data) {
@@ -206,8 +304,13 @@ char *get_input(LINE_t *linep) {
     return NULL;
   }
   // Ok, we have the line of data, now take it out of the input buffer.
-  eol++;
-  char *newbuffer = malloc(INBUF_LENGTH);
+  size_t consumed_len = (size_t)(eol - linep->inbuf->buf.base) + 1;
+  size_t remaining_len = linep->inbuf->buf.len - consumed_len;
+  size_t new_capacity = INBUF_LENGTH;
+  if (remaining_len + 1 > new_capacity) {
+    new_capacity = remaining_len + 1;
+  }
+  char *newbuffer = malloc(new_capacity);
   if (!newbuffer) {
     logerr("Failed to allocate replacement input buffer for line %d.\n",
            linep->linenum);
@@ -218,12 +321,14 @@ char *get_input(LINE_t *linep) {
     }
     return NULL;
   }
-  strcpy(newbuffer, eol);
+  memcpy(newbuffer, eol + 1, remaining_len);
+  newbuffer[remaining_len] = '\0';
   free(linep->inbuf->buf.base);
-  linep->inbuf->length = INBUF_LENGTH;
+  linep->inbuf->length = new_capacity;
   linep->inbuf->buf.base = newbuffer;
-  linep->inbuf->buf.len = strlen(newbuffer);
-  if (!strchr(linep->inbuf->buf.base, '\n')) {
+  linep->inbuf->buf.len = remaining_len;
+  linep->input_line_length = unterminated_input_line_length(newbuffer, remaining_len);
+  if (!memchr(linep->inbuf->buf.base, '\n', linep->inbuf->buf.len)) {
     linep->status = LINE_idle;
   }
   return data;
