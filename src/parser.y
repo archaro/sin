@@ -33,6 +33,7 @@
 }
 
 %{
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,6 +53,25 @@ int yyparse();
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
 YY_BUFFER_STATE yy_scan_bytes(const char *bytes, int len, yyscan_t yyscanner);
 void yy_delete_buffer(YY_BUFFER_STATE b, yyscan_t yyscanner);
+
+
+static AS_NODE *as_new_unary_minus_node(AS_NODE *operand) {
+  if (operand && operand->nodetype == N_VALUE) {
+    AS_VALUE *value = (AS_VALUE *)operand->lhs;
+    if (value) {
+      if (value->valtype == V_INT && value->value.i > INT64_MIN) {
+        value->value.i = -value->value.i;
+        return operand;
+      }
+      if (value->valtype == V_FLOAT) {
+        value->value.f_bits ^= UINT64_C(0x8000000000000000);
+        return operand;
+      }
+    }
+  }
+
+  return as_new_node(N_SUB, as_new_intnode(0), operand);
+}
 
 void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
   // yyerror() is called whenever there is a syntax error, so we need to
@@ -207,7 +227,7 @@ expr:     TLOCAL { $$ = as_new_valnode(V_LOCAL, $1); }
 	      |	expr TDIV expr { $$ = as_new_node(N_DIV, $1, $3); }
         | TLPAREN expr TRPAREN { $$ = $2; }
         | TNOT expr { $$ = as_new_node(N_NOT, $2, NULL); }
-        | TMINUS expr %prec UMINUS { $$ = as_new_node(N_SUB, as_new_intnode(0), $2); }
+        | TMINUS expr %prec UMINUS { $$ = as_new_unary_minus_node($2); }
         | funcop { $$ = $1; }
         | libcall { $$ = $1; }
         | TUNKNOWNCHAR { $$ = NULL;
