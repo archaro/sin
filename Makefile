@@ -35,6 +35,7 @@ LIB_DIR := lib
 # Test runner
 TEST_DIR := tests
 TEST_BIN := $(TEST_DIR)/test-compiler
+NETWORK_TEST_BIN := $(TEST_DIR)/network/test-network
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -135,7 +136,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
 
 .PHONY: all lib clean help
-.PHONY: test test-strict test-warnings test-asan test-lsan
+.PHONY: test test-network test-strict test-warnings test-asan test-lsan
 .PHONY: fuzz-build fuzz-corpora fuzz-smoke fuzz-smoke-run
 .PHONY: fuzz-scomp fuzz-sdiss fuzz-sin-object
 .PHONY: seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
@@ -194,8 +195,11 @@ $(OBJ_DIR)/lexer.o: $(SRC_DIR)/lexer.c
 # Include dependency files
 -include $(DEPS)
 
-test: $(TEST_BIN)
+test: $(TEST_BIN) test-network
 	./$(TEST_BIN)
+
+test-network: $(NETWORK_TEST_BIN)
+	./$(NETWORK_TEST_BIN)
 
 test-strict: $(TEST_BIN)
 	SIN_STRICT_BENCH=1 ./$(TEST_BIN)
@@ -211,6 +215,9 @@ test-lsan: clean
 
 $(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
 	$(CC) $(CFLAGS) $(DEBUG) -Isrc -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
+
+$(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/network.c $(SRC_DIR)/network.h
+	$(CC) $(CFLAGS) $(DEBUG) -Isrc -I$(TEST_DIR) -o $@ $(TEST_DIR)/network/test_network.c $(LDFLAGS) $(LIBS)
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)
