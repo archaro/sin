@@ -36,7 +36,7 @@ static void setup_libcall_runtime(void) {
 
 static void teardown_libcall_runtime(void) {
   if (line) {
-    for (uint8_t i = 0; i < config.maxconns; i++) {
+    for (size_t i = 0; i < config.maxconns; i++) {
       if (line[i].telnet) {
         telnet_free(line[i].telnet);
         line[i].telnet = NULL;
