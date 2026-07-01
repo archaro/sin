@@ -383,7 +383,10 @@ int main(int argc, char **argv) {
     // Here we go...
     logmsg("Running...\n");
     config.maxconns = MAXCONNS;
-    config.lastconn = 255;
+    config.lastconn = config.maxconns;
+    if (!validate_network_config()) {
+      exit(EXIT_FAILURE);
+    }
     init_networking();
     init_listener(listener_port);
     runloop_retval = uv_run(config.loop, UV_RUN_DEFAULT);

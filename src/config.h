@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <stddef.h>
 #include <uv.h>
 
 #include "vm.h"
@@ -26,8 +27,8 @@ typedef struct {
   char *inputline;      // Item to receive the input line number
   char *inputtext;      // Item to receive the input data
   VM_t *input_vm;       // VM for the input task
-  uint8_t maxconns;     // Maximum number of connected players
-  uint8_t lastconn;     // Last connection processed by net.input
+  size_t maxconns;      // Maximum number of connected players
+  size_t lastconn;      // Last connection processed by net.input
   bool safe_shutdown;   // Determins how to shut down.
   bool strict_validation; // Verify bytecode at runtime before execution.
 } CONFIG_t;

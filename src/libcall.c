@@ -349,7 +349,7 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
   // gets a turn.  Find the next activity.
   (void)item;
   config.lastconn++;
-  if (config.lastconn >= config.maxconns) {
+  if (config.maxconns == 0 || config.lastconn >= config.maxconns) {
     config.lastconn = 0;
   }
   while (config.lastconn < config.maxconns) {
@@ -359,7 +359,7 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
       case LINE_connecting:
         line[config.lastconn].status = LINE_idle;
         // Set the input item to the current line
-        val.i = config.lastconn;
+        val.i = (long)config.lastconn;
         set_item(config.itemroot, config.inputline, val);
         // And return a value from this libcall to say what happened.
         val.i = 1;
@@ -369,14 +369,14 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
         destroy_line(&line[config.lastconn]);
         line[config.lastconn].status = LINE_empty;
         // Set the input item to the current line
-        val.i = config.lastconn;
+        val.i = (long)config.lastconn;
         set_item(config.itemroot, config.inputline, val);
         val.i = 2;
         push_stack(VM->stack, val);
         return nextop;
       case LINE_data:
         // Set the input item to the current line
-        val.i = config.lastconn;
+        val.i = (long)config.lastconn;
         set_item(config.itemroot, config.inputline, val);
         // And grab some data.
         VALUE_t str = {VALUE_str, {0}};
@@ -400,58 +400,60 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
   (void)item;
   VALUE_t out = pop_stack(VM->stack);
   VALUE_t linenum = pop_stack(VM->stack);
+  size_t line_index = 0;
 
-  if (!lc_value_is_type(linenum, VALUE_int) || linenum.i < 0 
-                                        || linenum.i >= config.maxconns) {
+  if (!lc_value_is_type(linenum, VALUE_int) || linenum.i < 0 ||
+      (size_t)linenum.i >= config.maxconns) {
     FREE_STR(out);
     FREE_STR(linenum);
     return lc_invalid_args_detail_return(nextop, VALUE_NIL,
         "net.write line must be an integer connection index; floats are invalid");
   } else {
-    if ((line[linenum.i].status != LINE_data
-        && line[linenum.i].status != LINE_idle)
-        || line[linenum.i].telnet == NULL) {
+    line_index = (size_t)linenum.i;
+    if ((line[line_index].status != LINE_data
+        && line[line_index].status != LINE_idle)
+        || line[line_index].telnet == NULL) {
       FREE_STR(out);
       push_stack(VM->stack, VALUE_NIL);
       return nextop;
     }
     switch(out.type) {
       case VALUE_str:
-        if (line[linenum.i].outbuf &&
-            !line_can_accept_output(&line[linenum.i], strlen(out.s))) {
-          logerr("net.write rejected for line %ld: output buffer limit or backpressure.\n",
-                 linenum.i);
+        if (line[line_index].outbuf &&
+            !line_can_accept_output(&line[line_index], strlen(out.s))) {
+          logerr("net.write rejected for line %zu: output buffer limit or backpressure.\n",
+                 line_index);
           FREE_STR(out);
           push_stack(VM->stack, VALUE_FALSE);
           return nextop;
         }
-        telnet_send_text(line[linenum.i].telnet, out.s, strlen(out.s));
+        telnet_send_text(line[line_index].telnet, out.s, strlen(out.s));
         FREE_STR(out);
         break;
       case VALUE_int: {
         char buffer[22];
         itoa(out.i, buffer, 10);
-        if (line[linenum.i].outbuf &&
-            !line_can_accept_output(&line[linenum.i], strlen(buffer))) {
-          logerr("net.write rejected for line %ld: output buffer limit or backpressure.\n",
-                 linenum.i);
+        if (line[line_index].outbuf &&
+            !line_can_accept_output(&line[line_index], strlen(buffer))) {
+          logerr("net.write rejected for line %zu: output buffer limit or backpressure.\n",
+                 line_index);
           push_stack(VM->stack, VALUE_FALSE);
           return nextop;
         }
-        telnet_send_text(line[linenum.i].telnet, buffer, strlen(buffer));
+        telnet_send_text(line[line_index].telnet, buffer, strlen(buffer));
         break;
       }
       case VALUE_float: {
         char fbuffer[64];
         if (sin_format_binary64_buf(out.f, fbuffer, sizeof(fbuffer))) {
-          if (line[linenum.i].outbuf &&
-              !line_can_accept_output(&line[linenum.i], strlen(fbuffer))) {
-            logerr("net.write rejected for line %ld: output buffer limit or backpressure.\n",
-                   linenum.i);
+          if (line[line_index].outbuf &&
+              !line_can_accept_output(&line[line_index], strlen(fbuffer))) {
+            logerr("net.write rejected for line %zu: output buffer limit or backpressure.\n",
+                   line_index);
             push_stack(VM->stack, VALUE_FALSE);
             return nextop;
           }
-          telnet_send_text(line[linenum.i].telnet, fbuffer, strlen(fbuffer));
+          telnet_send_text(line[line_index].telnet, fbuffer, strlen(fbuffer));
         }
         break;
       }
@@ -461,20 +463,20 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
       case VALUE_bool: {
         char *t = "true";
         char *f = "false";
-        if (line[linenum.i].outbuf &&
-            !line_can_accept_output(&line[linenum.i], strlen(out.i?t:f))) {
-          logerr("net.write rejected for line %ld: output buffer limit or backpressure.\n",
-                 linenum.i);
+        if (line[line_index].outbuf &&
+            !line_can_accept_output(&line[line_index], strlen(out.i?t:f))) {
+          logerr("net.write rejected for line %zu: output buffer limit or backpressure.\n",
+                 line_index);
           push_stack(VM->stack, VALUE_FALSE);
           return nextop;
         }
-        telnet_send_text(line[linenum.i].telnet, out.i?t:f,
+        telnet_send_text(line[line_index].telnet, out.i?t:f,
                                                         strlen(out.i?t:f));
         break;
       }
     }
   }
-  if (line[linenum.i].status == LINE_disconnecting) {
+  if (line[line_index].status == LINE_disconnecting) {
     push_stack(VM->stack, VALUE_FALSE);
     return nextop;
   }

@@ -25,7 +25,7 @@ typedef struct {
   uv_tcp_t *line_handle;
   enum { LINE_empty, LINE_connecting,
          LINE_disconnecting, LINE_data, LINE_idle } status;
-  uint8_t linenum;
+  size_t linenum;
   char address[40];
   telnet_t *telnet;
   write_req_t *outbuf;
@@ -36,6 +36,7 @@ typedef struct {
   size_t input_line_length; // Bytes buffered since the last newline
 } LINE_t;
 
+bool validate_network_config();
 void init_networking();
 void init_listener(uint32_t port);
 void destroy_line(LINE_t *line);

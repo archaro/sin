@@ -4,7 +4,9 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <limits.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #include "config.h"
@@ -38,11 +40,32 @@ LINE_t *line;
 
 void flush_output(LINE_t *linep);
 
+bool validate_network_config() {
+  if (config.maxconns == 0) {
+    logerr("Invalid maxconns: must be greater than zero.\n");
+    return false;
+  }
+  if (config.maxconns > (size_t)LONG_MAX) {
+    logerr("Invalid maxconns: %zu exceeds maximum line number %ld.\n",
+           config.maxconns, LONG_MAX);
+    return false;
+  }
+  if (config.maxconns > SIZE_MAX / sizeof(LINE_t)) {
+    logerr("Invalid maxconns: %zu is too large to allocate.\n",
+           config.maxconns);
+    return false;
+  }
+  return true;
+}
+
 void init_networking() {
   // Do that which needs to be done before starting the network interface
+  if (!validate_network_config()) {
+    exit(EXIT_FAILURE);
+  }
 
   line = GROW_ARRAY(LINE_t, line, 0, config.maxconns);
-  for (int l = 0; l < config.maxconns; l++) {
+  for (size_t l = 0; l < config.maxconns; l++) {
     line[l].status = LINE_empty;
     line[l].linenum = l;
     line[l].address[0] = '\0';
@@ -58,7 +81,7 @@ void init_networking() {
 }
 
 LINE_t *add_line(uv_tcp_t *line_handle) {
-  uint8_t l = 0;
+  size_t l = 0;
   while (line[l].status != LINE_empty) {
     l++;
     if (l >= config.maxconns) {
@@ -148,7 +171,7 @@ void destroy_line(LINE_t *linep) {
 LINE_t *find_line(uv_tcp_t *client) {
   // Given a TCP client connection, find its associated line.
   // Return the line, or NULL if not found.
-  uint8_t l = 0;
+  size_t l = 0;
   while (l < config.maxconns) {
     if (line[l].line_handle == client) {
       return &line[l];
@@ -165,12 +188,12 @@ void client_on_close(uv_handle_t *handle) {
     free(handle);
     return;
   }
-  logmsg("Line %d: %s disconnected.\n", linep->linenum, linep->address);
+  logmsg("Line %zu: %s disconnected.\n", linep->linenum, linep->address);
   linep->status = LINE_disconnecting;
 }
 
 static void disconnect_line_for_output_limit(LINE_t *linep, const char *reason) {
-  logerr("Line %d (%s) exceeded output limits: %s. Disconnecting.\n",
+  logerr("Line %zu (%s) exceeded output limits: %s. Disconnecting.\n",
          linep->linenum, linep->address[0] ? linep->address : "unknown", reason);
   if (linep->outbuf && linep->outbuf->buf.base) {
     linep->outbuf->buf.len = 0;
@@ -251,7 +274,7 @@ void append_output(LINE_t *linep, const char *msg, const ssize_t len) {
 }
 
 static void disconnect_line_for_input_limit(LINE_t *linep, const char *reason) {
-  logerr("Line %d (%s) exceeded input limits: %s. Disconnecting.\n",
+  logerr("Line %zu (%s) exceeded input limits: %s. Disconnecting.\n",
          linep->linenum, linep->address[0] ? linep->address : "unknown", reason);
   if (linep->inbuf && linep->inbuf->buf.base) {
     linep->inbuf->buf.len = 0;
@@ -354,7 +377,7 @@ char *get_input(LINE_t *linep) {
   // unchanged.  The buffer allocated by this function will need to be
   // freed by the calling function when it is no longer needed.
   if (!linep->inbuf || !linep->inbuf->buf.base) {
-    logerr("Line %d (%s) has no input buffer. Disconnecting.\n",
+    logerr("Line %zu (%s) has no input buffer. Disconnecting.\n",
            linep->linenum, linep->address[0] ? linep->address : "unknown");
     linep->status = LINE_disconnecting;
     if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
@@ -365,7 +388,7 @@ char *get_input(LINE_t *linep) {
 
   char *eol = memchr(linep->inbuf->buf.base, '\n', linep->inbuf->buf.len);
   if (!eol) {
-    logerr("Line %d (%s) marked as data without a newline. Returning to idle.\n",
+    logerr("Line %zu (%s) marked as data without a newline. Returning to idle.\n",
            linep->linenum, linep->address[0] ? linep->address : "unknown");
     linep->status = LINE_idle;
     linep->input_line_length = unterminated_input_line_length(
@@ -376,7 +399,7 @@ char *get_input(LINE_t *linep) {
   *eol = '\0';
   char *data = strdup(linep->inbuf->buf.base);
   if (!data) {
-    logerr("Failed to allocate input line for line %d.\n", linep->linenum);
+    logerr("Failed to allocate input line for line %zu.\n", linep->linenum);
     linep->status = LINE_disconnecting;
     if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
       uv_close((uv_handle_t *)linep->line_handle, client_on_close);
@@ -392,7 +415,7 @@ char *get_input(LINE_t *linep) {
   }
   char *newbuffer = malloc(new_capacity);
   if (!newbuffer) {
-    logerr("Failed to allocate replacement input buffer for line %d.\n",
+    logerr("Failed to allocate replacement input buffer for line %zu.\n",
            linep->linenum);
     free(data);
     linep->status = LINE_disconnecting;
@@ -446,7 +469,7 @@ static void output_write_cb(uv_write_t *req, int status) {
   LINE_t *linep = (LINE_t *)req->data;
 
   if (status < 0 && linep) {
-    logerr("Line %d (%s) write error: %s. Disconnecting.\n",
+    logerr("Line %zu (%s) write error: %s. Disconnecting.\n",
            linep->linenum, linep->address[0] ? linep->address : "unknown",
            uv_strerror(status));
   }
@@ -592,7 +615,7 @@ void on_new_connection(uv_stream_t *server, int status) {
   if (!newline) {
     uv_buf_t gamefull = {"Too many connections.\r\n", 23};
     uv_try_write((uv_stream_t *)client, &gamefull, 1);
-    logmsg("Rejected connection: maximum connections (%d) exceeded or allocation failed.\n",
+    logmsg("Rejected connection: maximum connections (%zu) exceeded or allocation failed.\n",
            config.maxconns);
     uv_close((uv_handle_t *)client, free_client_on_close);
     return;
@@ -601,7 +624,7 @@ void on_new_connection(uv_stream_t *server, int status) {
   newline->telnet = telnet_init(telopts, telnet_event_handler,
                                 TELNET_FLAG_NVT_EOL, newline);
   if (!newline->telnet) {
-    logerr("Rejected connection: telnet_init failed for line %d.\n",
+    logerr("Rejected connection: telnet_init failed for line %zu.\n",
            newline->linenum);
     newline->status = LINE_disconnecting;
     uv_close((uv_handle_t *)client, client_on_close);
@@ -637,7 +660,7 @@ void on_new_connection(uv_stream_t *server, int status) {
 
   telnet_printf(newline->telnet, "Connected.\n");
   flush_output(newline);
-  logmsg("Line %d: %s connected.\n", newline->linenum, newline->address);
+  logmsg("Line %zu: %s connected.\n", newline->linenum, newline->address);
 }
 
 void init_listener(uint32_t port) {
@@ -651,7 +674,7 @@ void init_listener(uint32_t port) {
   if (r) {
     logerr("Failed to start listening: %s\n", uv_strerror(r));
   } else {
-    logmsg("Listening on port %d.\n", port);
+    logmsg("Listening on port %u.\n", port);
   }
 }
 
@@ -667,7 +690,7 @@ void input_processor(uv_idle_t* handle) {
   interpret(input);
   reset_stack(VM->stack);
   // Flush the output of every connected line
-  for (int l = 0; l < config.maxconns; l++) {
+  for (size_t l = 0; l < config.maxconns; l++) {
     if (line[l].status != LINE_empty 
                                   && line[l].status != LINE_disconnecting) {
       flush_output(&line[l]);
