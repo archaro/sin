@@ -118,20 +118,56 @@ static char *first_source_line(const char *source, size_t len) {
   return line;
 }
 
-int8_t compile_source_to_bytecode_diag(const char *source, size_t len, OUTPUT_t **out, CompilerDiagnostic *out_diag){
- char *errdetail=NULL;
- int8_t rc = compile_source_to_bytecode(source,len,out,&errdetail);
- if(out_diag){
-  compiler_diag_reset(out_diag);
-  if(rc!=ERR_NOERROR){
-   compiler_diag_set(out_diag,rc,phase_from_detail(errdetail),errdetail?errdetail:"");
-   compiler_diag_set_source_name(out_diag,"<memory>");
-   compiler_diag_set_location(out_diag,1,1,1);
-   char *excerpt = first_source_line(source,len);
-   compiler_diag_set_excerpt(out_diag,excerpt?excerpt:"");
-   free(excerpt);
+int8_t compile_source_to_bytecode_diag(const char *source, size_t len, OUTPUT_t **out, CompilerDiagnostic *out_diag) {
+  char *errdetail = NULL;
+  CompilerContext ctx;
+  SCANNER_STATE_t parse_state = {0};
+  int8_t rc = ERR_NOERROR;
+
+  if (out) *out = NULL;
+  compiler_context_init(&ctx, source, len);
+
+  if (!source || !out) {
+    rc = ERR_COMP_SYNTAX;
+    errdetail = strdup("compile: invalid source or output");
+  } else if (compiler_context_prepare_bytecode_output(&ctx, 1024) != 0) {
+    rc = ERR_COMP_SYNTAX;
+    errdetail = strdup("compile: bytecode output allocation failed");
+  } else {
+    ctx.sem_ctx = sem_create_ctx();
+    ParseInput input = {ctx.source, ctx.source_len, "<memory>"};
+    rc = parse_source_diag(&input, &ctx.ast_root, &errdetail, &parse_state);
+    if (rc == ERR_NOERROR) rc = sem_check_locals(ctx.ast_root, &errdetail, ctx.sem_ctx);
+    if (rc == ERR_NOERROR) rc = lower_ast_to_ir(ctx.ast_root, ctx.sem_ctx, &ctx.ir_unit, &errdetail);
+    if (rc == ERR_NOERROR) rc = ir_validate(ctx.ir_unit, ctx.sem_ctx->count, &errdetail);
+    if (rc == ERR_NOERROR) {
+      rc = emit_bytecode(ctx.ir_unit, (uint8_t)ctx.sem_ctx->count, 0, ctx.bytecode_out, &errdetail);
+    }
+    if (rc == ERR_NOERROR) {
+      *out = ctx.bytecode_out;
+      ctx.bytecode_out = NULL;
+    }
   }
- }
- if(errdetail) free(errdetail);
- return rc;
+
+  if (out_diag) {
+    compiler_diag_reset(out_diag);
+    if (rc != ERR_NOERROR) {
+      DiagPhase phase = rc == ERR_COMP_SYNTAX || rc == ERR_COMP_UNKNOWNCHAR ? DIAG_PHASE_PARSE : phase_from_detail(errdetail);
+      compiler_diag_set(out_diag, rc, phase, errdetail ? errdetail : "");
+      compiler_diag_set_source_name(out_diag, "<memory>");
+      if (phase == DIAG_PHASE_PARSE && parse_state.line > 0) {
+        compiler_diag_set_location(out_diag, parse_state.line, parse_state.column, parse_state.span);
+      } else {
+        compiler_diag_set_location(out_diag, 1, 1, 1);
+      }
+      char *excerpt = first_source_line(source, len);
+      compiler_diag_set_excerpt(out_diag, excerpt ? excerpt : "");
+      free(excerpt);
+    }
+  }
+
+  free(errdetail);
+  free(parse_state.offending_token);
+  compiler_context_destroy(&ctx);
+  return rc;
 }
