@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "compiler_pipeline.h"
 #include "semant.h"
 #include "lower.h"
@@ -7,7 +8,57 @@
 #include "error.h"
 #include "test_assert.h"
 
+static char *read_text_file_for_diag_test(const char *path) {
+  FILE *f = fopen(path, "rb");
+  ASSERT_NOT_NULL(f);
+  ASSERT_EQ_INT(0, fseek(f, 0, SEEK_END));
+  long n = ftell(f);
+  ASSERT_TRUE(n >= 0);
+  ASSERT_EQ_INT(0, fseek(f, 0, SEEK_SET));
+  char *buf = malloc((size_t)n + 1);
+  ASSERT_NOT_NULL(buf);
+  ASSERT_EQ_INT((int)n, (int)fread(buf, 1, (size_t)n, f));
+  buf[n] = '\0';
+  ASSERT_EQ_INT(0, fclose(f));
+  return buf;
+}
+
+static void test_scomp_cli_malformed_diagnostic_shape(void) {
+  const char *src_path = "tests/fixtures/scomp-cli-malformed.tmp.src";
+  const char *obj_path = "tests/fixtures/scomp-cli-malformed.tmp.obj";
+  const char *err_path = "tests/fixtures/scomp-cli-malformed.tmp.err";
+  FILE *src = fopen(src_path, "wb");
+  ASSERT_NOT_NULL(src);
+  const char *malformed = "@x = 1;\n@yy = 2;\n^;";
+  ASSERT_EQ_INT((int)strlen(malformed), (int)fwrite(malformed, 1, strlen(malformed), src));
+  ASSERT_EQ_INT(0, fclose(src));
+
+  char cmd[512];
+  int cmd_len = snprintf(cmd, sizeof(cmd), "./scomp %s %s > /dev/null 2> %s", src_path, obj_path, err_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_TRUE(system(cmd) != 0);
+
+  char *err = read_text_file_for_diag_test(err_path);
+  ASSERT_TRUE(strstr(err, "Diagnostic SIN-PARSE-") != NULL);
+  ASSERT_TRUE(strstr(err, "stage: PARSE") != NULL);
+  ASSERT_TRUE(strstr(err, "file: tests/fixtures/scomp-cli-malformed.tmp.src") != NULL);
+  ASSERT_TRUE(strstr(err, "line: 3") != NULL);
+  ASSERT_TRUE(strstr(err, "column: 1") != NULL);
+  ASSERT_TRUE(strstr(err, "message:") != NULL);
+  ASSERT_TRUE(strstr(err, "legacy: ERR_") != NULL);
+  ASSERT_TRUE(strstr(err, "source:") != NULL);
+  ASSERT_TRUE(strstr(err, "    ^;") != NULL);
+  ASSERT_TRUE(strstr(err, "    ^") != NULL);
+  ASSERT_TRUE(strstr(err, "Diag: code=") == NULL);
+
+  free(err);
+  remove(src_path);
+  remove(obj_path);
+  remove(err_path);
+}
+
 void test_compiler_diag_pipeline(void){
+  test_scomp_cli_malformed_diagnostic_shape();
   OUTPUT_t *out=NULL; CompilerDiagnostic d; compiler_diag_init(&d);
   int8_t rc = compile_source_to_bytecode_diag("^;",2,&out,&d);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc); ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, d.code); ASSERT_EQ_INT(DIAG_PHASE_PARSE, d.phase); ASSERT_NOT_NULL(d.message);

@@ -17,6 +17,73 @@
 // Things which need to be known
 CONFIG_t config;
 
+static const char *diag_message(const CompilerDiagnostic *diag) {
+  return diag && diag->message ? diag->message : "";
+}
+
+static void print_source_line(FILE *stream, const char *source, size_t source_len,
+                              int line) {
+  const char *line_start = source;
+  const char *line_end = source;
+  int current_line = 1;
+
+  if (!stream || !source || source_len == 0 || line < 1) {
+    fprintf(stream, "\n");
+    return;
+  }
+
+  while (line_start < source + source_len && current_line < line) {
+    if (*line_start == '\n') current_line++;
+    line_start++;
+  }
+
+  line_end = line_start;
+  while (line_end < source + source_len && *line_end != '\n' &&
+         *line_end != '\r') {
+    line_end++;
+  }
+
+  fprintf(stream, "%.*s\n", (int)(line_end - line_start), line_start);
+}
+
+static void print_caret_marker(FILE *stream, int column, int span) {
+  int caret_column = column > 0 ? column : 1;
+  int caret_span = span > 0 ? span : 1;
+
+  if (!stream) return;
+  for (int i = 1; i < caret_column; i++) fputc(' ', stream);
+  fputc('^', stream);
+  for (int i = 1; i < caret_span; i++) fputc('~', stream);
+  fputc('\n', stream);
+}
+
+static void print_compiler_diagnostic(const CompilerDiagnostic *diag,
+                                      const char *source, size_t source_len) {
+  const char *stable_code = diag && diag->stable_code
+                                ? diag->stable_code
+                                : compiler_diag_stable_code(diag ? diag->code : 0,
+                                                            diag ? diag->phase : DIAG_PHASE_NONE);
+  const char *stage = diag ? compiler_diag_phase_name(diag->phase)
+                           : compiler_diag_phase_name(DIAG_PHASE_NONE);
+  const char *file = diag && diag->source_name ? diag->source_name : "<unknown>";
+  int line = diag && diag->has_loc ? diag->line : 1;
+  int column = diag && diag->has_loc ? diag->column : 1;
+  int span = diag && diag->span > 0 ? diag->span : 1;
+
+  logerr("Diagnostic %s\n", stable_code);
+  logerr("  stage: %s\n", stage);
+  logerr("  file: %s\n", file);
+  logerr("  line: %d\n", line);
+  logerr("  column: %d\n", column);
+  logerr("  message: %s\n", diag_message(diag));
+  logerr("  legacy: ERR_%d\n", diag ? diag->code : 0);
+  logerr("  source:\n");
+  logerr("    ");
+  print_source_line(stderr, source, source_len, line);
+  logerr("    ");
+  print_caret_marker(stderr, column, span);
+}
+
 int load_file_buffer(const char *path, char **out_data, size_t *out_len) {
   FILE *in = NULL;
   long file_len = 0;
@@ -66,14 +133,18 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  if (load_file_buffer(argv[1], &source, &source_len) != 0) {    result = ERR_COMP_SYNTAX;
+  if (load_file_buffer(argv[1], &source, &source_len) != 0) {
+    result = ERR_COMP_SYNTAX;
     compiler_diag_set(&diag, result, DIAG_PHASE_IO, "input file IO failure");
+    compiler_diag_set_source_name(&diag, argv[1]);
+    compiler_diag_set_location(&diag, 1, 1, 1);
     goto compile_error;
   }
   logmsg("Source loaded: %zu bytes.\n", source_len);
 
   logmsg("Compiling...\n");
-  result = compile_source_to_bytecode_diag(source, source_len, &out, &diag);
+  ParseInput input = {source, source_len, argv[1]};
+  result = compile_parse_input_to_bytecode_diag(&input, &out, &diag);
   if (result != ERR_NOERROR) {
     goto compile_error;
   }
@@ -90,7 +161,7 @@ int main(int argc, char **argv) {
 
 compile_error:
   logerr("Error: (#%d) %s\n", result, errmsg[result]);
-  logerr("Diag: code=%d phase=%s message=%s\n", diag.code, compiler_diag_phase_name(diag.phase), diag.message ? diag.message : "");
+  print_compiler_diagnostic(&diag, source, source_len);
   logerr("Compilation failed.\n");
 
 cleanup:
