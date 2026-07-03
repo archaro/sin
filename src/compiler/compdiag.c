@@ -10,7 +10,22 @@
 #include <string.h>
 
 #include "error.h"
-#include "memory.h"
+static char *compiler_diag_strdup(const char *s) {
+  const char *safe = s ? s : "";
+  size_t len = strlen(safe);
+  char *copy = malloc(len + 1);
+  if (!copy) return NULL;
+  memcpy(copy, safe, len + 1);
+  return copy;
+}
+
+static void compiler_diag_free(char *s) {
+  free(s);
+}
+
+char *compdiag_copy_detail(const char *errdetail) {
+  return errdetail ? compiler_diag_strdup(errdetail) : NULL;
+}
 
 static char *compdiag_alloc_detail(const char *phase, const char *msg) {
   const char *safe_phase = phase ? phase : "comp";
@@ -19,7 +34,7 @@ static char *compdiag_alloc_detail(const char *phase, const char *msg) {
   int needed = snprintf(NULL, 0, "%s: %s", safe_phase, safe_msg);
   if (needed < 0) return NULL;
 
-  char *buf = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
+  char *buf = malloc((size_t)needed + 1);
   if (!buf) return NULL;
 
   snprintf(buf, (size_t)needed + 1, "%s: %s", safe_phase, safe_msg);
@@ -56,8 +71,7 @@ bool compdiag_set_once_diag(int8_t *current_errnum, char **errdetail,
     compiler_diag_set(diag, new_errnum, diag_phase, formatted ? formatted : detail);
   }
   if (!errdetail && formatted) {
-    size_t len = strlen(formatted);
-    FREE_ARRAY(char, formatted, len + 1);
+    compiler_diag_free(formatted);
   }
   return true;
 }
@@ -75,7 +89,7 @@ bool compdiag_setf_once(int8_t *current_errnum, char **errdetail,
                              "formatting error");
   }
 
-  char *msg = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
+  char *msg = malloc((size_t)needed + 1);
   if (!msg) {
     return compdiag_set_once(current_errnum, errdetail, new_errnum, phase,
                              "out of memory");
@@ -86,7 +100,7 @@ bool compdiag_setf_once(int8_t *current_errnum, char **errdetail,
   va_end(args);
 
   bool recorded = compdiag_set_once(current_errnum, errdetail, new_errnum, phase, msg);
-  FREE_ARRAY(char, msg, (size_t)needed + 1);
+  compiler_diag_free(msg);
   return recorded;
 }
 
@@ -106,7 +120,7 @@ bool compdiag_setf_once_diag(int8_t *current_errnum, char **errdetail,
                                   diag_phase, phase, "formatting error");
   }
 
-  char *msg = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
+  char *msg = malloc((size_t)needed + 1);
   if (!msg) {
     return compdiag_set_once_diag(current_errnum, errdetail, diag, new_errnum,
                                   diag_phase, phase, "out of memory");
@@ -118,25 +132,16 @@ bool compdiag_setf_once_diag(int8_t *current_errnum, char **errdetail,
 
   bool recorded = compdiag_set_once_diag(current_errnum, errdetail, diag,
                                          new_errnum, diag_phase, phase, msg);
-  FREE_ARRAY(char, msg, (size_t)needed + 1);
+  compiler_diag_free(msg);
   return recorded;
 }
 void compdiag_reset_detail(char **errdetail) {
   if (!errdetail || !*errdetail) return;
 
-  size_t len = strlen(*errdetail);
-  FREE_ARRAY(char, *errdetail, len + 1);
+  compiler_diag_free(*errdetail);
   *errdetail = NULL;
 }
 
-static char *compiler_diag_strdup(const char *s) {
-  const char *safe = s ? s : "";
-  size_t len = strlen(safe);
-  char *copy = malloc(len + 1);
-  if (!copy) return NULL;
-  memcpy(copy, safe, len + 1);
-  return copy;
-}
 
 void compiler_diag_init(CompilerDiagnostic *d) {
   if (!d) return;
@@ -152,10 +157,10 @@ void compiler_diag_init(CompilerDiagnostic *d) {
 
 void compiler_diag_reset(CompilerDiagnostic *d) {
   if (!d) return;
-  free(d->message);
-  free(d->stable_code);
-  free(d->source_name);
-  free(d->excerpt);
+  compiler_diag_free(d->message);
+  compiler_diag_free(d->stable_code);
+  compiler_diag_free(d->source_name);
+  compiler_diag_free(d->excerpt);
   compiler_diag_init(d);
 }
 
@@ -179,13 +184,13 @@ void compiler_diag_set_location(CompilerDiagnostic *d, int line, int column, int
 
 void compiler_diag_set_source_name(CompilerDiagnostic *d, const char *source_name) {
   if (!d) return;
-  free(d->source_name);
+  compiler_diag_free(d->source_name);
   d->source_name = compiler_diag_strdup(source_name ? source_name : "");
 }
 
 void compiler_diag_set_excerpt(CompilerDiagnostic *d, const char *excerpt) {
   if (!d) return;
-  free(d->excerpt);
+  compiler_diag_free(d->excerpt);
   d->excerpt = compiler_diag_strdup(excerpt ? excerpt : "");
 }
 

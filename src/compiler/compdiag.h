@@ -43,6 +43,7 @@ bool compdiag_setf_once_diag(int8_t *current_errnum, char **errdetail,
                              CompilerDiagnostic *diag, int8_t new_errnum,
                              DiagPhase diag_phase, const char *phase,
                              const char *fmt, ...);
+char *compdiag_copy_detail(const char *errdetail);
 void compdiag_reset_detail(char **errdetail);
 
 void compiler_diag_init(CompilerDiagnostic *d);

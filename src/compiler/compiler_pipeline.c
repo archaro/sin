@@ -171,7 +171,7 @@ int8_t compile_parse_input_to_bytecode_diag(const ParseInput *input, OUTPUT_t **
     free(excerpt);
   }
 
-  free(errdetail);
+  compdiag_reset_detail(&errdetail);
   free(parse_state.offending_token);
   compiler_context_destroy(&ctx);
   return rc;
