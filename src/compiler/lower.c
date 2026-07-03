@@ -568,12 +568,13 @@ static void lower_node(LOWER_CTX *ctx, AS_NODE *node) {
   lower_stmt(ctx, node);
 }
 
-int8_t lower_ast_to_ir(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **errdetail) {
+int8_t lower_ast_to_ir_diag(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **errdetail, CompilerDiagnostic *diag) {
+  if (diag) compiler_diag_reset(diag);
   LOWER_CTX ctx;
   int8_t startup_errnum = ERR_NOERROR;
 
   if (!out_ir) {
-    compdiag_set_once(&startup_errnum, errdetail, ERR_COMP_SYNTAX, "lower", "out_ir is NULL");
+    compdiag_set_once_diag(&startup_errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_LOWER, "lower", "out_ir is NULL");
     return startup_errnum;
   }
 
@@ -585,13 +586,13 @@ int8_t lower_ast_to_ir(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **err
   ctx.errnum = ERR_NOERROR;
 
   if (!libcall_init_registry()) {
-    compdiag_set_once(&startup_errnum, errdetail, ERR_COMP_INUSE, "lower",
-                      "failed to initialize libcall registry");
+    compdiag_set_once_diag(&startup_errnum, errdetail, diag, ERR_COMP_INUSE, DIAG_PHASE_LOWER, "lower",
+                          "failed to initialize libcall registry");
     return startup_errnum;
   }
 
   if (!ctx.ir) {
-    compdiag_set_once(&startup_errnum, errdetail, ERR_COMP_INUSE, "lower", "failed to allocate IR unit");
+    compdiag_set_once_diag(&startup_errnum, errdetail, diag, ERR_COMP_INUSE, DIAG_PHASE_LOWER, "lower", "failed to allocate IR unit");
     return startup_errnum;
   }
 
@@ -603,10 +604,17 @@ int8_t lower_ast_to_ir(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **err
   }
 
   ir_destroy_unit(ctx.ir);
+  if (diag && ctx.errnum != ERR_NOERROR) {
+    compiler_diag_set(diag, ctx.errnum, DIAG_PHASE_LOWER, ctx.errdetail ? ctx.errdetail : "");
+  }
   if (errdetail) {
     *errdetail = ctx.errdetail;
   } else if (ctx.errdetail) {
     free(ctx.errdetail);
   }
   return ctx.errnum;
+}
+
+int8_t lower_ast_to_ir(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **errdetail) {
+  return lower_ast_to_ir_diag(root, sem, out_ir, errdetail, NULL);
 }

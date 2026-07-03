@@ -256,7 +256,7 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
   }
 }
 
-int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx) {
+int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic *diag, SEM_CTX *ctx) {
   // sem_check_locals is reusable per SEM_CTX. It preserves discovered locals
   // across calls, but resets and re-computes per-call error state.
   //
@@ -276,7 +276,15 @@ int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx) {
     *errdetail = ctx->errdetail ? strdup(ctx->errdetail) : NULL;
   }
 
+  if (diag && ctx->errnum != ERR_NOERROR) {
+    compiler_diag_set(diag, ctx->errnum, DIAG_PHASE_SEMANT, ctx->errdetail ? ctx->errdetail : "");
+  }
+
   return ctx->errnum;
+}
+
+int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx) {
+  return sem_check_locals_diag(root, errdetail, NULL, ctx);
 }
 
 bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out) {

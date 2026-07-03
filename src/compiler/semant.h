@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "absyn.h"
+#include "compdiag.h"
 
 typedef struct {
   char *name;
@@ -43,6 +44,7 @@ void sem_delete_ctx(SEM_CTX *ctx);
 // - preserves discovered locals in ctx
 // - resets ctx error state on each call
 // - if errdetail is non-NULL, returns an owned heap copy (caller frees)
+int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic *diag, SEM_CTX *ctx);
 int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx);
 bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out);
 void sem_seed_params(SEM_CTX *ctx, const char **params, size_t count);
