@@ -10,18 +10,27 @@
 #include "parser.h"
 #include <stdlib.h>
 
-int8_t compile_source_to_bytecode_with_params(const char *source, size_t len,
-                                              const char **params, size_t param_count,
-                                              OUTPUT_t **out, char **errdetail) {
+static const char *default_source_name(const ParseInput *input) {
+  return input && input->source_name ? input->source_name : "<memory>";
+}
+
+static ParseInput make_default_parse_input(const char *source, size_t len) {
+  ParseInput input = {source, len, "<memory>"};
+  return input;
+}
+
+static int8_t compile_parse_input_to_bytecode_with_params(const ParseInput *input,
+                                                          const char **params, size_t param_count,
+                                                          OUTPUT_t **out, char **errdetail) {
   CompilerContext ctx;
   int8_t rc = ERR_NOERROR;
 
-  if (!source || !out) {
+  if (!input || !input->data || !out) {
     return ERR_COMP_SYNTAX;
   }
 
   *out = NULL;
-  compiler_context_init(&ctx, source, len);
+  compiler_context_init(&ctx, input->data, input->len);
 
   if (compiler_context_prepare_bytecode_output(&ctx, 1024) != 0) {
     rc = ERR_COMP_SYNTAX;
@@ -29,8 +38,8 @@ int8_t compile_source_to_bytecode_with_params(const char *source, size_t len,
   }
 
   ctx.sem_ctx = sem_create_ctx();
-  ParseInput input = {ctx.source, ctx.source_len, "<memory>"};
-  rc = parse_source(&input, &ctx.ast_root, errdetail);
+  ParseInput parse_input = {ctx.source, ctx.source_len, default_source_name(input)};
+  rc = parse_source(&parse_input, &ctx.ast_root, errdetail);
   if (rc != ERR_NOERROR) {
     goto done;
   }
@@ -84,13 +93,19 @@ done:
   return rc;
 }
 
+int8_t compile_source_to_bytecode_with_params(const char *source, size_t len,
+                                              const char **params, size_t param_count,
+                                              OUTPUT_t **out, char **errdetail) {
+  ParseInput input = make_default_parse_input(source, len);
+  return compile_parse_input_to_bytecode_with_params(&input, params, param_count, out, errdetail);
+}
+
 int8_t compile_source_to_bytecode(const char *source, size_t len, OUTPUT_t **out, char **errdetail) {
   return compile_source_to_bytecode_with_params(source, len, NULL, 0, out, errdetail);
 }
 
 int8_t compile_parse_input_to_bytecode(const ParseInput *input, OUTPUT_t **out, char **errdetail) {
-  if (!input) return ERR_COMP_SYNTAX;
-  return compile_source_to_bytecode(input->data, input->len, out, errdetail);
+  return compile_parse_input_to_bytecode_with_params(input, NULL, 0, out, errdetail);
 }
 
 #include <string.h>
@@ -118,16 +133,17 @@ static char *first_source_line(const char *source, size_t len) {
   return line;
 }
 
-int8_t compile_source_to_bytecode_diag(const char *source, size_t len, OUTPUT_t **out, CompilerDiagnostic *out_diag) {
+int8_t compile_parse_input_to_bytecode_diag(const ParseInput *input, OUTPUT_t **out, CompilerDiagnostic *out_diag) {
   char *errdetail = NULL;
   CompilerContext ctx;
   SCANNER_STATE_t parse_state = {0};
   int8_t rc = ERR_NOERROR;
+  const char *source_name = default_source_name(input);
 
   if (out) *out = NULL;
-  compiler_context_init(&ctx, source, len);
+  compiler_context_init(&ctx, input ? input->data : NULL, input ? input->len : 0);
 
-  if (!source || !out) {
+  if (!input || !input->data || !out) {
     rc = ERR_COMP_SYNTAX;
     errdetail = strdup("compile: invalid source or output");
   } else if (compiler_context_prepare_bytecode_output(&ctx, 1024) != 0) {
@@ -135,8 +151,8 @@ int8_t compile_source_to_bytecode_diag(const char *source, size_t len, OUTPUT_t 
     errdetail = strdup("compile: bytecode output allocation failed");
   } else {
     ctx.sem_ctx = sem_create_ctx();
-    ParseInput input = {ctx.source, ctx.source_len, "<memory>"};
-    rc = parse_source_diag(&input, &ctx.ast_root, &errdetail, &parse_state);
+    ParseInput parse_input = {ctx.source, ctx.source_len, source_name};
+    rc = parse_source_diag(&parse_input, &ctx.ast_root, &errdetail, &parse_state);
     if (rc == ERR_NOERROR) rc = sem_check_locals(ctx.ast_root, &errdetail, ctx.sem_ctx);
     if (rc == ERR_NOERROR) rc = lower_ast_to_ir(ctx.ast_root, ctx.sem_ctx, &ctx.ir_unit, &errdetail);
     if (rc == ERR_NOERROR) rc = ir_validate(ctx.ir_unit, ctx.sem_ctx->count, &errdetail);
@@ -154,13 +170,13 @@ int8_t compile_source_to_bytecode_diag(const char *source, size_t len, OUTPUT_t 
     if (rc != ERR_NOERROR) {
       DiagPhase phase = rc == ERR_COMP_SYNTAX || rc == ERR_COMP_UNKNOWNCHAR ? DIAG_PHASE_PARSE : phase_from_detail(errdetail);
       compiler_diag_set(out_diag, rc, phase, errdetail ? errdetail : "");
-      compiler_diag_set_source_name(out_diag, "<memory>");
+      compiler_diag_set_source_name(out_diag, source_name);
       if (phase == DIAG_PHASE_PARSE && parse_state.line > 0) {
         compiler_diag_set_location(out_diag, parse_state.line, parse_state.column, parse_state.span);
       } else {
         compiler_diag_set_location(out_diag, 1, 1, 1);
       }
-      char *excerpt = first_source_line(source, len);
+      char *excerpt = first_source_line(input ? input->data : NULL, input ? input->len : 0);
       compiler_diag_set_excerpt(out_diag, excerpt ? excerpt : "");
       free(excerpt);
     }
@@ -170,4 +186,9 @@ int8_t compile_source_to_bytecode_diag(const char *source, size_t len, OUTPUT_t 
   free(parse_state.offending_token);
   compiler_context_destroy(&ctx);
   return rc;
+}
+
+int8_t compile_source_to_bytecode_diag(const char *source, size_t len, OUTPUT_t **out, CompilerDiagnostic *out_diag) {
+  ParseInput input = make_default_parse_input(source, len);
+  return compile_parse_input_to_bytecode_diag(&input, out, out_diag);
 }

@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 #include "compiler_pipeline.h"
 #include "error.h"
 #include "test_assert.h"
@@ -38,5 +39,23 @@ void test_compiler_diag_pipeline(void){
   ASSERT_EQ_INT(1, d.column);
   ASSERT_EQ_INT(1, d.span);
   ASSERT_TRUE(d.has_loc);
+
+  compiler_diag_reset(&d);
+  const char *named_source = "@x = ;";
+  ParseInput named_input = {named_source, strlen(named_source), "custom_source.sin"};
+  char *errdetail = NULL;
+  rc = compile_parse_input_to_bytecode(&named_input, &out, &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strstr(errdetail, "custom_source.sin") != NULL);
+  free(errdetail);
+
+  compiler_diag_reset(&d);
+  rc = compile_parse_input_to_bytecode_diag(&named_input, &out, &d);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_NOT_NULL(d.source_name);
+  ASSERT_TRUE(strcmp("custom_source.sin", d.source_name)==0);
+  ASSERT_NOT_NULL(d.message);
+  ASSERT_TRUE(strstr(d.message, "custom_source.sin") != NULL);
   compiler_diag_reset(&d);
 }
