@@ -39,6 +39,28 @@ bool compdiag_set_once(int8_t *current_errnum, char **errdetail,
   return true;
 }
 
+
+bool compdiag_set_once_diag(int8_t *current_errnum, char **errdetail,
+                            CompilerDiagnostic *diag, int8_t new_errnum,
+                            DiagPhase diag_phase, const char *phase,
+                            const char *detail) {
+  if (!current_errnum || *current_errnum != ERR_NOERROR) return false;
+
+  *current_errnum = new_errnum;
+  char *formatted = compdiag_alloc_detail(phase, detail);
+  if (errdetail) {
+    compdiag_reset_detail(errdetail);
+    *errdetail = formatted;
+  }
+  if (diag) {
+    compiler_diag_set(diag, new_errnum, diag_phase, formatted ? formatted : detail);
+  }
+  if (!errdetail && formatted) {
+    size_t len = strlen(formatted);
+    FREE_ARRAY(char, formatted, len + 1);
+  }
+  return true;
+}
 bool compdiag_setf_once(int8_t *current_errnum, char **errdetail,
                         int8_t new_errnum, const char *phase,
                         const char *fmt, ...) {
@@ -68,6 +90,37 @@ bool compdiag_setf_once(int8_t *current_errnum, char **errdetail,
   return recorded;
 }
 
+
+bool compdiag_setf_once_diag(int8_t *current_errnum, char **errdetail,
+                             CompilerDiagnostic *diag, int8_t new_errnum,
+                             DiagPhase diag_phase, const char *phase,
+                             const char *fmt, ...) {
+  if (!current_errnum || *current_errnum != ERR_NOERROR) return false;
+
+  va_list args;
+  va_start(args, fmt);
+  int needed = vsnprintf(NULL, 0, fmt, args);
+  va_end(args);
+  if (needed < 0) {
+    return compdiag_set_once_diag(current_errnum, errdetail, diag, new_errnum,
+                                  diag_phase, phase, "formatting error");
+  }
+
+  char *msg = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
+  if (!msg) {
+    return compdiag_set_once_diag(current_errnum, errdetail, diag, new_errnum,
+                                  diag_phase, phase, "out of memory");
+  }
+
+  va_start(args, fmt);
+  vsnprintf(msg, (size_t)needed + 1, fmt, args);
+  va_end(args);
+
+  bool recorded = compdiag_set_once_diag(current_errnum, errdetail, diag,
+                                         new_errnum, diag_phase, phase, msg);
+  FREE_ARRAY(char, msg, (size_t)needed + 1);
+  return recorded;
+}
 void compdiag_reset_detail(char **errdetail) {
   if (!errdetail || !*errdetail) return;
 
@@ -154,6 +207,8 @@ const char *compiler_diag_phase_name(DiagPhase p) {
       return "IR_VALIDATE";
     case DIAG_PHASE_EMITBC:
       return "EMITBC";
+    case DIAG_PHASE_COMPILE:
+      return "COMPILE";
     case DIAG_PHASE_IO:
       return "IO";
     default:

@@ -170,26 +170,26 @@ void ir_dump(FILE* out, IR_Unit* unit) {
   }
 }
 
-static int8_t ir_validate_error(char **errdetail, int8_t errnum, const char *fmt, ...) {
+static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag, int8_t errnum, const char *fmt, ...) {
   va_list args;
   int needed;
   char *msg;
 
-  if (errdetail == NULL) return errnum;
+  if (errdetail == NULL && diag == NULL) return errnum;
 
   va_start(args, fmt);
   needed = vsnprintf(NULL, 0, fmt, args);
   va_end(args);
   if (needed < 0) {
     int8_t current = ERR_NOERROR;
-    compdiag_set_once(&current, errdetail, errnum, "ir", "formatting error");
+    compdiag_set_once_diag(&current, errdetail, diag, errnum, DIAG_PHASE_IR_VALIDATE, "ir", "formatting error");
     return errnum;
   }
 
   msg = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
   if (!msg) {
     int8_t current = ERR_NOERROR;
-    compdiag_set_once(&current, errdetail, errnum, "ir", "out of memory");
+    compdiag_set_once_diag(&current, errdetail, diag, errnum, DIAG_PHASE_IR_VALIDATE, "ir", "out of memory");
     return errnum;
   }
 
@@ -199,25 +199,26 @@ static int8_t ir_validate_error(char **errdetail, int8_t errnum, const char *fmt
 
   {
     int8_t current = ERR_NOERROR;
-    compdiag_set_once(&current, errdetail, errnum, "ir", msg);
+    compdiag_set_once_diag(&current, errdetail, diag, errnum, DIAG_PHASE_IR_VALIDATE, "ir", msg);
   }
   FREE_ARRAY(char, msg, (size_t)needed + 1);
   return errnum;
 }
 
-int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
+int8_t ir_validate_diag(IR_Unit* unit, uint32_t local_count, char **errdetail, CompilerDiagnostic *diag) {
+  if (diag) compiler_diag_reset(diag);
   if (errdetail != NULL) {
     compdiag_reset_detail(errdetail);
   }
 
   if (unit == NULL) {
-    return ir_validate_error(errdetail, ERR_COMP_SYNTAX, "IR unit is null.");
+    return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX, "IR unit is null.");
   }
 
   for (size_t i = 0; i < unit->labels.count; i++) {
     IR_Label* label = &unit->labels.entries[i];
     if (!label->bound) {
-      return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
+      return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
                                "Unbound label .L%d.", label->id);
     }
   }
@@ -229,12 +230,12 @@ int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
       case IR_OP_JUMP_IF_FALSE:
       case IR_OP_LABEL: {
         if (inst->a < 0 || (size_t)inst->a >= unit->labels.count) {
-          return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
                                    "Instruction %zu (%s) references invalid label id %d.",
                                    i, ir_op_name(inst->op), inst->a);
         }
         if (!unit->labels.entries[inst->a].bound) {
-          return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
                                    "Instruction %zu (%s) references unbound label .L%d.",
                                    i, ir_op_name(inst->op), inst->a);
         }
@@ -246,7 +247,7 @@ int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
       case IR_OP_DEC_LOCAL:
       case IR_OP_ITEM_PUSH_DEREF_LOCAL: {
         if (inst->a < 0 || (uint32_t)inst->a >= local_count) {
-          return ir_validate_error(errdetail, ERR_COMP_LOCALBEFOREDEF,
+          return ir_validate_error(errdetail, diag, ERR_COMP_LOCALBEFOREDEF,
                                    "Instruction %zu (%s) has out-of-range local index %d (locals=%u).",
                                    i, ir_op_name(inst->op), inst->a, local_count);
         }
@@ -254,7 +255,7 @@ int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
       }
       case IR_OP_CALL: {
         if (inst->a < 0) {
-          return ir_validate_error(errdetail, ERR_COMP_TOOMANYARGS,
+          return ir_validate_error(errdetail, diag, ERR_COMP_TOOMANYARGS,
                                    "Instruction %zu (CALL) has negative arity %d.",
                                    i, ir_op_name(inst->op), inst->a);
         }
@@ -262,7 +263,7 @@ int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
       }
       case IR_OP_LIBCALL_TOKEN:
         if (inst->a < 0) {
-          return ir_validate_error(errdetail, ERR_COMP_SYNTAX,
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
                                    "Instruction %zu (LIBCALL_TOKEN) has negative token %d.",
                                    i, inst->a);
         }
@@ -314,4 +315,8 @@ int8_t ir_opcode_schema_validate_unique(char **errdetail) {
     seen_by[meta->encoded_symbol] = meta->op;
   }
   return ERR_NOERROR;
+}
+
+int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
+  return ir_validate_diag(unit, local_count, errdetail, NULL);
 }

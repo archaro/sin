@@ -16,6 +16,7 @@
 
   #include "absyn.h"
   #include "parse_input.h"
+  #include "compdiag.h"
 
   typedef struct {
     unsigned char *bytecode;
@@ -36,6 +37,7 @@
 
   int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail);
   int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, SCANNER_STATE_t *out_state);
+  int8_t parse_source_compiler_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, CompilerDiagnostic *diag, SCANNER_STATE_t *out_state);
 }
 
 %{
@@ -154,6 +156,20 @@ int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdet
     else free(scanner_state.offending_token);
     return 0;
   }
+}
+
+int8_t parse_source_compiler_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, CompilerDiagnostic *diag, SCANNER_STATE_t *out_state) {
+  SCANNER_STATE_t state;
+  if (diag) compiler_diag_reset(diag);
+  int8_t rc = parse_source_diag(input, absyn, errdetail, &state);
+  if (rc != ERR_NOERROR && diag) {
+    compiler_diag_set(diag, rc, DIAG_PHASE_PARSE, errdetail && *errdetail ? *errdetail : "");
+    compiler_diag_set_source_name(diag, input && input->source_name ? input->source_name : "<memory>");
+    compiler_diag_set_location(diag, state.line, state.column, state.span);
+  }
+  if (out_state) *out_state = state;
+  else free(state.offending_token);
+  return rc;
 }
 
 int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) {

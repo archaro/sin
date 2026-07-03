@@ -7,14 +7,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-bool compdiag_set_once(int8_t *current_errnum, char **errdetail,
-                       int8_t new_errnum, const char *phase,
-                       const char *detail);
-bool compdiag_setf_once(int8_t *current_errnum, char **errdetail,
-                        int8_t new_errnum, const char *phase,
-                        const char *fmt, ...);
-void compdiag_reset_detail(char **errdetail);
-
 typedef enum {
   DIAG_PHASE_NONE = 0,
   DIAG_PHASE_PARSE,
@@ -22,6 +14,7 @@ typedef enum {
   DIAG_PHASE_LOWER,
   DIAG_PHASE_IR_VALIDATE,
   DIAG_PHASE_EMITBC,
+  DIAG_PHASE_COMPILE,
   DIAG_PHASE_IO
 } DiagPhase;
 
@@ -35,6 +28,22 @@ typedef struct {
   int line, column, span;
   bool has_loc;
 } CompilerDiagnostic;
+
+bool compdiag_set_once(int8_t *current_errnum, char **errdetail,
+                       int8_t new_errnum, const char *phase,
+                       const char *detail);
+bool compdiag_set_once_diag(int8_t *current_errnum, char **errdetail,
+                            CompilerDiagnostic *diag, int8_t new_errnum,
+                            DiagPhase diag_phase, const char *phase,
+                            const char *detail);
+bool compdiag_setf_once(int8_t *current_errnum, char **errdetail,
+                        int8_t new_errnum, const char *phase,
+                        const char *fmt, ...);
+bool compdiag_setf_once_diag(int8_t *current_errnum, char **errdetail,
+                             CompilerDiagnostic *diag, int8_t new_errnum,
+                             DiagPhase diag_phase, const char *phase,
+                             const char *fmt, ...);
+void compdiag_reset_detail(char **errdetail);
 
 void compiler_diag_init(CompilerDiagnostic *d);
 void compiler_diag_reset(CompilerDiagnostic *d);

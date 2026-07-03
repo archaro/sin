@@ -110,16 +110,6 @@ int8_t compile_parse_input_to_bytecode(const ParseInput *input, OUTPUT_t **out, 
 
 #include <string.h>
 
-static DiagPhase phase_from_detail(const char *d){
-  if(!d) return DIAG_PHASE_NONE;
-  if(strncmp(d,"semant:",7)==0) return DIAG_PHASE_SEMANT;
-  if(strncmp(d,"lower:",6)==0) return DIAG_PHASE_LOWER;
-  if(strncmp(d,"ir:",3)==0) return DIAG_PHASE_IR_VALIDATE;
-  if(strncmp(d,"emitbc:",7)==0) return DIAG_PHASE_EMITBC;
-  if(strstr(d,"syntax error")||strcmp(d,"^")==0) return DIAG_PHASE_PARSE;
-  return DIAG_PHASE_NONE;
-}
-
 static char *first_source_line(const char *source, size_t len) {
   if (!source) return NULL;
   size_t line_len = 0;
@@ -140,24 +130,28 @@ int8_t compile_parse_input_to_bytecode_diag(const ParseInput *input, OUTPUT_t **
   int8_t rc = ERR_NOERROR;
   const char *source_name = default_source_name(input);
 
+  if (out_diag) compiler_diag_reset(out_diag);
   if (out) *out = NULL;
   compiler_context_init(&ctx, input ? input->data : NULL, input ? input->len : 0);
 
   if (!input || !input->data || !out) {
     rc = ERR_COMP_SYNTAX;
-    errdetail = strdup("compile: invalid source or output");
+    if (out_diag) compiler_diag_set(out_diag, rc, DIAG_PHASE_COMPILE, "compile: invalid source or output");
   } else if (compiler_context_prepare_bytecode_output(&ctx, 1024) != 0) {
     rc = ERR_COMP_SYNTAX;
-    errdetail = strdup("compile: bytecode output allocation failed");
+    if (out_diag) compiler_diag_set(out_diag, rc, DIAG_PHASE_COMPILE, "compile: bytecode output allocation failed");
   } else {
     ctx.sem_ctx = sem_create_ctx();
     ParseInput parse_input = {ctx.source, ctx.source_len, source_name};
     rc = parse_source_diag(&parse_input, &ctx.ast_root, &errdetail, &parse_state);
-    if (rc == ERR_NOERROR) rc = sem_check_locals(ctx.ast_root, &errdetail, ctx.sem_ctx);
-    if (rc == ERR_NOERROR) rc = lower_ast_to_ir(ctx.ast_root, ctx.sem_ctx, &ctx.ir_unit, &errdetail);
-    if (rc == ERR_NOERROR) rc = ir_validate(ctx.ir_unit, ctx.sem_ctx->count, &errdetail);
+    if (rc != ERR_NOERROR) {
+      if (out_diag) compiler_diag_set(out_diag, rc, DIAG_PHASE_PARSE, errdetail ? errdetail : "");
+    }
+    if (rc == ERR_NOERROR) rc = sem_check_locals_diag(ctx.ast_root, &errdetail, out_diag, ctx.sem_ctx);
+    if (rc == ERR_NOERROR) rc = lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ctx.ir_unit, &errdetail, out_diag);
+    if (rc == ERR_NOERROR) rc = ir_validate_diag(ctx.ir_unit, ctx.sem_ctx->count, &errdetail, out_diag);
     if (rc == ERR_NOERROR) {
-      rc = emit_bytecode(ctx.ir_unit, (uint8_t)ctx.sem_ctx->count, 0, ctx.bytecode_out, &errdetail);
+      rc = emit_bytecode_diag(ctx.ir_unit, (uint8_t)ctx.sem_ctx->count, 0, ctx.bytecode_out, &errdetail, out_diag);
     }
     if (rc == ERR_NOERROR) {
       *out = ctx.bytecode_out;
@@ -165,21 +159,16 @@ int8_t compile_parse_input_to_bytecode_diag(const ParseInput *input, OUTPUT_t **
     }
   }
 
-  if (out_diag) {
-    compiler_diag_reset(out_diag);
-    if (rc != ERR_NOERROR) {
-      DiagPhase phase = rc == ERR_COMP_SYNTAX || rc == ERR_COMP_UNKNOWNCHAR ? DIAG_PHASE_PARSE : phase_from_detail(errdetail);
-      compiler_diag_set(out_diag, rc, phase, errdetail ? errdetail : "");
-      compiler_diag_set_source_name(out_diag, source_name);
-      if (phase == DIAG_PHASE_PARSE && parse_state.line > 0) {
-        compiler_diag_set_location(out_diag, parse_state.line, parse_state.column, parse_state.span);
-      } else {
-        compiler_diag_set_location(out_diag, 1, 1, 1);
-      }
-      char *excerpt = first_source_line(input ? input->data : NULL, input ? input->len : 0);
-      compiler_diag_set_excerpt(out_diag, excerpt ? excerpt : "");
-      free(excerpt);
+  if (out_diag && rc != ERR_NOERROR) {
+    compiler_diag_set_source_name(out_diag, source_name);
+    if (out_diag->phase == DIAG_PHASE_PARSE && parse_state.line > 0) {
+      compiler_diag_set_location(out_diag, parse_state.line, parse_state.column, parse_state.span);
+    } else {
+      compiler_diag_set_location(out_diag, 1, 1, 1);
     }
+    char *excerpt = first_source_line(input ? input->data : NULL, input ? input->len : 0);
+    compiler_diag_set_excerpt(out_diag, excerpt ? excerpt : "");
+    free(excerpt);
   }
 
   free(errdetail);
