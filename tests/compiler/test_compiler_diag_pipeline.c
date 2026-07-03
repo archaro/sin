@@ -20,7 +20,8 @@ void test_compiler_diag_pipeline(void){
   ASSERT_NOT_NULL(d.excerpt); ASSERT_TRUE(strcmp("@x;", d.excerpt)==0);
 
   compiler_diag_reset(&d);
-  rc = compile_source_to_bytecode_diag("@x = 1;\n@yy = 2;\n@z = ;", 25, &out, &d);
+  const char *syntax_source = "@x = 1;\n@yy = 2;\n@z = ;";
+  rc = compile_source_to_bytecode_diag(syntax_source, strlen(syntax_source), &out, &d);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   ASSERT_EQ_INT(DIAG_PHASE_PARSE, d.phase);
   ASSERT_EQ_INT(3, d.line);
@@ -29,7 +30,8 @@ void test_compiler_diag_pipeline(void){
   ASSERT_TRUE(d.has_loc);
 
   compiler_diag_reset(&d);
-  rc = compile_source_to_bytecode_diag("@x = 1;\n@yy = 2;\n☃;", 22, &out, &d);
+  const char *unknown_source = "@x = 1;\n@yy = 2;\n☃;";
+  rc = compile_source_to_bytecode_diag(unknown_source, strlen(unknown_source), &out, &d);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
   ASSERT_EQ_INT(DIAG_PHASE_PARSE, d.phase);
   ASSERT_EQ_INT(3, d.line);
