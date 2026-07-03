@@ -6,6 +6,7 @@
 
 
 %define api.pure full
+%locations
 %lex-param {void *scanner}
 %parse-param {void *scanner}{SCANNER_STATE_t *state}
 
@@ -27,9 +28,14 @@
     char *errdetail;
     AS_NODE *absyn;
     const char *source_name;
+    int line;
+    int column;
+    int span;
+    char *offending_token;
   } SCANNER_STATE_t;
 
   int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail);
+  int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, SCANNER_STATE_t *out_state);
 }
 
 %{
@@ -45,9 +51,10 @@
 #include "libcall.h"
 
 typedef void *yyscan_t;
-int yylex (YYSTYPE *yylval_param, yyscan_t yyscanner);
+int yylex (YYSTYPE *yylval_param, YYLTYPE *yylloc_param, yyscan_t yyscanner);
 int yylex_init(yyscan_t* scanner);
 void yyset_in(FILE *_in_str, yyscan_t yyscanner);
+void yyset_extra(SCANNER_STATE_t *user_defined, yyscan_t yyscanner);
 int yylex_destroy(yyscan_t yyscanner);
 int yyparse();
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
@@ -73,10 +80,15 @@ static AS_NODE *as_new_unary_minus_node(AS_NODE *operand) {
   return as_new_node(N_SUB, as_new_intnode(0), operand);
 }
 
-void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
+void yyerror(YYLTYPE *locp, yyscan_t scanner, SCANNER_STATE_t *state, char const *s) {
   // yyerror() is called whenever there is a syntax error, so we need to
   // set the error number in the state appropriately.
-  (void)locp;
+  (void)scanner;
+  if (locp && state->errnum == ERR_NOERROR) {
+    state->line = locp->first_line;
+    state->column = locp->first_column;
+    state->span = locp->last_column >= locp->first_column ? locp->last_column - locp->first_column + 1 : 1;
+  }
   if (state->errnum == ERR_NOERROR) {
     // This might have been set already so don't clobber it if it has
     state->errnum = ERR_COMP_SYNTAX;
@@ -94,7 +106,7 @@ void yyerror(yyscan_t locp, SCANNER_STATE_t *state, char const *s) {
   }
 }
 
-int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) {
+int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, SCANNER_STATE_t *out_state) {
   // Compile the given string.
   // Returns 0 if successful or > 0 (error number) if not.
   // source holds the source input string
@@ -107,10 +119,15 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
   scanner_state.errnum = ERR_NOERROR;
   scanner_state.errdetail = NULL;
   scanner_state.absyn = NULL;
+  scanner_state.line = 1;
+  scanner_state.column = 1;
+  scanner_state.span = 1;
+  scanner_state.offending_token = NULL;
   if (!input || !input->data || !absyn || !errdetail) {
     return ERR_COMP_SYNTAX;
   }
   scanner_state.source_name = input->source_name;
+  yyset_extra(&scanner_state, sc);
   YY_BUFFER_STATE in = yy_scan_bytes(input->data, (int)input->len, sc);
 
   bool failed = yyparse(sc, &scanner_state);
@@ -125,13 +142,25 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
       scanner_state.absyn = NULL;
     }
     *errdetail = scanner_state.errdetail;
+    scanner_state.errdetail = NULL;
+    if (out_state) *out_state = scanner_state;
+    else free(scanner_state.offending_token);
     return scanner_state.errnum;
   } else {
     // scanner_state.absyn now points to the root of the abstract syntax tree
     *absyn = scanner_state.absyn;
     *errdetail = NULL;
+    if (out_state) *out_state = scanner_state;
+    else free(scanner_state.offending_token);
     return 0;
   }
+}
+
+int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) {
+  SCANNER_STATE_t state;
+  int8_t rc = parse_source_diag(input, absyn, errdetail, &state);
+  free(state.offending_token);
+  return rc;
 }
 
 %}
@@ -233,6 +262,11 @@ expr:     TLOCAL { $$ = as_new_valnode(V_LOCAL, $1); }
         | TUNKNOWNCHAR { $$ = NULL;
                          state->errnum = ERR_COMP_UNKNOWNCHAR;
                          state->errdetail = $1;
+                         state->line = @1.first_line;
+                         state->column = @1.first_column;
+                         state->span = @1.last_column >= @1.first_column ? @1.last_column - @1.first_column + 1 : 1;
+                         free(state->offending_token);
+                         state->offending_token = strdup($1 ? $1 : "");
                          YYERROR;
                        }
         ;

@@ -18,5 +18,25 @@ void test_compiler_diag_pipeline(void){
   ASSERT_NOT_NULL(d.source_name); ASSERT_TRUE(strcmp("<memory>", d.source_name)==0);
   ASSERT_EQ_INT(1, d.line); ASSERT_EQ_INT(1, d.column); ASSERT_TRUE(d.has_loc);
   ASSERT_NOT_NULL(d.excerpt); ASSERT_TRUE(strcmp("@x;", d.excerpt)==0);
+
+  compiler_diag_reset(&d);
+  const char *syntax_source = "@x = 1;\n@yy = 2;\n@z = ;";
+  rc = compile_source_to_bytecode_diag(syntax_source, strlen(syntax_source), &out, &d);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_EQ_INT(DIAG_PHASE_PARSE, d.phase);
+  ASSERT_EQ_INT(3, d.line);
+  ASSERT_EQ_INT(6, d.column);
+  ASSERT_EQ_INT(1, d.span);
+  ASSERT_TRUE(d.has_loc);
+
+  compiler_diag_reset(&d);
+  const char *unknown_source = "@x = 1;\n@yy = 2;\n☃;";
+  rc = compile_source_to_bytecode_diag(unknown_source, strlen(unknown_source), &out, &d);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_EQ_INT(DIAG_PHASE_PARSE, d.phase);
+  ASSERT_EQ_INT(3, d.line);
+  ASSERT_EQ_INT(1, d.column);
+  ASSERT_EQ_INT(1, d.span);
+  ASSERT_TRUE(d.has_loc);
   compiler_diag_reset(&d);
 }

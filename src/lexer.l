@@ -5,6 +5,45 @@
   #include "log.h"
   #include "parser.h"
 
+  static int sin_utf8_columns(const char *text, int len) {
+    int cols = 0;
+    for (int i = 0; i < len; ++i) {
+      unsigned char c = (unsigned char)text[i];
+      if (c == '\n') continue;
+      if ((c & 0xC0) != 0x80) cols++;
+    }
+    return cols > 0 ? cols : 1;
+  }
+
+  static void sin_update_location(YYLTYPE *loc, SCANNER_STATE_t *state, const char *text, int len) {
+    if (!state || !loc) return;
+    loc->first_line = state->line;
+    loc->first_column = state->column;
+    int line = state->line;
+    int column = state->column;
+    int token_first_column = column;
+    int token_last_line = line;
+    int token_last_column = column;
+    for (int i = 0; i < len; ++i) {
+      unsigned char c = (unsigned char)text[i];
+      token_last_line = line;
+      token_last_column = column;
+      if (c == '\n') {
+        line++;
+        column = 1;
+      } else if ((c & 0xC0) != 0x80) {
+        column++;
+      }
+    }
+    loc->last_line = token_last_line;
+    loc->last_column = token_last_column;
+    state->line = line;
+    state->column = column;
+    state->span = token_last_line == loc->first_line ? token_last_column - token_first_column + 1 : sin_utf8_columns(text, len);
+  }
+
+  #define YY_USER_ACTION sin_update_location(yylloc, yyextra, yytext, yyleng);
+
   void str_append_str(char **buf, char **bufptr,
                       int *len, int *max, char *append) {
     // A helper function for string handling.
@@ -52,7 +91,7 @@
   }
 %}
 
-%option noinput nounput noyywrap reentrant bison-bridge case-insensitive
+%option noinput nounput noyywrap reentrant bison-bridge bison-locations case-insensitive extra-type="SCANNER_STATE_t *"
 %x STRINGLIT
 %x CODE
 %x CODEBODY
