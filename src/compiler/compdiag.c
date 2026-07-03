@@ -76,11 +76,23 @@ void compdiag_reset_detail(char **errdetail) {
   *errdetail = NULL;
 }
 
+static char *compiler_diag_strdup(const char *s) {
+  const char *safe = s ? s : "";
+  size_t len = strlen(safe);
+  char *copy = malloc(len + 1);
+  if (!copy) return NULL;
+  memcpy(copy, safe, len + 1);
+  return copy;
+}
+
 void compiler_diag_init(CompilerDiagnostic *d) {
   if (!d) return;
   d->code = 0;
   d->phase = DIAG_PHASE_NONE;
   d->message = NULL;
+  d->stable_code = NULL;
+  d->source_name = NULL;
+  d->excerpt = NULL;
   d->line = d->column = d->span = -1;
   d->has_loc = false;
 }
@@ -88,6 +100,9 @@ void compiler_diag_init(CompilerDiagnostic *d) {
 void compiler_diag_reset(CompilerDiagnostic *d) {
   if (!d) return;
   free(d->message);
+  free(d->stable_code);
+  free(d->source_name);
+  free(d->excerpt);
   compiler_diag_init(d);
 }
 
@@ -97,7 +112,34 @@ void compiler_diag_set(CompilerDiagnostic *d, int8_t code, DiagPhase phase,
   compiler_diag_reset(d);
   d->code = code;
   d->phase = phase;
-  d->message = strdup(message ? message : "");
+  d->message = compiler_diag_strdup(message ? message : "");
+  d->stable_code = compiler_diag_strdup(compiler_diag_stable_code(code, phase));
+}
+
+void compiler_diag_set_location(CompilerDiagnostic *d, int line, int column, int span) {
+  if (!d) return;
+  d->line = line;
+  d->column = column;
+  d->span = span;
+  d->has_loc = line > 0 && column > 0;
+}
+
+void compiler_diag_set_source_name(CompilerDiagnostic *d, const char *source_name) {
+  if (!d) return;
+  free(d->source_name);
+  d->source_name = compiler_diag_strdup(source_name ? source_name : "");
+}
+
+void compiler_diag_set_excerpt(CompilerDiagnostic *d, const char *excerpt) {
+  if (!d) return;
+  free(d->excerpt);
+  d->excerpt = compiler_diag_strdup(excerpt ? excerpt : "");
+}
+
+const char *compiler_diag_stable_code(int8_t errnum, DiagPhase phase) {
+  static char buf[32];
+  snprintf(buf, sizeof(buf), "SIN-%s-%04d", compiler_diag_phase_name(phase), errnum);
+  return buf;
 }
 
 const char *compiler_diag_phase_name(DiagPhase p) {
