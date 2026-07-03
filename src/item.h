@@ -14,6 +14,7 @@
 #include <stdbool.h>
 
 #include "value.h"
+#include "compiler/compdiag.h"
 
 // Items are up to 8 layers deep, and each layer name is a maximum of
 // 32 characters.  There is a dot separating each layer name (7 in total)
@@ -115,3 +116,5 @@ uint64_t get_itemstore_generation(void);
 // Other item-related API functions
 bool is_valid_layer(const char *str);
 void set_error_item(const int errnum, const char *errdetail);
+void set_compiler_error_item(const CompilerDiagnostic *diag);
+void clear_error_item(void);
