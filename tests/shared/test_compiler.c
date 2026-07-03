@@ -134,6 +134,7 @@ void test_relative_item_leading_dot_boundary_max_name_after_prefix_expansion_com
 void test_relative_item_leading_dot_existing_absolute_item_unchanged(void);
 void test_float_item_literal_layer_rejected_at_compile_time(void);
 void test_float_local_deref_layer_returns_nil_and_does_not_save_item(void);
+void test_error_item_preserves_compiler_diagnostic_fields(void);
 void test_value_ieee754_environment_contract(void);
 void test_value_integer_arithmetic_helpers(void);
 void test_value_arithmetic_invalid_and_nil_operands(void);
@@ -252,6 +253,7 @@ static const test_case_t core_tests[] = {
     {"test_relative_item_leading_dot_existing_absolute_item_unchanged", test_relative_item_leading_dot_existing_absolute_item_unchanged},
     {"test_float_item_literal_layer_rejected_at_compile_time", test_float_item_literal_layer_rejected_at_compile_time},
     {"test_float_local_deref_layer_returns_nil_and_does_not_save_item", test_float_local_deref_layer_returns_nil_and_does_not_save_item},
+    {"test_error_item_preserves_compiler_diagnostic_fields", test_error_item_preserves_compiler_diagnostic_fields},
     {"test_value_ieee754_environment_contract", test_value_ieee754_environment_contract},
     {"test_value_integer_arithmetic_helpers", test_value_integer_arithmetic_helpers},
     {"test_value_arithmetic_invalid_and_nil_operands", test_value_arithmetic_invalid_and_nil_operands},

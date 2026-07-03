@@ -37,6 +37,25 @@ static void assert_bool(VALUE_t v, int expected) {
   ASSERT_EQ_INT(expected, v.i);
 }
 
+static ITEM_t *assert_string_item(const char *name, const char *contains) {
+  ITEM_t *item = find_item(config.itemroot, name);
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(VALUE_str, item->value.type);
+  ASSERT_NOT_NULL(item->value.s);
+  if (contains) {
+    ASSERT_TRUE(strstr(item->value.s, contains) != NULL);
+  }
+  return item;
+}
+
+static ITEM_t *assert_int_item(const char *name, int64_t expected) {
+  ITEM_t *item = find_item(config.itemroot, name);
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(VALUE_int, item->value.type);
+  ASSERT_EQ_INT(expected, item->value.i);
+  return item;
+}
+
 static void assert_compile_success_bool(const char *source) {
   push_stack(config.vm->stack, vstr(source));
   (void)lc_sys_compile(NULL, config.itemroot);
@@ -65,6 +84,19 @@ void test_sys_compile_libcall_runtime(void) {
   ASSERT_TRUE(err_item->value.i != ERR_NOERROR);
   ASSERT_EQ_INT(VALUE_str, msg_item->value.type);
   ASSERT_TRUE(msg_item->value.s != NULL && strlen(msg_item->value.s) > 0);
+  ASSERT_TRUE(strstr(msg_item->value.s, "SIN-PARSE-") != NULL);
+  ASSERT_TRUE(strstr(msg_item->value.s, "stage=PARSE") != NULL);
+  ASSERT_TRUE(strstr(msg_item->value.s, "file=<memory>") != NULL);
+  ASSERT_TRUE(strstr(msg_item->value.s, "line=") != NULL);
+  ASSERT_TRUE(strstr(msg_item->value.s, "column=") != NULL);
+  ASSERT_TRUE(strstr(msg_item->value.s, "message=") != NULL);
+  ASSERT_TRUE(strstr(msg_item->value.s, "excerpt=sys.log{;") != NULL);
+  assert_string_item("error.code", "SIN-PARSE-");
+  assert_string_item("error.stage", "PARSE");
+  assert_string_item("error.file", "<memory>");
+  assert_int_item("error.line", 1);
+  assert_int_item("error.column", 9);
+  assert_string_item("error.excerpt", "sys.log{;");
 
   VALUE_t intarg = {VALUE_int, {.i = 42}};
   push_stack(config.vm->stack, intarg);

@@ -8,6 +8,7 @@
 #include "error.h"
 #include "interpret.h"
 #include "item.h"
+#include "compiler/compdiag.h"
 #include "test_assert.h"
 #include "value.h"
 #include "vm.h"
@@ -96,6 +97,70 @@ static VALUE_t run_float_binary(uint64_t lhs, uint64_t rhs, uint8_t op, const ch
   return run_code(name, code, pos);
 }
 
+
+
+void test_error_item_preserves_compiler_diagnostic_fields(void) {
+  setup_runtime();
+
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  compiler_diag_set(&diag, ERR_COMP_UNKNOWNCHAR, DIAG_PHASE_PARSE,
+                    "parse: unexpected character");
+  compiler_diag_set_source_name(&diag, "example.sin");
+  compiler_diag_set_location(&diag, 7, 3, 1);
+  compiler_diag_set_excerpt(&diag, "bad ^ token");
+
+  set_compiler_error_item(&diag);
+
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(VALUE_int, err->value.type);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, err->value.i);
+
+  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_EQ_INT(VALUE_str, msg->value.type);
+  ASSERT_TRUE(strstr(msg->value.s, "SIN-PARSE-0005") != NULL);
+  ASSERT_TRUE(strstr(msg->value.s, "stage=PARSE") != NULL);
+  ASSERT_TRUE(strstr(msg->value.s, "file=example.sin") != NULL);
+  ASSERT_TRUE(strstr(msg->value.s, "line=7") != NULL);
+  ASSERT_TRUE(strstr(msg->value.s, "column=3") != NULL);
+  ASSERT_TRUE(strstr(msg->value.s, "message=parse: unexpected character") != NULL);
+  ASSERT_TRUE(strstr(msg->value.s, "excerpt=bad ^ token") != NULL);
+
+  ITEM_t *code = find_item(config.itemroot, "error.code");
+  ASSERT_NOT_NULL(code);
+  ASSERT_EQ_INT(VALUE_str, code->value.type);
+  ASSERT_TRUE(strcmp(code->value.s, "SIN-PARSE-0005") == 0);
+
+  ITEM_t *stage = find_item(config.itemroot, "error.stage");
+  ASSERT_NOT_NULL(stage);
+  ASSERT_EQ_INT(VALUE_str, stage->value.type);
+  ASSERT_TRUE(strcmp(stage->value.s, "PARSE") == 0);
+
+  ITEM_t *file = find_item(config.itemroot, "error.file");
+  ASSERT_NOT_NULL(file);
+  ASSERT_EQ_INT(VALUE_str, file->value.type);
+  ASSERT_TRUE(strcmp(file->value.s, "example.sin") == 0);
+
+  ITEM_t *line = find_item(config.itemroot, "error.line");
+  ASSERT_NOT_NULL(line);
+  ASSERT_EQ_INT(VALUE_int, line->value.type);
+  ASSERT_EQ_INT(7, line->value.i);
+
+  ITEM_t *column = find_item(config.itemroot, "error.column");
+  ASSERT_NOT_NULL(column);
+  ASSERT_EQ_INT(VALUE_int, column->value.type);
+  ASSERT_EQ_INT(3, column->value.i);
+
+  ITEM_t *excerpt = find_item(config.itemroot, "error.excerpt");
+  ASSERT_NOT_NULL(excerpt);
+  ASSERT_EQ_INT(VALUE_str, excerpt->value.type);
+  ASSERT_TRUE(strcmp(excerpt->value.s, "bad ^ token") == 0);
+
+  compiler_diag_reset(&diag);
+  teardown_runtime();
+}
 
 void test_value_ieee754_environment_contract(void) {
   volatile double one = 1.0;

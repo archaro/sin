@@ -157,18 +157,26 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   }
 
   int8_t result = 0;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   OUTPUT_t *out = NULL;
   char tmpname[MAX_ITEM_NAME];
   static uint64_t tmpname_counter = 0;
 
   // Compile source -> bytecode
-  result = compile_source_to_bytecode(val.s, strlen(val.s), &out, &errdetail);
+  result = compile_source_to_bytecode_diag(val.s, strlen(val.s), &out, &diag);
 
   if (result != 0 || !out || !out->bytecode) {
-    // Compile failed; release owned errdetail/out/val.s exactly once.
-    set_error_item(result != 0 ? result : ERR_COMP_UNKNOWN, errdetail);
-    lc_cleanup_cstr(errdetail);
+    // Compile failed; preserve structured compiler diagnostics.
+    if (result == 0) {
+      compiler_diag_reset(&diag);
+      compiler_diag_set(&diag, ERR_COMP_UNKNOWN, DIAG_PHASE_COMPILE,
+          "compile: missing bytecode output");
+      compiler_diag_set_source_name(&diag, "<memory>");
+      compiler_diag_set_location(&diag, 1, 1, 1);
+      compiler_diag_set_excerpt(&diag, val.s ? val.s : "");
+    }
+    set_compiler_error_item(&diag);
     if (out) {
       if (out->bytecode) {
         FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
@@ -176,6 +184,7 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
       FREE_ARRAY(OUTPUT_t, out, 1);
     }
     lc_cleanup_cstr(val.s);
+    compiler_diag_reset(&diag);
     push_stack(VM->stack, VALUE_FALSE);
     return nextop;
   }
@@ -188,6 +197,7 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
     FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
     FREE_ARRAY(OUTPUT_t, out, 1);
     lc_cleanup_cstr(val.s);
+    compiler_diag_reset(&diag);
     push_stack(VM->stack, VALUE_FALSE);
     return nextop;
   }
@@ -207,6 +217,7 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
     FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
     FREE_ARRAY(OUTPUT_t, out, 1);
     lc_cleanup_cstr(val.s);
+    compiler_diag_reset(&diag);
     push_stack(VM->stack, VALUE_FALSE);
     return nextop;
   }
@@ -222,11 +233,11 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   delete_item(config.itemroot, tmpname);
 
   // clear compiler/runtime error indicators on success
-  set_item(config.itemroot, "error", VALUE_NIL);
-  set_item(config.itemroot, "error.msg", VALUE_NIL);
+  clear_error_item();
 
   FREE_ARRAY(OUTPUT_t, out, 1); // bytecode ownership moved into inserted item
   lc_cleanup_cstr(val.s);
+  compiler_diag_reset(&diag);
 
   push_stack(VM->stack, VALUE_TRUE);
   return nextop;
