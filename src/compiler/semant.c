@@ -273,7 +273,7 @@ int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic
   sem_walk(ctx, root);
 
   if (errdetail) {
-    *errdetail = ctx->errdetail ? strdup(ctx->errdetail) : NULL;
+    *errdetail = compdiag_copy_detail(ctx->errdetail);
   }
 
   if (diag && ctx->errnum != ERR_NOERROR) {

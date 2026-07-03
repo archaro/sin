@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "compiler_pipeline.h"
+#include "compdiag.h"
 #include "semant.h"
 #include "lower.h"
 #include "ir.h"
@@ -57,7 +58,40 @@ static void test_scomp_cli_malformed_diagnostic_shape(void) {
   remove(err_path);
 }
 
+static void test_compiler_diag_repeated_set_reset_cycles(void) {
+  CompilerDiagnostic d;
+  compiler_diag_init(&d);
+
+  for (int i = 0; i < 256; i++) {
+    compiler_diag_set(&d, ERR_COMP_SYNTAX, DIAG_PHASE_PARSE, "parse: repeated diagnostic");
+    compiler_diag_set_source_name(&d, "repeat.sin");
+    compiler_diag_set_excerpt(&d, "^;");
+    ASSERT_NOT_NULL(d.message);
+    ASSERT_NOT_NULL(d.stable_code);
+    ASSERT_NOT_NULL(d.source_name);
+    ASSERT_NOT_NULL(d.excerpt);
+    compiler_diag_reset(&d);
+    ASSERT_TRUE(d.message == NULL);
+    ASSERT_TRUE(d.stable_code == NULL);
+    ASSERT_TRUE(d.source_name == NULL);
+    ASSERT_TRUE(d.excerpt == NULL);
+    ASSERT_TRUE(!d.has_loc);
+  }
+
+  char *errdetail = NULL;
+  for (int i = 0; i < 256; i++) {
+    int8_t errnum = ERR_NOERROR;
+    ASSERT_TRUE(compdiag_setf_once(&errnum, &errdetail, ERR_COMP_SYNTAX, "diag",
+                                   "repeated detail %d", i));
+    ASSERT_EQ_INT(ERR_COMP_SYNTAX, errnum);
+    ASSERT_NOT_NULL(errdetail);
+    compdiag_reset_detail(&errdetail);
+    ASSERT_TRUE(errdetail == NULL);
+  }
+}
+
 void test_compiler_diag_pipeline(void){
+  test_compiler_diag_repeated_set_reset_cycles();
   test_scomp_cli_malformed_diagnostic_shape();
   OUTPUT_t *out=NULL; CompilerDiagnostic d; compiler_diag_init(&d);
   int8_t rc = compile_source_to_bytecode_diag("^;",2,&out,&d);
@@ -102,7 +136,7 @@ void test_compiler_diag_pipeline(void){
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   ASSERT_NOT_NULL(errdetail);
   ASSERT_TRUE(strstr(errdetail, "custom_source.sin") != NULL);
-  free(errdetail);
+  compdiag_reset_detail(&errdetail);
 
   compiler_diag_reset(&d);
   rc = compile_parse_input_to_bytecode_diag(&named_input, &out, &d);
@@ -122,7 +156,7 @@ void test_compiler_diag_pipeline(void){
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
   ASSERT_EQ_INT(DIAG_PHASE_PARSE, d.phase);
   ASSERT_NOT_NULL(errdetail);
-  free(errdetail);
+  compdiag_reset_detail(&errdetail);
   free(parse_state.offending_token);
 
   compiler_diag_reset(&d);
@@ -134,7 +168,7 @@ void test_compiler_diag_pipeline(void){
   rc = sem_check_locals_diag(ast, &errdetail, &d, sem);
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
   ASSERT_EQ_INT(DIAG_PHASE_SEMANT, d.phase);
-  free(errdetail);
+  compdiag_reset_detail(&errdetail);
   as_delete(ast);
   sem_delete_ctx(sem);
 
@@ -145,21 +179,21 @@ void test_compiler_diag_pipeline(void){
   ASSERT_TRUE(rc != ERR_NOERROR);
   (void)ir;
   ASSERT_EQ_INT(DIAG_PHASE_LOWER, d.phase);
-  free(errdetail);
+  compdiag_reset_detail(&errdetail);
 
   compiler_diag_reset(&d);
   errdetail = NULL;
   rc = ir_validate_diag(NULL, 0, &errdetail, &d);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   ASSERT_EQ_INT(DIAG_PHASE_IR_VALIDATE, d.phase);
-  free(errdetail);
+  compdiag_reset_detail(&errdetail);
 
   compiler_diag_reset(&d);
   errdetail = NULL;
   rc = emit_bytecode_diag(NULL, 0, 0, NULL, &errdetail, &d);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   ASSERT_EQ_INT(DIAG_PHASE_EMITBC, d.phase);
-  free(errdetail);
+  compdiag_reset_detail(&errdetail);
 
   compiler_diag_reset(&d);
   rc = compile_source_to_bytecode_diag(NULL, 0, &out, &d);

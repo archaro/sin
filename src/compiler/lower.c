@@ -610,7 +610,7 @@ int8_t lower_ast_to_ir_diag(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char 
   if (errdetail) {
     *errdetail = ctx.errdetail;
   } else if (ctx.errdetail) {
-    free(ctx.errdetail);
+    compdiag_reset_detail(&ctx.errdetail);
   }
   return ctx.errnum;
 }
