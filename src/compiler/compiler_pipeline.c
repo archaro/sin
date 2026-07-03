@@ -105,10 +105,33 @@ static DiagPhase phase_from_detail(const char *d){
   return DIAG_PHASE_NONE;
 }
 
+static char *first_source_line(const char *source, size_t len) {
+  if (!source) return NULL;
+  size_t line_len = 0;
+  while (line_len < len && source[line_len] != '\n' && source[line_len] != '\r') {
+    line_len++;
+  }
+  char *line = malloc(line_len + 1);
+  if (!line) return NULL;
+  memcpy(line, source, line_len);
+  line[line_len] = '\0';
+  return line;
+}
+
 int8_t compile_source_to_bytecode_diag(const char *source, size_t len, OUTPUT_t **out, CompilerDiagnostic *out_diag){
  char *errdetail=NULL;
  int8_t rc = compile_source_to_bytecode(source,len,out,&errdetail);
- if(out_diag){ compiler_diag_reset(out_diag); if(rc!=ERR_NOERROR){ compiler_diag_set(out_diag,rc,phase_from_detail(errdetail),errdetail?errdetail:""); }}
+ if(out_diag){
+  compiler_diag_reset(out_diag);
+  if(rc!=ERR_NOERROR){
+   compiler_diag_set(out_diag,rc,phase_from_detail(errdetail),errdetail?errdetail:"");
+   compiler_diag_set_source_name(out_diag,"<memory>");
+   compiler_diag_set_location(out_diag,1,1,1);
+   char *excerpt = first_source_line(source,len);
+   compiler_diag_set_excerpt(out_diag,excerpt?excerpt:"");
+   free(excerpt);
+  }
+ }
  if(errdetail) free(errdetail);
  return rc;
 }
