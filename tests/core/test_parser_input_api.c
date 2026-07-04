@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "absyn.h"
+#include "compdiag.h"
 #include "error.h"
 #include "parse_input.h"
 #include "parser.h"
@@ -37,4 +38,29 @@ void test_parser_input_api(void) {
   ASSERT_TRUE(absyn != NULL);
   ASSERT_TRUE(errdetail == NULL);
   as_delete(absyn);
+
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(NULL, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_TRUE(absyn == NULL);
+  ASSERT_TRUE(errdetail == NULL);
+
+  ParseInput null_data_input = {NULL, 0, "null-data.src"};
+  CompilerDiagnostic diag = {0};
+  SCANNER_STATE_t state = {0};
+  rc = parse_source_compiler_diag(&null_data_input, &absyn, &errdetail,
+                                  &diag, &state);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_EQ_INT(1, state.line);
+  ASSERT_EQ_INT(1, state.column);
+  ASSERT_EQ_INT(1, state.span);
+  ASSERT_TRUE(state.offending_token == NULL);
+  ASSERT_EQ_INT(DIAG_PHASE_PARSE, diag.phase);
+  compiler_diag_reset(&diag);
+
+  rc = parse_source(&empty_input, NULL, &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  rc = parse_source(&empty_input, &absyn, NULL);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
 }

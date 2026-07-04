@@ -113,22 +113,21 @@ int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdet
   // Returns 0 if successful or > 0 (error number) if not.
   // source holds the source input string
   // sourcelen holds the length of the input
-  yyscan_t sc;
-  yylex_init(&sc);
   // Wrap all these bits of state up into a nice package
   // for ease of transport
-  SCANNER_STATE_t scanner_state;
-  scanner_state.errnum = ERR_NOERROR;
-  scanner_state.errdetail = NULL;
-  scanner_state.absyn = NULL;
-  scanner_state.line = 1;
-  scanner_state.column = 1;
-  scanner_state.span = 1;
-  scanner_state.offending_token = NULL;
+  SCANNER_STATE_t scanner_state = {
+    .errnum = ERR_NOERROR,
+    .line = 1,
+    .column = 1,
+    .span = 1,
+    .source_name = input ? input->source_name : NULL,
+  };
   if (!input || !input->data || !absyn || !errdetail) {
+    if (out_state) *out_state = scanner_state;
     return ERR_COMP_SYNTAX;
   }
-  scanner_state.source_name = input->source_name;
+  yyscan_t sc;
+  yylex_init(&sc);
   yyset_extra(&scanner_state, sc);
   YY_BUFFER_STATE in = yy_scan_bytes(input->data, (int)input->len, sc);
 
@@ -159,7 +158,7 @@ int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdet
 }
 
 int8_t parse_source_compiler_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, CompilerDiagnostic *diag, SCANNER_STATE_t *out_state) {
-  SCANNER_STATE_t state;
+  SCANNER_STATE_t state = {0};
   if (diag) compiler_diag_reset(diag);
   int8_t rc = parse_source_diag(input, absyn, errdetail, &state);
   if (rc != ERR_NOERROR && diag) {
@@ -173,7 +172,7 @@ int8_t parse_source_compiler_diag(const ParseInput *input, AS_NODE **absyn, char
 }
 
 int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) {
-  SCANNER_STATE_t state;
+  SCANNER_STATE_t state = {0};
   int8_t rc = parse_source_diag(input, absyn, errdetail, &state);
   free(state.offending_token);
   return rc;
