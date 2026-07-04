@@ -140,6 +140,8 @@ void test_compiler_diag_pipeline(void){
   ASSERT_EQ_INT(6, d.column);
   ASSERT_EQ_INT(1, d.span);
   ASSERT_TRUE(d.has_loc);
+  ASSERT_NOT_NULL(d.excerpt);
+  ASSERT_TRUE(strcmp("@z = ;", d.excerpt)==0);
 
   compiler_diag_reset(&d);
   const char *unknown_source = "@x = 1;\n@yy = 2;\n☃;";
@@ -150,6 +152,8 @@ void test_compiler_diag_pipeline(void){
   ASSERT_EQ_INT(1, d.column);
   ASSERT_EQ_INT(1, d.span);
   ASSERT_TRUE(d.has_loc);
+  ASSERT_NOT_NULL(d.excerpt);
+  ASSERT_TRUE(strcmp("☃;", d.excerpt)==0);
 
   compiler_diag_reset(&d);
   const char *named_source = "@x = ;";

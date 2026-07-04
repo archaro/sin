@@ -110,15 +110,30 @@ int8_t compile_parse_input_to_bytecode(const ParseInput *input, OUTPUT_t **out, 
 
 #include <string.h>
 
-static char *first_source_line(const char *source, size_t len) {
-  if (!source) return NULL;
+static char *source_line(const char *source, size_t len, int line_number) {
+  if (!source || line_number < 1) return NULL;
+
+  size_t start = 0;
+  for (int current_line = 1; current_line < line_number; current_line++) {
+    while (start < len && source[start] != '\n' && source[start] != '\r') {
+      start++;
+    }
+    if (start == len) return NULL;
+    if (source[start] == '\r' && start + 1 < len && source[start + 1] == '\n') {
+      start += 2;
+    } else {
+      start++;
+    }
+  }
+
   size_t line_len = 0;
-  while (line_len < len && source[line_len] != '\n' && source[line_len] != '\r') {
+  while (start + line_len < len && source[start + line_len] != '\n' &&
+         source[start + line_len] != '\r') {
     line_len++;
   }
   char *line = malloc(line_len + 1);
   if (!line) return NULL;
-  memcpy(line, source, line_len);
+  memcpy(line, source + start, line_len);
   line[line_len] = '\0';
   return line;
 }
@@ -172,7 +187,8 @@ int8_t compile_parse_input_to_bytecode_diag(const ParseInput *input, OUTPUT_t **
     } else {
       compiler_diag_set_location(out_diag, 1, 1, 1);
     }
-    char *excerpt = first_source_line(input ? input->data : NULL, input ? input->len : 0);
+    char *excerpt = source_line(input ? input->data : NULL,
+                                input ? input->len : 0, out_diag->line);
     compiler_diag_set_excerpt(out_diag, excerpt ? excerpt : "");
     free(excerpt);
   }
