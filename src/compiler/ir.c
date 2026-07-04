@@ -21,7 +21,7 @@ static bool ensure_inst_capacity(IR_Function* function, size_t needed) {
   size_t oldcap = function->capacity;
   size_t newcap = 0;
   if (!alloc_grow_capacity(oldcap, needed, &newcap)) return false;
-  if (!alloc_grow_array((void **)&function->code, oldcap, newcap, sizeof(IR_Inst))) return false;
+  if (!alloc_grow_array((void **)&function->code, newcap, sizeof(IR_Inst))) return false;
   function->capacity = newcap;
   return true;
 }
@@ -33,7 +33,7 @@ static bool ensure_label_capacity(IR_LabelTable* labels, size_t needed) {
   size_t oldcap = labels->capacity;
   size_t newcap = 0;
   if (!alloc_grow_capacity(oldcap, needed, &newcap)) return false;
-  if (!alloc_grow_array((void **)&labels->entries, oldcap, newcap, sizeof(IR_Label))) return false;
+  if (!alloc_grow_array((void **)&labels->entries, newcap, sizeof(IR_Label))) return false;
   labels->capacity = newcap;
   return true;
 }
@@ -96,7 +96,7 @@ static bool ensure_embedded_capacity(IR_EmbeddedCodeTable* table, size_t needed)
   size_t oldcap = table->capacity;
   size_t newcap = 0;
   if (!alloc_grow_capacity(oldcap, needed, &newcap)) return false;
-  if (!alloc_grow_array((void **)&table->entries, oldcap, newcap, sizeof(IR_EmbeddedCodePayload))) return false;
+  if (!alloc_grow_array((void **)&table->entries, newcap, sizeof(IR_EmbeddedCodePayload))) return false;
   table->capacity = newcap;
   return true;
 }

@@ -13,12 +13,11 @@
 // across the project with one stroke.
 #define GROW_CAPACITY(capacity) ((capacity) < 8 ? 8 : (capacity) * 2)
 
-void* reallocate(void* pointer, size_t oldSize, size_t newSize);
 void* alloc_malloc(size_t size);
 void* alloc_calloc(size_t count, size_t size);
 
 bool alloc_mul_overflow(size_t a, size_t b, size_t *out);
 bool alloc_add_overflow(size_t a, size_t b, size_t *out);
 bool alloc_grow_capacity(size_t oldcap, size_t needed, size_t *newcap);
-bool alloc_grow_array(void **ptr, size_t oldcap, size_t newcap, size_t elem_size);
+bool alloc_grow_array(void **ptr, size_t newcap, size_t elem_size);
 void alloc_test_fail_after(long nth_allocation);

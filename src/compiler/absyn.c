@@ -108,7 +108,7 @@ bool as_stmtlist_append_checked(AS_NODE *stmtlist_node, AS_NODE *stmt) {
     size_t oldcap = stmtlist->capacity;
     size_t newcap = 0;
     if (!alloc_grow_capacity(oldcap, oldcap + 1, &newcap)) return false;
-    if (!alloc_grow_array((void **)&stmtlist->stmts, oldcap, newcap, sizeof(AS_NODE*))) return false;
+    if (!alloc_grow_array((void **)&stmtlist->stmts, newcap, sizeof(AS_NODE*))) return false;
     stmtlist->capacity = (uint32_t)newcap;
   }
   stmtlist->stmts[stmtlist->count++] = stmt;

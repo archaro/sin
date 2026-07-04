@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "memory.h"
 
@@ -37,13 +38,23 @@ bool alloc_grow_capacity(size_t oldcap, size_t needed, size_t *newcap) {
   return true;
 }
 
-bool alloc_grow_array(void **ptr, size_t oldcap, size_t newcap, size_t elem_size) {
-  size_t oldbytes = 0, newbytes = 0;
+bool alloc_grow_array(void **ptr, size_t newcap, size_t elem_size) {
+  size_t newbytes = 0;
+  bool was_null;
   void *res;
-  if (alloc_mul_overflow(oldcap, elem_size, &oldbytes)) return false;
   if (alloc_mul_overflow(newcap, elem_size, &newbytes)) return false;
-  res = reallocate(*ptr, oldbytes, newbytes);
-  if (!res && newbytes != 0) return false;
+
+  if (newbytes == 0) {
+    free(*ptr);
+    *ptr = NULL;
+    return true;
+  }
+  if (alloc_should_fail()) return false;
+
+  was_null = *ptr == NULL;
+  res = realloc(*ptr, newbytes);
+  if (!res) return false;
+  if (was_null) memset(res, 0, newbytes);
   *ptr = res;
   return true;
 }
@@ -60,34 +71,4 @@ void* alloc_calloc(size_t count, size_t size) {
   if (alloc_mul_overflow(count, size, &bytes) || bytes == 0) return NULL;
   if (alloc_should_fail()) return NULL;
   return calloc(count, size);
-}
-
-void* reallocate(void* ptr, size_t oldcount, size_t newcount) {
-  // This function handles all memory allocation, reallocation, and release.
-  // oldcount 	newcount 	  action
-  //   0 	      not 0       allocate new block of memory (malloc)
-  // not 0       	0 	      free memory (free)
-  // not 0      < oldcount 	shrink existing allocation (realloc)
-  // not 0      > oldcount 	grow existing allocation (realloc)
-  // everything else is undefined
-
-  (void)oldcount;
-
-  if (newcount == 0) {
-    free(ptr);
-    return NULL;
-  }
-
-  if (alloc_should_fail()) return NULL;
-
-  void *res;
-  if (ptr) {
-    res = realloc(ptr, newcount);
-  } else {
-    res = calloc(1, newcount); // zero all bytes
-  }
-
-  return res;
-
-  // We don't use oldcount yet.  But we will.
 }

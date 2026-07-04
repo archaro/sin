@@ -32,7 +32,8 @@ static int bw_ensure(BC_Writer *w, size_t extra) {
     w->failed = 1;
     return 0;
   }
-  if (!alloc_grow_array((void **)&w->out->bytecode, oldcap, newcap, sizeof(unsigned char))) {
+  if (!alloc_grow_array((void **)&w->out->bytecode, newcap,
+                        sizeof(unsigned char))) {
     w->failed = 1;
     return 0;
   }
@@ -96,7 +97,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
 
   size_t pos_count = ir->function.count > 0 ? ir->function.count : 1;
   size_t *pos = NULL;
-  if (!alloc_grow_array((void **)&pos, 0, pos_count, sizeof(size_t))) {
+  if (!alloc_grow_array((void **)&pos, pos_count, sizeof(size_t))) {
     int8_t errnum = ERR_NOERROR;
     compdiag_set_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "out of memory allocating position map");
     return errnum;
