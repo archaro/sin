@@ -8,6 +8,7 @@ scomp
 sin
 sdiss
 tests/test-compiler
+tests/network/test-network
 .vscode/
 .*.swp
 sin.code-workspace
