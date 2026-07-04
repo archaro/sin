@@ -96,6 +96,6 @@ int main(int argc, char **argv) {
   }
 
   logmsg("Shutting down.\n");
-  FREE_ARRAY(unsigned char, bytecode, filesize);
+  free(bytecode);
   return result.status == BC_VERIFY_ERROR ? EXIT_FAILURE : EXIT_SUCCESS;
 }

@@ -2,6 +2,7 @@
 
 // Licensed under the MIT License - see LICENSE file for details.
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "config.h"
@@ -34,13 +35,13 @@ void init_tasks() {
 
 void finalise_tasks() {
   // Called before shutdown to clean up memory.
-  FREE_ARRAY(uint64_t, id_stack, capacity_of_id_stack);
+  free(id_stack);
   TASKNODE_t *temp;
   while (task_list) {
     temp = task_list;
     task_list = temp->next;
     destroy_task(temp->data);
-    FREE_ARRAY(TASKNODE_t, temp, 1);
+    free(temp);
   }
 }
 
@@ -87,9 +88,9 @@ void destroy_task(TASK_t *task) {
   // Assumes task definitely exists in the task list!
   logmsg("Destroying task %d (%s)\n", task->id, task->itemname);
   destroy_vm(task->vm);
-  FREE_ARRAY(uv_timer_t, task->timer, 1);
+  free(task->timer);
   retire_task_id(task->id);
-  FREE_ARRAY(TASK_t, task, 1);
+  free(task);
   TASKNODE_t *temp = task_list, *prev = NULL;
   if (temp != NULL && temp->data == task) {
     // Special case for the first task in the list
@@ -129,4 +130,3 @@ TASK_t *find_task_by_id(uint64_t id) {
   // Not found
   return NULL;
 }
-

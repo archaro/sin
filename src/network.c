@@ -707,5 +707,5 @@ void shutdown_listener() {
 void shutdown_networking() {
   // Having been set-up, now shut it down.  Shut it down forever.
   // All the lines will have been disconnected by this point.
-  FREE_ARRAY(LINE_t, line, config.maxconns);
+  free(line);
 }

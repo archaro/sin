@@ -856,8 +856,8 @@ static int8_t compile_and_insert_codeitem(const VALUE_t *itemname, const CODEITE
     if (!inserted) rc = ERR_COMP_INUSE;
   }
   if (out) {
-    if (rc != 0 && out->bytecode) FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
-    FREE_ARRAY(OUTPUT_t, out, 1);
+    if (rc != 0 && out->bytecode) free(out->bytecode);
+    free(out);
   }
   return rc;
 }
@@ -884,7 +884,7 @@ static void persist_codeitem_source(const VALUE_t *itemname, const CODEITEM_INPU
     logerr("Source was not saved.\nItem: %s\n", fullname);
     logerr("Source:\n%s\n", sb.buf);
   }
-  FREE_ARRAY(char, sb.buf, sb.cap);
+  free(sb.buf);
 }
 
 uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
@@ -923,7 +923,7 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
       set_error_item(ERR_COMP_UNKNOWN, "Invalid item name for code assignment.");
       goto cleanup;
     }
-    FREE_ARRAY(char, itemname.s, strlen(itemname.s) + 1);
+    free(itemname.s);
     itemname.s = strdup(fullname);
   }
 
@@ -938,15 +938,15 @@ uint8_t *op_assigncodeitem(uint8_t *nextop, ITEM_t *item) {
   }
 
 cleanup:
-  if (errdetail) FREE_ARRAY(char, errdetail, strlen(errdetail) + 1);
-  if (in.source) FREE_ARRAY(char, in.source, in.source_len + 1);
+  if (errdetail) free(errdetail);
+  if (in.source) free(in.source);
   if (in.params) {
     for (size_t pc = 0; pc < in.param_count; pc++) {
-      FREE_ARRAY(char, (char *)in.params[pc], in.param_lens[pc] + 1);
+      free((char *)in.params[pc]);
     }
-    FREE_ARRAY(const char *, (char **)in.params, in.param_count);
+    free((char **)in.params);
   }
-  if (in.param_lens) FREE_ARRAY(uint16_t, in.param_lens, in.param_count);
+  if (in.param_lens) free(in.param_lens);
   FREE_STR(itemname);
   return nextop;
 }
@@ -958,7 +958,7 @@ uint8_t *op_assignitem(uint8_t *nextop, ITEM_t *item) {
   if (itemname.type == VALUE_str) {
     char fullname[MAX_ITEM_NAME];
     if (canonicalize_itemname(itemname.s, item, fullname)) {
-      FREE_ARRAY(char, itemname.s, strlen(itemname.s) + 1);
+      free(itemname.s);
       itemname.s = strdup(fullname);
     } else {
       logerr("Unable to create item '%s': failed to resolve canonical name.\n", itemname.s);
@@ -1280,7 +1280,7 @@ uint8_t *assembleitem_helper(uint8_t *nextop, ITEM_t *item, bool relative) {
 
   if (invalid) {
     // Not a valid item name, so push nil.
-    FREE_ARRAY(char, sb.buf, sb.cap);
+    free(sb.buf);
     push_stack(VM->stack, VALUE_NIL);
   } else {
     VALUE_t name;

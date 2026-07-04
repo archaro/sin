@@ -57,7 +57,7 @@ static inline void lc_cleanup_values(VALUE_t *values, size_t count) {
 
 static inline void lc_cleanup_cstr(char *s) {
   if (s) {
-    FREE_ARRAY(char, s, strlen(s) + 1);
+    free(s);
   }
 }
 
@@ -179,9 +179,9 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
     set_compiler_error_item(&diag);
     if (out) {
       if (out->bytecode) {
-        FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
+        free(out->bytecode);
       }
-      FREE_ARRAY(OUTPUT_t, out, 1);
+      free(out);
     }
     lc_cleanup_cstr(val.s);
     compiler_diag_reset(&diag);
@@ -194,8 +194,8 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   if (namelen < 0 || namelen >= (int)sizeof(tmpname)) {
     set_error_item(ERR_RUNTIME_INVALIDARGS,
         "Sys.compile temporary item name generation failed.");
-    FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
-    FREE_ARRAY(OUTPUT_t, out, 1);
+    free(out->bytecode);
+    free(out);
     lc_cleanup_cstr(val.s);
     compiler_diag_reset(&diag);
     push_stack(VM->stack, VALUE_FALSE);
@@ -214,8 +214,8 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
     // Could not create temp item (likely in-use/name conflict).
     // out->bytecode/out and val.s are still owned here and must be freed once.
     set_error_item(ERR_COMP_INUSE, NULL);
-    FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
-    FREE_ARRAY(OUTPUT_t, out, 1);
+    free(out->bytecode);
+    free(out);
     lc_cleanup_cstr(val.s);
     compiler_diag_reset(&diag);
     push_stack(VM->stack, VALUE_FALSE);
@@ -235,7 +235,7 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   // clear compiler/runtime error indicators on success
   clear_error_item();
 
-  FREE_ARRAY(OUTPUT_t, out, 1); // bytecode ownership moved into inserted item
+  free(out); // bytecode ownership moved into inserted item
   lc_cleanup_cstr(val.s);
   compiler_diag_reset(&diag);
 
@@ -622,13 +622,13 @@ static void libcall_key_set_free(LIBCALL_KEY_NODE_t **buckets, size_t bucket_cou
     while (node) {
       LIBCALL_KEY_NODE_t *next = node->next;
       if (node->key) {
-        FREE_ARRAY(char, node->key, strlen(node->key) + 1);
+        free(node->key);
       }
-      FREE_ARRAY(LIBCALL_KEY_NODE_t, node, 1);
+      free(node);
       node = next;
     }
   }
-  FREE_ARRAY(LIBCALL_KEY_NODE_t *, buckets, bucket_count);
+  free(buckets);
 }
 
 static bool libcall_registry_fail(const char *msg, const LIBCALL_t *entry, size_t idx, bool fail_fast) {
@@ -679,14 +679,14 @@ bool libcall_registry_self_check(const LIBCALL_t *calls, bool fail_fast) {
     size_t bucket = (size_t)(libcall_key_hash(lookup_key) % key_bucket_count);
     for (LIBCALL_KEY_NODE_t *node = seen_keys[bucket]; node; node = node->next) {
       if (strcmp(node->key, lookup_key) == 0) {
-        FREE_ARRAY(char, lookup_key, strlen(lookup_key) + 1);
+        free(lookup_key);
         libcall_key_set_free(seen_keys, key_bucket_count);
         return libcall_registry_fail("duplicate textual key libname.callname", e, i, fail_fast);
       }
     }
     LIBCALL_KEY_NODE_t *new_node = GROW_ARRAY(LIBCALL_KEY_NODE_t, NULL, 0, 1);
     if (!new_node) {
-      FREE_ARRAY(char, lookup_key, strlen(lookup_key) + 1);
+      free(lookup_key);
       libcall_key_set_free(seen_keys, key_bucket_count);
       return libcall_registry_fail("failed to allocate textual key node", e, i, fail_fast);
     }
@@ -753,17 +753,15 @@ void libcall_free_registry(void) {
   if (libcall_name_registry) {
     for (size_t i = 0; i < libcall_name_registry_count; i++) {
       if (libcall_name_registry[i].lookup_key) {
-        FREE_ARRAY(char, libcall_name_registry[i].lookup_key,
-                   strlen(libcall_name_registry[i].lookup_key) + 1);
+        free(libcall_name_registry[i].lookup_key);
         libcall_name_registry[i].lookup_key = NULL;
       }
     }
-    FREE_ARRAY(LIBCALL_NAME_ENTRY_t, libcall_name_registry, libcall_name_registry_count);
+    free(libcall_name_registry);
   }
 
-  size_t dense_count = libcall_registry_height * libcall_registry_width;
   if (libcall_registry) {
-    FREE_ARRAY(LIBCALL_REG_ENTRY_t, libcall_registry, dense_count);
+    free(libcall_registry);
   }
 
   libcall_registry = NULL;
@@ -878,16 +876,15 @@ fail:
   memset(tmp_token_present, 0, sizeof(tmp_token_present));
   for (size_t i = 0; i < tmp_count; i++) {
     if (tmp_name_registry && tmp_name_registry[i].lookup_key) {
-      FREE_ARRAY(char, tmp_name_registry[i].lookup_key,
-                 strlen(tmp_name_registry[i].lookup_key) + 1);
+      free(tmp_name_registry[i].lookup_key);
       tmp_name_registry[i].lookup_key = NULL;
     }
   }
   if (tmp_name_registry) {
-    FREE_ARRAY(LIBCALL_NAME_ENTRY_t, tmp_name_registry, tmp_count);
+    free(tmp_name_registry);
   }
   if (tmp_registry) {
-    FREE_ARRAY(LIBCALL_REG_ENTRY_t, tmp_registry, dense_count);
+    free(tmp_registry);
   }
   return false;
 }
@@ -924,7 +921,7 @@ bool libcall_lookup_token(const char *libname, const char *callname, uint8_t *to
   LIBCALL_NAME_ENTRY_t *entry = bsearch(&needle, libcall_name_registry,
       libcall_name_registry_count, sizeof(LIBCALL_NAME_ENTRY_t),
       libcall_name_entry_cmp);
-  FREE_ARRAY(char, lookup_key, strlen(lookup_key) + 1);
+  free(lookup_key);
   if (!entry) return false;
   if (token) *token = entry->token;
   if (args) *args = entry->args;

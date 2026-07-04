@@ -147,7 +147,7 @@ void as_delete_if(AS_IF *asif) {
   if (asif->elsif) {
     as_delete_if(asif->elsif);
   }
-  FREE_ARRAY(AS_IF, asif, 1);
+  free(asif);
 }
 
 void as_delete(AS_NODE *root) {
@@ -161,7 +161,7 @@ void as_delete(AS_NODE *root) {
     case N_VALUE: {
       AS_VALUE *val = (AS_VALUE*)root->lhs;
       if (val->valtype != V_INT && val->valtype != V_FLOAT && val->valtype != V_BOOLTRUE && val->valtype != V_BOOLFALSE) free(val->value.s);
-      FREE_ARRAY(AS_VALUE, root->lhs, 1);
+      free(root->lhs);
       // rhs is always null for this nodetype
       break;
     }
@@ -175,8 +175,8 @@ void as_delete(AS_NODE *root) {
       for (uint32_t i = 0; i < stmtlist->count; i++) {
         as_delete(stmtlist->stmts[i]);
       }
-      FREE_ARRAY(AS_NODE*, stmtlist->stmts, stmtlist->capacity);
-      FREE_ARRAY(AS_STMTLIST, stmtlist, 1);
+      free(stmtlist->stmts);
+      free(stmtlist);
       break;
     }
     case N_ADD:
@@ -224,7 +224,7 @@ void as_delete(AS_NODE *root) {
       logerr("Calling as_delete() with invalid node type %d\n", root->nodetype);
     }
   }
-  FREE_ARRAY(AS_NODE, root, 1);
+  free(root);
 }
 
 // Keep this in sync with ENUM_VALUE!

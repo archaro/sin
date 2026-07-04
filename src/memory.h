@@ -17,10 +17,6 @@
 #define GROW_ARRAY(type, ptr, oldsize, newsize) \
   (type*)reallocate(ptr, sizeof(type) * (oldsize), sizeof(type) * (newsize))
 
-// One stop shop for freeing arrays
-#define FREE_ARRAY(type, ptr, oldsize) \
-    reallocate(ptr, sizeof(type) * (oldsize), 0)
-
 void* reallocate(void* pointer, size_t oldSize, size_t newSize);
 
 bool alloc_mul_overflow(size_t a, size_t b, size_t *out);

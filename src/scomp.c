@@ -113,7 +113,7 @@ int load_file_buffer(const char *path, char **out_data, size_t *out_len) {
 
 fail:
   if (in) fclose(in);
-  if (buf) FREE_ARRAY(char, buf, (int)file_len);
+  if (buf) free(buf);
   return -1;
 }
 
@@ -168,12 +168,12 @@ cleanup:
   compiler_diag_reset(&diag);
   if (out) {
     if (out->bytecode) {
-      FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
+      free(out->bytecode);
     }
-    FREE_ARRAY(OUTPUT_t, out, 1);
+    free(out);
   }
   if (source) {
-    FREE_ARRAY(char, source, (int)source_len);
+    free(source);
   }
 
   return result == ERR_NOERROR ? 0 : 1;

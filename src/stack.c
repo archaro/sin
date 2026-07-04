@@ -24,7 +24,7 @@ STACK_t *make_stack() {
 void destroy_stack(STACK_t *stack) {
   // Byebye stack
   reset_stack(stack);
-  FREE_ARRAY(STACK_t, stack, 1);
+  free(stack);
 }
 
 void reset_stack(STACK_t *stack) {
@@ -100,4 +100,3 @@ int size_stack(STACK_t *stack) {
   // which are freeloading at the bottom of the stack.
   return (stack->current + 1 - stack->locals);
 }
-

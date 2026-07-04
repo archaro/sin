@@ -2,6 +2,7 @@
 
 // Licensed under the MIT License - see LICENSE file for details.
 
+#include <stdlib.h>
 #include "signal.h"
 
 #include "config.h"
@@ -21,7 +22,7 @@ VM_t *make_vm() {
 void destroy_vm(VM_t *vm) {
   destroy_stack(vm->stack);
   destroy_callstack(vm->callstack);
-  FREE_ARRAY(VM_t, vm, 1);
+  free(vm);
 }
 
 CALLSTACK_t *make_callstack() {
@@ -35,7 +36,7 @@ CALLSTACK_t *make_callstack() {
 
 void destroy_callstack(CALLSTACK_t *stack) {
   // Byebye stack
-  FREE_ARRAY(CALLSTACK_t, stack, 1);
+  free(stack);
 }
 
 void push_callstack(VM_t *vm, ITEM_t *item, uint8_t *nextop, uint8_t args,

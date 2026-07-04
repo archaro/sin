@@ -433,17 +433,17 @@ ITEM_t *allocate_item() {
 
 void deallocate_entry(ENTRY_t *entry) {
   // Allocator API: Take this ENTRY_t back.
-  FREE_ARRAY(ENTRY_t, entry, 1);
+  free(entry);
 }
 
 void deallocate_hashtable(HASHTABLE_t *hashtable) {
   // Allocator API: Take this HashTable back.
-  FREE_ARRAY(HASHTABLE_t, hashtable, 1);
+  free(hashtable);
 }
 
 void deallocate_item(ITEM_t *item) {
   // Allocator API: Take this Item back.
-  FREE_ARRAY(ITEM_t, item, 1);
+  free(item);
 }
 
 static uint32_t hashtable_buckets_for_entries(uint32_t entry_count) {
@@ -562,8 +562,7 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
           return NULL;
         }
         if (current_item->bytecode_len > 0) {
-          FREE_ARRAY(uint8_t, current_item->bytecode,
-                                                current_item->bytecode_len);
+          free(current_item->bytecode);
         }
       }
       current_item->value = value;
@@ -614,8 +613,7 @@ ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
       current_item->type = ITEM_code;
       current_item->value.type = VALUE_nil; // Just to be safe
       if (current_item->bytecode_len > 0) {
-        FREE_ARRAY(unsigned char, current_item->bytecode,
-                                           current_item->bytecode_len);
+        free(current_item->bytecode);
       }
       current_item->bytecode_len = len;
       current_item->bytecode = bytecode;

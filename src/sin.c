@@ -3,6 +3,7 @@
 // Licensed under the MIT License - see LICENSE file for details.
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <getopt.h>
@@ -353,7 +354,7 @@ int main(int argc, char **argv) {
     logmsg("Bytecode interpreter returned: %ld\n", ret.i);
   } else if (ret.type == VALUE_str) {
     logmsg("Bytecode interpreter returned: %s\n", ret.s);
-    FREE_ARRAY(char, ret.s, strlen(ret.s));
+    free(ret.s);
   } else if (ret.type == VALUE_float) {
     char fbuffer[64];
     if (sin_format_binary64_buf(ret.f, fbuffer, sizeof(fbuffer))) {
@@ -417,7 +418,7 @@ int main(int argc, char **argv) {
       if (runloop_retval == 0) runloop_retval = EXIT_FAILURE;
     }
   }
-  FREE_ARRAY(uv_loop_t, config.loop, sizeof(uv_loop_t));
+  free(config.loop);
   free(config.itemstore);
   free(config.srcroot);
   free(config.input);

@@ -27,7 +27,7 @@ bool log_to_file(const char *logfile) {
       result = true;
     }
   }
-  FREE_ARRAY(char, newlog, len);
+  free(newlog);
   return result;
 }
 
@@ -51,4 +51,3 @@ void logmsg(const char *msg, ...) {
   fflush(stdout);
   va_end(args);
 }
-

@@ -3,6 +3,7 @@
 // Licensed under the MIT License - see LICENSE file for details.
 #include "compiler_context.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "memory.h"
@@ -32,13 +33,13 @@ void compiler_context_reset(CompilerContext *ctx) {
   }
   if (ctx->bytecode_out) {
     if (ctx->bytecode_out->bytecode) {
-      FREE_ARRAY(unsigned char, ctx->bytecode_out->bytecode, ctx->bytecode_out->maxsize);
+      free(ctx->bytecode_out->bytecode);
     }
-    FREE_ARRAY(OUTPUT_t, ctx->bytecode_out, 1);
+    free(ctx->bytecode_out);
     ctx->bytecode_out = NULL;
   }
   if (ctx->diagnostic) {
-    FREE_ARRAY(char, ctx->diagnostic, 1);
+    free(ctx->diagnostic);
     ctx->diagnostic = NULL;
   }
 }

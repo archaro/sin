@@ -5,6 +5,7 @@
 
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "bytecode_verify.h"
@@ -144,7 +145,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     if (in->op == IR_OP_LABEL) continue;
     const IR_OpSchema *meta = ir_opcode_schema(in->op);
     if (!meta || bc_opcode_byte(in->op) == 0) {
-      FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+      free(pos);
       {
         int8_t errnum = ERR_NOERROR;
         compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "unsupported IR op %d", in->op);
@@ -156,7 +157,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case VALIDATE_NONE: break;
       case VALIDATE_A_U8:
         if (in->a < 0 || in->a > UINT8_MAX) {
-          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "%s operand a out of range for u8: %d", meta->name, in->a);
           return errnum;
@@ -164,7 +165,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
         break;
       case VALIDATE_A_U16:
         if (in->a < 0 || in->a > UINT16_MAX) {
-          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "%s operand a out of range for u16: %d", meta->name, in->a);
           return errnum;
@@ -172,7 +173,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
         break;
       case VALIDATE_A_B_U8:
         if (in->a < 0 || in->a > UINT8_MAX || in->b < 0 || in->b > UINT8_MAX) {
-          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "%s operands out of range for u8: a=%d b=%d", meta->name, in->a, in->b);
           return errnum;
@@ -193,7 +194,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
         const char *s = (const char *)(intptr_t)in->imm;
         size_t len = strlen(s);
         if (len > UINT16_MAX) {
-          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "string literal too long: %zu", len);
           return errnum;
@@ -220,14 +221,14 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case IR_OP_JUMP:
       case IR_OP_JUMP_IF_FALSE: {
         if (in->a < 0 || (size_t)in->a >= ir->labels.count) {
-          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "jump invalid label id %d", in->a);
           return errnum;
         }
         IR_Label *label = &ir->labels.entries[in->a];
         if (!label->bound) {
-          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "jump unbound label %d", in->a);
           return errnum;
@@ -236,7 +237,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
         size_t to = pos[label->position];
         long diff = (long)to - (long)from;
         if (diff < INT16_MIN || diff > INT16_MAX) {
-          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "jump offset out of range: %ld", diff);
           return errnum;
@@ -247,14 +248,14 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case IR_OP_ITEM_PUSH_LAYER: {
         const char *s = (const char *)(intptr_t)in->imm;
         if (!s) {
-          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_set_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "null layer name");
           return errnum;
         }
         size_t len = strlen(s);
         if (len > UINT8_MAX) {
-          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "layer name too long: %zu", len);
           return errnum;
@@ -264,7 +265,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       }
       case IR_OP_ITEM_SAVE_CODE: {
         if (in->a < 0 || (size_t)in->a >= ir->embedded_code.count) {
-          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "invalid embedded code payload index %d", in->a);
           return errnum;
@@ -276,7 +277,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
             const char *name = payload->params[p];
             size_t nlen = strlen(name);
             if (nlen > UINT16_MAX) {
-              FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+              free(pos);
               int8_t errnum = ERR_NOERROR;
               compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "embedded param too long: %zu", nlen);
               return errnum;
@@ -286,14 +287,14 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
           if (!bw_write_u16(&w, 0)) goto oom;
         }
         if (!payload->source) {
-          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "embedded code payload %d has null source", in->a);
           return errnum;
         }
         size_t len = strlen(payload->source);
         if (len > UINT16_MAX) {
-          FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+          free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "embedded code too long: %zu", len);
           return errnum;
@@ -305,7 +306,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     }
   }
 
-  FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+  free(pos);
 
   size_t bytecode_len = (size_t)(out->nextbyte - out->bytecode);
   if (bytecode_len > UINT32_MAX) {
@@ -329,7 +330,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
   }
   return ERR_NOERROR;
 oom:
-  FREE_ARRAY(size_t, pos, ir->function.count > 0 ? ir->function.count : 1);
+  free(pos);
   {
     int8_t errnum = ERR_NOERROR;
     compdiag_set_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "bytecode writer out of memory");

@@ -47,15 +47,15 @@ void ir_destroy_unit(IR_Unit* unit) {
     return;
   }
 
-  FREE_ARRAY(IR_Inst, unit->function.code, unit->function.capacity);
-  FREE_ARRAY(IR_Label, unit->labels.entries, unit->labels.capacity);
+  free(unit->function.code);
+  free(unit->labels.entries);
   for (size_t i = 0; i < unit->embedded_code.count; i++) {
     IR_EmbeddedCodePayload* payload = &unit->embedded_code.entries[i];
-    FREE_ARRAY(const char*, payload->params, payload->param_count);
-    FREE_ARRAY(IR_EmbeddedLocal, payload->locals, payload->local_count);
+    free(payload->params);
+    free(payload->locals);
   }
-  FREE_ARRAY(IR_EmbeddedCodePayload, unit->embedded_code.entries, unit->embedded_code.capacity);
-  FREE_ARRAY(IR_Unit, unit, 1);
+  free(unit->embedded_code.entries);
+  free(unit);
 }
 
 size_t ir_emit(IR_Unit* unit, IR_Inst inst) {
@@ -201,7 +201,7 @@ static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag, int8
     int8_t current = ERR_NOERROR;
     compdiag_set_once_diag(&current, errdetail, diag, errnum, DIAG_PHASE_IR_VALIDATE, "ir", msg);
   }
-  FREE_ARRAY(char, msg, (size_t)needed + 1);
+  free(msg);
   return errnum;
 }
 

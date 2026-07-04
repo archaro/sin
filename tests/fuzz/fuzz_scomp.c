@@ -35,9 +35,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
   if (out) {
     if (out->bytecode) {
-      FREE_ARRAY(unsigned char, out->bytecode, out->maxsize);
+      free(out->bytecode);
     }
-    FREE_ARRAY(OUTPUT_t, out, 1);
+    free(out);
   }
   free(errdetail);
 

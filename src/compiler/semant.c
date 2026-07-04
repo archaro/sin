@@ -147,12 +147,12 @@ SEM_CTX *sem_create_ctx() {
 
 void sem_delete_ctx(SEM_CTX *ctx) {
   for (uint32_t i = 0; i < ctx->count; i++) {
-    FREE_ARRAY(char *, ctx->locals[i].name, 0);
+    free(ctx->locals[i].name);
   }
-  FREE_ARRAY(SEM_LOCAL, ctx->locals, 0);
-  FREE_ARRAY(SEM_LOCAL_INDEX, ctx->local_index, 0);
+  free(ctx->locals);
+  free(ctx->local_index);
   compdiag_reset_detail(&ctx->errdetail);
-  FREE_ARRAY(SEM_CTX, ctx, 0);
+  free(ctx);
 }
 
 static void sem_walk(SEM_CTX *ctx, AS_NODE *node);
