@@ -163,10 +163,7 @@ HASHTABLE_t *create_hashtable(int size) {
   HASHTABLE_t *hashtable = allocate_hashtable();
   hashtable->size = size;
   hashtable->entry_count = 0;
-  hashtable->table = (ENTRY_t **)malloc(sizeof(ENTRY_t *) * size);
-  for (int i = 0; i < size; i++) {
-    hashtable->table[i] = NULL;
-  }
+  hashtable->table = calloc((size_t)size, sizeof *hashtable->table);
   return hashtable;
 }
 
@@ -412,23 +409,17 @@ char *substr(const char *str, size_t begin, size_t len) {
 
 ENTRY_t *allocate_entry() {
   // Allocator API: Gimme a new ENTRY_t
-  ENTRY_t *newentry = NULL;
-  newentry = GROW_ARRAY(ENTRY_t, newentry, 0, 1);
-  return newentry;
+  return malloc(sizeof(ENTRY_t));
 }
 
 HASHTABLE_t *allocate_hashtable() {
   // Allocator API: Gimme a new HASHTABLE_t
-  HASHTABLE_t *newhash = NULL;
-  newhash = GROW_ARRAY(HASHTABLE_t, newhash, 0, 1);
-  return newhash;
+  return malloc(sizeof(HASHTABLE_t));
 }
 
 ITEM_t *allocate_item() {
-  ITEM_t *newitem = NULL;
-  newitem = GROW_ARRAY(ITEM_t, newitem, 0, 1);
   // Allocator API: Gimme a new Item
-  return newitem;
+  return malloc(sizeof(ITEM_t));
 }
 
 void deallocate_entry(ENTRY_t *entry) {
@@ -459,6 +450,8 @@ static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
   item->parent = parent;
   item->inuse = false;
   item->type = type;
+  item->bytecode = NULL;
+  item->bytecode_len = 0;
   // There are two types of items.  Those which don't contain a value
   // MUST contain bytecode.
   if (type == ITEM_value) {
@@ -741,7 +734,7 @@ char *get_itemfilename(ITEM_t *item) {
   itemname[0] = '\0';
   get_itemname(item, itemname);
   l = strlen(itemname) + strlen(config.srcroot) + 13;
-  filename = GROW_ARRAY(char, NULL, 0, l);
+  filename = malloc((size_t)l);
   p = itemname;
   while (*p) {
     if(*p == '.') *p = '/';
@@ -1503,7 +1496,7 @@ void set_error_item(const int errnum, const char *errdetail) {
     // Allocate enough space for the two error messages, plus
     // the extra characters "errmsg (errdetail)"
     int elen = strlen(base) + strlen(errdetail) + 4;
-    emsg.s = GROW_ARRAY(char, NULL, 0, elen);
+    emsg.s = malloc((size_t)elen);
     snprintf(emsg.s, elen, "%s (%s)", base, errdetail);
   } else {
     emsg.s = strdup(base);
@@ -1548,7 +1541,7 @@ void set_compiler_error_item(const CompilerDiagnostic *diag) {
 
   VALUE_t emsg;
   emsg.type = VALUE_str;
-  emsg.s = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
+  emsg.s = malloc((size_t)needed + 1);
   snprintf(emsg.s, (size_t)needed + 1,
       "%s stage=%s file=%s line=%d column=%d message=%s excerpt=%s",
       stable_code, stage, file, line, column, message, excerpt);

@@ -8,13 +8,12 @@
 #include <signal.h>
 
 #include "stack.h"
-#include "memory.h"
 #include "log.h"
 
 STACK_t *make_stack() {
   // Allocate space for a new stack, and return it.
-  STACK_t *stack = NULL;
-  stack = GROW_ARRAY(STACK_t, stack, 0, 1);
+  STACK_t *stack = calloc(1, sizeof *stack);
+  if (!stack) return NULL;
   stack->max = STACK_SIZE - 1;
   stack->current = -1;
   stack->base = 0;

@@ -39,7 +39,7 @@ static bool ensure_label_capacity(IR_LabelTable* labels, size_t needed) {
 }
 
 IR_Unit* ir_create_unit(void) {
-  return GROW_ARRAY(IR_Unit, NULL, 0, 1);
+  return calloc(1, sizeof(IR_Unit));
 }
 
 void ir_destroy_unit(IR_Unit* unit) {
@@ -119,8 +119,9 @@ bool ir_embedded_locals_from_params(AS_NODE* params, IR_EmbeddedCodePayload* pay
   }
 
   payload->param_count = count;
-  payload->params = GROW_ARRAY(const char*, NULL, 0, count > 0 ? count : 1);
-  payload->locals = GROW_ARRAY(IR_EmbeddedLocal, NULL, 0, count > 0 ? count : 1);
+  size_t allocation_count = count > 0 ? count : 1;
+  payload->params = malloc(sizeof *payload->params * allocation_count);
+  payload->locals = malloc(sizeof *payload->locals * allocation_count);
   payload->local_count = count;
 
   cursor = params;
@@ -186,7 +187,7 @@ static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag, int8
     return errnum;
   }
 
-  msg = GROW_ARRAY(char, NULL, 0, (size_t)needed + 1);
+  msg = malloc((size_t)needed + 1);
   if (!msg) {
     int8_t current = ERR_NOERROR;
     compdiag_set_once_diag(&current, errdetail, diag, errnum, DIAG_PHASE_IR_VALIDATE, "ir", "out of memory");

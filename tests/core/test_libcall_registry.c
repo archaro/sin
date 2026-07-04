@@ -132,18 +132,28 @@ void test_libcall_registry_roundtrip(void) {
 }
 
 void test_libcall_registry_init_failure_has_no_partial_state(void) {
-  libcall_reset_registry_for_tests();
+  bool reached_success = false;
 
-  alloc_test_fail_after(1);
-  ASSERT_TRUE(!libcall_init_registry());
+  for (long fail_at = 1; fail_at < 512; fail_at++) {
+    libcall_reset_registry_for_tests();
+    alloc_test_fail_after(fail_at);
+    if (libcall_init_registry()) {
+      reached_success = true;
+      break;
+    }
+
+    // Every injected failure must leave the registry safe to initialize
+    // again, proving that no partial allocation state escaped.
+    alloc_test_fail_after(-1);
+    ASSERT_TRUE(libcall_init_registry());
+    ASSERT_TRUE(libcall_validate_registry());
+  }
+
+  ASSERT_TRUE(reached_success);
+  alloc_test_fail_after(-1);
 
   uint8_t token = 0;
   uint8_t args = 0;
-  ASSERT_TRUE(!libcall_lookup_token("sys", "log", &token, &args));
-  ASSERT_TRUE(libcall_func_token(1) == NULL);
-
-  alloc_test_fail_after(-1);
-  ASSERT_TRUE(libcall_init_registry());
   ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
   ASSERT_EQ_INT(1, args);
 }

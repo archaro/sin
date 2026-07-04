@@ -574,8 +574,14 @@ static bool libcall_make_key(const char *libname, const char *callname,
                              char **out_key) {
   size_t liblen = strlen(libname);
   size_t calllen = strlen(callname);
-  size_t keylen = liblen + 1 + calllen;
-  char *key = GROW_ARRAY(char, NULL, 0, keylen + 1);
+  size_t keylen;
+  size_t allocation_size;
+  if (alloc_add_overflow(liblen, 1, &keylen) ||
+      alloc_add_overflow(keylen, calllen, &keylen) ||
+      alloc_add_overflow(keylen, 1, &allocation_size)) {
+    return false;
+  }
+  char *key = alloc_malloc(allocation_size);
   if (!key) {
     return false;
   }
@@ -651,11 +657,11 @@ bool libcall_registry_self_check(const LIBCALL_t *calls, bool fail_fast) {
   bool seen_lib[256] = {0};
   bool seen_pair[256][256] = {{0}};
   size_t key_bucket_count = 257;
-  LIBCALL_KEY_NODE_t **seen_keys = GROW_ARRAY(LIBCALL_KEY_NODE_t *, NULL, 0, key_bucket_count);
+  LIBCALL_KEY_NODE_t **seen_keys =
+      alloc_calloc(key_bucket_count, sizeof *seen_keys);
   if (!seen_keys) {
     return libcall_registry_fail("failed to allocate textual key set", NULL, 0, fail_fast);
   }
-  memset(seen_keys, 0, sizeof(*seen_keys) * key_bucket_count);
   for (size_t i = 0; calls[i].libname != NULL || calls[i].callname != NULL; i++) {
     const LIBCALL_t *e = &calls[i];
     if (!e->libname || !e->callname || !e->func) {
@@ -684,7 +690,7 @@ bool libcall_registry_self_check(const LIBCALL_t *calls, bool fail_fast) {
         return libcall_registry_fail("duplicate textual key libname.callname", e, i, fail_fast);
       }
     }
-    LIBCALL_KEY_NODE_t *new_node = GROW_ARRAY(LIBCALL_KEY_NODE_t, NULL, 0, 1);
+    LIBCALL_KEY_NODE_t *new_node = alloc_malloc(sizeof *new_node);
     if (!new_node) {
       free(lookup_key);
       libcall_key_set_free(seen_keys, key_bucket_count);
@@ -815,15 +821,16 @@ bool libcall_init_registry(void) {
   tmp_registry_height = (size_t)max_lib_index + 1;
   tmp_registry_width = (size_t)max_call_index + 1;
   tmp_count = count;
-  dense_count = tmp_registry_height * tmp_registry_width;
+  if (alloc_mul_overflow(tmp_registry_height, tmp_registry_width,
+                         &dense_count)) {
+    goto fail;
+  }
 
-  tmp_registry = GROW_ARRAY(LIBCALL_REG_ENTRY_t, NULL, 0, dense_count);
-  tmp_name_registry = GROW_ARRAY(LIBCALL_NAME_ENTRY_t, NULL, 0, tmp_count);
+  tmp_registry = alloc_calloc(dense_count, sizeof *tmp_registry);
+  tmp_name_registry = alloc_calloc(tmp_count, sizeof *tmp_name_registry);
   if (!tmp_registry || !tmp_name_registry) {
     goto fail;
   }
-  memset(tmp_registry, 0, sizeof(LIBCALL_REG_ENTRY_t) * dense_count);
-  memset(tmp_name_registry, 0, sizeof(LIBCALL_NAME_ENTRY_t) * tmp_count);
 
   for (size_t i = 0; i < tmp_count; i++) {
     uint8_t lib_index = (uint8_t)libcalls[i].lib_index;

@@ -10,6 +10,11 @@
 static long g_alloc_counter = 0;
 static long g_fail_after = -1;
 
+static bool alloc_should_fail(void) {
+  g_alloc_counter++;
+  return g_fail_after >= 0 && g_alloc_counter >= g_fail_after;
+}
+
 bool alloc_mul_overflow(size_t a, size_t b, size_t *out) {
   if (a != 0 && b > SIZE_MAX / a) return true;
   if (out) *out = a * b;
@@ -45,6 +50,18 @@ bool alloc_grow_array(void **ptr, size_t oldcap, size_t newcap, size_t elem_size
 
 void alloc_test_fail_after(long nth_allocation) { g_fail_after = nth_allocation; g_alloc_counter = 0; }
 
+void* alloc_malloc(size_t size) {
+  if (size == 0 || alloc_should_fail()) return NULL;
+  return malloc(size);
+}
+
+void* alloc_calloc(size_t count, size_t size) {
+  size_t bytes;
+  if (alloc_mul_overflow(count, size, &bytes) || bytes == 0) return NULL;
+  if (alloc_should_fail()) return NULL;
+  return calloc(count, size);
+}
+
 void* reallocate(void* ptr, size_t oldcount, size_t newcount) {
   // This function handles all memory allocation, reallocation, and release.
   // oldcount 	newcount 	  action
@@ -61,8 +78,7 @@ void* reallocate(void* ptr, size_t oldcount, size_t newcount) {
     return NULL;
   }
 
-  g_alloc_counter++;
-  if (g_fail_after >= 0 && g_alloc_counter >= g_fail_after) return NULL;
+  if (alloc_should_fail()) return NULL;
 
   void *res;
   if (ptr) {

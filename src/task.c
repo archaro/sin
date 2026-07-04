@@ -30,7 +30,7 @@ void init_tasks() {
   next_taskid = 1;
   top_of_id_stack = 0;
   capacity_of_id_stack = 256;
-  id_stack = GROW_ARRAY(uint64_t, id_stack, 0, capacity_of_id_stack);
+  id_stack = malloc(sizeof *id_stack * capacity_of_id_stack);
 }
 
 void finalise_tasks() {
@@ -61,23 +61,20 @@ void retire_task_id(uint64_t id) {
   }
   if (top_of_id_stack == capacity_of_id_stack) {
     capacity_of_id_stack *= 2;
-    id_stack = GROW_ARRAY(uint64_t, id_stack, capacity_of_id_stack / 2,
-                                                      capacity_of_id_stack);
+    id_stack = realloc(id_stack, sizeof *id_stack * capacity_of_id_stack);
   }
   id_stack[top_of_id_stack++] = id;
 }
 
 TASK_t *make_task(char *itemname, uint64_t interval) {
   // Create a new task
-  TASK_t *task = NULL;
-  task = GROW_ARRAY(TASK_t, task, 0, 1);
+  TASK_t *task = malloc(sizeof *task);
   strcpy(task->itemname, itemname);
   task->vm = make_vm();
   task->id = new_task_id();
   task->interval = interval;
-  task->timer = GROW_ARRAY(uv_timer_t, task->timer, 0, 1);
-  TASKNODE_t *tasknode = NULL;
-  tasknode = GROW_ARRAY(TASKNODE_t, tasknode, 0, 1);
+  task->timer = malloc(sizeof *task->timer);
+  TASKNODE_t *tasknode = malloc(sizeof *tasknode);
   tasknode->data = task;
   tasknode->next = task_list;
   task_list = tasknode;

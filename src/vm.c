@@ -12,8 +12,7 @@
 
 VM_t *make_vm() {
   // Create a shiny new VM ready for use.
-  VM_t *newvm = NULL;
-  newvm = GROW_ARRAY(VM_t, newvm, 0, 1);
+  VM_t *newvm = malloc(sizeof *newvm);
   newvm->callstack = make_callstack();
   newvm->stack = make_stack();
   return newvm;
@@ -27,8 +26,7 @@ void destroy_vm(VM_t *vm) {
 
 CALLSTACK_t *make_callstack() {
   // Allocate space for a new stack, and return it.
-  CALLSTACK_t *stack = NULL;
-  stack = GROW_ARRAY(CALLSTACK_t, stack, 0, 1);
+  CALLSTACK_t *stack = malloc(sizeof *stack);
   stack->max = CALLSTACK_SIZE - 1;
   stack->current = -1;
   return stack;

@@ -71,16 +71,14 @@ static void sem_add_local(SEM_CTX *ctx, const char *name) {
   }
 
   if (ctx->count == ctx->capacity) {
-    uint32_t oldcap = ctx->capacity;
     ctx->capacity = ctx->capacity == 0 ? 8 : ctx->capacity * 2;
-    ctx->locals = GROW_ARRAY(SEM_LOCAL, ctx->locals, oldcap, ctx->capacity);
+    ctx->locals = realloc(ctx->locals, sizeof *ctx->locals * ctx->capacity);
   }
 
   if (ctx->count == ctx->index_capacity) {
-    uint32_t oldcap = ctx->index_capacity;
     ctx->index_capacity = ctx->index_capacity == 0 ? 8 : ctx->index_capacity * 2;
-    ctx->local_index = GROW_ARRAY(SEM_LOCAL_INDEX, ctx->local_index,
-                                  oldcap, ctx->index_capacity);
+    ctx->local_index = realloc(ctx->local_index,
+                               sizeof *ctx->local_index * ctx->index_capacity);
   }
 
   SEM_LOCAL *local = &ctx->locals[ctx->count];
@@ -131,8 +129,7 @@ static void sem_set_embedded_error(SEM_CTX *ctx, int8_t errnum,
 }
 
 SEM_CTX *sem_create_ctx() {
-  SEM_CTX *ctx = NULL;
-  ctx = GROW_ARRAY(SEM_CTX, ctx, 0, 1);
+  SEM_CTX *ctx = malloc(sizeof *ctx);
   (*ctx).locals = NULL;
   (*ctx).local_index = NULL;
   (*ctx).count = 0;

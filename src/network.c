@@ -64,19 +64,9 @@ void init_networking() {
     exit(EXIT_FAILURE);
   }
 
-  line = GROW_ARRAY(LINE_t, line, 0, config.maxconns);
+  line = calloc(config.maxconns, sizeof *line);
   for (size_t l = 0; l < config.maxconns; l++) {
-    line[l].status = LINE_empty;
     line[l].linenum = l;
-    line[l].address[0] = '\0';
-    line[l].line_handle = NULL;
-    line[l].telnet = NULL;
-    line[l].outbuf = NULL;
-    line[l].inbuf = NULL;
-    line[l].output_write_in_flight = false;
-    line[l].output_in_flight_length = 0;
-    line[l].output_backpressure_ticks = 0;
-    line[l].input_line_length = 0;
   }
 }
 

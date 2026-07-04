@@ -102,7 +102,7 @@ int load_file_buffer(const char *path, char **out_data, size_t *out_len) {
   if (file_len < 0 || file_len > INT_MAX) goto fail;
   if (fseek(in, 0, SEEK_SET) != 0) goto fail;
 
-  buf = GROW_ARRAY(char, NULL, 0, (int)file_len);
+  buf = malloc((size_t)file_len);
   bytes_read = fread(buf, sizeof(char), (size_t)file_len, in);
   if (bytes_read != (size_t)file_len) goto fail;
 

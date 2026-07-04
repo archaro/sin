@@ -13,11 +13,9 @@
 // across the project with one stroke.
 #define GROW_CAPACITY(capacity) ((capacity) < 8 ? 8 : (capacity) * 2)
 
-// A pretty wrapper to reallocate(), which makes the cast neater
-#define GROW_ARRAY(type, ptr, oldsize, newsize) \
-  (type*)reallocate(ptr, sizeof(type) * (oldsize), sizeof(type) * (newsize))
-
 void* reallocate(void* pointer, size_t oldSize, size_t newSize);
+void* alloc_malloc(size_t size);
+void* alloc_calloc(size_t count, size_t size);
 
 bool alloc_mul_overflow(size_t a, size_t b, size_t *out);
 bool alloc_add_overflow(size_t a, size_t b, size_t *out);

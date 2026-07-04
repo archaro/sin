@@ -16,7 +16,7 @@ AS_VALUE *as_new_value(ENUM_VALUE valtype, uint64_t ival, char *sval) {
   //    sval:    null-terminated string value (V_STR, V_LOCAL, V_ITEM, V_LAYER)
   // Integers, strings, locals and layers are easy.
   // Items are encoded as the name of the item.
-  AS_VALUE *newval = GROW_ARRAY(AS_VALUE, NULL, 0, 1);
+  AS_VALUE *newval = malloc(sizeof *newval);
   newval->valtype = valtype;
   if (valtype == V_INT || valtype == V_BOOLTRUE || valtype == V_BOOLFALSE) {
     newval->value.i = ival;
@@ -66,7 +66,7 @@ AS_NODE *as_new_node(ENUM_NODE nodetype, void *lhs, void *rhs) {
   //    nodetype: type of node
   //    lhs: node payload (lhs if a binary operation node)
   //    rhs: rhs if a binary operation node
-  AS_NODE *newnode = GROW_ARRAY(AS_NODE, NULL, 0, 1);
+  AS_NODE *newnode = malloc(sizeof *newnode);
   newnode->nodetype = nodetype;
   // Add nodetypes to the switch below.
   switch (nodetype) {
@@ -88,7 +88,7 @@ AS_NODE *as_new_node(ENUM_NODE nodetype, void *lhs, void *rhs) {
 }
 
 AS_STMTLIST *as_new_stmtlist(void) {
-  AS_STMTLIST *newlist = GROW_ARRAY(AS_STMTLIST, NULL, 0, 1);
+  AS_STMTLIST *newlist = malloc(sizeof *newlist);
   newlist->stmts = NULL;
   newlist->count = 0;
   newlist->capacity = 0;
@@ -126,7 +126,7 @@ AS_IF *as_new_if(AS_NODE *condition, AS_NODE *then, AS_IF *elsif) {
   //            if this AS_IF just contains the ELSE branch
   // then:      the statements to execute if condition is true
   // elsif:     further tests, or the else branch, or null
-  AS_IF *newif = GROW_ARRAY(AS_IF, NULL, 0, 1);
+  AS_IF *newif = malloc(sizeof *newif);
   newif->condition = condition;
   newif->then = then;
   newif->elsif = elsif;

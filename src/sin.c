@@ -236,7 +236,7 @@ int main(int argc, char **argv) {
         fseek(in, 0, SEEK_END);
         filesize = ftell(in);
         fseek(in, 0, SEEK_SET);
-        bytecode = GROW_ARRAY(unsigned char, bytecode, 0, filesize);
+        bytecode = realloc(bytecode, (size_t)filesize);
         fread(bytecode, filesize, sizeof(char), in);
         fclose(in);
         logmsg("Bytecode loaded: %d bytes.\n", filesize);
@@ -334,7 +334,7 @@ int main(int argc, char **argv) {
   boot->bytecode_len = filesize;
   // Prepare the loop - the boot item should be setting up tasks,
   // so the loop needs to be read for 'em.
-  config.loop = GROW_ARRAY(uv_loop_t, config.loop, 0, sizeof(uv_loop_t));
+  config.loop = malloc(sizeof *config.loop);
   uv_loop_init(config.loop);
 
   // This is a relatively safe restart point if things turn ugly.

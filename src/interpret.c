@@ -220,7 +220,7 @@ static VALUE_t concat_two_strings(VALUE_t left, VALUE_t right) {
     if (left_meta) {
       out_cap = strbuf_growth_capacity(needed);
     }
-    out = GROW_ARRAY(char, NULL, 0, out_cap);
+    out = malloc(out_cap);
     memcpy(out, left.s, left_len);
     memcpy(out + left_len, right.s, right_len + 1);
     free_runtime_string(left.s);
@@ -502,7 +502,7 @@ uint8_t *op_pushstr(uint8_t *nextop, ITEM_t *item) {
   nextop = bc_read_u16(nextop, &len, "OP_PUSHSTR length");
   if (!nextop) return NULL;
   REQUIRE_BYTES(nextop, len, "OP_PUSHSTR payload");
-  v.s = GROW_ARRAY(char, NULL, 0, len+1);
+  v.s = malloc((size_t)len + 1);
   memcpy(v.s, nextop, len);
   v.s[len] = 0;
   push_stack(VM->stack, v);
@@ -761,7 +761,7 @@ typedef struct {
 } STRBUILDER_t;
 
 static void sb_init(STRBUILDER_t *sb, uint32_t cap) {
-  sb->buf = GROW_ARRAY(char, NULL, 0, cap);
+  sb->buf = malloc(cap);
   sb->cap = cap;
   sb->len = 0;
   sb->buf[0] = '\0';
@@ -776,7 +776,7 @@ static void sb_ensure(STRBUILDER_t *sb, uint32_t add_len) {
   while (new_cap < need) {
     new_cap *= 2;
   }
-  sb->buf = GROW_ARRAY(char, sb->buf, sb->cap, new_cap);
+  sb->buf = realloc(sb->buf, new_cap);
   sb->cap = new_cap;
 }
 
@@ -819,12 +819,14 @@ static bool decode_assigncode_params(uint8_t **opcodep, CODEITEM_INPUT_t *in) {
     if (in->param_count >= MAX_ASSIGNCODE_PARAMS) return false;
     if ((in->total_param_len + param_len) > MAX_ASSIGNCODE_PARAM_BYTES) return false;
     REQUIRE_BYTES(*opcodep, param_len, "OP_ASSIGNCODEITEM param-bytes");
-    char *param = GROW_ARRAY(char, NULL, 0, param_len + 1);
+    char *param = malloc((size_t)param_len + 1);
     memcpy(param, *opcodep, param_len);
     param[param_len] = '\0';
     *opcodep += param_len;
-    in->params = GROW_ARRAY(const char *, (char **)in->params, in->param_count, in->param_count + 1);
-    in->param_lens = GROW_ARRAY(uint16_t, in->param_lens, in->param_count, in->param_count + 1);
+    in->params = realloc((char **)in->params,
+                         sizeof *in->params * (in->param_count + 1));
+    in->param_lens = realloc(in->param_lens,
+                             sizeof *in->param_lens * (in->param_count + 1));
     in->params[in->param_count] = param;
     in->param_lens[in->param_count] = param_len;
     in->param_count++;
@@ -838,7 +840,7 @@ static bool decode_assigncode_source(uint8_t **opcodep, CODEITEM_INPUT_t *in) {
   memcpy(&in->source_len, *opcodep, 2);
   *opcodep += 2;
   REQUIRE_BYTES(*opcodep, in->source_len, "OP_ASSIGNCODEITEM source-bytes");
-  in->source = GROW_ARRAY(char, NULL, 0, in->source_len + 1);
+  in->source = malloc((size_t)in->source_len + 1);
   memcpy(in->source, *opcodep, in->source_len);
   in->source[in->source_len] = '\0';
   *opcodep += in->source_len;

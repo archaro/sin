@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
         fseek(in, 0, SEEK_END);
         filesize = ftell(in);
         fseek(in, 0, SEEK_SET);
-        bytecode = GROW_ARRAY(unsigned char, bytecode, 0, filesize);
+        bytecode = realloc(bytecode, (size_t)filesize);
         fread(bytecode, filesize, sizeof(char), in);
         fclose(in);
         logmsg("Bytecode loaded: %d bytes.\n", filesize);
