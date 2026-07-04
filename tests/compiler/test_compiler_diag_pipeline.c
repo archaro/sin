@@ -90,8 +90,31 @@ static void test_compiler_diag_repeated_set_reset_cycles(void) {
   }
 }
 
+static void test_compiler_diag_rejects_256_locals(void) {
+  char source[8192];
+  size_t used = 0;
+  for (int i = 0; i < 256; i++) {
+    int written = snprintf(source + used, sizeof(source) - used,
+                           "@local_%d = %d;\n", i, i);
+    ASSERT_TRUE(written > 0);
+    ASSERT_TRUE((size_t)written < sizeof(source) - used);
+    used += (size_t)written;
+  }
+
+  OUTPUT_t *out = NULL;
+  CompilerDiagnostic d;
+  compiler_diag_init(&d);
+  int8_t rc = compile_source_to_bytecode_diag(source, used, &out, &d);
+  ASSERT_EQ_INT(ERR_COMP_TOOMANYLOCALS, rc);
+  ASSERT_EQ_INT(ERR_COMP_TOOMANYLOCALS, d.code);
+  ASSERT_EQ_INT(DIAG_PHASE_SEMANT, d.phase);
+  ASSERT_TRUE(out == NULL);
+  compiler_diag_reset(&d);
+}
+
 void test_compiler_diag_pipeline(void){
   test_compiler_diag_repeated_set_reset_cycles();
+  test_compiler_diag_rejects_256_locals();
   test_scomp_cli_malformed_diagnostic_shape();
   OUTPUT_t *out=NULL; CompilerDiagnostic d; compiler_diag_init(&d);
   int8_t rc = compile_source_to_bytecode_diag("^;",2,&out,&d);

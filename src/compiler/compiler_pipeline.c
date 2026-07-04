@@ -148,6 +148,12 @@ int8_t compile_parse_input_to_bytecode_diag(const ParseInput *input, OUTPUT_t **
       if (out_diag) compiler_diag_set(out_diag, rc, DIAG_PHASE_PARSE, errdetail ? errdetail : "");
     }
     if (rc == ERR_NOERROR) rc = sem_check_locals_diag(ctx.ast_root, &errdetail, out_diag, ctx.sem_ctx);
+    if (rc == ERR_NOERROR && ctx.sem_ctx->count > UINT8_MAX) {
+      compdiag_setf_once_diag(&rc, &errdetail, out_diag,
+                              ERR_COMP_TOOMANYLOCALS, DIAG_PHASE_SEMANT,
+                              "compile", "locals exceeds u8 max: %u",
+                              ctx.sem_ctx->count);
+    }
     if (rc == ERR_NOERROR) rc = lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ctx.ir_unit, &errdetail, out_diag);
     if (rc == ERR_NOERROR) rc = ir_validate_diag(ctx.ir_unit, ctx.sem_ctx->count, &errdetail, out_diag);
     if (rc == ERR_NOERROR) {
