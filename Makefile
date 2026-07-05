@@ -36,6 +36,7 @@ LIB_DIR := lib
 TEST_DIR := tests
 TEST_BIN := $(TEST_DIR)/test-compiler
 NETWORK_TEST_BIN := $(TEST_DIR)/network/test-network
+NETWORK_TEST_DEPS := $(NETWORK_TEST_BIN).d
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -194,6 +195,7 @@ $(OBJ_DIR)/lexer.o: $(SRC_DIR)/lexer.c
 
 # Include dependency files
 -include $(DEPS)
+-include $(NETWORK_TEST_DEPS)
 
 test: $(TEST_BIN) test-network
 	./$(TEST_BIN)
@@ -217,7 +219,8 @@ $(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
 	$(CC) $(CFLAGS) $(DEBUG) -Isrc -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
 $(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/network.c $(SRC_DIR)/network.h
-	$(CC) $(CFLAGS) $(DEBUG) -Isrc -I$(TEST_DIR) -o $@ $(TEST_DIR)/network/test_network.c $(LDFLAGS) $(LIBS)
+	$(CC) $(CFLAGS) $(DEBUG) -Isrc -I$(TEST_DIR) -MF $(NETWORK_TEST_DEPS) \
+		-o $@ $(TEST_DIR)/network/test_network.c $(LDFLAGS) $(LIBS)
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)
@@ -287,4 +290,4 @@ fuzz-sin-object: clean
 
 clean:
 	rm -rf $(OBJ_DIR) $(LIB_DIR) $(PROGRAMS) $(TEST_BIN) $(FUZZ_BINS) \
-		$(NETWORK_TEST_BIN) $(PARSER_GENERATED) $(LEXER_GENERATED)
+		$(NETWORK_TEST_BIN) $(NETWORK_TEST_DEPS) $(PARSER_GENERATED) $(LEXER_GENERATED)
