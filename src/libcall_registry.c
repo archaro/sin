@@ -1,0 +1,377 @@
+// Libcall registry allocation and lookup.
+
+// Licensed under the MIT License - see LICENSE file for details.
+
+#include <stdlib.h>
+#include <string.h>
+
+#include "libcall_registry.h"
+#include "log.h"
+#include "memory.h"
+
+
+
+static int libcall_name_entry_cmp(const void *a, const void *b) {
+  const LIBCALL_NAME_ENTRY_t *ea = (const LIBCALL_NAME_ENTRY_t *)a;
+  const LIBCALL_NAME_ENTRY_t *eb = (const LIBCALL_NAME_ENTRY_t *)b;
+  return strcmp(ea->lookup_key, eb->lookup_key);
+}
+
+static bool libcall_make_key(const char *libname, const char *callname,
+                             char **out_key) {
+  size_t liblen = strlen(libname);
+  size_t calllen = strlen(callname);
+  size_t keylen;
+  size_t allocation_size;
+  if (alloc_add_overflow(liblen, 1, &keylen) ||
+      alloc_add_overflow(keylen, calllen, &keylen) ||
+      alloc_add_overflow(keylen, 1, &allocation_size)) {
+    return false;
+  }
+  char *key = alloc_malloc(allocation_size);
+  if (!key) {
+    return false;
+  }
+  memcpy(key, libname, liblen);
+  key[liblen] = '\x1f';
+  memcpy(key + liblen + 1, callname, calllen);
+  key[keylen] = '\0';
+  *out_key = key;
+  return true;
+}
+
+static LIBCALL_REG_ENTRY_t *libcall_registry = NULL;
+static LIBCALL_NAME_ENTRY_t *libcall_name_registry = NULL;
+static size_t libcall_registry_width = 0;
+static size_t libcall_registry_height = 0;
+static size_t libcall_name_registry_count = 0;
+static OP_t libcall_token_registry[256] = {0};
+static bool libcall_token_present[256] = {0};
+static bool libcall_registry_ready = false;
+
+
+static bool libcall_args_in_range(uint8_t args) {
+  return args <= 32;
+}
+
+typedef struct LIBCALL_KEY_NODE {
+  char *key;
+  struct LIBCALL_KEY_NODE *next;
+} LIBCALL_KEY_NODE_t;
+
+static uint32_t libcall_key_hash(const char *key) {
+  // djb2 hash
+  uint32_t hash = 5381U;
+  for (unsigned char c = (unsigned char)*key; c != '\0'; c = (unsigned char)*++key) {
+    hash = ((hash << 5) + hash) + c;
+  }
+  return hash;
+}
+
+static void libcall_key_set_free(LIBCALL_KEY_NODE_t **buckets, size_t bucket_count) {
+  if (!buckets) return;
+  for (size_t i = 0; i < bucket_count; i++) {
+    LIBCALL_KEY_NODE_t *node = buckets[i];
+    while (node) {
+      LIBCALL_KEY_NODE_t *next = node->next;
+      if (node->key) {
+        free(node->key);
+      }
+      free(node);
+      node = next;
+    }
+  }
+  free(buckets);
+}
+
+static bool libcall_registry_fail(const char *msg, const LIBCALL_t *entry, size_t idx, bool fail_fast) {
+  logerr("FATAL: libcall registry self-check failed: %s (entry %zu: %s.%s lib=%d call=%d args=%u)\n",
+         msg, idx,
+         entry && entry->libname ? entry->libname : "<null-lib>",
+         entry && entry->callname ? entry->callname : "<null-call>",
+         entry ? (int)entry->lib_index : -1,
+         entry ? (int)entry->call_index : -1,
+         entry ? (unsigned)entry->args : 0U);
+  if (fail_fast) {
+    abort();
+  }
+  return false;
+}
+
+bool libcall_registry_self_check(const LIBCALL_t *calls, bool fail_fast) {
+  if (!calls) return libcall_registry_fail("registry pointer is null", NULL, 0, fail_fast);
+
+  bool seen_lib[256] = {0};
+  bool seen_pair[256][256] = {{0}};
+  size_t key_bucket_count = 257;
+  LIBCALL_KEY_NODE_t **seen_keys =
+      alloc_calloc(key_bucket_count, sizeof *seen_keys);
+  if (!seen_keys) {
+    return libcall_registry_fail("failed to allocate textual key set", NULL, 0, fail_fast);
+  }
+  for (size_t i = 0; calls[i].libname != NULL || calls[i].callname != NULL; i++) {
+    const LIBCALL_t *e = &calls[i];
+    if (!e->libname || !e->callname || !e->func) {
+      libcall_key_set_free(seen_keys, key_bucket_count);
+      return libcall_registry_fail("entry requires non-null libname/callname/func", e, i, fail_fast);
+    }
+    if (e->lib_index < 0 || e->call_index < 0) {
+      libcall_key_set_free(seen_keys, key_bucket_count);
+      return libcall_registry_fail("negative lib_index/call_index", e, i, fail_fast);
+    }
+    if (!libcall_args_in_range(e->args)) {
+      libcall_key_set_free(seen_keys, key_bucket_count);
+      return libcall_registry_fail("args out of acceptable range", e, i, fail_fast);
+    }
+
+    char *lookup_key = NULL;
+    if (!libcall_make_key(e->libname, e->callname, &lookup_key)) {
+      libcall_key_set_free(seen_keys, key_bucket_count);
+      return libcall_registry_fail("failed to allocate textual key", e, i, fail_fast);
+    }
+    size_t bucket = (size_t)(libcall_key_hash(lookup_key) % key_bucket_count);
+    for (LIBCALL_KEY_NODE_t *node = seen_keys[bucket]; node; node = node->next) {
+      if (strcmp(node->key, lookup_key) == 0) {
+        free(lookup_key);
+        libcall_key_set_free(seen_keys, key_bucket_count);
+        return libcall_registry_fail("duplicate textual key libname.callname", e, i, fail_fast);
+      }
+    }
+    LIBCALL_KEY_NODE_t *new_node = alloc_malloc(sizeof *new_node);
+    if (!new_node) {
+      free(lookup_key);
+      libcall_key_set_free(seen_keys, key_bucket_count);
+      return libcall_registry_fail("failed to allocate textual key node", e, i, fail_fast);
+    }
+    new_node->key = lookup_key;
+    new_node->next = seen_keys[bucket];
+    seen_keys[bucket] = new_node;
+
+    uint8_t li = (uint8_t)e->lib_index, ci = (uint8_t)e->call_index;
+    if (seen_pair[li][ci]) {
+      libcall_key_set_free(seen_keys, key_bucket_count);
+      return libcall_registry_fail("duplicate numeric key (lib_index,call_index)", e, i, fail_fast);
+    }
+    seen_pair[li][ci] = true;
+    seen_lib[li] = true;
+  }
+
+  int max_lib = -1;
+  for (int i=0;i<256;i++) if (seen_lib[i]) max_lib = i;
+  for (int i=0;i<=max_lib;i++) if (!seen_lib[i] && i!=0) {
+    libcall_key_set_free(seen_keys, key_bucket_count);
+    return libcall_registry_fail("lib_index values must be contiguous from 1..max", &calls[0], 0, fail_fast);
+  }
+  libcall_key_set_free(seen_keys, key_bucket_count);
+  return true;
+}
+static size_t libcall_registry_index(uint8_t lib_index, uint8_t call_index) {
+  return ((size_t)lib_index * libcall_registry_width) + (size_t)call_index;
+}
+
+void libcall_free_registry(void) {
+  if (libcall_name_registry) {
+    for (size_t i = 0; i < libcall_name_registry_count; i++) {
+      if (libcall_name_registry[i].lookup_key) {
+        free(libcall_name_registry[i].lookup_key);
+        libcall_name_registry[i].lookup_key = NULL;
+      }
+    }
+    free(libcall_name_registry);
+  }
+
+  if (libcall_registry) {
+    free(libcall_registry);
+  }
+
+  libcall_registry = NULL;
+  libcall_name_registry = NULL;
+  libcall_registry_width = 0;
+  libcall_registry_height = 0;
+  libcall_name_registry_count = 0;
+  memset(libcall_token_registry, 0, sizeof(libcall_token_registry));
+  memset(libcall_token_present, 0, sizeof(libcall_token_present));
+  libcall_registry_ready = false;
+}
+
+void libcall_reset_registry_for_tests(void) {
+  libcall_free_registry();
+}
+
+bool libcall_init_registry(void) {
+  LIBCALL_REG_ENTRY_t *tmp_registry = NULL;
+  LIBCALL_NAME_ENTRY_t *tmp_name_registry = NULL;
+  size_t tmp_registry_width = 0;
+  size_t tmp_registry_height = 0;
+  size_t tmp_count = 0;
+  size_t dense_count = 0;
+  OP_t tmp_token_registry[256] = {0};
+  bool tmp_token_present[256] = {0};
+
+  if (libcall_registry_ready) {
+    return true;
+  }
+
+  if (!libcall_registry_self_check(libcalls, false)) {
+    return false;
+  }
+
+  int8_t max_lib_index = -1;
+  int8_t max_call_index = -1;
+  size_t count = 0;
+  for (size_t i = 0; libcalls[i].libname != NULL; i++) {
+    if (libcalls[i].lib_index < 0 || libcalls[i].call_index < 0) {
+      return false;
+    }
+    if (libcalls[i].lib_index > max_lib_index) {
+      max_lib_index = libcalls[i].lib_index;
+    }
+    if (libcalls[i].call_index > max_call_index) {
+      max_call_index = libcalls[i].call_index;
+    }
+    count++;
+  }
+
+  tmp_registry_height = (size_t)max_lib_index + 1;
+  tmp_registry_width = (size_t)max_call_index + 1;
+  tmp_count = count;
+  if (alloc_mul_overflow(tmp_registry_height, tmp_registry_width,
+                         &dense_count)) {
+    goto fail;
+  }
+
+  tmp_registry = alloc_calloc(dense_count, sizeof *tmp_registry);
+  tmp_name_registry = alloc_calloc(tmp_count, sizeof *tmp_name_registry);
+  if (!tmp_registry || !tmp_name_registry) {
+    goto fail;
+  }
+
+  for (size_t i = 0; i < tmp_count; i++) {
+    uint8_t lib_index = (uint8_t)libcalls[i].lib_index;
+    uint8_t call_index = (uint8_t)libcalls[i].call_index;
+    size_t dense_index = ((size_t)lib_index * tmp_registry_width) + (size_t)call_index;
+    if (tmp_registry[dense_index].present) {
+      goto fail;
+    }
+    tmp_registry[dense_index].func = libcalls[i].func;
+    tmp_registry[dense_index].args = libcalls[i].args;
+    tmp_registry[dense_index].present = true;
+
+    tmp_name_registry[i].libname = libcalls[i].libname;
+    tmp_name_registry[i].callname = libcalls[i].callname;
+    tmp_name_registry[i].lib_index = lib_index;
+    tmp_name_registry[i].call_index = call_index;
+    tmp_name_registry[i].args = libcalls[i].args;
+    tmp_name_registry[i].token = (uint8_t)i;
+    tmp_name_registry[i].lookup_key = NULL;
+    if (!libcall_make_key(libcalls[i].libname, libcalls[i].callname,
+                          &tmp_name_registry[i].lookup_key)) {
+      goto fail;
+    }
+    tmp_token_registry[(uint8_t)i] = libcalls[i].func;
+    tmp_token_present[(uint8_t)i] = true;
+  }
+
+  qsort(tmp_name_registry, tmp_count, sizeof(LIBCALL_NAME_ENTRY_t),
+        libcall_name_entry_cmp);
+
+  for (size_t i = 1; i < tmp_count; i++) {
+    if (strcmp(tmp_name_registry[i - 1].lookup_key,
+               tmp_name_registry[i].lookup_key) == 0) {
+      goto fail;
+    }
+  }
+
+  libcall_registry = tmp_registry;
+  libcall_name_registry = tmp_name_registry;
+  libcall_registry_width = tmp_registry_width;
+  libcall_registry_height = tmp_registry_height;
+  libcall_name_registry_count = tmp_count;
+  memcpy(libcall_token_registry, tmp_token_registry, sizeof(libcall_token_registry));
+  memcpy(libcall_token_present, tmp_token_present, sizeof(libcall_token_present));
+  libcall_registry_ready = true;
+  return true;
+
+fail:
+  memset(tmp_token_registry, 0, sizeof(tmp_token_registry));
+  memset(tmp_token_present, 0, sizeof(tmp_token_present));
+  for (size_t i = 0; i < tmp_count; i++) {
+    if (tmp_name_registry && tmp_name_registry[i].lookup_key) {
+      free(tmp_name_registry[i].lookup_key);
+      tmp_name_registry[i].lookup_key = NULL;
+    }
+  }
+  if (tmp_name_registry) {
+    free(tmp_name_registry);
+  }
+  if (tmp_registry) {
+    free(tmp_registry);
+  }
+  return false;
+}
+
+bool libcall_validate_registry(void) {
+  if (!libcall_init_registry()) {
+    return false;
+  }
+
+  for (size_t i = 0; libcalls[i].libname != NULL; i++) {
+    uint8_t lib_index = (uint8_t)libcalls[i].lib_index;
+    uint8_t call_index = (uint8_t)libcalls[i].call_index;
+    if (lib_index >= libcall_registry_height || call_index >= libcall_registry_width) {
+      return false;
+    }
+    size_t dense_index = libcall_registry_index(lib_index, call_index);
+    if (!libcall_registry[dense_index].present) {
+      return false;
+    }
+    if (libcall_registry[dense_index].func != libcalls[i].func ||
+        libcall_registry[dense_index].args != libcalls[i].args) {
+      return false;
+    }
+  }
+  return true;
+}
+
+
+bool libcall_lookup_token(const char *libname, const char *callname, uint8_t *token, uint8_t *args) {
+  if (!libcall_registry_ready && !libcall_init_registry()) return false;
+  char *lookup_key = NULL;
+  if (!libcall_make_key(libname, callname, &lookup_key)) return false;
+  LIBCALL_NAME_ENTRY_t needle = {.lookup_key = lookup_key};
+  LIBCALL_NAME_ENTRY_t *entry = bsearch(&needle, libcall_name_registry,
+      libcall_name_registry_count, sizeof(LIBCALL_NAME_ENTRY_t),
+      libcall_name_entry_cmp);
+  free(lookup_key);
+  if (!entry) return false;
+  if (token) *token = entry->token;
+  if (args) *args = entry->args;
+  return true;
+}
+
+bool libcall_token_arg_count(uint8_t token, uint8_t *args) {
+  for (size_t i = 0; libcalls[i].libname != NULL; i++) {
+    if (i != token) continue;
+    if (args) *args = libcalls[i].args;
+    return true;
+  }
+  return false;
+}
+
+bool libcall_names_unique(const LIBCALL_t *calls) {
+  for (size_t i = 0; calls[i].libname != NULL; i++) {
+    for (size_t j = i + 1; calls[j].libname != NULL; j++) {
+      if (strcmp(calls[i].libname, calls[j].libname) == 0 &&
+          strcmp(calls[i].callname, calls[j].callname) == 0) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+OP_t libcall_func_token(uint8_t token) {
+  if (!libcall_registry_ready && !libcall_init_registry()) return NULL;
+  if (!libcall_token_present[token]) return NULL;
+  return libcall_token_registry[token];
+}
