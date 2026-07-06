@@ -29,20 +29,6 @@ typedef struct Item ITEM_t;
 typedef struct Entry ENTRY_t;
 typedef struct HashTable HASHTABLE_t;
 
-// Define the hash table entry
-struct Entry {
-  char *key;
-  ITEM_t *child;
-  ENTRY_t *next;
-};
-
-// This hashtable contains pointers to all the children of this Item.
-struct HashTable {
-  uint32_t size;
-  uint32_t entry_count;
-  ENTRY_t **table; // An array of pointers to ENTRY_t
-};
-
 typedef enum {ITEM_value, ITEM_code} ITEM_e;
 typedef enum {
   ITEMSTORE_DURABLE_FULL = 0,
@@ -57,45 +43,24 @@ struct Item {
   bool inuse;            // Set when an item is being executed.
   uint8_t pad[7];        // 6 bytes of padding for 8-byte alignment
   ITEM_t *parent;        // 8 bytes - Pointer to the parent item
-  HASHTABLE_t *children; // 8 bytes - Hash table for immediate children
-  uint8_t *bytecode;     // 8 bytes - Bytecode if a code item
-  VALUE_t value;         // 16 bytes - (at present)
+  HASHTABLE_t *children; // Owned hash table for immediate children.
+  uint8_t *bytecode;     // Owned bytecode buffer for code items; NULL for value items.
+  VALUE_t value;         // Owned VALUE_t payload for value items; destroyed with the item.
   size_t ordered_size;  // Number of children in the ordered array
   size_t ordered_capacity; // Max size of ordered array
-  ITEM_t **ordered_array; // Ordered array of all children
+  ITEM_t **ordered_array; // Owned array of borrowed child pointers; children own themselves.
 };
-
-// These functions are not intended to be called externally.
-HASHTABLE_t *create_hashtable(int size);
-uint32_t simple_hash(const char *key, size_t len);
-HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize);
-float calculate_load_factor(HASHTABLE_t *hashTable);
-HASHTABLE_t *maybe_resize_hashtable(HASHTABLE_t *hashtable);
-void insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child);
-ITEM_t *search_hashtable(HASHTABLE_t *hashtable, const char *key);
-void delete_hashtable(HASHTABLE_t *hashtable, const char *key);
-void free_hashtable(HASHTABLE_t *hashtable);
-uint32_t murmur3_32(const char *key, size_t len, uint32_t seed);
-char *substr(const char *str, size_t begin, size_t len);
-bool write_item(FILE *file, ITEM_t *item);
-ITEM_t *read_item(FILE *file, ITEM_t *parent);
-
-// Allocator API
-// Defined in the itemstore as it defines allocators for specific
-// object types.  Probably needs to be defined elsewhere, though.
-ENTRY_t *allocate_entry();
-HASHTABLE_t *allocate_hashtable();
-ITEM_t *allocate_item();
-void deallocate_entry(ENTRY_t *entry);
-void deallocate_hashtable(HASHTABLE_t *hashtable);
-void deallocate_item(ITEM_t *item);
 
 // Itemstore API
 ITEM_t *make_root_item(const char *name);
+// make_item takes ownership of string payloads inside value for value items,
+// and takes ownership of bytecode for code items.
 ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
                                 VALUE_t value, uint8_t *bytecode, int len);
 void destroy_item(ITEM_t *item);    
+// insert_item/set_item take ownership of string payloads inside value.
 ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value);
+// insert_code_item takes ownership of bytecode on success.
 ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
                                                         uint8_t *bytecode);
 ITEM_t *find_item(ITEM_t *root, const char *item_name);
@@ -104,6 +69,7 @@ ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index);
 void delete_item(ITEM_t *root, const char *item_name);
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value);
 void get_itemname(ITEM_t *item, char *itemname);
+// Returns a newly allocated string owned by the caller.
 char *get_itemfilename(ITEM_t *item);
 bool save_itemsource(ITEM_t *item, char *source);
 bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability);

@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "item.h"
+#include "item_internal.h"
 #include "test_assert.h"
 
 void test_find_item_cached_hit_and_negative_cache(void) {
