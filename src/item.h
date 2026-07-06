@@ -53,28 +53,50 @@ struct Item {
 
 // Itemstore API
 ITEM_t *make_root_item(const char *name);
-// make_item takes ownership of string payloads inside value for value items,
-// and takes ownership of bytecode for code items.
+// make_item creates an item owned by its parent/itemstore. For ITEM_value, the
+// item takes ownership of value, including any VALUE_str payload. For ITEM_code,
+// the item takes ownership of bytecode and frees it from destroy_item(); value is
+// ignored. On failure before an item is constructed, the caller still owns the
+// supplied payloads.
 ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
                                 VALUE_t value, uint8_t *bytecode, int len);
+// Recursively destroys item and all children. Frees owned bytecode for code
+// items, owned VALUE_t string payloads for value items, the child table, ordered
+// child-pointer array, and the ITEM_t itself.
 void destroy_item(ITEM_t *item);    
-// insert_item/set_item take ownership of string payloads inside value.
+// insert_item creates or replaces a value item. On success, the itemstore takes
+// ownership of value, including any VALUE_str payload; callers must not free the
+// string after transfer. Existing value payloads or code bytecode are freed
+// before replacement. If validation fails or replacement is rejected before the
+// value is stored, the caller retains ownership of value.
 ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value);
-// insert_code_item takes ownership of bytecode on success.
+// insert_code_item creates or replaces a code item. On success, the itemstore
+// takes ownership of bytecode and frees any previous code bytecode/value payload.
+// If validation fails or installation does not reach the final item, the caller
+// retains ownership of bytecode.
 ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
                                                         uint8_t *bytecode);
 ITEM_t *find_item(ITEM_t *root, const char *item_name);
 ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found);
 ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index);
 void delete_item(ITEM_t *root, const char *item_name);
+// set_item creates or replaces a value item. The itemstore takes ownership of
+// value, including any VALUE_str payload, whether updating an existing item or
+// inserting a new one. If validation fails, the caller retains ownership.
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value);
 void get_itemname(ITEM_t *item, char *itemname);
-// Returns a newly allocated string owned by the caller.
+// Returns a newly allocated source filename string owned by the caller; free it
+// with free(). The item is borrowed and not modified.
 char *get_itemfilename(ITEM_t *item);
+// Borrows item and source for the duration of the call. Does not take ownership
+// of source or modify/free it.
 bool save_itemsource(ITEM_t *item, char *source);
 bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability);
 void itemstore_set_sync_hook_for_tests(ITEMSTORE_SYNC_HOOK_t hook);
 bool save_itemstore(const char *filename, ITEM_t *root);
+// Loads and returns a newly allocated item tree. The caller owns the returned
+// root and must destroy it with destroy_item(); NULL indicates failure and
+// transfers no ownership.
 ITEM_t *load_itemstore(const char *filename); 
 void dump_item(ITEM_t *item, char *item_name, bool isroot);
 uint64_t get_itemstore_generation(void);
