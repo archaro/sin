@@ -22,6 +22,7 @@
 #include "value.h"
 #include "stack.h"
 #include "item.h"
+#include "runtime_decode.h"
 
 // The configuration object, defined in sin.c
 extern CONFIG_t config;
@@ -72,52 +73,21 @@ static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
   return false;
 }
 
-static inline bool require_bytes(RuntimeContext *ctx, uint8_t *nextop, size_t bytes, const char *opname) {
-  if (!ctx->current_frame_start || !ctx->current_frame_end) return true;
-  if (nextop > ctx->current_frame_end || (size_t)(ctx->current_frame_end - nextop) < bytes) {
-    char detail[128];
-    snprintf(detail, sizeof(detail), "%s truncated bytecode read (%zu bytes)", opname, bytes);
-    logerr("%s.\n", detail);
-    set_error_item(ERR_RUNTIME_TRUNCATED, detail);
-    return false;
+static bool report_decode_status(RuntimeDecodeStatus status) {
+  if (runtime_decode_status_ok(status)) return true;
+  if (status.code == RUNTIME_DECODE_TRUNCATED) {
+    logerr("%s.\n", status.detail);
+    set_error_item(ERR_RUNTIME_TRUNCATED, status.detail);
   }
-  return true;
+  return false;
+}
+
+static uint8_t *decode_next(RuntimeDecodeStatus status) {
+  return report_decode_status(status) ? status.next : NULL;
 }
 
 #define REQUIRE_BYTES(nextop, n, opname) \
-  do { if (!require_bytes(ctx, (nextop), (n), (opname))) return NULL; } while (0)
-
-static uint8_t *bc_read_u8(RuntimeContext *ctx, uint8_t *nextop, uint8_t *out, const char *opname) {
-  REQUIRE_BYTES(nextop, sizeof(*out), opname);
-  memcpy(out, nextop, sizeof(*out));
-  return nextop + sizeof(*out);
-}
-
-static uint8_t *bc_read_u16(RuntimeContext *ctx, uint8_t *nextop, uint16_t *out, const char *opname) {
-  REQUIRE_BYTES(nextop, sizeof(*out), opname);
-  memcpy(out, nextop, sizeof(*out));
-  return nextop + sizeof(*out);
-}
-
-static uint8_t *bc_read_i16(RuntimeContext *ctx, uint8_t *nextop, int16_t *out, const char *opname) {
-  REQUIRE_BYTES(nextop, sizeof(*out), opname);
-  memcpy(out, nextop, sizeof(*out));
-  return nextop + sizeof(*out);
-}
-
-static uint8_t *bc_read_u64_payload(RuntimeContext *ctx, uint8_t *nextop, uint64_t *out, const char *opname) {
-  REQUIRE_BYTES(nextop, sizeof(*out), opname);
-  memcpy(out, nextop, sizeof(*out));
-  return nextop + sizeof(*out);
-}
-
-static uint8_t *bc_read_i64(RuntimeContext *ctx, uint8_t *nextop, int64_t *out, const char *opname) {
-  uint64_t payload;
-  uint8_t *after = bc_read_u64_payload(ctx, nextop, &payload, opname);
-  if (!after) return NULL;
-  memcpy(out, &payload, sizeof(*out));
-  return after;
-}
+  do { if (!report_decode_status(require_bytes(&ctx->decoder, (nextop), (n), (opname)))) return NULL; } while (0)
 
 uint8_t *op_undefined(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 typedef struct {
@@ -344,7 +314,7 @@ uint8_t *op_pushint(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   VALUE_t v;
   v.type = VALUE_int;
-  nextop = bc_read_i64(ctx, nextop, &v.i, "OP_PUSHINT");
+  nextop = decode_next(bc_read_i64(&ctx->decoder, nextop, &v.i, "OP_PUSHINT"));
   if (!nextop) return NULL;
   push_stack(VM->stack, v);
   DISASS_LOG("OP_PUSHINT: %ld\n", v.i);
@@ -356,7 +326,7 @@ uint8_t *op_pushfloat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t v;
   v.type = VALUE_float;
   uint64_t bits;
-  nextop = bc_read_u64_payload(ctx, nextop, &bits, "OP_PUSHFLOAT");
+  nextop = decode_next(bc_read_u64_payload(&ctx->decoder, nextop, &bits, "OP_PUSHFLOAT"));
   if (!nextop) return NULL;
   v.f = value_float_from_bits(bits);
   push_stack(VM->stack, v);
@@ -367,7 +337,7 @@ uint8_t *op_pushfloat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_pushbool(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   uint8_t raw;
-  nextop = bc_read_u8(ctx, nextop, &raw, "OP_PUSHBOOL");
+  nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw, "OP_PUSHBOOL"));
   if (!nextop) return NULL;
   VALUE_t v;
   v.type = VALUE_bool;
@@ -382,7 +352,7 @@ uint8_t *op_inclocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // If that local is an int, increment it.  Otherwise complain.
   (void)item;
   uint8_t raw_index;
-  nextop = bc_read_u8(ctx, nextop, &raw_index, "OP_INCLOCAL");
+  nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_INCLOCAL"));
   if (!nextop) return NULL;
   uint8_t index = raw_index + VM->stack->base;
   if (VM->stack->stack[index].type == VALUE_int) {
@@ -399,7 +369,7 @@ uint8_t *op_declocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // If that local is an int, decrement it.  Otherwise complain.
   (void)item;
   uint8_t raw_index;
-  nextop = bc_read_u8(ctx, nextop, &raw_index, "OP_DECLOCAL");
+  nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_DECLOCAL"));
   if (!nextop) return NULL;
   uint8_t index = raw_index + VM->stack->base;
   if (VM->stack->stack[index].type == VALUE_int) {
@@ -416,7 +386,7 @@ uint8_t *op_jump(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // SIGNED int, and then modify the bytecode pointer by that amount.
   (void)item;
   int16_t offset;
-  nextop = bc_read_i16(ctx, nextop, &offset, "OP_JUMP");
+  nextop = decode_next(bc_read_i16(&ctx->decoder, nextop, &offset, "OP_JUMP"));
   if (!nextop) return NULL;
   DISASS_LOG("OP_JUMP: offset is  %d.\n", offset);
   return nextop - sizeof(offset) + offset;
@@ -431,7 +401,7 @@ uint8_t *op_jumpfalse(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   int16_t offset;
   uint8_t *offset_start = nextop;
-  nextop = bc_read_i16(ctx, nextop, &offset, "OP_JUMPFALSE");
+  nextop = decode_next(bc_read_i16(&ctx->decoder, nextop, &offset, "OP_JUMPFALSE"));
   if (!nextop) return NULL;
   VALUE_t v1;
   v1 = pop_stack(VM->stack);
@@ -454,7 +424,7 @@ uint8_t *op_savelocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the stack.
   (void)item;
   uint8_t raw_index;
-  nextop = bc_read_u8(ctx, nextop, &raw_index, "OP_SAVELOCAL");
+  nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_SAVELOCAL"));
   if (!nextop) return NULL;
   uint8_t index = raw_index + VM->stack->base;
   // First check if the current value is a string.  If so, free it.
@@ -469,7 +439,7 @@ uint8_t *op_getlocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the stack.
   (void)item;
   uint8_t raw_index;
-  nextop = bc_read_u8(ctx, nextop, &raw_index, "OP_GETLOCAL");
+  nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_GETLOCAL"));
   if (!nextop) return NULL;
   uint8_t index = raw_index + VM->stack->base;
 
@@ -498,7 +468,7 @@ uint8_t *op_pushstr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   v.type = VALUE_str;
   uint16_t len;
   // Get the length
-  nextop = bc_read_u16(ctx, nextop, &len, "OP_PUSHSTR length");
+  nextop = decode_next(bc_read_u16(&ctx->decoder, nextop, &len, "OP_PUSHSTR length"));
   if (!nextop) return NULL;
   REQUIRE_BYTES(nextop, len, "OP_PUSHSTR payload");
   v.s = malloc((size_t)len + 1);
@@ -690,7 +660,7 @@ uint8_t *op_logicalor(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
 uint8_t *op_libcall_token(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   uint8_t token;
-  nextop = bc_read_u8(ctx, nextop, &token, "OP_LIBCALL");
+  nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &token, "OP_LIBCALL"));
   if (!nextop) return NULL;
   DISASS_LOG("Calling libcall token %d.\n", token);
   OP_t libcall = libcall_func_token(token);
@@ -978,7 +948,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   // First, let's get the number of arguments passed to this item
   uint16_t arg_count;
-  nextop = bc_read_u16(ctx, nextop, &arg_count, "OP_FETCHITEM arg-count");
+  nextop = decode_next(bc_read_u16(&ctx->decoder, nextop, &arg_count, "OP_FETCHITEM arg-count"));
   if (!nextop) return NULL;
 
   // Now the item name.
@@ -1028,7 +998,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         // correctly adjusted to account for them at the top of the
         // current stack (they will be at the bottom of the frame for
         // the new item).
-        push_callstack(VM, item, nextop, i->bytecode[1], ctx->current_frame_start, ctx->current_frame_end);
+        push_callstack(VM, item, nextop, i->bytecode[1], (uint8_t *)ctx->decoder.frame_start, (uint8_t *)ctx->decoder.frame_end);
         // Invariant at call-entry:
         // - caller VM stack/base/locals/params are captured in callstack.
         // - caller continuation (item + nextop + bytecode bounds) is captured.
@@ -1453,8 +1423,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
 
   if (!verify_runtime_bytecode(ctx, ctx->current_item)) {
     ctx->current_item = NULL;
-    ctx->current_frame_start = NULL;
-    ctx->current_frame_end = NULL;
+    runtime_decoder_init(&ctx->decoder, NULL, NULL);
     return VALUE_NIL;
   }
 
@@ -1464,8 +1433,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   VM->stack->locals = ctx->current_item->bytecode[0];
   VM->stack->params = ctx->current_item->bytecode[1];
   uint8_t *op = ctx->current_item->bytecode + 2;
-  ctx->current_frame_start = op;
-  ctx->current_frame_end = ctx->current_item->bytecode + ctx->current_item->bytecode_len;
+  runtime_decoder_init(&ctx->decoder, op, ctx->current_item->bytecode + ctx->current_item->bytecode_len);
 
   while (true) {
     if (*op == 'h') {
@@ -1473,8 +1441,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
       ctx->current_item->inuse = false;
 
       if (size_callstack(VM->callstack) == 0) {
-        ctx->current_frame_start = NULL;
-        ctx->current_frame_end = NULL;
+        runtime_decoder_init(&ctx->decoder, NULL, NULL);
         ctx->current_item = NULL;
         return return_value;
       }
@@ -1486,8 +1453,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
       ctx->current_item = prev_frame->item;
       ctx->current_item->inuse = true;
       op = prev_frame->nextop;
-      ctx->current_frame_start = prev_frame->bytecode_start;
-      ctx->current_frame_end = prev_frame->bytecode_end;
+      runtime_decoder_init(&ctx->decoder, prev_frame->bytecode_start, prev_frame->bytecode_end);
       push_stack(VM->stack, return_value);
       continue;
     }
@@ -1503,13 +1469,11 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
         VM->stack->locals = ctx->current_item->bytecode[0];
         VM->stack->params = ctx->current_item->bytecode[1];
         op = ctx->current_item->bytecode + 2;
-        ctx->current_frame_start = op;
-        ctx->current_frame_end = ctx->current_item->bytecode + ctx->current_item->bytecode_len;
+        runtime_decoder_init(&ctx->decoder, op, ctx->current_item->bytecode + ctx->current_item->bytecode_len);
         continue;
       }
       ctx->current_item->inuse = false;
-      ctx->current_frame_start = NULL;
-      ctx->current_frame_end = NULL;
+      runtime_decoder_init(&ctx->decoder, NULL, NULL);
       ctx->current_item = NULL;
       return VALUE_NIL;
     }

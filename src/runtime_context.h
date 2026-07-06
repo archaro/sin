@@ -9,6 +9,7 @@
 
 #include "item.h"
 #include "vm.h"
+#include "runtime_decode.h"
 
 typedef struct RuntimeContext RuntimeContext;
 
@@ -18,8 +19,7 @@ typedef uint8_t *(*OP_t)(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 struct RuntimeContext {
   VM_t *vm;
-  uint8_t *current_frame_start;
-  uint8_t *current_frame_end;
+  RuntimeDecoder decoder;
   ITEM_t *current_item;
   ITEM_t *pending_call_item;
   OP_t opcode[256];
