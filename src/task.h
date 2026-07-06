@@ -16,6 +16,8 @@ typedef struct {
   uint64_t interval; // centiseconds
   uv_timer_t *timer;
   VM_t *vm;
+  ITEM_t *itemroot;
+  uv_loop_t *loop;
   RuntimeContext runtime_context;
   char itemname[MAX_ITEM_NAME];
 } TASK_t;

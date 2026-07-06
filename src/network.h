@@ -36,6 +36,8 @@ typedef struct {
   size_t input_line_length; // Bytes buffered since the last newline
 } LINE_t;
 
+extern LINE_t *line;
+
 bool validate_network_config();
 void init_networking();
 void init_listener(uint32_t port);
