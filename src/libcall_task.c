@@ -87,7 +87,7 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   newtask->itemroot = ctx->itemroot;
   newtask->loop = ctx->loop;
   newtask->runtime_context = *ctx;
-  memset(&newtask->runtime_context.libcalls, 0, sizeof(newtask->runtime_context.libcalls));
+  newtask->runtime_context.libcalls = NULL;
   newtask->runtime_context.initialized = false;
   (void)runtime_init(&newtask->runtime_context, newtask->vm);
   newtask->runtime_context.itemroot = newtask->itemroot;

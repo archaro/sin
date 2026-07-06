@@ -56,7 +56,7 @@ struct RuntimeContext {
   ITEM_t *current_item;
   ITEM_t *pending_call_item;
   OP_t opcode[256];
-  LibcallRegistry libcalls;
+  LibcallRegistry *libcalls;
   bool initialized;
 };
 

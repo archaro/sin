@@ -52,6 +52,7 @@ static void runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
   ctx->network.inputline_name = config.inputline;
   ctx->network.inputtext_name = config.inputtext;
   ctx->strict_validation = config.strict_validation;
+  (void)runtime_init(ctx, vm);
 }
 
 void close_all_tasks(uv_handle_t* handle, void* arg) {

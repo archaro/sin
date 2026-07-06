@@ -26,12 +26,67 @@
 
 #define VM ctx->vm
 
+typedef struct RuntimeRegistryNode {
+  LibcallRegistry *registry;
+  struct RuntimeRegistryNode *next;
+} RuntimeRegistryNode;
+
+static RuntimeRegistryNode *runtime_registry_nodes = NULL;
+static bool runtime_registry_cleanup_registered = false;
+
+static void runtime_registry_cleanup_all(void) {
+  RuntimeRegistryNode *node = runtime_registry_nodes;
+  runtime_registry_nodes = NULL;
+  while (node) {
+    RuntimeRegistryNode *next = node->next;
+    libcall_registry_destroy(node->registry);
+    free(node->registry);
+    free(node);
+    node = next;
+  }
+}
+
+static bool runtime_registry_track(LibcallRegistry *registry) {
+  RuntimeRegistryNode *node = malloc(sizeof(*node));
+  if (!node) return false;
+  node->registry = registry;
+  node->next = runtime_registry_nodes;
+  runtime_registry_nodes = node;
+  if (!runtime_registry_cleanup_registered) {
+    atexit(runtime_registry_cleanup_all);
+    runtime_registry_cleanup_registered = true;
+  }
+  return true;
+}
+
+static void runtime_registry_untrack(LibcallRegistry *registry) {
+  RuntimeRegistryNode **link = &runtime_registry_nodes;
+  while (*link) {
+    RuntimeRegistryNode *node = *link;
+    if (node->registry == registry) {
+      *link = node->next;
+      free(node);
+      return;
+    }
+    link = &node->next;
+  }
+}
+
 bool runtime_init(RuntimeContext *ctx, VM_t *vm) {
   if (!ctx) return false;
-  memset(ctx, 0, sizeof(*ctx));
-  ctx->vm = vm;
+  if (vm) ctx->vm = vm;
+  if (ctx->initialized) return true;
+  if (!ctx->libcalls) {
+    ctx->libcalls = calloc(1, sizeof(*ctx->libcalls));
+    if (!ctx->libcalls) return false;
+    if (!runtime_registry_track(ctx->libcalls)) {
+      free(ctx->libcalls);
+      ctx->libcalls = NULL;
+      return false;
+    }
+  }
   libcall_registry_self_check(libcalls, true);
-  if (!libcall_registry_init(&ctx->libcalls)) {
+  if (!libcall_registry_init(ctx->libcalls)) {
     logerr("Failed to initialize libcall registry.\n");
     return false;
   }
@@ -42,13 +97,20 @@ bool runtime_init(RuntimeContext *ctx, VM_t *vm) {
 
 void runtime_destroy(RuntimeContext *ctx) {
   if (!ctx) return;
-  libcall_registry_destroy(&ctx->libcalls);
+  if (ctx->libcalls) {
+    runtime_registry_untrack(ctx->libcalls);
+    libcall_registry_destroy(ctx->libcalls);
+    free(ctx->libcalls);
+    ctx->libcalls = NULL;
+  }
   memset(ctx->opcode, 0, sizeof(ctx->opcode));
   ctx->initialized = false;
 }
 
 void runtime_context_init(RuntimeContext *ctx, VM_t *vm) {
-  (void)runtime_init(ctx, vm);
+  if (!ctx) return;
+  memset(ctx, 0, sizeof(*ctx));
+  ctx->vm = vm;
 }
 
 static const char *runtime_item_label(ITEM_t *item, char *buffer, size_t size) {
@@ -529,7 +591,7 @@ uint8_t *op_libcall_token(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &token, "OP_LIBCALL"));
   if (!nextop) return NULL;
   DISASS_LOG("Calling libcall token %d.\n", token);
-  OP_t libcall = libcall_registry_func_token(&ctx->libcalls, token);
+  OP_t libcall = libcall_registry_func_token(ctx->libcalls, token);
   if (!libcall) {
     char detail[64];
     snprintf(detail, sizeof(detail), "Unknown libcall token %u", token);
