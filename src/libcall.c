@@ -28,7 +28,7 @@ extern CONFIG_t config;
 extern LINE_t *line;
 
 // Some shorthand
-#define VM config.vm
+#define VM ctx->vm
 
 // Popped VALUE_t ownership rules in this file:
 // - Callers own popped values and must free any owned string payload exactly once.
@@ -37,13 +37,13 @@ static inline bool lc_value_is_type(VALUE_t v, VALUE_e type) {
   return value_is_type(&v, type);
 }
 
-static inline uint8_t *lc_invalid_args_return(uint8_t *nextop, VALUE_t ret) {
+static inline uint8_t *lc_invalid_args_return(RuntimeContext *ctx, uint8_t *nextop, VALUE_t ret) {
   set_error_item(ERR_RUNTIME_INVALIDARGS, NULL);
   push_stack(VM->stack, ret);
   return nextop;
 }
 
-static inline uint8_t *lc_invalid_args_detail_return(uint8_t *nextop, VALUE_t ret, const char *detail) {
+static inline uint8_t *lc_invalid_args_detail_return(RuntimeContext *ctx, uint8_t *nextop, VALUE_t ret, const char *detail) {
   set_error_item(ERR_RUNTIME_INVALIDARGS, detail);
   push_stack(VM->stack, ret);
   return nextop;
@@ -61,7 +61,7 @@ static inline void lc_cleanup_cstr(char *s) {
   }
 }
 
-uint8_t *lc_sys_backup(uint8_t *nextop, ITEM_t *item) {
+uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Create a backup of the itemstore.
   // All of the following is a long-winded way to get a backup filename.
   (void)item;
@@ -81,7 +81,7 @@ uint8_t *lc_sys_backup(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
+uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Pop the top of the stack and write it to the syslog
   // Try to do something sensible if the type is not a string.
   (void)item;
@@ -117,7 +117,7 @@ uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *lc_sys_shutdown(uint8_t *nextop, ITEM_t *item) {
+uint8_t *lc_sys_shutdown(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // End the game loop, thereby shutting down neatly, and
   // saving the itemstore.
   // This call takes no parameters.
@@ -130,7 +130,7 @@ uint8_t *lc_sys_shutdown(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *lc_sys_abort(uint8_t *nextop, ITEM_t *item) {
+uint8_t *lc_sys_abort(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // End the game loop, thereby aborting, and not
   // saving the itemstore.
   // This call takes no parameters.
@@ -143,7 +143,7 @@ uint8_t *lc_sys_abort(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
+uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Compile and execute some Sinistra code.
   // This call takes one parameter, expected to be a string.
   (void)item;
@@ -152,7 +152,7 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   if (!lc_value_is_type(val, VALUE_str)) {
     logmsg("Sys.compile called with non-string value.\n");
     FREE_STR(val);
-    return lc_invalid_args_detail_return(nextop, VALUE_FALSE,
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_FALSE,
         "sys.compile source must be a string; non-string values, including floats, are invalid");
   }
 
@@ -223,7 +223,7 @@ uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item) {
   }
 
   int32_t stack_top_before_interpret = VM->stack->current;
-  (void)interpret(tmpitem);
+  (void)interpret(ctx, tmpitem);
   while (VM->stack->current > stack_top_before_interpret) {
     VALUE_t dropped = pop_stack(VM->stack);
     value_free(&dropped);
@@ -252,8 +252,10 @@ void execute_task_cb(uv_timer_t *req) {
   config.vm = task->vm;
   ITEM_t *item = find_item(config.itemroot, task->itemname);
   if (item && item->type == ITEM_code) {
-    VALUE_t ret = interpret(item);
-    reset_stack(VM->stack);
+    RuntimeContext task_ctx;
+    runtime_context_init(&task_ctx, task->vm);
+    VALUE_t ret = interpret(&task_ctx, item);
+    reset_stack(task->vm->stack);
     if (ret.type == VALUE_int) {
       logmsg("Bytecode interpreter returned: %ld\n", ret.i);
     } else if (ret.type == VALUE_str) {
@@ -278,7 +280,7 @@ void execute_task_cb(uv_timer_t *req) {
   }
 }
 
-uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
+uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Create a new game task.  There are three values on the stack:
   // name of the item to execute, time until first execution, and
   // time between executions.  The intervals are in 10ths of a second.
@@ -297,7 +299,7 @@ uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
     // and return.
     VALUE_t popped[] = {repeatin, startin, itemname};
     lc_cleanup_values(popped, 3);
-    return lc_invalid_args_detail_return(nextop, VALUE_NIL,
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
         "task.newgametask expects string item name and integer start/repeat intervals; floats are invalid for intervals");
   }
   ITEM_t *taskitem = find_item(config.itemroot, itemname.s);
@@ -329,7 +331,7 @@ uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *lc_task_killtask(uint8_t *nextop, ITEM_t *item) {
+uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Given a task id, kill it.
   // First validate the argument
   (void)item;
@@ -337,7 +339,7 @@ uint8_t *lc_task_killtask(uint8_t *nextop, ITEM_t *item) {
   if (!lc_value_is_type(taskid, VALUE_int)) {
     // taskid may only own heap memory when it is a string; FREE_STR is a safe no-op otherwise.
     FREE_STR(taskid);
-    return lc_invalid_args_detail_return(nextop, VALUE_NIL,
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
         "task.killtask id must be an integer; floats are invalid");
   }
 
@@ -354,7 +356,7 @@ uint8_t *lc_task_killtask(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
+uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Called by the task which checks for player input.
   // We operate a fair queuing process here.  Everyone
   // gets a turn.  Find the next activity.
@@ -405,7 +407,7 @@ uint8_t *lc_net_input(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
+uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Write data out to a line
   // Validate the parameters before creating the task.
   (void)item;
@@ -417,7 +419,7 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
       (size_t)linenum.i >= config.maxconns) {
     FREE_STR(out);
     FREE_STR(linenum);
-    return lc_invalid_args_detail_return(nextop, VALUE_NIL,
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
         "net.write line must be an integer connection index; floats are invalid");
   } else {
     line_index = (size_t)linenum.i;
@@ -496,7 +498,7 @@ uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *lc_str_capitalise(uint8_t *nextop, ITEM_t *item) {
+uint8_t *lc_str_capitalise(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // If the value on the top of the stack is a string, capitalise the
   // first letter.  Otherwise pop the top of the stack and push nil.
   (void)item;
@@ -511,7 +513,7 @@ uint8_t *lc_str_capitalise(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *lc_str_upper(uint8_t *nextop, ITEM_t *item) {
+uint8_t *lc_str_upper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // If the value on the top of the stack is a string, make it
   // uppercase.  Otherwise pop the top of the stack and push nil.
   (void)item;
@@ -529,7 +531,7 @@ uint8_t *lc_str_upper(uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *lc_str_lower(uint8_t *nextop, ITEM_t *item) {
+uint8_t *lc_str_lower(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // If the value on the top of the stack is a string, make it
   // lowercase.  Otherwise pop the top of the stack and push nil.
   (void)item;

@@ -6,9 +6,7 @@
 
 #include "item.h"
 #include "value.h"
+#include "runtime_context.h"
 
-// opcode functions have this form
-typedef uint8_t *(*OP_t)(uint8_t *nextop, ITEM_t *item);
-
-void init_interpreter();
-VALUE_t interpret(ITEM_t *item);
+void init_interpreter(RuntimeContext *ctx);
+VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item);

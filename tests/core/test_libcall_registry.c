@@ -13,17 +13,23 @@
 
 #include "network.h"
 
-uint8_t *lc_task_newgametask(uint8_t *nextop, ITEM_t *item);
-uint8_t *lc_task_killtask(uint8_t *nextop, ITEM_t *item);
-uint8_t *lc_net_write(uint8_t *nextop, ITEM_t *item);
-uint8_t *lc_sys_log(uint8_t *nextop, ITEM_t *item);
-uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item);
-uint8_t *lc_str_capitalise(uint8_t *nextop, ITEM_t *item);
-uint8_t *lc_str_upper(uint8_t *nextop, ITEM_t *item);
-uint8_t *lc_str_lower(uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_capitalise(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_upper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_lower(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 extern LINE_t *line;
 extern CONFIG_t config;
+
+static RuntimeContext test_runtime_ctx;
+static RuntimeContext *test_ctx(void) {
+  runtime_context_init(&test_runtime_ctx, config.vm);
+  return &test_runtime_ctx;
+}
 
 static void setup_libcall_runtime(void) {
   memset(&config, 0, sizeof(config));
@@ -72,7 +78,7 @@ static void assert_sys_log_float_output(void) {
 
   VALUE_t out = {VALUE_float, {.f = 3.5}};
   push_stack(config.vm->stack, out);
-  (void)lc_sys_log(NULL, config.itemroot);
+  (void)lc_sys_log(test_ctx(), NULL, config.itemroot);
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   fflush(stdout);
@@ -98,18 +104,18 @@ static void assert_invalid_args_float_detail_contains(const char *expected) {
   ASSERT_TRUE(strstr(msg->value.s, expected) != NULL);
 }
 
-static void assert_float_string_libcall_returns_nil(uint8_t *(*func)(uint8_t *, ITEM_t *)) {
+static void assert_float_string_libcall_returns_nil(uint8_t *(*func)(RuntimeContext *, uint8_t *, ITEM_t *)) {
   VALUE_t arg = {VALUE_float, {.f = 1.25}};
   push_stack(config.vm->stack, arg);
-  (void)func(NULL, config.itemroot);
+  (void)func(test_ctx(), NULL, config.itemroot);
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   ASSERT_TRUE(find_item(config.itemroot, "error") == NULL);
   ASSERT_TRUE(find_item(config.itemroot, "error.msg") == NULL);
 }
 
-static uint8_t *test_noop_libcall(uint8_t *nextop, ITEM_t *item) {
-  (void)item;
+static uint8_t *test_noop_libcall(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)ctx; (void)item;
   return nextop;
 }
 
@@ -218,8 +224,8 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
                                   sizeof(template_bytecode), bytecode);
   ASSERT_NOT_NULL(code);
 
-  VALUE_t v1 = interpret(code);
-  VALUE_t v2 = interpret(code);
+  VALUE_t v1 = interpret(test_ctx(), code);
+  VALUE_t v2 = interpret(test_ctx(), code);
   ASSERT_EQ_INT(VALUE_nil, v1.type);
   ASSERT_EQ_INT(VALUE_nil, v2.type);
   ITEM_t *err_item = find_item(config.itemroot, "error");
@@ -263,7 +269,7 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
   push_stack(config.vm->stack, bad_name);
   push_stack(config.vm->stack, start);
   push_stack(config.vm->stack, repeat);
-  (void)lc_task_newgametask(NULL, config.itemroot);
+  (void)lc_task_newgametask(test_ctx(), NULL, config.itemroot);
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   ITEM_t *err = find_item(config.itemroot, "error");
@@ -272,7 +278,7 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
 
   VALUE_t bad_taskid = {VALUE_str, {.s = strdup("x")}};
   push_stack(config.vm->stack, bad_taskid);
-  (void)lc_task_killtask(NULL, config.itemroot);
+  (void)lc_task_killtask(test_ctx(), NULL, config.itemroot);
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   err = find_item(config.itemroot, "error");
@@ -286,7 +292,7 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
   VALUE_t out = {VALUE_str, {.s = strdup("hello")}};
   push_stack(config.vm->stack, bad_line);
   push_stack(config.vm->stack, out);
-  (void)lc_net_write(NULL, config.itemroot);
+  (void)lc_net_write(test_ctx(), NULL, config.itemroot);
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   err = find_item(config.itemroot, "error");
@@ -312,7 +318,7 @@ void test_net_write_ignores_non_writable_lines(void) {
     push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = (int64_t)i}});
     push_stack(config.vm->stack,
                (VALUE_t){VALUE_str, {.s = strdup("hello")}});
-    (void)lc_net_write(NULL, config.itemroot);
+    (void)lc_net_write(test_ctx(), NULL, config.itemroot);
     VALUE_t ret = pop_stack(config.vm->stack);
     ASSERT_EQ_INT(VALUE_nil, ret.type);
   }
@@ -330,14 +336,14 @@ void test_libcall_float_integer_only_arguments_rejected(void) {
   push_stack(config.vm->stack, itemname);
   push_stack(config.vm->stack, float_start);
   push_stack(config.vm->stack, repeat);
-  (void)lc_task_newgametask(NULL, config.itemroot);
+  (void)lc_task_newgametask(test_ctx(), NULL, config.itemroot);
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_float_detail_contains("task.newgametask");
 
   VALUE_t float_taskid = {VALUE_float, {.f = 2.0}};
   push_stack(config.vm->stack, float_taskid);
-  (void)lc_task_killtask(NULL, config.itemroot);
+  (void)lc_task_killtask(test_ctx(), NULL, config.itemroot);
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_float_detail_contains("task.killtask");
@@ -349,14 +355,14 @@ void test_libcall_float_integer_only_arguments_rejected(void) {
   VALUE_t out = {VALUE_str, {.s = strdup("hello")}};
   push_stack(config.vm->stack, float_line);
   push_stack(config.vm->stack, out);
-  (void)lc_net_write(NULL, config.itemroot);
+  (void)lc_net_write(test_ctx(), NULL, config.itemroot);
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_float_detail_contains("net.write");
 
   VALUE_t float_source = {VALUE_float, {.f = 3.25}};
   push_stack(config.vm->stack, float_source);
-  (void)lc_sys_compile(NULL, config.itemroot);
+  (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
@@ -393,7 +399,7 @@ void test_net_write_formats_float_output(void) {
   VALUE_t out = {VALUE_float, {.f = 3.5}};
   push_stack(config.vm->stack, target_line);
   push_stack(config.vm->stack, out);
-  (void)lc_net_write(NULL, config.itemroot);
+  (void)lc_net_write(test_ctx(), NULL, config.itemroot);
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   ASSERT_TRUE(strcmp(telnet_capture, "3.5") == 0);

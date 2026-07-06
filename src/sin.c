@@ -318,8 +318,10 @@ int main(int argc, char **argv) {
   STRINGDEBUG_LOG("STRINGDEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
   config.vm = make_vm();
-
-  init_interpreter();
+  RuntimeContext boot_ctx;
+  runtime_context_init(&boot_ctx, config.vm);
+  init_interpreter(&boot_ctx);
+  boot_ctx.interpreter_initialized = true;
   // If the itemstore hasn't been loaded, do so now.
   if (!config.itemroot) {
     config.itemstore = strdup("items.dat");
@@ -346,10 +348,11 @@ int main(int argc, char **argv) {
     logerr("Destroying and recreating all stacks.\n");
     destroy_vm(config.vm);
     config.vm = make_vm();
+    runtime_context_init(&boot_ctx, config.vm);
   }
   // Execute the boot item.  This should set up all the tasks for
   // the main game.  It must not be an infinite loop!
-  VALUE_t ret = interpret(boot);
+  VALUE_t ret = interpret(&boot_ctx, boot);
   if (ret.type == VALUE_int) {
     logmsg("Bytecode interpreter returned: %ld\n", ret.i);
   } else if (ret.type == VALUE_str) {
