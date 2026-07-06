@@ -1179,6 +1179,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   RuntimeDecoder saved_decoder = ctx->decoder;
   ITEM_t *saved_current_item = ctx->current_item;
   ITEM_t *saved_pending_call_item = ctx->pending_call_item;
+  size_t entry_callstack_depth = size_callstack(VM->callstack);
   if (!ctx->initialized) {
     init_interpreter(ctx);
   }
@@ -1211,7 +1212,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
       VALUE_t return_value = (size_stack(VM->stack) > 0) ? pop_stack(VM->stack) : VALUE_NIL;
       ctx->current_item->inuse = false;
 
-      if (size_callstack(VM->callstack) == 0) {
+      if (size_callstack(VM->callstack) == entry_callstack_depth) {
         ctx->decoder = saved_decoder;
         ctx->current_item = saved_current_item;
         ctx->pending_call_item = saved_pending_call_item;
