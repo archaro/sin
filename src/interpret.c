@@ -16,13 +16,14 @@
 #include "memory.h"
 #include "parser.h"
 #include "compiler_pipeline.h"
-#include "compiler/ir/opcode_schema.h"
 #include "bytecode_verify.h"
-#include "absyn.h"
 #include "value.h"
 #include "stack.h"
 #include "item.h"
 #include "runtime_decode.h"
+#include "runtime_item_ops.h"
+#include "runtime_opcode.h"
+#include "runtime_value.h"
 
 // The configuration object, defined in sin.c
 extern CONFIG_t config;
@@ -89,119 +90,6 @@ static uint8_t *decode_next(RuntimeDecodeStatus status) {
 #define REQUIRE_BYTES(nextop, n, opname) \
   do { if (!report_decode_status(require_bytes(&ctx->decoder, (nextop), (n), (opname)))) return NULL; } while (0)
 
-uint8_t *op_undefined(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
-typedef struct {
-  OP_t *table;
-} RuntimeBindingCheckCtx;
-
-static bool assert_runtime_binding(uint8_t opbyte, IR_Op op, const IR_OpSchema *schema, void *raw_ctx) {
-  (void)op;
-  (void)schema;
-  RuntimeBindingCheckCtx *check_ctx = (RuntimeBindingCheckCtx *)raw_ctx;
-  assert(check_ctx->table[opbyte] != op_undefined
-         && "Missing interpreter handler for schema-defined runtime opcode");
-  return true;
-}
-
-typedef struct strbuf_meta {
-  char *ptr;
-  size_t cap;
-  struct strbuf_meta *next;
-} strbuf_meta_t;
-
-static strbuf_meta_t *strbuf_head = NULL;
-
-static strbuf_meta_t *strbuf_find(char *ptr) {
-  strbuf_meta_t *meta = strbuf_head;
-  while (meta) {
-    if (meta->ptr == ptr) return meta;
-    meta = meta->next;
-  }
-  return NULL;
-}
-
-static void strbuf_forget(char *ptr) {
-  strbuf_meta_t **scan = &strbuf_head;
-  while (*scan) {
-    if ((*scan)->ptr == ptr) {
-      strbuf_meta_t *found = *scan;
-      *scan = found->next;
-      free(found);
-      return;
-    }
-    scan = &((*scan)->next);
-  }
-}
-
-static void strbuf_track(char *ptr, size_t cap) {
-  strbuf_meta_t *meta = strbuf_find(ptr);
-  if (!meta) {
-    meta = malloc(sizeof(strbuf_meta_t));
-    if (!meta) return;
-    meta->next = strbuf_head;
-    strbuf_head = meta;
-  }
-  meta->ptr = ptr;
-  meta->cap = cap;
-}
-
-static void free_runtime_string(char *s) {
-  if (!s) return;
-  strbuf_forget(s);
-  free(s);
-}
-
-static void value_free_runtime(VALUE_t *value) {
-  if (!value) return;
-  if (value->type == VALUE_str) {
-    free_runtime_string(value->s);
-    value->type = VALUE_nil;
-    value->i = 0;
-  } else {
-    value_free(value);
-  }
-}
-
-static size_t strbuf_growth_capacity(size_t needed) {
-  size_t cap = 16;
-  while (cap < needed) {
-    if (cap > SIZE_MAX / 2) return needed;
-    cap *= 2;
-  }
-  return cap;
-}
-
-static VALUE_t concat_two_strings(VALUE_t left, VALUE_t right) {
-  size_t left_len = strlen(left.s);
-  size_t right_len = strlen(right.s);
-  size_t needed = left_len + right_len + 1;
-  strbuf_meta_t *left_meta = strbuf_find(left.s);
-  char *out = NULL;
-  size_t out_cap = needed;
-
-  if (left_meta && left_meta->cap >= needed) {
-    out = left.s;
-    memcpy(out + left_len, right.s, right_len + 1);
-    out_cap = left_meta->cap;
-    strbuf_forget(right.s);
-    free(right.s);
-  } else {
-    if (left_meta) {
-      out_cap = strbuf_growth_capacity(needed);
-    }
-    out = malloc(out_cap);
-    memcpy(out, left.s, left_len);
-    memcpy(out + left_len, right.s, right_len + 1);
-    free_runtime_string(left.s);
-    free_runtime_string(right.s);
-  }
-
-  strbuf_track(out, out_cap);
-  left.s = out;
-  left.type = VALUE_str;
-  return left;
-}
-
 static void log_invalid_binary_operands(const char *opcode_name,
                                         const VALUE_t *left,
                                         const VALUE_t *right) {
@@ -259,43 +147,6 @@ static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const cha
   return result.i;
 }
 
-
-#define RUNTIME_OPCODE_TABLE(OP) \
-  OP(0, op_nop) \
-  OP('a', op_add) \
-  OP('b', op_pushbool) \
-  OP('c', op_savelocal) \
-  OP('d', op_divide) \
-  OP('e', op_getlocal) \
-  OP('f', op_inclocal) \
-  OP('g', op_declocal) \
-  OP('j', op_jump) \
-  OP('k', op_jumpfalse) \
-  OP('l', op_pushstr) \
-  OP('m', op_multiply) \
-  OP('n', op_negate) \
-  OP('o', op_equal) \
-  OP('p', op_pushint) \
-  OP('P', op_pushfloat) \
-  OP('q', op_notequal) \
-  OP('r', op_lessthan) \
-  OP('s', op_subtract) \
-  OP('t', op_greaterthan) \
-  OP('u', op_lessthanorequal) \
-  OP('v', op_greaterthanorequal) \
-  OP('x', op_logicalnot) \
-  OP('y', op_logicaland) \
-  OP('z', op_logicalor) \
-  OP('M', op_libcall_token) \
-  OP('B', op_assigncodeitem) \
-  OP('C', op_assignitem) \
-  OP('F', op_fetchitem) \
-  OP('I', op_assembleitem) \
-  OP('R', op_assembleitem_rel) \
-  OP('W', op_delete) \
-  OP('X', op_exists) \
-  OP('Y', op_nthname) \
-  OP('Z', op_rootname)
 
 uint8_t *op_nop(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
@@ -676,52 +527,6 @@ uint8_t *op_libcall_token(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-void assignitem(VALUE_t *itemname, VALUE_t val) {
-  // Given two values, use the first as the name of an item, and
-  // the second as the value to assign to it.  The item name must be
-  // freed after insertion.
-  // If the itemname does not resolve into a valid item, this function
-  // must fail silently (log messages are fine).  In this case, if the
-  // value to be saved has memory allocated to it, that must be freed.
-  // In other words, this is an end stage for values - they are either
-  // used or discarded.  The interpreter no longer cares.
-  if (itemname->type == VALUE_str) {
-    ITEM_t *i = insert_item(config.itemroot, itemname->s, val);
-    if (!i) {
-      logerr("Unable to create item '%s'.\n", itemname->s);
-      FREE_STR(val);
-    }
-    ITEMDEBUG_LOG("Saved value of type %d in item %s\n", val.type, itemname->s);
-  } else {
-    logerr("Unable to create item: invalid name type %d\n", itemname->type);
-    FREE_STR(val);
-  }
-  FREE_STR(*itemname);
-}
-
-static bool canonicalize_itemname(const char *assembled_name, ITEM_t *context_item, char *out_name) {
-  if (!assembled_name || assembled_name[0] == '\0') return false;
-
-  if (assembled_name[0] == '.') {
-    if (!context_item) {
-      logerr("Relative item name '%s' cannot be resolved without current item context.\n", assembled_name);
-      return false;
-    }
-    char parent[MAX_ITEM_NAME];
-    get_itemname(context_item, parent);
-    if (snprintf(out_name, MAX_ITEM_NAME, "%s%s", parent, assembled_name) >= MAX_ITEM_NAME) {
-      logerr("Resolved item name exceeds MAX_ITEM_NAME: %s%s\n", parent, assembled_name);
-      return false;
-    }
-    return true;
-  }
-
-  if (snprintf(out_name, MAX_ITEM_NAME, "%s", assembled_name) >= MAX_ITEM_NAME) {
-    logerr("Item name exceeds MAX_ITEM_NAME: %s\n", assembled_name);
-    return false;
-  }
-  return true;
-}
 
 typedef struct {
   char *buf;
@@ -738,13 +543,9 @@ static void sb_init(STRBUILDER_t *sb, uint32_t cap) {
 
 static void sb_ensure(STRBUILDER_t *sb, uint32_t add_len) {
   uint32_t need = sb->len + add_len + 1;
-  if (need <= sb->cap) {
-    return;
-  }
+  if (need <= sb->cap) return;
   uint32_t new_cap = sb->cap;
-  while (new_cap < need) {
-    new_cap *= 2;
-  }
+  while (new_cap < need) new_cap *= 2;
   sb->buf = realloc(sb->buf, new_cap);
   sb->cap = new_cap;
 }
@@ -764,98 +565,6 @@ static void sb_append_intstr(STRBUILDER_t *sb, int64_t val) {
   char str[22];
   itoa(val, str, 10);
   sb_append_literal(sb, str);
-}
-
-typedef struct {
-  const char **params;
-  uint16_t *param_lens;
-  size_t param_count;
-  size_t total_param_len;
-  char *source;
-  uint16_t source_len;
-} CODEITEM_INPUT_t;
-
-static bool decode_assigncode_params(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_INPUT_t *in) {
-  // Format assumption for params block: <u16 len><bytes> repeated, terminated by <u16 0>.
-  const size_t MAX_ASSIGNCODE_PARAMS = 1024;
-  const size_t MAX_ASSIGNCODE_PARAM_BYTES = 65535;
-  while (1) {
-    REQUIRE_BYTES(*opcodep, 2, "OP_ASSIGNCODEITEM param-len");
-    uint16_t param_len = 0;
-    memcpy(&param_len, *opcodep, 2);
-    *opcodep += 2;
-    if (param_len == 0) break;
-    if (in->param_count >= MAX_ASSIGNCODE_PARAMS) return false;
-    if ((in->total_param_len + param_len) > MAX_ASSIGNCODE_PARAM_BYTES) return false;
-    REQUIRE_BYTES(*opcodep, param_len, "OP_ASSIGNCODEITEM param-bytes");
-    char *param = malloc((size_t)param_len + 1);
-    memcpy(param, *opcodep, param_len);
-    param[param_len] = '\0';
-    *opcodep += param_len;
-    in->params = realloc((char **)in->params,
-                         sizeof *in->params * (in->param_count + 1));
-    in->param_lens = realloc(in->param_lens,
-                             sizeof *in->param_lens * (in->param_count + 1));
-    in->params[in->param_count] = param;
-    in->param_lens[in->param_count] = param_len;
-    in->param_count++;
-    in->total_param_len += param_len;
-  }
-  return true;
-}
-
-static bool decode_assigncode_source(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_INPUT_t *in) {
-  REQUIRE_BYTES(*opcodep, 2, "OP_ASSIGNCODEITEM source-len");
-  memcpy(&in->source_len, *opcodep, 2);
-  *opcodep += 2;
-  REQUIRE_BYTES(*opcodep, in->source_len, "OP_ASSIGNCODEITEM source-bytes");
-  in->source = malloc((size_t)in->source_len + 1);
-  memcpy(in->source, *opcodep, in->source_len);
-  in->source[in->source_len] = '\0';
-  *opcodep += in->source_len;
-  return true;
-}
-
-static int8_t compile_and_insert_codeitem(const VALUE_t *itemname, const CODEITEM_INPUT_t *in, char **errdetail) {
-  ITEM_t *testitem = find_item(config.itemroot, itemname->s);
-  if (testitem && testitem->inuse) return ERR_COMP_INUSE;
-  OUTPUT_t *out = NULL;
-  int8_t rc = compile_source_to_bytecode_with_params(in->source, in->source_len, in->params, in->param_count, &out, errdetail);
-  if (rc == 0 && out) {
-    uint32_t len = out->nextbyte - out->bytecode;
-    ITEM_t *inserted = insert_code_item(config.itemroot, itemname->s, len, out->bytecode);
-    if (!inserted) rc = ERR_COMP_INUSE;
-  }
-  if (out) {
-    if (rc != 0 && out->bytecode) free(out->bytecode);
-    free(out);
-  }
-  return rc;
-}
-
-static void persist_codeitem_source(const VALUE_t *itemname, const CODEITEM_INPUT_t *in) {
-  ITEM_t *code_item = find_item(config.itemroot, itemname->s);
-  STRBUILDER_t sb;
-  sb_init(&sb, in->source_len + in->total_param_len + 16);
-  if (in->param_count > 0) {
-    sb_append_literal(&sb, "code {");
-    for (size_t pc = 0; pc < in->param_count; pc++) {
-      sb_append_literal(&sb, in->params[pc]);
-      if (pc < (in->param_count - 1)) sb_append_literal(&sb, ", ");
-    }
-    sb_append_literal(&sb, "} (");
-  } else {
-    sb_append_literal(&sb, "code (");
-  }
-  sb_append_literal(&sb, in->source);
-  sb_append_literal(&sb, ");\n");
-  if (!save_itemsource(code_item, sb.buf)) {
-    char fullname[MAX_ITEM_NAME];
-    get_itemname(code_item, fullname);
-    logerr("Source was not saved.\nItem: %s\n", fullname);
-    logerr("Source:\n%s\n", sb.buf);
-  }
-  free(sb.buf);
 }
 
 uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -898,9 +607,9 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     itemname.s = strdup(fullname);
   }
 
-  result = compile_and_insert_codeitem(&itemname, &in, &errdetail);
+  result = compile_and_insert_codeitem(config.itemroot, &itemname, &in, &errdetail);
   if (result == 0) {
-    persist_codeitem_source(&itemname, &in);
+    persist_codeitem_source(config.itemroot, &itemname, &in);
     set_item(config.itemroot, "error", VALUE_NIL);
     set_item(config.itemroot, "error.msg", VALUE_NIL);
   } else {
@@ -935,7 +644,7 @@ uint8_t *op_assignitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       logerr("Unable to create item '%s': failed to resolve canonical name.\n", itemname.s);
     }
   }
-  assignitem(&itemname, val);
+  assignitem(config.itemroot, &itemname, val);
   return nextop;
 }
 
@@ -1387,23 +1096,7 @@ void init_interpreter(RuntimeContext *ctx) {
   if (!libcall_init_registry()) {
     logerr("Failed to initialize libcall registry.\n");
   }
-  // This function simply sets up the opcode dispatch table.
-  for (int o=0; o<256; o++) {
-    ctx->opcode[o] = op_undefined;
-  }
-#define BIND_RUNTIME_OPCODE(opcode_byte, handler_fn) \
-  ctx->opcode[(uint8_t)(opcode_byte)] = handler_fn;
-  RUNTIME_OPCODE_TABLE(BIND_RUNTIME_OPCODE)
-#undef BIND_RUNTIME_OPCODE
-
-#ifndef NDEBUG
-  RuntimeBindingCheckCtx binding_ctx = {ctx->opcode};
-  // NDEBUG disables assert(); keep this validation in debug builds so missing
-  // runtime opcode bindings fail fast during development without affecting
-  // optimized/release startup behavior.
-  ir_opcode_schema_for_each_runtime_opcode(assert_runtime_binding, &binding_ctx);
-  assert(bc_opcode_lookup('h', BC_CONTEXT_STATEMENT) != NULL);
-#endif
+  runtime_opcode_bind_table(ctx);
 }
 
 VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
