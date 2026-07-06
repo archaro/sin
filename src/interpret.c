@@ -1516,11 +1516,3 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
     op = newop;
   }
 }
-
-VALUE_t interpret_legacy(ITEM_t *item) {
-  static RuntimeContext legacy_ctx;
-  if (legacy_ctx.vm != config.vm) {
-    runtime_context_init(&legacy_ctx, config.vm);
-  }
-  return interpret(&legacy_ctx, item);
-}

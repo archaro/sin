@@ -10,5 +10,3 @@
 
 void init_interpreter(RuntimeContext *ctx);
 VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item);
-// Temporary compatibility wrapper for legacy callers; core execution paths should pass a RuntimeContext explicitly.
-VALUE_t interpret_legacy(ITEM_t *item);

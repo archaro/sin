@@ -224,8 +224,8 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
                                   sizeof(template_bytecode), bytecode);
   ASSERT_NOT_NULL(code);
 
-  VALUE_t v1 = interpret_legacy(code);
-  VALUE_t v2 = interpret_legacy(code);
+  VALUE_t v1 = interpret(test_ctx(), code);
+  VALUE_t v2 = interpret(test_ctx(), code);
   ASSERT_EQ_INT(VALUE_nil, v1.type);
   ASSERT_EQ_INT(VALUE_nil, v2.type);
   ITEM_t *err_item = find_item(config.itemroot, "error");
