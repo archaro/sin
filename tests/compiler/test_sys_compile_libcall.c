@@ -11,7 +11,14 @@
 #include "vm.h"
 
 CONFIG_t config;
-uint8_t *lc_sys_compile(uint8_t *nextop, ITEM_t *item);
+static RuntimeContext test_runtime_ctx;
+static RuntimeContext *test_ctx(void) {
+  runtime_context_init(&test_runtime_ctx, config.vm);
+  test_runtime_ctx.itemroot = config.itemroot;
+  test_runtime_ctx.strict_validation = config.strict_validation;
+  return &test_runtime_ctx;
+}
+uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 static VALUE_t vstr(const char *s) {
   VALUE_t v = {VALUE_str, {.s = strdup(s)}};
@@ -58,7 +65,7 @@ static ITEM_t *assert_int_item(const char *name, int64_t expected) {
 
 static void assert_compile_success_bool(const char *source) {
   push_stack(config.vm->stack, vstr(source));
-  (void)lc_sys_compile(NULL, config.itemroot);
+  (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);
   assert_bool(pop_stack(config.vm->stack), 1);
 }
 
@@ -74,7 +81,7 @@ void test_sys_compile_libcall_runtime(void) {
   assert_compile_success_bool("if \"\" then sys.log{\"empty string truthy\"}; endif;");
 
   push_stack(config.vm->stack, vstr("sys.log{;"));
-  (void)lc_sys_compile(NULL, config.itemroot);
+  (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);
   assert_bool(pop_stack(config.vm->stack), 0);
   ITEM_t *err_item = find_item(config.itemroot, "error");
   ITEM_t *msg_item = find_item(config.itemroot, "error.msg");
@@ -100,7 +107,7 @@ void test_sys_compile_libcall_runtime(void) {
 
   VALUE_t intarg = {VALUE_int, {.i = 42}};
   push_stack(config.vm->stack, intarg);
-  (void)lc_sys_compile(NULL, config.itemroot);
+  (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);
   assert_bool(pop_stack(config.vm->stack), 0);
   err_item = find_item(config.itemroot, "error");
   ASSERT_NOT_NULL(err_item);
@@ -111,7 +118,7 @@ void test_sys_compile_libcall_runtime(void) {
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
   for (int i = 0; i < 50; i++) {
     push_stack(config.vm->stack, vstr("sys.log{\"x\\n\"};"));
-    (void)lc_sys_compile(NULL, config.itemroot);
+    (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);
     assert_bool(pop_stack(config.vm->stack), 1);
     ASSERT_EQ_INT(baseline, config.vm->stack->current);
     ASSERT_EQ_INT(-1, config.vm->callstack->current);

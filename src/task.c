@@ -71,6 +71,8 @@ TASK_t *make_task(char *itemname, uint64_t interval) {
   TASK_t *task = malloc(sizeof *task);
   strcpy(task->itemname, itemname);
   task->vm = make_vm();
+  memset(&task->runtime_context, 0, sizeof(task->runtime_context));
+  task->runtime_context.vm = task->vm;
   task->id = new_task_id();
   task->interval = interval;
   task->timer = malloc(sizeof *task->timer);
@@ -84,6 +86,7 @@ TASK_t *make_task(char *itemname, uint64_t interval) {
 void destroy_task(TASK_t *task) {
   // Assumes task definitely exists in the task list!
   logmsg("Destroying task %d (%s)\n", task->id, task->itemname);
+  runtime_destroy(&task->runtime_context);
   destroy_vm(task->vm);
   free(task->timer);
   retire_task_id(task->id);

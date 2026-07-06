@@ -11,6 +11,7 @@
 #include "item.h"
 #include "value.h"
 #include "test_assert.h"
+#include "runtime_context.h"
 
 CONFIG_t config;
 const char *test_harness_current_suite(void){return "network";} const char *test_harness_current_test(void){return "network";} void test_harness_failf(const char *file,int line,const char *fmt,...){fprintf(stderr,"fail %s:%d %s\n",file,line,fmt); exit(1);} 
@@ -44,7 +45,8 @@ static void *test_malloc(size_t n){if(fail_malloc_after>=0&&malloc_calls++>=fail
 
 void logerr(const char *msg, ...){(void)msg;}
 void logmsg(const char *msg, ...){(void)msg;}
-VALUE_t interpret(ITEM_t *item){(void)item; VALUE_t v={VALUE_nil,{0}}; return v;}
+void runtime_context_init(RuntimeContext *ctx, VM_t *vm){(void)ctx;(void)vm;}
+VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item){(void)ctx;(void)item; VALUE_t v={VALUE_nil,{0}}; return v;}
 ITEM_t *find_item(ITEM_t *root, const char *name){(void)root;(void)name; return (ITEM_t *)1;}
 void reset_stack(STACK_t *stack){(void)stack;}
 int test_uv_write(uv_write_t *req, uv_stream_t *h, const uv_buf_t bufs[], unsigned int nbufs, uv_write_cb cb){(void)h;(void)bufs;(void)nbufs;last_write_req=req;last_write_cb=cb;return stub_uv_write_result;} void test_uv_close(uv_handle_t*h,uv_close_cb cb){uv_close_calls++;last_close_handle=h;last_close_cb=cb;} int test_uv_is_closing(const uv_handle_t*h){(void)h;return 0;} int test_uv_accept(uv_stream_t*s,uv_stream_t*c){(void)s;(void)c;return stub_uv_accept_result;} int test_uv_read_start(uv_stream_t*s,uv_alloc_cb a,uv_read_cb r){(void)s;(void)a;(void)r;return stub_uv_read_start_result;} int test_uv_tcp_init(uv_loop_t*l,uv_tcp_t*h){(void)l;(void)h;return stub_uv_tcp_init_result;} int test_uv_tcp_getpeername(const uv_tcp_t*h,struct sockaddr*n,int*len){(void)h;(void)n;(void)len;return stub_uv_tcp_getpeername_result;} int test_uv_ip_name(const struct sockaddr*src,char*dst,size_t size){(void)src;snprintf(dst,size,"127.0.0.1");return stub_uv_ip_name_result;} int test_uv_try_write(uv_stream_t*h,const uv_buf_t bufs[],unsigned int nbufs){(void)h;(void)bufs;(void)nbufs;return 0;} telnet_t *test_telnet_init(const telnet_telopt_t*opts,telnet_event_handler_t eh,unsigned char flags,void*ud){(void)opts;(void)eh;(void)flags;(void)ud;return stub_telnet_init_fail?NULL:(telnet_t*)test_malloc(8);} void test_telnet_free(telnet_t*t){free(t);} void test_telnet_printf(telnet_t*t,const char*fmt,...){(void)t;(void)fmt;} void test_telnet_recv(telnet_t*t,const char*b,size_t s){(void)t;(void)b;(void)s;}

@@ -16,9 +16,6 @@
 #include "util.h"
 #include "interpret.h"
 
-// Some shorthand
-#define VM config.vm
-
 extern CONFIG_t config;
 
 #define OUTBUF_LENGTH 16384
@@ -670,15 +667,18 @@ void init_listener(uint32_t port) {
 
 void input_processor(uv_idle_t* handle) {
   // Called once per iteration of the game loop
-  (void)handle;
-  config.vm = config.input_vm;
-  ITEM_t *input = find_item(config.itemroot, config.input);
+  RuntimeContext *input_ctx = handle ? (RuntimeContext *)handle->data : NULL;
+  if (!input_ctx) {
+    logerr("Input runtime context is missing! Cannot continue.\n");
+    exit(EXIT_FAILURE);
+  }
+  ITEM_t *input = find_item(input_ctx->itemroot, input_ctx->input_name);
   if (!input) {
     logerr("Input item does not exist!  Cannot continue.\n");
     exit(EXIT_FAILURE);
   }
-  interpret(input);
-  reset_stack(VM->stack);
+  interpret(input_ctx, input);
+  reset_stack(input_ctx->vm->stack);
   // Flush the output of every connected line
   for (size_t l = 0; l < config.maxconns; l++) {
     if (line[l].status != LINE_empty 

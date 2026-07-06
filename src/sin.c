@@ -33,6 +33,28 @@ jmp_buf recovery;
 // The configuration object - for passing interesting data around globally.
 CONFIG_t config;
 
+static void runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
+  runtime_context_init(ctx, vm);
+  ctx->itemroot = config.itemroot;
+  ctx->loop = config.loop;
+  ctx->itemstore_filename = config.itemstore;
+  ctx->itemstore_durability = config.itemstore_durability;
+  ctx->srcroot = config.srcroot;
+  ctx->input_name = config.input;
+  ctx->inputline_name = config.inputline;
+  ctx->inputtext_name = config.inputtext;
+  ctx->maxconns = &config.maxconns;
+  ctx->lastconn = &config.lastconn;
+  ctx->safe_shutdown = &config.safe_shutdown;
+  ctx->network.lines = line;
+  ctx->network.maxconns = &config.maxconns;
+  ctx->network.lastconn = &config.lastconn;
+  ctx->network.inputline_name = config.inputline;
+  ctx->network.inputtext_name = config.inputtext;
+  ctx->strict_validation = config.strict_validation;
+  (void)runtime_init(ctx, vm);
+}
+
 void close_all_tasks(uv_handle_t* handle, void* arg) {
   (void)arg;
   if (!uv_is_closing(handle)) { //FALSE, handle is closing
@@ -318,8 +340,7 @@ int main(int argc, char **argv) {
   STRINGDEBUG_LOG("STRINGDEBUG IS DEFINED\n");
   DISASS_LOG("DISASS IS DEFINED\n");
   config.vm = make_vm();
-
-  init_interpreter();
+  RuntimeContext boot_ctx;
   // If the itemstore hasn't been loaded, do so now.
   if (!config.itemroot) {
     config.itemstore = strdup("items.dat");
@@ -336,6 +357,8 @@ int main(int argc, char **argv) {
   // so the loop needs to be read for 'em.
   config.loop = malloc(sizeof *config.loop);
   uv_loop_init(config.loop);
+  runtime_context_from_config(&boot_ctx, config.vm);
+  if (!boot_ctx.initialized) exit(EXIT_FAILURE);
 
   // This is a relatively safe restart point if things turn ugly.
   // This will need to be revisited once the eventloop is running.
@@ -346,10 +369,11 @@ int main(int argc, char **argv) {
     logerr("Destroying and recreating all stacks.\n");
     destroy_vm(config.vm);
     config.vm = make_vm();
+    runtime_context_from_config(&boot_ctx, config.vm);
   }
   // Execute the boot item.  This should set up all the tasks for
   // the main game.  It must not be an infinite loop!
-  VALUE_t ret = interpret(boot);
+  VALUE_t ret = interpret(&boot_ctx, boot);
   if (ret.type == VALUE_int) {
     logmsg("Bytecode interpreter returned: %ld\n", ret.i);
   } else if (ret.type == VALUE_str) {
@@ -370,21 +394,25 @@ int main(int argc, char **argv) {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }
   // Finished with the boot item, and all its empty promises
+  runtime_destroy(&boot_ctx);
   destroy_vm(config.vm);
   destroy_item(boot);
 
   int runloop_retval = 0;
   uv_idle_t input_task;
+  RuntimeContext input_ctx = {0};
   if (!bootonly) {
     // Set up the item which handles input.
     logmsg("Using `%s` as the input item.\n", config.input);
     config.input_vm = make_vm();
+    config.maxconns = MAXCONNS;
+    config.lastconn = config.maxconns;
+    runtime_context_from_config(&input_ctx, config.input_vm);
     uv_idle_init(config.loop, &input_task);
+    input_task.data = &input_ctx;
     uv_idle_start(&input_task, input_processor);
     // Here we go...
     logmsg("Running...\n");
-    config.maxconns = MAXCONNS;
-    config.lastconn = config.maxconns;
     if (!validate_network_config()) {
       exit(EXIT_FAILURE);
     }
@@ -408,6 +436,7 @@ int main(int argc, char **argv) {
     uv_run(config.loop, UV_RUN_ONCE);
     finalise_tasks();
     shutdown_networking();
+    runtime_destroy(&input_ctx);
     destroy_vm(config.input_vm);
   }
   uv_loop_close(config.loop);

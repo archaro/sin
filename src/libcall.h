@@ -7,28 +7,23 @@
 
 #pragma once
 
-#include <stdint.h>
-#include <stdbool.h>
+#include "runtime_context.h"
+#include "libcall_registry.h"
 
-#include "interpret.h"
-
-typedef struct {
-  const char *libname;
-  const char *callname;
-  int8_t lib_index;
-  int8_t call_index;
-  uint8_t args;
-  OP_t func;
-} LIBCALL_t;
-
-extern const LIBCALL_t libcalls[];
-
-bool libcall_lookup_token(const char *libname, const char *callname, uint8_t *token, uint8_t *args);
-bool libcall_token_arg_count(uint8_t token, uint8_t *args);
-bool libcall_init_registry(void);
-void libcall_free_registry(void);
-void libcall_reset_registry_for_tests(void);
-bool libcall_validate_registry(void);
-bool libcall_registry_self_check(const LIBCALL_t *calls, bool fail_fast);
-bool libcall_names_unique(const LIBCALL_t *calls);
-OP_t libcall_func_token(uint8_t token);
+// Libcall handlers use the OP_t opcode-handler ABI:
+//   uint8_t *handler(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
+// The compiler emits argument-evaluation bytecode before OP_LIBCALL, so handlers
+// receive their arguments on ctx->vm->stack. A handler must consume exactly the
+// number of arguments declared in the registry entry and leave exactly one
+// VALUE_t return value on the stack before returning nextop.
+//
+// Popped argument VALUE_t objects become owned by the handler. String payloads
+// in popped arguments must be freed unless the handler transfers ownership into
+// the itemstore or returns the same value to Sinistra code. Handlers that mutate
+// an argument in place without popping it leave that stack-owned value as the
+// return value. Return values pushed onto the stack transfer ownership to the VM
+// stack.
+//
+// Return nextop after normal completion, including Sinistra-visible failures that
+// push nil/false. Return NULL only for fatal interpreter failures; interpret()
+// treats NULL as an abort and returns VALUE_NIL.

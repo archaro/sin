@@ -54,7 +54,11 @@ static VALUE_t compile_and_run(const char *name, const char *source) {
   memcpy(bytecode, out->bytecode, len);
   ITEM_t *code = insert_code_item(config.itemroot, name, len, bytecode);
   ASSERT_NOT_NULL(code);
-  VALUE_t result = interpret(code);
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = config.itemroot;
+  ctx.strict_validation = config.strict_validation;
+  VALUE_t result = interpret(&ctx, code);
 
   free(out->bytecode);
   free(out);

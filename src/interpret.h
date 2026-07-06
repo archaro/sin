@@ -6,9 +6,21 @@
 
 #include "item.h"
 #include "value.h"
+#include "runtime_context.h"
 
-// opcode functions have this form
-typedef uint8_t *(*OP_t)(uint8_t *nextop, ITEM_t *item);
+void init_interpreter(RuntimeContext *ctx);
 
-void init_interpreter();
-VALUE_t interpret(ITEM_t *item);
+// Executes a code item in the supplied runtime context. The returned VALUE_t is
+// transferred to the caller by value; if it contains a string payload, the
+// caller owns that payload and must free it when finished. interpret() borrows
+// ctx, item, the itemstore, and ctx->vm, but mutates the VM stack/callstack while
+// executing. The top-level return value is popped from the stack before it is
+// returned.
+//
+// The executing ITEM_t has its inuse flag set while its frame is active and
+// cleared when that frame exits or aborts; the flag protects running code from
+// deletion/replacement and does not transfer item ownership. Nested calls using
+// the same RuntimeContext are supported: decoder/current-item state is saved and
+// restored around the call, but the VM stack and callstack remain shared and are
+// therefore intentionally affected by nested execution.
+VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item);

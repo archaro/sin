@@ -6,6 +6,7 @@
 
 #include "config.h"
 #include "item.h"
+#include "item_internal.h"
 #include "test_assert.h"
 
 extern CONFIG_t config;

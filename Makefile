@@ -100,9 +100,9 @@ LIB := $(LIB_DIR)/libsinshared.a
 LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/bytecode_verify.o $(OBJ_DIR)/sdiss_core.o $(OBJ_DIR)/floatconv.o $(OBJ_DIR)/parser.o \
                $(OBJ_DIR)/lexer.o $(OBJ_DIR)/compiler/absyn.o $(OBJ_DIR)/compiler/semant.o \
                $(OBJ_DIR)/compiler/ir.o $(OBJ_DIR)/compiler/lower.o $(OBJ_DIR)/compiler/compiler_context.o $(OBJ_DIR)/compiler/compiler_pipeline.o $(OBJ_DIR)/compiler/emitbc.o \
-               $(OBJ_DIR)/compiler/compdiag.o $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcall.o \
-               $(OBJ_DIR)/stack.o $(OBJ_DIR)/value.o $(OBJ_DIR)/item.o \
-               $(OBJ_DIR)/vm.o $(OBJ_DIR)/task.o $(OBJ_DIR)/interpret.o \
+               $(OBJ_DIR)/compiler/compdiag.o $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcall_sys.o $(OBJ_DIR)/libcall_task.o $(OBJ_DIR)/libcall_net.o $(OBJ_DIR)/libcall_str.o $(OBJ_DIR)/libcall_registry.o $(OBJ_DIR)/libcall_table.o \
+               $(OBJ_DIR)/stack.o $(OBJ_DIR)/value.o $(OBJ_DIR)/item.o $(OBJ_DIR)/item_hash.o $(OBJ_DIR)/item_tree.o $(OBJ_DIR)/item_registry.o $(OBJ_DIR)/item_persist.o $(OBJ_DIR)/item_error.o \
+               $(OBJ_DIR)/vm.o $(OBJ_DIR)/task.o $(OBJ_DIR)/runtime_decode.o $(OBJ_DIR)/runtime_value.o $(OBJ_DIR)/runtime_item_ops.o $(OBJ_DIR)/runtime_opcode.o $(OBJ_DIR)/interpret.o \
                $(OBJ_DIR)/network.o $(OBJ_DIR)/libtelnet.o
 
 # Parser files for library
