@@ -10,7 +10,6 @@
 #include "util.h"
 #include "error.h"
 #include "memory.h"
-#include "config.h"
 #include "network.h"
 #include "task.h"
 #include "libcall.h"
@@ -20,9 +19,6 @@
 #include "compiler_pipeline.h"
 #include "interpret.h"
 #include "floatconv.h"
-
-// Configuration object.  Defined in sin.c
-extern CONFIG_t config;
 
 // Connected lines.  Defined in network.c
 extern LINE_t *line;
@@ -69,10 +65,10 @@ uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   time_t now = time(NULL);
   struct tm *tm_now = localtime(&now);
   strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S", tm_now);
-  char backupfile[strlen(config.itemstore)+strlen(timestamp)+2];
-  snprintf(backupfile, sizeof(backupfile), "%s_%s", config.itemstore,
+  char backupfile[strlen(ctx->itemstore_filename)+strlen(timestamp)+2];
+  snprintf(backupfile, sizeof(backupfile), "%s_%s", ctx->itemstore_filename,
                                                                 timestamp);
-  if (!save_itemstore(backupfile, config.itemroot)) {
+  if (!save_itemstore(backupfile, ctx->itemroot)) {
     logerr("sys.backup failed to persist itemstore backup '%s'.\n",
            backupfile);
   }
@@ -123,8 +119,8 @@ uint8_t *lc_sys_shutdown(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // This call takes no parameters.
   (void)item;
   logmsg("Sys.shutdown called.  Shutting down.\n");
-  config.safe_shutdown = true;
-  uv_stop(config.loop);
+  (*ctx->safe_shutdown) = true;
+  uv_stop(ctx->loop);
   // libcalls always return a value.
   push_stack(VM->stack, VALUE_NIL);
   return nextop;
@@ -136,8 +132,8 @@ uint8_t *lc_sys_abort(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // This call takes no parameters.
   (void)item;
   logmsg("Sys.abort called.  Immediate (and messy) shutdown.\n");
-  config.safe_shutdown = false;
-  uv_stop(config.loop);
+  (*ctx->safe_shutdown) = false;
+  uv_stop(ctx->loop);
   // libcalls always return a value.
   push_stack(VM->stack, VALUE_NIL);
   return nextop;
@@ -208,7 +204,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // nested interpret() run. This keeps Sys.compile safe when invoked from
   // within an already-active interpreter frame.
   uint32_t len = out->nextbyte - out->bytecode;
-  ITEM_t *tmpitem = insert_code_item(config.itemroot, tmpname, len, out->bytecode);
+  ITEM_t *tmpitem = insert_code_item(ctx->itemroot, tmpname, len, out->bytecode);
 
   if (!tmpitem) {
     // Could not create temp item (likely in-use/name conflict).
@@ -230,7 +226,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   // Best-effort cleanup of temp item
-  delete_item(config.itemroot, tmpname);
+  delete_item(ctx->itemroot, tmpname);
 
   // clear compiler/runtime error indicators on success
   clear_error_item();
@@ -249,12 +245,11 @@ void execute_task_cb(uv_timer_t *req) {
   DEBUG_LOG("Executing task %s (id: %d)\n", task->itemname, task->id);
   // Each task runs in its own VM (which may not be necessary, but
   // we will keep it up for now).
-  config.vm = task->vm;
-  ITEM_t *item = find_item(config.itemroot, task->itemname);
+  RuntimeContext *task_ctx = &task->runtime_context;
+  task_ctx->vm = task->vm;
+  ITEM_t *item = find_item(task_ctx->itemroot, task->itemname);
   if (item && item->type == ITEM_code) {
-    RuntimeContext task_ctx;
-    runtime_context_init(&task_ctx, task->vm);
-    VALUE_t ret = interpret(&task_ctx, item);
+    VALUE_t ret = interpret(task_ctx, item);
     reset_stack(task->vm->stack);
     if (ret.type == VALUE_int) {
       logmsg("Bytecode interpreter returned: %ld\n", ret.i);
@@ -302,7 +297,7 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
         "task.newgametask expects string item name and integer start/repeat intervals; floats are invalid for intervals");
   }
-  ITEM_t *taskitem = find_item(config.itemroot, itemname.s);
+  ITEM_t *taskitem = find_item(ctx->itemroot, itemname.s);
   if (!taskitem) {
     // If the task item doesn't exist, it can't be run.
     // Ownership: free itemname once on this error path before returning.
@@ -316,10 +311,12 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   repeatin.i *= 100;
   startin.i *= 100;
   TASK_t *newtask = make_task(itemname.s, repeatin.i);
+  newtask->runtime_context = *ctx;
+  newtask->runtime_context.vm = newtask->vm;
   // Success path: this is the only free on this path (the !taskitem branch returns).
   FREE_STR(itemname);
   // Now add the task to the game loop starting at the correct interval
-  uv_timer_init(config.loop, newtask->timer);
+  uv_timer_init(ctx->loop, newtask->timer);
   // The handle needs to be able to access its task
   newtask->timer->data = newtask;
   // Off we go!
@@ -361,45 +358,45 @@ uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // We operate a fair queuing process here.  Everyone
   // gets a turn.  Find the next activity.
   (void)item;
-  config.lastconn++;
-  if (config.maxconns == 0 || config.lastconn >= config.maxconns) {
-    config.lastconn = 0;
+  (*ctx->lastconn)++;
+  if ((*ctx->maxconns) == 0 || (*ctx->lastconn) >= (*ctx->maxconns)) {
+    (*ctx->lastconn) = 0;
   }
-  while (config.lastconn < config.maxconns) {
+  while ((*ctx->lastconn) < (*ctx->maxconns)) {
     VALUE_t val = {VALUE_int, {0}};
     // Find some activity.
-    switch (line[config.lastconn].status) {
+    switch (line[(*ctx->lastconn)].status) {
       case LINE_connecting:
-        line[config.lastconn].status = LINE_idle;
+        line[(*ctx->lastconn)].status = LINE_idle;
         // Set the input item to the current line
-        val.i = (long)config.lastconn;
-        set_item(config.itemroot, config.inputline, val);
+        val.i = (long)(*ctx->lastconn);
+        set_item(ctx->itemroot, ctx->inputline_name, val);
         // And return a value from this libcall to say what happened.
         val.i = 1;
         push_stack(VM->stack, val);
         return nextop;
       case LINE_disconnecting:
-        destroy_line(&line[config.lastconn]);
-        line[config.lastconn].status = LINE_empty;
+        destroy_line(&line[(*ctx->lastconn)]);
+        line[(*ctx->lastconn)].status = LINE_empty;
         // Set the input item to the current line
-        val.i = (long)config.lastconn;
-        set_item(config.itemroot, config.inputline, val);
+        val.i = (long)(*ctx->lastconn);
+        set_item(ctx->itemroot, ctx->inputline_name, val);
         val.i = 2;
         push_stack(VM->stack, val);
         return nextop;
       case LINE_data:
         // Set the input item to the current line
-        val.i = (long)config.lastconn;
-        set_item(config.itemroot, config.inputline, val);
+        val.i = (long)(*ctx->lastconn);
+        set_item(ctx->itemroot, ctx->inputline_name, val);
         // And grab some data.
         VALUE_t str = {VALUE_str, {0}};
-        str.s = get_input(&line[config.lastconn]);
-        set_item(config.itemroot, config.inputtext, str);
+        str.s = get_input(&line[(*ctx->lastconn)]);
+        set_item(ctx->itemroot, ctx->inputtext_name, str);
         val.i = 3;
         push_stack(VM->stack, val);
         return nextop;
       default:
-        config.lastconn++;
+        (*ctx->lastconn)++;
     }
   }
   // No activity found.
@@ -416,7 +413,7 @@ uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   size_t line_index = 0;
 
   if (!lc_value_is_type(linenum, VALUE_int) || linenum.i < 0 ||
-      (size_t)linenum.i >= config.maxconns) {
+      (size_t)linenum.i >= (*ctx->maxconns)) {
     FREE_STR(out);
     FREE_STR(linenum);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,

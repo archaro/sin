@@ -71,6 +71,8 @@ TASK_t *make_task(char *itemname, uint64_t interval) {
   TASK_t *task = malloc(sizeof *task);
   strcpy(task->itemname, itemname);
   task->vm = make_vm();
+  memset(&task->runtime_context, 0, sizeof(task->runtime_context));
+  task->runtime_context.vm = task->vm;
   task->id = new_task_id();
   task->interval = interval;
   task->timer = malloc(sizeof *task->timer);

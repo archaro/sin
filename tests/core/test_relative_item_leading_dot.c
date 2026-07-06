@@ -56,6 +56,8 @@ static VALUE_t compile_and_run(const char *name, const char *source) {
   ASSERT_NOT_NULL(code);
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = config.itemroot;
+  ctx.strict_validation = config.strict_validation;
   VALUE_t result = interpret(&ctx, code);
 
   free(out->bytecode);
