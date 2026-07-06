@@ -1,7 +1,7 @@
 # Sinistra Library Calls
 
 This reference is derived from the registered `libcalls[]` table in
-`src/libcall.c`.  Library calls are pseudo-items of the form
+`src/libcall_table.c`.  Library calls are pseudo-items of the form
 `library.call{arguments}` and always push a return value.  Calls with arity `0`
 are written without an argument list in normal Sinistra source, for example
 `net.input`.
