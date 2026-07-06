@@ -168,6 +168,7 @@ help:
 
 $(LIB): $(LIB_OBJECTS)
 	@mkdir -p $(LIB_DIR)
+	rm -f $@
 	ar rcs $@ $^
 
 scomp: $(SCOMP_OBJECTS) $(LIB)
