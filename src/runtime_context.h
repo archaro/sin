@@ -12,8 +12,17 @@
 #include "item.h"
 #include "vm.h"
 #include "runtime_decode.h"
+#include "network.h"
 
 typedef struct RuntimeContext RuntimeContext;
+
+typedef struct {
+  LINE_t *lines;
+  size_t *maxconns;
+  size_t *lastconn;
+  const char *inputline_name;
+  const char *inputtext_name;
+} LibcallNetworkDeps;
 
 // Opcode functions have this form.  The runtime context owns the VM and
 // per-invocation interpreter state that handlers need while executing.
@@ -35,6 +44,7 @@ struct RuntimeContext {
   const char *inputtext_name;
   size_t *maxconns;
   size_t *lastconn;
+  LibcallNetworkDeps network;
   bool *safe_shutdown;
   bool strict_validation;
 

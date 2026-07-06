@@ -16,9 +16,6 @@
 #include "util.h"
 #include "interpret.h"
 
-// Some shorthand
-#define VM config.vm
-
 extern CONFIG_t config;
 
 #define OUTBUF_LENGTH 16384

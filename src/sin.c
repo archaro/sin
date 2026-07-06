@@ -46,6 +46,11 @@ static void runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
   ctx->maxconns = &config.maxconns;
   ctx->lastconn = &config.lastconn;
   ctx->safe_shutdown = &config.safe_shutdown;
+  ctx->network.lines = line;
+  ctx->network.maxconns = &config.maxconns;
+  ctx->network.lastconn = &config.lastconn;
+  ctx->network.inputline_name = config.inputline;
+  ctx->network.inputtext_name = config.inputtext;
   ctx->strict_validation = config.strict_validation;
 }
 
