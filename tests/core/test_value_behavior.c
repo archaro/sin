@@ -51,6 +51,8 @@ static void emit_str(uint8_t *code, size_t *pos, const char *value) {
 static VALUE_t run_interpret(ITEM_t *item) {
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = config.itemroot;
+  ctx.strict_validation = config.strict_validation;
   return interpret(&ctx, item);
 }
 

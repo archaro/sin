@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#include "config.h"
 #include "error.h"
 #include "util.h"
 #include "interpret.h"
@@ -24,9 +23,6 @@
 #include "runtime_item_ops.h"
 #include "runtime_opcode.h"
 #include "runtime_value.h"
-
-// The configuration object, defined in sin.c
-extern CONFIG_t config;
 
 #define VM ctx->vm
 
@@ -47,7 +43,7 @@ static const char *runtime_item_label(ITEM_t *item, char *buffer, size_t size) {
 }
 
 static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
-  if (!config.strict_validation || !item || item->type != ITEM_code) return true;
+  if (!ctx->strict_validation || !item || item->type != ITEM_code) return true;
 
   char item_name[MAX_ITEM_NAME] = {0};
   const char *label = runtime_item_label(item, item_name, sizeof(item_name));
@@ -607,11 +603,11 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     itemname.s = strdup(fullname);
   }
 
-  result = compile_and_insert_codeitem(config.itemroot, &itemname, &in, &errdetail);
+  result = compile_and_insert_codeitem(ctx->itemroot, &itemname, &in, &errdetail);
   if (result == 0) {
-    persist_codeitem_source(config.itemroot, &itemname, &in);
-    set_item(config.itemroot, "error", VALUE_NIL);
-    set_item(config.itemroot, "error.msg", VALUE_NIL);
+    persist_codeitem_source(ctx->itemroot, &itemname, &in);
+    set_item(ctx->itemroot, "error", VALUE_NIL);
+    set_item(ctx->itemroot, "error.msg", VALUE_NIL);
   } else {
     logerr("Compilation failed.\n");
     set_error_item(result, errdetail);
@@ -644,7 +640,7 @@ uint8_t *op_assignitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       logerr("Unable to create item '%s': failed to resolve canonical name.\n", itemname.s);
     }
   }
-  assignitem(config.itemroot, &itemname, val);
+  assignitem(ctx->itemroot, &itemname, val);
   return nextop;
 }
 
@@ -677,7 +673,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       FREE_STR(itemname);
       return nextop;
     }
-    ITEM_t *i = find_item_cached(config.itemroot, fullname, NULL);
+    ITEM_t *i = find_item_cached(ctx->itemroot, fullname, NULL);
     if (i) {
       ITEMDEBUG_LOG("Fetched item %s (called with %d arguments).\n", fullname, arg_count);
       // Just push the item value onto the stack.
@@ -855,7 +851,7 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
             VALUE_t layername = pop_stack(VM->stack);
             if (layername.type == VALUE_str) {
               //  This is basically the same as op_fetchitem
-              ITEM_t *i = find_item(config.itemroot, layername.s);
+              ITEM_t *i = find_item(ctx->itemroot, layername.s);
               if (i) {
                 // We have an item.  Only two value types are allowed.
                 switch (i->value.type) {
@@ -1004,7 +1000,7 @@ uint8_t *op_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (val.type == VALUE_str) {
     char fullname[MAX_ITEM_NAME];
     if (canonicalize_itemname(val.s, item, fullname)) {
-      delete_item(config.itemroot, fullname);
+      delete_item(ctx->itemroot, fullname);
     } else {
       logerr("OP_DELETE failed to resolve canonical name for '%s'.\n", val.s);
     }
@@ -1033,7 +1029,7 @@ uint8_t *op_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     push_stack(VM->stack, VALUE_FALSE);
     return nextop;
   }
-  ITEM_t *i = find_item(config.itemroot, fullname);
+  ITEM_t *i = find_item(ctx->itemroot, fullname);
   FREE_STR(val);
   push_stack(VM->stack, i ? VALUE_TRUE : VALUE_FALSE);
   DISASS_LOG("OP_EXISTS\n");
@@ -1050,7 +1046,7 @@ uint8_t *op_nthname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t itemname = pop_stack(VM->stack);
   bool found = false;
   if (index.type == VALUE_int && index.i >= 0 && itemname.type == VALUE_str) {
-    ITEM_t *i = find_item(config.itemroot, itemname.s);
+    ITEM_t *i = find_item(ctx->itemroot, itemname.s);
     if (i) {
       ITEM_t *child = find_item_by_index(i, index.i);
       if (child) {
@@ -1076,7 +1072,7 @@ uint8_t *op_rootname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t index = pop_stack(VM->stack);
   bool found = false;
   if (index.type == VALUE_int && index.i >= 0) {
-    ITEM_t *child = find_item_by_index(config.itemroot, index.i);
+    ITEM_t *child = find_item_by_index(ctx->itemroot, index.i);
     if (child) {
       found = true;
       VALUE_t result = {VALUE_str, {0}};
@@ -1105,8 +1101,8 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
     init_interpreter(ctx);
     ctx->interpreter_initialized = true;
   }
-  set_item(config.itemroot, "error", VALUE_NIL);
-  set_item(config.itemroot, "error.msg", VALUE_NIL);
+  set_item(ctx->itemroot, "error", VALUE_NIL);
+  set_item(ctx->itemroot, "error.msg", VALUE_NIL);
   // Given some bytecode, interpret it until the HALT instruction is seen
   // NB: The HALT opcode (currently represented by the character 'h') does
   // not have an associated function.

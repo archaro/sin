@@ -28,6 +28,14 @@ extern CONFIG_t config;
 static RuntimeContext test_runtime_ctx;
 static RuntimeContext *test_ctx(void) {
   runtime_context_init(&test_runtime_ctx, config.vm);
+  test_runtime_ctx.itemroot = config.itemroot;
+  test_runtime_ctx.strict_validation = config.strict_validation;
+  test_runtime_ctx.maxconns = &config.maxconns;
+  test_runtime_ctx.lastconn = &config.lastconn;
+  test_runtime_ctx.inputline_name = config.inputline;
+  test_runtime_ctx.inputtext_name = config.inputtext;
+  test_runtime_ctx.loop = config.loop;
+  test_runtime_ctx.safe_shutdown = &config.safe_shutdown;
   return &test_runtime_ctx;
 }
 

@@ -9,12 +9,14 @@
 
 #include "vm.h"
 #include "item.h"
+#include "runtime_context.h"
 
 typedef struct {
   uint64_t id;
   uint64_t interval; // centiseconds
   uv_timer_t *timer;
   VM_t *vm;
+  RuntimeContext runtime_context;
   char itemname[MAX_ITEM_NAME];
 } TASK_t;
 
@@ -24,4 +26,3 @@ TASK_t *make_task(char *name, uint64_t interval);
 void destroy_task(TASK_t *task);
 void destroy_task_by_id(uint64_t id);
 TASK_t *find_task_by_id(uint64_t id);
-

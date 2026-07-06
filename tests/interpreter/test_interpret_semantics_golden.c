@@ -233,6 +233,8 @@ void test_interpret_rejects_malformed_bytecode_before_execution(void) {
 
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = config.itemroot;
+  ctx.strict_validation = config.strict_validation;
   VALUE_t result = interpret(&ctx, code);
   ASSERT_EQ_INT(VALUE_nil, result.type);
   ITEM_t *err = find_item(config.itemroot, "error");

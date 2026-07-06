@@ -33,6 +33,22 @@ jmp_buf recovery;
 // The configuration object - for passing interesting data around globally.
 CONFIG_t config;
 
+static void runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
+  runtime_context_init(ctx, vm);
+  ctx->itemroot = config.itemroot;
+  ctx->loop = config.loop;
+  ctx->itemstore_filename = config.itemstore;
+  ctx->itemstore_durability = config.itemstore_durability;
+  ctx->srcroot = config.srcroot;
+  ctx->input_name = config.input;
+  ctx->inputline_name = config.inputline;
+  ctx->inputtext_name = config.inputtext;
+  ctx->maxconns = &config.maxconns;
+  ctx->lastconn = &config.lastconn;
+  ctx->safe_shutdown = &config.safe_shutdown;
+  ctx->strict_validation = config.strict_validation;
+}
+
 void close_all_tasks(uv_handle_t* handle, void* arg) {
   (void)arg;
   if (!uv_is_closing(handle)) { //FALSE, handle is closing
@@ -319,9 +335,6 @@ int main(int argc, char **argv) {
   DISASS_LOG("DISASS IS DEFINED\n");
   config.vm = make_vm();
   RuntimeContext boot_ctx;
-  runtime_context_init(&boot_ctx, config.vm);
-  init_interpreter(&boot_ctx);
-  boot_ctx.interpreter_initialized = true;
   // If the itemstore hasn't been loaded, do so now.
   if (!config.itemroot) {
     config.itemstore = strdup("items.dat");
@@ -338,6 +351,9 @@ int main(int argc, char **argv) {
   // so the loop needs to be read for 'em.
   config.loop = malloc(sizeof *config.loop);
   uv_loop_init(config.loop);
+  runtime_context_from_config(&boot_ctx, config.vm);
+  init_interpreter(&boot_ctx);
+  boot_ctx.interpreter_initialized = true;
 
   // This is a relatively safe restart point if things turn ugly.
   // This will need to be revisited once the eventloop is running.
@@ -348,7 +364,7 @@ int main(int argc, char **argv) {
     logerr("Destroying and recreating all stacks.\n");
     destroy_vm(config.vm);
     config.vm = make_vm();
-    runtime_context_init(&boot_ctx, config.vm);
+    runtime_context_from_config(&boot_ctx, config.vm);
   }
   // Execute the boot item.  This should set up all the tasks for
   // the main game.  It must not be an infinite loop!
@@ -382,12 +398,15 @@ int main(int argc, char **argv) {
     // Set up the item which handles input.
     logmsg("Using `%s` as the input item.\n", config.input);
     config.input_vm = make_vm();
+    config.maxconns = MAXCONNS;
+    config.lastconn = config.maxconns;
+    RuntimeContext input_ctx;
+    runtime_context_from_config(&input_ctx, config.input_vm);
     uv_idle_init(config.loop, &input_task);
+    input_task.data = &input_ctx;
     uv_idle_start(&input_task, input_processor);
     // Here we go...
     logmsg("Running...\n");
-    config.maxconns = MAXCONNS;
-    config.lastconn = config.maxconns;
     if (!validate_network_config()) {
       exit(EXIT_FAILURE);
     }
