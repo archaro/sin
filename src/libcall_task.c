@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <string.h>
 
 #include "floatconv.h"
 #include "interpret.h"
@@ -86,7 +87,9 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   newtask->itemroot = ctx->itemroot;
   newtask->loop = ctx->loop;
   newtask->runtime_context = *ctx;
-  newtask->runtime_context.vm = newtask->vm;
+  newtask->runtime_context.libcalls = NULL;
+  newtask->runtime_context.initialized = false;
+  (void)runtime_init(&newtask->runtime_context, newtask->vm);
   newtask->runtime_context.itemroot = newtask->itemroot;
   newtask->runtime_context.loop = newtask->loop;
   // Success path: this is the only free on this path (the !taskitem branch returns).

@@ -86,6 +86,7 @@ TASK_t *make_task(char *itemname, uint64_t interval) {
 void destroy_task(TASK_t *task) {
   // Assumes task definitely exists in the task list!
   logmsg("Destroying task %d (%s)\n", task->id, task->itemname);
+  runtime_destroy(&task->runtime_context);
   destroy_vm(task->vm);
   free(task->timer);
   retire_task_id(task->id);

@@ -13,6 +13,7 @@
 #include "vm.h"
 #include "runtime_decode.h"
 #include "network.h"
+#include "libcall_registry.h"
 
 typedef struct RuntimeContext RuntimeContext;
 
@@ -55,7 +56,10 @@ struct RuntimeContext {
   ITEM_t *current_item;
   ITEM_t *pending_call_item;
   OP_t opcode[256];
-  bool interpreter_initialized;
+  LibcallRegistry *libcalls;
+  bool initialized;
 };
 
+bool runtime_init(RuntimeContext *ctx, VM_t *vm);
+void runtime_destroy(RuntimeContext *ctx);
 void runtime_context_init(RuntimeContext *ctx, VM_t *vm);

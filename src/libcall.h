@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include "runtime_context.h"
 #include "libcall_registry.h"
 
 // Libcall handlers use the OP_t opcode-handler ABI:
