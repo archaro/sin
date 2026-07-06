@@ -1097,6 +1097,9 @@ void init_interpreter(RuntimeContext *ctx) {
 
 VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   if (!ctx) return VALUE_NIL;
+  RuntimeDecoder saved_decoder = ctx->decoder;
+  ITEM_t *saved_current_item = ctx->current_item;
+  ITEM_t *saved_pending_call_item = ctx->pending_call_item;
   if (!ctx->interpreter_initialized) {
     init_interpreter(ctx);
     ctx->interpreter_initialized = true;
@@ -1111,8 +1114,9 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   ctx->pending_call_item = NULL;
 
   if (!verify_runtime_bytecode(ctx, ctx->current_item)) {
-    ctx->current_item = NULL;
-    runtime_decoder_init(&ctx->decoder, NULL, NULL);
+    ctx->current_item = saved_current_item;
+    ctx->pending_call_item = saved_pending_call_item;
+    ctx->decoder = saved_decoder;
     return VALUE_NIL;
   }
 
@@ -1130,8 +1134,9 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
       ctx->current_item->inuse = false;
 
       if (size_callstack(VM->callstack) == 0) {
-        runtime_decoder_init(&ctx->decoder, NULL, NULL);
-        ctx->current_item = NULL;
+        ctx->decoder = saved_decoder;
+        ctx->current_item = saved_current_item;
+        ctx->pending_call_item = saved_pending_call_item;
         return return_value;
       }
 
@@ -1162,8 +1167,9 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
         continue;
       }
       ctx->current_item->inuse = false;
-      runtime_decoder_init(&ctx->decoder, NULL, NULL);
-      ctx->current_item = NULL;
+      ctx->decoder = saved_decoder;
+      ctx->current_item = saved_current_item;
+      ctx->pending_call_item = saved_pending_call_item;
       return VALUE_NIL;
     }
     op = newop;
