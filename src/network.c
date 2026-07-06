@@ -677,7 +677,9 @@ void input_processor(uv_idle_t* handle) {
     logerr("Input item does not exist!  Cannot continue.\n");
     exit(EXIT_FAILURE);
   }
-  interpret(input);
+  RuntimeContext input_ctx;
+  runtime_context_init(&input_ctx, config.input_vm);
+  interpret(&input_ctx, input);
   reset_stack(VM->stack);
   // Flush the output of every connected line
   for (size_t l = 0; l < config.maxconns; l++) {

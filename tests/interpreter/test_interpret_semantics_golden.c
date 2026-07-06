@@ -231,7 +231,7 @@ void test_interpret_rejects_malformed_bytecode_before_execution(void) {
   ITEM_t *code = insert_code_item(config.itemroot, "malformed", sizeof(bytecode), owned);
   ASSERT_NOT_NULL(code);
 
-  VALUE_t result = interpret(code);
+  VALUE_t result = interpret_legacy(code);
   ASSERT_EQ_INT(VALUE_nil, result.type);
   ITEM_t *err = find_item(config.itemroot, "error");
   ASSERT_NOT_NULL(err);

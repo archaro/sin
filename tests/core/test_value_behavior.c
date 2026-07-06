@@ -54,7 +54,7 @@ static VALUE_t run_code(const char *name, const uint8_t *template_code, size_t l
   memcpy(bytecode, template_code, len);
   ITEM_t *code = insert_code_item(config.itemroot, name, (uint32_t)len, bytecode);
   ASSERT_NOT_NULL(code);
-  return interpret(code);
+  return interpret_legacy(code);
 }
 
 
@@ -693,7 +693,7 @@ void test_strict_validation_runtime_opt_in(void) {
   ASSERT_NOT_NULL(item);
 
   config.strict_validation = false;
-  VALUE_t result = interpret(item);
+  VALUE_t result = interpret_legacy(item);
   (void)result;
   ITEM_t *err = find_item(config.itemroot, "error");
   ASSERT_NOT_NULL(err);
@@ -710,7 +710,7 @@ void test_strict_validation_runtime_opt_in(void) {
   int32_t before_current = config.vm->stack->current;
   uint8_t before_locals = config.vm->stack->locals;
   uint8_t before_params = config.vm->stack->params;
-  result = interpret(item);
+  result = interpret_legacy(item);
   ASSERT_EQ_INT(VALUE_nil, result.type);
   ASSERT_TRUE(!item->inuse);
   ASSERT_EQ_INT(before_current, config.vm->stack->current);
@@ -734,7 +734,7 @@ void test_strict_validation_rejects_null_bytecode(void) {
   ITEM_t *item = make_item("nullcode", config.itemroot, ITEM_code, VALUE_NIL, NULL, 0);
   ASSERT_NOT_NULL(item);
   config.strict_validation = true;
-  VALUE_t result = interpret(item);
+  VALUE_t result = interpret_legacy(item);
   ASSERT_EQ_INT(VALUE_nil, result.type);
   ASSERT_TRUE(!item->inuse);
   ITEM_t *err = find_item(config.itemroot, "error");

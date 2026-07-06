@@ -54,7 +54,7 @@ static VALUE_t compile_and_run(const char *name, const char *source) {
   memcpy(bytecode, out->bytecode, len);
   ITEM_t *code = insert_code_item(config.itemroot, name, len, bytecode);
   ASSERT_NOT_NULL(code);
-  VALUE_t result = interpret(code);
+  VALUE_t result = interpret_legacy(code);
 
   free(out->bytecode);
   free(out);
