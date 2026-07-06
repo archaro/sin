@@ -357,8 +357,7 @@ int main(int argc, char **argv) {
   config.loop = malloc(sizeof *config.loop);
   uv_loop_init(config.loop);
   runtime_context_from_config(&boot_ctx, config.vm);
-  init_interpreter(&boot_ctx);
-  boot_ctx.interpreter_initialized = true;
+  if (!boot_ctx.initialized) exit(EXIT_FAILURE);
 
   // This is a relatively safe restart point if things turn ugly.
   // This will need to be revisited once the eventloop is running.
@@ -394,18 +393,19 @@ int main(int argc, char **argv) {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }
   // Finished with the boot item, and all its empty promises
+  runtime_destroy(&boot_ctx);
   destroy_vm(config.vm);
   destroy_item(boot);
 
   int runloop_retval = 0;
   uv_idle_t input_task;
+  RuntimeContext input_ctx = {0};
   if (!bootonly) {
     // Set up the item which handles input.
     logmsg("Using `%s` as the input item.\n", config.input);
     config.input_vm = make_vm();
     config.maxconns = MAXCONNS;
     config.lastconn = config.maxconns;
-    RuntimeContext input_ctx;
     runtime_context_from_config(&input_ctx, config.input_vm);
     uv_idle_init(config.loop, &input_task);
     input_task.data = &input_ctx;
@@ -435,6 +435,7 @@ int main(int argc, char **argv) {
     uv_run(config.loop, UV_RUN_ONCE);
     finalise_tasks();
     shutdown_networking();
+    runtime_destroy(&input_ctx);
     destroy_vm(config.input_vm);
   }
   uv_loop_close(config.loop);

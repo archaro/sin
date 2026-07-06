@@ -26,10 +26,29 @@
 
 #define VM ctx->vm
 
-void runtime_context_init(RuntimeContext *ctx, VM_t *vm) {
-  if (!ctx) return;
+bool runtime_init(RuntimeContext *ctx, VM_t *vm) {
+  if (!ctx) return false;
   memset(ctx, 0, sizeof(*ctx));
   ctx->vm = vm;
+  libcall_registry_self_check(libcalls, true);
+  if (!libcall_registry_init(&ctx->libcalls)) {
+    logerr("Failed to initialize libcall registry.\n");
+    return false;
+  }
+  runtime_opcode_bind_table(ctx);
+  ctx->initialized = true;
+  return true;
+}
+
+void runtime_destroy(RuntimeContext *ctx) {
+  if (!ctx) return;
+  libcall_registry_destroy(&ctx->libcalls);
+  memset(ctx->opcode, 0, sizeof(ctx->opcode));
+  ctx->initialized = false;
+}
+
+void runtime_context_init(RuntimeContext *ctx, VM_t *vm) {
+  (void)runtime_init(ctx, vm);
 }
 
 static const char *runtime_item_label(ITEM_t *item, char *buffer, size_t size) {
@@ -510,7 +529,7 @@ uint8_t *op_libcall_token(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &token, "OP_LIBCALL"));
   if (!nextop) return NULL;
   DISASS_LOG("Calling libcall token %d.\n", token);
-  OP_t libcall = libcall_func_token(token);
+  OP_t libcall = libcall_registry_func_token(&ctx->libcalls, token);
   if (!libcall) {
     char detail[64];
     snprintf(detail, sizeof(detail), "Unknown libcall token %u", token);
@@ -1088,11 +1107,9 @@ uint8_t *op_rootname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 }
 
 void init_interpreter(RuntimeContext *ctx) {
-  libcall_registry_self_check(libcalls, true);
-  if (!libcall_init_registry()) {
-    logerr("Failed to initialize libcall registry.\n");
+  if (ctx && !ctx->initialized) {
+    (void)runtime_init(ctx, ctx->vm);
   }
-  runtime_opcode_bind_table(ctx);
 }
 
 VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
@@ -1100,9 +1117,8 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   RuntimeDecoder saved_decoder = ctx->decoder;
   ITEM_t *saved_current_item = ctx->current_item;
   ITEM_t *saved_pending_call_item = ctx->pending_call_item;
-  if (!ctx->interpreter_initialized) {
+  if (!ctx->initialized) {
     init_interpreter(ctx);
-    ctx->interpreter_initialized = true;
   }
   set_item(ctx->itemroot, "error", VALUE_NIL);
   set_item(ctx->itemroot, "error.msg", VALUE_NIL);
