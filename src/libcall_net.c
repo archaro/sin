@@ -1,3 +1,5 @@
+#include <inttypes.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "floatconv.h"
@@ -112,7 +114,7 @@ uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         break;
       case VALUE_int: {
         char buffer[22];
-        itoa(out.i, buffer, 10);
+        snprintf(buffer, sizeof(buffer), "%" PRId64, out.i);
         if (net->lines[line_index].outbuf &&
             !line_can_accept_output(&net->lines[line_index], strlen(buffer))) {
           logerr("net.write rejected for line %zu: output buffer limit or backpressure.\n",
@@ -164,4 +166,3 @@ uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   push_stack(ctx->vm->stack, VALUE_NIL);
   return nextop;
 }
-

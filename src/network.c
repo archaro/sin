@@ -212,10 +212,10 @@ bool line_can_accept_output(LINE_t *linep, size_t len) {
   return queued <= MAX_OUTPUT_PENDING_LENGTH - len;
 }
 
-void append_output(LINE_t *linep, const char *msg, const ssize_t len) {
+void append_output(LINE_t *linep, const char *msg, size_t len) {
   // Append output to the buffer for this line, ready for sending later.
-  if (len <= 0) return;
-  size_t msg_len = (size_t)len;
+  if (len == 0) return;
+  size_t msg_len = len;
   if (linep->status != LINE_empty && linep->status != LINE_disconnecting) {
     // No point in doing this if there is no connection.
     if (!linep->outbuf || !linep->outbuf->buf.base) {
@@ -299,11 +299,11 @@ static size_t unterminated_input_line_length(const char *buf, size_t len) {
   return len;
 }
 
-void append_input(LINE_t *linep, const char *msg, const ssize_t len) {
+void append_input(LINE_t *linep, const char *msg, size_t len) {
   // Append input to the input buffer, ready for processing later.
   // This is where telnet processing will happen.
-  if (len <= 0) return;
-  size_t msg_len = (size_t)len;
+  if (len == 0) return;
+  size_t msg_len = len;
   if (linep->status != LINE_empty && linep->status != LINE_disconnecting) {
     if (!linep->inbuf || !linep->inbuf->buf.base) {
       disconnect_line_for_input_limit(linep, "missing input buffer");
@@ -559,14 +559,14 @@ void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
     }
     LINE_t *linep = find_line((uv_tcp_t *)client);
     if (linep) {
-      telnet_recv(linep->telnet, buf->base, nread);
+      telnet_recv(linep->telnet, buf->base, (size_t)nread);
     }
     free(buf->base);
     return;
   }
   if (nread < 0) {
     if (nread != UV_EOF)
-      logerr("Read error %s\n", uv_err_name(nread));
+      logerr("Read error %s\n", uv_err_name((int)nread));
     uv_close((uv_handle_t *) client, client_on_close);
   }
   free(buf->base);
@@ -654,7 +654,11 @@ void init_listener(uint32_t port) {
   // Use libuv to elegantly create a listener
   struct sockaddr_in6 addr;
   uv_tcp_init(config.loop, &config.listener);
-  uv_ip6_addr("::", port, &addr);
+  if (port > UINT16_MAX) {
+    logerr("Invalid listener port %u.\n", port);
+    return;
+  }
+  uv_ip6_addr("::", (int)port, &addr);
   uv_tcp_bind(&config.listener, (const struct sockaddr *)&addr, 0);
   uv_tcp_nodelay(&config.listener, 1);
   int r = uv_listen((uv_stream_t *) &config.listener, 10, on_new_connection);

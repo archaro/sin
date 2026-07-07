@@ -12,7 +12,7 @@ uint8_t *lc_str_capitalise(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
     ctx->vm->stack->stack[ctx->vm->stack->current].s[0] =
-                        toupper(ctx->vm->stack->stack[ctx->vm->stack->current].s[0]);
+        (char)toupper((unsigned char)ctx->vm->stack->stack[ctx->vm->stack->current].s[0]);
   } else {
     pop_stack(ctx->vm->stack);
     push_stack(ctx->vm->stack, VALUE_NIL);
@@ -28,7 +28,7 @@ uint8_t *lc_str_upper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
     char *c = ctx->vm->stack->stack[ctx->vm->stack->current].s;
     while (*c) {
-      *c = toupper(*c);
+      *c = (char)toupper((unsigned char)*c);
       c++;
     }
   } else {
@@ -46,7 +46,7 @@ uint8_t *lc_str_lower(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
     char *c = ctx->vm->stack->stack[ctx->vm->stack->current].s;
     while (*c) {
-      *c = tolower(*c);
+      *c = (char)tolower((unsigned char)*c);
       c++;
     }
   } else {

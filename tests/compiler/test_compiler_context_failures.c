@@ -96,8 +96,9 @@ void test_compiler_context_failures(void) {
     AS_NODE *list = as_new_stmtlist_node();
     ASSERT_NOT_NULL(list);
     for (int i = 0; i < 8; i++) {
-      char buf[8];
-      snprintf(buf, sizeof(buf), "%d", i);
+      char buf[16];
+      int written = snprintf(buf, sizeof(buf), "%d", i);
+      ASSERT_TRUE(written > 0 && (size_t)written < sizeof(buf));
       ASSERT_TRUE(as_stmtlist_append_checked(list, as_new_valnode(V_INT, strdup(buf))));
     }
     AS_NODE *stmt2 = as_new_valnode(V_INT, strdup("9"));

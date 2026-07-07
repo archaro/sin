@@ -611,8 +611,14 @@ static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
     goto fail_before_item;
   }
 
+  if (bytecode_len > (uint32_t)INT_MAX) {
+    logerr("Corrupt itemstore '%s': bytecode length %u for '%s' exceeds "
+           "platform item length limit.\n", ctx->filename, bytecode_len, name);
+    goto fail_before_item;
+  }
+
   ITEM_t *item = make_loaded_item(name, parent, type, itemval, bytecode,
-                                  bytecode_len, numchildren);
+                                  (int)bytecode_len, numchildren);
 
   for (uint32_t i = 0; i < numchildren; i++) {
     ctx->depth++;

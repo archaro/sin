@@ -34,7 +34,7 @@ static void stdout_write(void *ctx, const char *data, size_t len) {
 
 int main(int argc, char **argv) {
   FILE *in = NULL;
-  int filesize = 0;
+  size_t filesize = 0;
   bytecode = NULL;
   if (argc < 2) {
     usage();
@@ -59,13 +59,38 @@ int main(int argc, char **argv) {
           logerr("Unable to open input file: %s\n", optarg);
           exit(EXIT_FAILURE);
         }
-        fseek(in, 0, SEEK_END);
-        filesize = ftell(in);
-        fseek(in, 0, SEEK_SET);
-        bytecode = realloc(bytecode, (size_t)filesize);
-        fread(bytecode, filesize, sizeof(char), in);
+        if (fseek(in, 0, SEEK_END) != 0) {
+          logerr("Unable to seek input file: %s\n", optarg);
+          fclose(in);
+          exit(EXIT_FAILURE);
+        }
+        long file_len = ftell(in);
+        if (file_len < 0 || (uint64_t)file_len > UINT32_MAX) {
+          logerr("Input file is too large to disassemble: %s\n", optarg);
+          fclose(in);
+          exit(EXIT_FAILURE);
+        }
+        filesize = (size_t)file_len;
+        if (fseek(in, 0, SEEK_SET) != 0) {
+          logerr("Unable to rewind input file: %s\n", optarg);
+          fclose(in);
+          exit(EXIT_FAILURE);
+        }
+        uint8_t *new_bytecode = realloc(bytecode, filesize);
+        if (filesize > 0 && !new_bytecode) {
+          logerr("Unable to allocate %zu bytes for input file: %s\n",
+                 filesize, optarg);
+          fclose(in);
+          exit(EXIT_FAILURE);
+        }
+        bytecode = new_bytecode;
+        if (filesize > 0 && fread(bytecode, 1, filesize, in) != filesize) {
+          logerr("Unable to read complete input file: %s\n", optarg);
+          fclose(in);
+          exit(EXIT_FAILURE);
+        }
         fclose(in);
-        logmsg("Bytecode loaded: %d bytes.\n", filesize);
+        logmsg("Bytecode loaded: %zu bytes.\n", filesize);
         break;
       case 1000:
         opt_raw = 1;

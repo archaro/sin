@@ -3,6 +3,7 @@
 // Licensed under the MIT License - see LICENSE file for details.
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 #include "version.h"
@@ -122,7 +123,7 @@ int main(int argc, char **argv) {
   size_t source_len = 0;
   CompilerDiagnostic diag;
   compiler_diag_init(&diag);
-  uint8_t result = ERR_NOERROR;
+  int8_t result = ERR_NOERROR;
   OUTPUT_t *out = NULL;
   init_errmsg();
 
@@ -149,13 +150,18 @@ int main(int argc, char **argv) {
     goto compile_error;
   }
 
-  logmsg("Compilation completed: %ld bytes.\n", out->nextbyte - out->bytecode);
+  size_t bytecode_len = (size_t)(out->nextbyte - out->bytecode);
+  logmsg("Compilation completed: %zu bytes.\n", bytecode_len);
   FILE *output = fopen(argv[2], "w");
   if (!output) {
-    printf("Unable to open output file.");
+    logerr("Unable to open output file: %s\n", argv[2]);
+    result = ERR_COMP_UNKNOWN;
     goto cleanup;
   }
-  fwrite(out->bytecode, out->nextbyte - out->bytecode, 1, output);
+  if (fwrite(out->bytecode, 1, bytecode_len, output) != bytecode_len) {
+    logerr("Unable to write output file: %s\n", argv[2]);
+    result = ERR_COMP_UNKNOWN;
+  }
   fclose(output);
   goto cleanup;
 

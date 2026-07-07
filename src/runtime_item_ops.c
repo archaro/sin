@@ -3,6 +3,7 @@
 // Licensed under the MIT License - see LICENSE file for details.
 
 #include <stdint.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -146,9 +147,14 @@ int8_t compile_and_insert_codeitem(ITEM_t *itemroot, const VALUE_t *itemname, co
   OUTPUT_t *out = NULL;
   int8_t rc = compile_source_to_bytecode_with_params(in->source, in->source_len, in->params, in->param_count, &out, errdetail);
   if (rc == 0 && out) {
-    uint32_t len = out->nextbyte - out->bytecode;
-    ITEM_t *inserted = insert_code_item(itemroot, itemname->s, len, out->bytecode);
-    if (!inserted) rc = ERR_COMP_INUSE;
+    ptrdiff_t raw_len = out->nextbyte - out->bytecode;
+    if (raw_len < 0 || (uint64_t)raw_len > UINT32_MAX) {
+      rc = ERR_RUNTIME_INVALIDARGS;
+    } else {
+      uint32_t len = (uint32_t)raw_len;
+      ITEM_t *inserted = insert_code_item(itemroot, itemname->s, len, out->bytecode);
+      if (!inserted) rc = ERR_COMP_INUSE;
+    }
   }
   if (out) {
     if (rc != 0 && out->bytecode) free(out->bytecode);
@@ -160,7 +166,9 @@ int8_t compile_and_insert_codeitem(ITEM_t *itemroot, const VALUE_t *itemname, co
 void persist_codeitem_source(ITEM_t *itemroot, const VALUE_t *itemname, const CODEITEM_INPUT_t *in) {
   ITEM_t *code_item = find_item(itemroot, itemname->s);
   STRBUILDER_t sb;
-  sb_init(&sb, in->source_len + in->total_param_len + 16);
+  size_t source_cap = in->source_len + in->total_param_len + 16u;
+  if (source_cap > UINT32_MAX) return;
+  sb_init(&sb, (uint32_t)source_cap);
   if (in->param_count > 0) {
     sb_append_literal(&sb, "code {");
     for (size_t pc = 0; pc < in->param_count; pc++) {
@@ -181,4 +189,3 @@ void persist_codeitem_source(ITEM_t *itemroot, const VALUE_t *itemname, const CO
   }
   free(sb.buf);
 }
-

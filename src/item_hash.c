@@ -23,8 +23,9 @@
 
 HASHTABLE_t *create_hashtable(int size) {
   // Create a hashtable with the given number of buckets
+  if (size <= 0) size = 1;
   HASHTABLE_t *hashtable = allocate_hashtable();
-  hashtable->size = size;
+  hashtable->size = (uint32_t)size;
   hashtable->entry_count = 0;
   hashtable->table = calloc((size_t)size, sizeof *hashtable->table);
   return hashtable;
@@ -100,7 +101,8 @@ HASHTABLE_t *maybe_resize_hashtable(HASHTABLE_t *hashtable) {
   const float maxloadfactor = 0.75; // Tweak for performance as needed
   if (loadfactor > maxloadfactor) {
     // Double the size - maybe tweak for performance
-    int newsize = (hashtable->size * 2) + 1;
+    uint32_t grown_size = (hashtable->size * 2u) + 1u;
+    int newsize = grown_size > (uint32_t)INT_MAX ? INT_MAX : (int)grown_size;
     return resize_hashtable(hashtable, newsize);
   }
   // hashtable has not changed.
@@ -209,9 +211,9 @@ uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
   uint32_t m = 5;
   uint32_t n = 0xe6546b64;
   uint32_t hash = seed;
-  const int nblocks = len / 4;
+  const size_t nblocks = len / 4;
   const uint32_t* blocks = (const uint32_t*)key;
-  int i;
+  size_t i;
   for (i = 0; i < nblocks; i++) {
     uint32_t k = blocks[i];
     k *= c1;
@@ -220,7 +222,7 @@ uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
     hash ^= k;
     hash = ((hash << r2) | (hash >> (32 - r2))) * m + n;
   }
-  const uint8_t *tail = (const uint8_t*)(key + nblocks * 4);
+  const uint8_t *tail = (const uint8_t*)(key + nblocks * 4u);
   uint32_t k1 = 0;
   switch (len & 3) {
     case 3:
@@ -236,7 +238,7 @@ uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
       k1 *= c2;
       hash ^= k1;
   }
-  hash ^= len;
+  hash ^= (uint32_t)len;
   hash ^= (hash >> 16);
   hash *= 0x85ebca6b;
   hash ^= (hash >> 13);

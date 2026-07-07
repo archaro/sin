@@ -9,13 +9,15 @@
 static char *read_text(const char *path) {
   FILE *f = fopen(path, "rb");
   ASSERT_NOT_NULL(f);
-  fseek(f, 0, SEEK_END);
+  ASSERT_EQ_INT(0, fseek(f, 0, SEEK_END));
   long n = ftell(f);
-  fseek(f, 0, SEEK_SET);
-  char *buf = malloc((size_t)n + 1);
+  ASSERT_TRUE(n >= 0);
+  ASSERT_EQ_INT(0, fseek(f, 0, SEEK_SET));
+  size_t len = (size_t)n;
+  char *buf = malloc(len + 1u);
   ASSERT_NOT_NULL(buf);
-  fread(buf, 1, (size_t)n, f);
-  buf[n] = '\0';
+  ASSERT_TRUE(fread(buf, 1, len, f) == len);
+  buf[len] = '\0';
   fclose(f);
   return buf;
 }

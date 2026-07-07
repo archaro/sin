@@ -3,9 +3,12 @@
 // Licensed under the MIT License - see LICENSE file for details.
 
 #include <string.h>
+#include <stdio.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <stddef.h>
 
 #include "error.h"
 #include "util.h"
@@ -123,18 +126,42 @@ static const char *runtime_item_label(ITEM_t *item, char *buffer, size_t size) {
   return item->name;
 }
 
+static void set_runtime_bytecode_error(const char *label, uint32_t offset,
+                                       const char *message) {
+  const char *safe_label = label ? label : "<null>";
+  const char *safe_message = message ? message : "<no diagnostic>";
+  const char *fmt =
+      "Runtime bytecode validation failed for item '%s' at offset %u: %s";
+  int needed = snprintf(NULL, 0, fmt, safe_label, offset, safe_message);
+  if (needed < 0) {
+    logerr("Runtime bytecode validation failed.\n");
+    set_error_item(ERR_RUNTIME_BYTECODE,
+                   "Runtime bytecode validation failed.");
+    return;
+  }
+
+  size_t detail_len = (size_t)needed + 1u;
+  char *detail = alloc_malloc(detail_len);
+  if (!detail) {
+    logerr("Runtime bytecode validation failed: out of memory while formatting diagnostic.\n");
+    set_error_item(ERR_RUNTIME_BYTECODE,
+                   "Runtime bytecode validation failed: out of memory while formatting diagnostic.");
+    return;
+  }
+
+  snprintf(detail, detail_len, fmt, safe_label, offset, safe_message);
+  logerr("%s.\n", detail);
+  set_error_item(ERR_RUNTIME_BYTECODE, detail);
+  free(detail);
+}
+
 static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
   if (!ctx->strict_validation || !item || item->type != ITEM_code) return true;
 
   char item_name[MAX_ITEM_NAME] = {0};
   const char *label = runtime_item_label(item, item_name, sizeof(item_name));
   if (!item->bytecode) {
-    char detail[320];
-    snprintf(detail, sizeof(detail),
-             "Runtime bytecode validation failed for item '%s' at offset 0: null bytecode pointer",
-             label);
-    logerr("%s.\n", detail);
-    set_error_item(ERR_RUNTIME_BYTECODE, detail);
+    set_runtime_bytecode_error(label, 0, "null bytecode pointer");
     return false;
   }
   BC_VerifyOptions options = bc_verify_strict_options();
@@ -142,12 +169,8 @@ static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
       (uint32_t)item->bytecode_len, label, &options);
   if (result.status == BC_VERIFY_OK) return true;
 
-  char detail[320];
-  snprintf(detail, sizeof(detail),
-           "Runtime bytecode validation failed for item '%s' at offset %u: %s",
-           label, result.diagnostic.offset, result.diagnostic.message);
-  logerr("%s.\n", detail);
-  set_error_item(ERR_RUNTIME_BYTECODE, detail);
+  set_runtime_bytecode_error(label, result.diagnostic.offset,
+                             result.diagnostic.message);
   return false;
 }
 
@@ -221,16 +244,18 @@ static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const cha
   if (!result.i) {
     DISASS_LOG("%s: types %d and %d\n", opcode_tag, v1_type, v2_type);
   }
-  return result.i;
+  return result.i != 0;
 }
 
 
 uint8_t *op_nop(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)ctx;
   (void)item;
   return nextop;
 }
 
 uint8_t *op_undefined(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)ctx;
   (void)item;
   logerr("Undefined opcode: %c\n", *(nextop-1));
   return nextop;
@@ -282,7 +307,8 @@ uint8_t *op_inclocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   uint8_t raw_index;
   nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_INCLOCAL"));
   if (!nextop) return NULL;
-  uint8_t index = raw_index + VM->stack->base;
+  int32_t index = (int32_t)raw_index + VM->stack->base;
+  if (index < 0 || index >= STACK_SIZE) return NULL;
   if (VM->stack->stack[index].type == VALUE_int) {
     VM->stack->stack[index].i++;
   } else {
@@ -299,7 +325,8 @@ uint8_t *op_declocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   uint8_t raw_index;
   nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_DECLOCAL"));
   if (!nextop) return NULL;
-  uint8_t index = raw_index + VM->stack->base;
+  int32_t index = (int32_t)raw_index + VM->stack->base;
+  if (index < 0 || index >= STACK_SIZE) return NULL;
   if (VM->stack->stack[index].type == VALUE_int) {
     VM->stack->stack[index].i--;
   } else {
@@ -354,7 +381,8 @@ uint8_t *op_savelocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   uint8_t raw_index;
   nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_SAVELOCAL"));
   if (!nextop) return NULL;
-  uint8_t index = raw_index + VM->stack->base;
+  int32_t index = (int32_t)raw_index + VM->stack->base;
+  if (index < 0 || index >= STACK_SIZE) return NULL;
   // First check if the current value is a string.  If so, free it.
   VALUE_t top = pop_stack(VM->stack);
   value_move(&VM->stack->stack[index], &top);
@@ -369,7 +397,8 @@ uint8_t *op_getlocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   uint8_t raw_index;
   nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_GETLOCAL"));
   if (!nextop) return NULL;
-  uint8_t index = raw_index + VM->stack->base;
+  int32_t index = (int32_t)raw_index + VM->stack->base;
+  if (index < 0 || index >= STACK_SIZE) return NULL;
 
   push_stack(VM->stack, value_clone(&VM->stack->stack[index]));
 #ifdef DISASS
@@ -640,7 +669,7 @@ static void sb_append_literal(STRBUILDER_t *sb, const char *literal) {
 
 static void sb_append_intstr(STRBUILDER_t *sb, int64_t val) {
   char str[22];
-  itoa(val, str, 10);
+  snprintf(str, sizeof(str), "%" PRId64, val);
   sb_append_literal(sb, str);
 }
 
@@ -852,7 +881,7 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
         // Simple layer
         REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM layer length");
         int s = *nextop++; // Length of layer name
-        REQUIRE_BYTES(nextop, s, "OP_ASSEMBLEITEM layer bytes");
+        REQUIRE_BYTES(nextop, (size_t)s, "OP_ASSEMBLEITEM layer bytes");
         sb_append_substr(&sb, (char *)nextop, (uint32_t)s);
         nextop += s;
         saw_non_missing_layer = true;
@@ -1129,7 +1158,7 @@ uint8_t *op_nthname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (index.type == VALUE_int && index.i >= 0 && itemname.type == VALUE_str) {
     ITEM_t *i = find_item(ctx->itemroot, itemname.s);
     if (i) {
-      ITEM_t *child = find_item_by_index(i, index.i);
+      ITEM_t *child = find_item_by_index(i, (size_t)index.i);
       if (child) {
         found = true;
         VALUE_t result = {VALUE_str, {0}};
@@ -1153,7 +1182,7 @@ uint8_t *op_rootname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t index = pop_stack(VM->stack);
   bool found = false;
   if (index.type == VALUE_int && index.i >= 0) {
-    ITEM_t *child = find_item_by_index(ctx->itemroot, index.i);
+    ITEM_t *child = find_item_by_index(ctx->itemroot, (size_t)index.i);
     if (child) {
       found = true;
       VALUE_t result = {VALUE_str, {0}};
@@ -1179,7 +1208,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   RuntimeDecoder saved_decoder = ctx->decoder;
   ITEM_t *saved_current_item = ctx->current_item;
   ITEM_t *saved_pending_call_item = ctx->pending_call_item;
-  size_t entry_callstack_depth = size_callstack(VM->callstack);
+  int entry_callstack_depth = size_callstack(VM->callstack);
   if (!ctx->initialized) {
     init_interpreter(ctx);
   }

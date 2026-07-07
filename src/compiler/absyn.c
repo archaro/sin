@@ -19,7 +19,7 @@ AS_VALUE *as_new_value(ENUM_VALUE valtype, uint64_t ival, char *sval) {
   AS_VALUE *newval = malloc(sizeof *newval);
   newval->valtype = valtype;
   if (valtype == V_INT || valtype == V_BOOLTRUE || valtype == V_BOOLFALSE) {
-    newval->value.i = ival;
+    newval->value.i = (int64_t)ival;
   } else if (valtype == V_FLOAT) {
     newval->value.f_bits = ival;
   } else {
@@ -37,7 +37,7 @@ AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval) {
   // Like as_new_value(), but puts the value into a node and returns that.
   AS_VALUE *newval;
   if (valtype == V_INT) {
-    newval = as_new_value(V_INT, atoll(sval), NULL);
+    newval = as_new_value(V_INT, (uint64_t)atoll(sval), NULL);
     free(sval);
   } else if (valtype == V_FLOAT) {
     uint64_t bits = 0;

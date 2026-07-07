@@ -81,9 +81,15 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   }
   // We have the task item, and the start and repeat intervals.
   // Intervals are given in 10ths of a second, but we need milliseconds.
-  repeatin.i *= 100;
-  startin.i *= 100;
-  TASK_t *newtask = make_task(itemname.s, repeatin.i);
+  if (startin.i < 0 || repeatin.i < 0 ||
+      startin.i > (INT64_MAX / 100) || repeatin.i > (INT64_MAX / 100)) {
+    FREE_STR(itemname);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "task.newgametask intervals must be non-negative and within timer range");
+  }
+  uint64_t start_ms = (uint64_t)startin.i * 100u;
+  uint64_t repeat_ms = (uint64_t)repeatin.i * 100u;
+  TASK_t *newtask = make_task(itemname.s, repeat_ms);
   newtask->itemroot = ctx->itemroot;
   newtask->loop = ctx->loop;
   newtask->runtime_context = *ctx;
@@ -99,10 +105,10 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   // The handle needs to be able to access its task
   newtask->timer->data = newtask;
   // Off we go!
-  uv_timer_start(newtask->timer, execute_task_cb, startin.i, repeatin.i);
+  uv_timer_start(newtask->timer, execute_task_cb, start_ms, repeat_ms);
 
   // libcalls always return a value. In this case, the id of the task.
-  VALUE_t ret = {VALUE_int, {newtask->id}};
+  VALUE_t ret = {VALUE_int, {(int64_t)newtask->id}};
   push_stack(ctx->vm->stack, ret);
   return nextop;
 }
@@ -120,7 +126,11 @@ uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   // Does this task even exist?
-  TASK_t *task = find_task_by_id(taskid.i);
+  if (taskid.i < 0) {
+    push_stack(ctx->vm->stack, VALUE_FALSE);
+    return nextop;
+  }
+  TASK_t *task = find_task_by_id((uint64_t)taskid.i);
   if (!task) {
     // Nope!
     push_stack(ctx->vm->stack, VALUE_FALSE);
@@ -131,4 +141,3 @@ uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
   return nextop;
 }
-

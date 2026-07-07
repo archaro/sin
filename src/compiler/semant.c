@@ -83,7 +83,7 @@ static void sem_add_local(SEM_CTX *ctx, const char *name) {
 
   SEM_LOCAL *local = &ctx->locals[ctx->count];
   local->name = strdup(name);
-  local->index = ctx->count;
+  local->index = (uint8_t)ctx->count;
   local->param = false;
 
   ctx->local_index[ctx->count].name = local->name;

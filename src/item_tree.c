@@ -100,9 +100,9 @@ static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
   } else {
     // The bytecode is allocated elsewhere, before calling this function.
     item->bytecode = bytecode;
-    item->bytecode_len = len;
+    item->bytecode_len = len < 0 ? 0u : (uint32_t)len;
   }
-  strncpy(item->name, name, strlen(name)+1);
+  strcpy(item->name, name);
   uint32_t bucket_count = presize_children
       ? hashtable_buckets_for_entries(expected_children)
       : 16u;
@@ -341,7 +341,7 @@ char *get_itemfilename(ITEM_t *item) {
   // item).  The return value will need to be freed by the caller.
   char *filename, *p;
   char itemname[MAX_ITEM_NAME];
-  int l;
+  size_t l;
 
   itemname[0] = '\0';
   get_itemname(item, itemname);

@@ -1,3 +1,6 @@
+#include <inttypes.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <time.h>
 #include <string.h>
 #include <stdio.h>
@@ -158,7 +161,18 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // pre-call depth while discarding only temporary values produced by the
   // nested interpret() run. This keeps Sys.compile safe when invoked from
   // within an already-active interpreter frame.
-  uint32_t len = out->nextbyte - out->bytecode;
+  ptrdiff_t raw_len = out->nextbyte - out->bytecode;
+  if (raw_len < 0 || (uintmax_t)raw_len > UINT32_MAX) {
+    set_error_item(ERR_RUNTIME_INVALIDARGS,
+        "Sys.compile bytecode output length is out of range.");
+    free(out->bytecode);
+    free(out);
+    lc_cleanup_cstr(val.s);
+    compiler_diag_reset(&diag);
+    push_stack(ctx->vm->stack, VALUE_FALSE);
+    return nextop;
+  }
+  uint32_t len = (uint32_t)raw_len;
   ITEM_t *tmpitem = insert_code_item(ctx->itemroot, tmpname, len, out->bytecode);
 
   if (!tmpitem) {
@@ -193,4 +207,3 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   push_stack(ctx->vm->stack, VALUE_TRUE);
   return nextop;
 }
-

@@ -68,8 +68,8 @@ void set_error_item(const int errnum, const char *errdetail) {
     // It's possible that there is an extended error message.
     // Allocate enough space for the two error messages, plus
     // the extra characters "errmsg (errdetail)"
-    int elen = strlen(base) + strlen(errdetail) + 4;
-    emsg.s = malloc((size_t)elen);
+    size_t elen = strlen(base) + strlen(errdetail) + 4;
+    emsg.s = malloc(elen);
     snprintf(emsg.s, elen, "%s (%s)", base, errdetail);
   } else {
     emsg.s = strdup(base);

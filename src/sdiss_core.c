@@ -104,8 +104,9 @@ static void print_operand_line(SDissState *state, const BC_Instruction *inst) {
     case IR_OP_JUMP:
     case IR_OP_JUMP_IF_FALSE: {
       int16_t off = inst->operand.value.i16;
+      uint32_t abs_offset = (uint32_t)((int64_t)inst->operand.offset + 2 + off);
       outln(state, "%s rel=%d abs=%u\n", inst->mnemonic, off,
-            (unsigned int)(inst->operand.offset + 2 + off));
+            (unsigned int)abs_offset);
       break;
     }
     case IR_OP_ITEM_PUSH_LAYER:

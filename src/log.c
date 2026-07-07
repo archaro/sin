@@ -13,8 +13,8 @@
 bool log_to_file(const char *logfile) {
   // Log to file.  The logfile parameter is suffixed with .log and .err
   // for stdout and stderr respectively.
-  int len = strlen(logfile) + 5;
-  char *newlog = malloc((size_t)len);
+  size_t len = strlen(logfile) + sizeof(".err");
+  char *newlog = malloc(len);
   bool result = false;
   snprintf(newlog, len, "%s.log", logfile);
   if (!freopen(newlog,"a",stdout)) {
@@ -32,8 +32,12 @@ bool log_to_file(const char *logfile) {
 }
 
 void close_log() {
-  freopen("/dev/tty","a",stderr);
-  freopen("/dev/tty","a",stdout);
+  if (!freopen("/dev/tty","a",stderr)) {
+    fprintf(stderr, "Unable to restore stderr to /dev/tty\n");
+  }
+  if (!freopen("/dev/tty","a",stdout)) {
+    fprintf(stderr, "Unable to restore stdout to /dev/tty\n");
+  }
 }
 
 void logerr(const char *msg, ...) {

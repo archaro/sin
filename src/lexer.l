@@ -107,7 +107,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                 // Maximum length of string literal is uint16_t
                 char *strbuf, *strbuf_ptr;
                 int strbuf_size, strbuf_capacity;
-                int code_paren;
+                int code_paren = 0;
 
 <INITIAL>{
   "and"         { return TAND; }
@@ -309,4 +309,3 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   return TUNKNOWNCHAR;
 }
 %%
-

@@ -132,7 +132,8 @@ static bool strict_validation_requested(int argc, char **argv) {
 
 int main(int argc, char **argv) {
   FILE *in;
-  int filesize = 0, listener_port = LISTENER_PORT;
+  size_t filesize = 0;
+  int listener_port = LISTENER_PORT;
   uint8_t *bytecode = NULL;
   bool bootonly = false;
 
@@ -255,13 +256,38 @@ int main(int argc, char **argv) {
           logerr("Unable to open input file: %s\n", optarg);
           exit(EXIT_FAILURE);
         }
-        fseek(in, 0, SEEK_END);
-        filesize = ftell(in);
-        fseek(in, 0, SEEK_SET);
-        bytecode = realloc(bytecode, (size_t)filesize);
-        fread(bytecode, filesize, sizeof(char), in);
+        if (fseek(in, 0, SEEK_END) != 0) {
+          logerr("Unable to seek input file: %s\n", optarg);
+          fclose(in);
+          exit(EXIT_FAILURE);
+        }
+        long file_len = ftell(in);
+        if (file_len < 0 || (uint64_t)file_len > UINT32_MAX) {
+          logerr("Input file is too large to interpret: %s\n", optarg);
+          fclose(in);
+          exit(EXIT_FAILURE);
+        }
+        filesize = (size_t)file_len;
+        if (fseek(in, 0, SEEK_SET) != 0) {
+          logerr("Unable to rewind input file: %s\n", optarg);
+          fclose(in);
+          exit(EXIT_FAILURE);
+        }
+        uint8_t *new_bytecode = realloc(bytecode, filesize);
+        if (filesize > 0 && !new_bytecode) {
+          logerr("Unable to allocate %zu bytes for input file: %s\n",
+                 filesize, optarg);
+          fclose(in);
+          exit(EXIT_FAILURE);
+        }
+        bytecode = new_bytecode;
+        if (filesize > 0 && fread(bytecode, 1, filesize, in) != filesize) {
+          logerr("Unable to read complete input file: %s\n", optarg);
+          fclose(in);
+          exit(EXIT_FAILURE);
+        }
         fclose(in);
-        logmsg("Bytecode loaded: %d bytes.\n", filesize);
+        logmsg("Bytecode loaded: %zu bytes.\n", filesize);
         break;
       }
       case 'p': {
@@ -352,7 +378,7 @@ int main(int argc, char **argv) {
   ITEM_t *boot = make_root_item("boot");
   boot->type = ITEM_code;
   boot->bytecode = bytecode;
-  boot->bytecode_len = filesize;
+  boot->bytecode_len = (uint32_t)filesize;
   // Prepare the loop - the boot item should be setting up tasks,
   // so the loop needs to be read for 'em.
   config.loop = malloc(sizeof *config.loop);
@@ -417,7 +443,11 @@ int main(int argc, char **argv) {
       exit(EXIT_FAILURE);
     }
     init_networking();
-    init_listener(listener_port);
+    if (listener_port < 0) {
+      logerr("Listener port must be non-negative.\n");
+      exit(EXIT_FAILURE);
+    }
+    init_listener((uint32_t)listener_port);
     runloop_retval = uv_run(config.loop, UV_RUN_DEFAULT);
   }
 
