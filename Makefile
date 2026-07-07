@@ -1,21 +1,58 @@
 CC = gcc
-CFLAGS = -g -Wall -MMD -MP -Isrc -Isrc/compiler
-LDFLAGS = -g
-LIBS = -luv
+PKG_CONFIG ?= pkg-config
+LIBUV_PC ?= libuv
+# Default `make`/`make all` builds the debug variant. Override with
+# `BUILD=release` or `BUILD=sanitize`, or use the variant targets below.
+BUILD ?= debug
+CSTD ?= c18
+
+SRC_DIR := src
+OBJ_DIR := obj
+LIB_DIR := lib
+GENERATED_DIR := $(OBJ_DIR)/generated
+
+BASE_CFLAGS := -std=$(CSTD) -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -MMD -MP
+CPPFLAGS := -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=700 -I$(SRC_DIR) -I$(SRC_DIR)/compiler -I$(GENERATED_DIR)
+DEBUG_CFLAGS := -g -O0 -DDEBUG=1
+RELEASE_CFLAGS := -O2 -DNDEBUG
+SANITIZE_CFLAGS := -g -O1 -DDEBUG=1
+DEBUG_LDFLAGS := -g
+RELEASE_LDFLAGS :=
+SANITIZE_LDFLAGS := -g
+LIBUV_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(LIBUV_PC) 2>/dev/null)
+LIBUV_LIBS := $(shell $(PKG_CONFIG) --libs $(LIBUV_PC) 2>/dev/null || printf '%s' '-luv')
+CFLAGS ?= $(BASE_CFLAGS)
+LDFLAGS ?=
+LIBS ?= $(LIBUV_LIBS)
 
 .DEFAULT_GOAL := all
 
-SANITIZE ?= 0
 STRICT_WARNINGS ?= 0
 ASAN_OPTIONS ?= strict_string_checks=1:abort_on_error=1
 SANITIZE_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
-STRICT_WARNING_FLAGS := -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 \
+STRICT_WARNING_FLAGS := -Werror -Wshadow -Wformat=2 \
 	-Wno-error=unused-parameter -Wno-error=sign-compare \
 	-Wno-error=implicit-fallthrough -Wno-error=missing-field-initializers \
-	-Wno-error=pedantic -Wno-error=shadow -Wno-error=type-limits -Wno-error=format-nonliteral
-GENERATED_WARNING_FLAGS :=
+	-Wno-error=pedantic -Wno-error=shadow -Wno-error=type-limits \
+	-Wno-error=format-nonliteral -Wno-error=conversion -Wno-error=sign-conversion
+GENERATED_WARNING_FLAGS := -Wno-conversion -Wno-sign-conversion -Wno-pedantic
 
-ifeq ($(SANITIZE),1)
+ifeq ($(BUILD),debug)
+CFLAGS += $(DEBUG_CFLAGS)
+LDFLAGS += $(DEBUG_LDFLAGS)
+else ifeq ($(BUILD),release)
+CFLAGS += $(RELEASE_CFLAGS)
+LDFLAGS += $(RELEASE_LDFLAGS)
+else ifeq ($(BUILD),sanitize)
+CFLAGS += $(SANITIZE_CFLAGS)
+LDFLAGS += $(SANITIZE_LDFLAGS)
+else
+$(error Unknown BUILD '$(BUILD)'; expected debug, release, or sanitize)
+endif
+
+CFLAGS += $(CPPFLAGS) $(LIBUV_CFLAGS)
+
+ifeq ($(BUILD),sanitize)
 CFLAGS += $(SANITIZE_FLAGS)
 LDFLAGS += $(SANITIZE_FLAGS)
 endif
@@ -26,11 +63,6 @@ GENERATED_WARNING_FLAGS += -Wno-error=format -Wno-error=format-nonliteral
 endif
 YACC = bison
 LEX = flex
-DEBUG = -DDEBUG=1 #-DSTRINGDEBUG=1 -DDISASS=1
-
-SRC_DIR := src
-OBJ_DIR := obj
-LIB_DIR := lib
 
 # Test runner
 TEST_DIR := tests
@@ -107,36 +139,27 @@ LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/bytecode_verify.o
 
 # Parser files for library
 PARSER_SOURCES := $(SRC_DIR)/parser.y
-PARSER_GENERATED := $(SRC_DIR)/parser.c $(SRC_DIR)/parser.h
+PARSER_C := $(GENERATED_DIR)/parser.c
+PARSER_H := $(GENERATED_DIR)/parser.h
+PARSER_GENERATED := $(PARSER_C) $(PARSER_H)
 
 # Lexer files for library
 LEXER_SOURCES := $(SRC_DIR)/lexer.l
-LEXER_GENERATED := $(SRC_DIR)/lexer.c
+LEXER_C := $(GENERATED_DIR)/lexer.c
+LEXER_GENERATED := $(LEXER_C)
 
-# Source files for scomp
-SCOMP_SOURCES := $(SRC_DIR)/scomp.c
-SCOMP_OBJECTS := $(SCOMP_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
-
-$(OBJ_DIR)/scomp.o: $(PARSER_GENERATED)
-
-# Source files for sdiss
-SDISS_SOURCES := $(SRC_DIR)/sdiss.c
-SDISS_OBJECTS := $(SDISS_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
-
-# Source files for sin
-SIN_SOURCES := $(SRC_DIR)/sin.c
-SIN_OBJECTS := $(SIN_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 PROGRAMS := scomp sdiss sin
+PROGRAM_OBJECTS := $(PROGRAMS:%=$(OBJ_DIR)/%.o)
 
 # Dependency files
-OBJECTS := $(LIB_OBJECTS) $(SCOMP_OBJECTS) $(SDISS_OBJECTS) $(SIN_OBJECTS)
+OBJECTS := $(LIB_OBJECTS) $(PROGRAM_OBJECTS)
 DEPS := $(OBJECTS:.o=.d)
 
 $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
-	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
+	$(CC) -c $(CFLAGS) $< -o $@
 
-.PHONY: all lib clean help
+.PHONY: all lib clean help debug release sanitize
 .PHONY: test test-network test-strict test-warnings test-asan test-lsan
 .PHONY: fuzz-build fuzz-corpora fuzz-smoke fuzz-smoke-run
 .PHONY: fuzz-scomp fuzz-sdiss fuzz-sin-object
@@ -146,53 +169,79 @@ all: $(PROGRAMS)
 
 lib: $(LIB)
 
+debug:
+	+$(MAKE) clean
+	+$(MAKE) BUILD=debug all
+
+release:
+	+$(MAKE) clean
+	+$(MAKE) BUILD=release all
+
+sanitize:
+	+$(MAKE) clean
+	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=0" $(MAKE) BUILD=sanitize all
+
 help:
 	@printf '%s\n' \
 		'Build targets:' \
-		'  all              Build scomp, sdiss, and sin (default)' \
-		'  clean            Remove generated and compiled files' \
+		'  all              Build scomp, sdiss, and sin; default BUILD=debug' \
+		'  debug            Clean, then build all with BUILD=debug' \
+		'  release          Clean, then build all with BUILD=release' \
+		'  sanitize         Clean, then build all with BUILD=sanitize and ASan/UBSan' \
+		'  lib              Build lib/libsinshared.a only' \
+		'  clean            Remove objects, binaries, libraries, tests, and stale generated files' \
 		'' \
 		'Test targets:' \
-		'  test             Run the standard test suite' \
-		'  test-strict      Run tests with benchmark budgets enabled' \
-		'  test-warnings    Clean, rebuild, and test with strict warnings' \
-		'  test-asan        Clean, rebuild, and test with ASan/UBSan' \
-		'  test-lsan        Clean, rebuild, and test with leak detection' \
+		'  test             Build debug artifacts and run network + standard suite' \
+		'  test-network     Build and run network tests only' \
+		'  test-strict      Run standard suite with benchmark budgets enabled' \
+		'  test-warnings    Clean, rebuild, and test with STRICT_WARNINGS=1' \
+		'  test-asan        Clean, rebuild, and test with BUILD=sanitize, leak checks off' \
+		'  test-lsan        Clean, rebuild, and test with BUILD=sanitize, leak checks on' \
 		'' \
 		'Fuzz targets:' \
 		'  fuzz-build       Clean and build all fuzz harnesses' \
+		'  fuzz-corpora     Seed fuzz corpora from checked-in fixtures/examples' \
 		'  fuzz-smoke       Build and run all seeded fuzz harnesses' \
+		'  fuzz-smoke-run   Run already-built fuzz harnesses against seeded corpora' \
 		'  fuzz-scomp       Build the scomp fuzz harness' \
 		'  fuzz-sdiss       Build the sdiss fuzz harness' \
-		'  fuzz-sin-object  Build the itemstore fuzz harness'
+		'  fuzz-sin-object  Build the itemstore fuzz harness' \
+		'' \
+		'Common variables:' \
+		'  BUILD=debug|release|sanitize  Select build variant; default debug' \
+		'  CSTD=c18                      Select C standard passed as -std=$(CSTD)' \
+		'  CC=gcc                        Select compiler' \
+		'  PKG_CONFIG=pkg-config         Dependency discovery command' \
+		'  LIBUV_PC=libuv                pkg-config module for libuv' \
+		'  STRICT_WARNINGS=1             Promote selected warnings to errors' \
+		'  FUZZ_CC=clang                 Compiler used by fuzz targets'
 
 $(LIB): $(LIB_OBJECTS)
 	@mkdir -p $(LIB_DIR)
 	rm -f $@
 	ar rcs $@ $^
 
-scomp: $(SCOMP_OBJECTS) $(LIB)
-	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS)
-
-sdiss: $(SDISS_OBJECTS) $(LIB)
-	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS)
-
-sin: $(SIN_OBJECTS) $(LIB)
+scomp sdiss sin: %: $(OBJ_DIR)/%.o $(LIB)
 	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 $(PARSER_GENERATED) &: $(PARSER_SOURCES)
-	$(YACC) -o $(SRC_DIR)/parser.c --defines=$(SRC_DIR)/parser.h $<
+	@mkdir -p $(GENERATED_DIR)
+	$(YACC) -o $(PARSER_C) --defines=$(PARSER_H) $<
 
 $(LEXER_GENERATED): $(LEXER_SOURCES) $(PARSER_GENERATED)
-	$(LEX) -o $(SRC_DIR)/lexer.c $<
+	@mkdir -p $(GENERATED_DIR)
+	$(LEX) -o $(LEXER_C) $<
 
 # Make sure parser.o and lexer.o dependences are tracked
-$(OBJ_DIR)/parser.o: $(SRC_DIR)/parser.c $(SRC_DIR)/parser.h
+$(OBJECTS): $(PARSER_H)
+
+$(OBJ_DIR)/parser.o: $(PARSER_C) $(PARSER_H)
 	@mkdir -p $(@D)
-	$(CC) -c $(CFLAGS) $(GENERATED_WARNING_FLAGS) $(DEBUG) $< -o $@
-$(OBJ_DIR)/lexer.o: $(SRC_DIR)/lexer.c
+	$(CC) -c $(CFLAGS) $(GENERATED_WARNING_FLAGS) $< -o $@
+$(OBJ_DIR)/lexer.o: $(LEXER_C) $(PARSER_H)
 	@mkdir -p $(@D)
-	$(CC) -c $(CFLAGS) $(GENERATED_WARNING_FLAGS) $(DEBUG) $< -o $@
+	$(CC) -c $(CFLAGS) $(GENERATED_WARNING_FLAGS) $< -o $@
 
 # Include dependency files
 -include $(DEPS)
@@ -211,21 +260,21 @@ test-warnings: clean
 	+$(MAKE) STRICT_WARNINGS=1 test
 
 test-asan: clean
-	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=0" $(MAKE) SANITIZE=1 STRICT_WARNINGS=1 test
+	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=0" $(MAKE) BUILD=sanitize STRICT_WARNINGS=1 test
 
 test-lsan: clean
-	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=1" $(MAKE) SANITIZE=1 STRICT_WARNINGS=1 test
+	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=1" $(MAKE) BUILD=sanitize STRICT_WARNINGS=1 test
 
 $(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
-	$(CC) $(CFLAGS) $(DEBUG) -Isrc -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
+	$(CC) $(CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
 $(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/network.c $(SRC_DIR)/network.h
-	$(CC) $(CFLAGS) $(DEBUG) -Isrc -I$(TEST_DIR) -MF $(NETWORK_TEST_DEPS) \
+	$(CC) $(CFLAGS) -I$(TEST_DIR) -MF $(NETWORK_TEST_DEPS) \
 		-o $@ $(TEST_DIR)/network/test_network.c $(LDFLAGS) $(LIBS)
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)
-	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
+	$(CC) -c $(CFLAGS) $< -o $@
 
 $(FUZZ_BIN): $(OBJ_DIR)/tests/fuzz/fuzz_scomp.o $(LIB)
 	$(CC) -o $@ $^ $(FUZZ_LINK_FLAGS) $(LIBS)
@@ -291,4 +340,5 @@ fuzz-sin-object: clean
 
 clean:
 	rm -rf $(OBJ_DIR) $(LIB_DIR) $(PROGRAMS) $(TEST_BIN) $(FUZZ_BINS) \
-		$(NETWORK_TEST_BIN) $(NETWORK_TEST_DEPS) $(PARSER_GENERATED) $(LEXER_GENERATED)
+		$(NETWORK_TEST_BIN) $(NETWORK_TEST_DEPS) \
+		$(SRC_DIR)/parser.c $(SRC_DIR)/parser.h $(SRC_DIR)/lexer.c
