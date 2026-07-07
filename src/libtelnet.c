@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdarg.h>
+#include <limits.h>
 
 /* Win32 compatibility */
 #if defined(_WIN32)
@@ -48,9 +49,12 @@
 #endif
 
 /* helper for Q-method option tracking */
-#define Q_US(q) ((q).state & 0x0F)
-#define Q_HIM(q) (((q).state & 0xF0) >> 4)
-#define Q_MAKE(us,him) ((us) | ((him) << 4))
+#define Q_US(q) ((unsigned char)((q).state & 0x0Fu))
+#define Q_HIM(q) ((unsigned char)(((q).state & 0xF0u) >> 4))
+#define Q_MAKE(us,him) ((unsigned char)(((unsigned char)(us) & 0x0Fu) | \
+		(unsigned char)(((unsigned char)(him) & 0x0Fu) << 4)))
+#define TELNET_FLAG_CLEAR(flags, mask) \
+	((unsigned char)((flags) & (unsigned char)~(unsigned char)(mask)))
 
 /* helper for the negotiation routines */
 #define NEGOTIATE_EVENT(telnet,cmd,opt) \
@@ -148,7 +152,7 @@ static telnet_error_t _error(telnet_t *telnet, unsigned line,
 	ev.type = fatal ? TELNET_EV_ERROR : TELNET_EV_WARNING;
 	ev.error.file = __FILE__;
 	ev.error.func = func;
-	ev.error.line = line;
+	ev.error.line = line > (unsigned)INT_MAX ? INT_MAX : (int)line;
 	ev.error.msg = buffer;
 	telnet->eh(telnet, &ev, telnet->ud);
 
@@ -301,7 +305,7 @@ static INLINE telnet_rfc1143_t _get_rfc1143(telnet_t *telnet,
 
 /* save RFC1143 option state */
 static INLINE void _set_rfc1143(telnet_t *telnet, unsigned char telopt,
-		char us, char him) {
+		unsigned char us, unsigned char him) {
 	telnet_rfc1143_t *qtmp;
 	unsigned int i;
 
@@ -311,8 +315,9 @@ static INLINE void _set_rfc1143(telnet_t *telnet, unsigned char telopt,
 			telnet->q[i].state = Q_MAKE(us,him);
 			if (telopt != TELNET_TELOPT_BINARY)
 				return;
-			telnet->flags &= ~(TELNET_FLAG_TRANSMIT_BINARY |
-					   TELNET_FLAG_RECEIVE_BINARY);
+			telnet->flags = TELNET_FLAG_CLEAR(telnet->flags,
+					TELNET_FLAG_TRANSMIT_BINARY |
+					TELNET_FLAG_RECEIVE_BINARY);
 			if (us == Q_YES)
 				telnet->flags |= TELNET_FLAG_TRANSMIT_BINARY;
 			if (him == Q_YES)
@@ -540,7 +545,7 @@ static int _environ_telnet(telnet_t *telnet, unsigned char type,
 	}
 
 	/* store ENVIRON command */
-	ev.environ.cmd = buffer[0];
+	ev.environ.cmd = (unsigned char)buffer[0];
 
 	/* if we have no arguments, send an event with no data end return */
 	if (size == 1) {
@@ -594,7 +599,7 @@ static int _environ_telnet(telnet_t *telnet, unsigned char type,
 	c = buffer + 1;
 	for (index = 0; index != count; ++index) {
 		/* remember the variable type (will be VAR or USERVAR) */
-		values[index].type = *c++;
+		values[index].type = (unsigned char)*c++;
 
 		/* scan until we find an end-marker, and buffer up unescaped
 		 * bytes into our buffer */
@@ -700,7 +705,7 @@ static int _mssp_telnet(telnet_t *telnet, char* buffer, size_t size) {
 
 	/* allocate strings in argument array */
 	out = last = buffer;
-	next_type = buffer[0];
+	next_type = (unsigned char)buffer[0];
 	for (i = 0, c = buffer + 1; c < buffer + size;) {
 		/* search for end marker */
 		while (c < buffer + size && (unsigned)*c != TELNET_MSSP_VAR &&
@@ -725,7 +730,7 @@ static int _mssp_telnet(telnet_t *telnet, char* buffer, size_t size) {
 
 		/* remember our next type and increment c for next loop run */
 		last = out;
-		next_type = *c++;
+		next_type = (unsigned char)*c++;
 	}
 
 	/* invoke event with our arguments */
@@ -960,7 +965,7 @@ static telnet_error_t _buffer_byte(telnet_t *telnet,
 	}
 
 	/* push the byte, all set */
-	telnet->buffer[telnet->buffer_pos++] = byte;
+	telnet->buffer[telnet->buffer_pos++] = (char)byte;
 	return TELNET_EOK;
 }
 
@@ -969,7 +974,7 @@ static void _process(telnet_t *telnet, const char *buffer, size_t size) {
 	unsigned char byte;
 	size_t i, start;
 	for (i = start = 0; i != size; ++i) {
-		byte = buffer[i];
+		byte = (unsigned char)buffer[i];
 		switch (telnet->state) {
 		/* regular data */
 		case TELNET_STATE_DATA:
@@ -1004,7 +1009,7 @@ static void _process(telnet_t *telnet, const char *buffer, size_t size) {
 				ev.data.buffer = (char*)&byte;
 				ev.data.size = 1;
 				telnet->eh(telnet, &ev, telnet->ud);
-				byte = buffer[i];
+				byte = (unsigned char)buffer[i];
 			}
 			/* any byte following '\r' other than '\n' or '\0' is invalid,
 			 * so pass both \r and the byte */
@@ -1467,15 +1472,22 @@ int telnet_vprintf(telnet_t *telnet, const char *fmt, va_list va) {
 	va_list va_temp;
 	char buffer[1024];
 	char *output = buffer;
-	unsigned int rs, i, l;
+	int rs;
+	size_t i, l, len;
 
 	/* format */
 	va_copy(va_temp, va);
 	rs = vsnprintf(buffer, sizeof(buffer), fmt, va_temp);
 	va_end(va_temp);
+	if (rs < 0) {
+		_error(telnet, __LINE__, __func__, TELNET_EBADVAL, 0,
+				"vsnprintf() failed");
+		return -1;
+	}
 
-	if (rs >= sizeof(buffer)) {
-		output = (char*)malloc(rs + 1);
+	len = (size_t)rs;
+	if (len >= sizeof(buffer)) {
+		output = (char*)malloc(len + 1u);
 		if (output == 0) {
 			_error(telnet, __LINE__, __func__, TELNET_ENOMEM, 0,
 					"malloc() failed: %s", strerror(errno));
@@ -1483,12 +1495,19 @@ int telnet_vprintf(telnet_t *telnet, const char *fmt, va_list va) {
 		}
 
 		va_copy(va_temp, va);
-		rs = vsnprintf(output, rs + 1, fmt, va_temp);
+		rs = vsnprintf(output, len + 1u, fmt, va_temp);
 		va_end(va_temp);
+		if (rs < 0) {
+			_error(telnet, __LINE__, __func__, TELNET_EBADVAL, 0,
+					"vsnprintf() failed");
+			free(output);
+			return -1;
+		}
+		len = (size_t)rs;
 	}
 
 	/* send */
-	for (l = i = 0; i != rs; ++i) {
+	for (l = i = 0; i != len; ++i) {
 		/* special characters */
 		if (output[i] == (char)TELNET_IAC || output[i] == '\r' ||
 				output[i] == '\n') {
@@ -1539,15 +1558,22 @@ int telnet_raw_vprintf(telnet_t *telnet, const char *fmt, va_list va) {
 	va_list va_temp;
 	char buffer[1024];
 	char *output = buffer;
-	unsigned int rs;
+	int rs;
+	size_t len;
 
 	/* format; allocate more space if necessary */
 	va_copy(va_temp, va);
 	rs = vsnprintf(buffer, sizeof(buffer), fmt, va_temp);
 	va_end(va_temp);
+	if (rs < 0) {
+		_error(telnet, __LINE__, __func__, TELNET_EBADVAL, 0,
+				"vsnprintf() failed");
+		return -1;
+	}
 
-	if (rs >= sizeof(buffer)) {
-		output = (char*)malloc(rs + 1);
+	len = (size_t)rs;
+	if (len >= sizeof(buffer)) {
+		output = (char*)malloc(len + 1u);
 		if (output == 0) {
 			_error(telnet, __LINE__, __func__, TELNET_ENOMEM, 0,
 					"malloc() failed: %s", strerror(errno));
@@ -1555,12 +1581,19 @@ int telnet_raw_vprintf(telnet_t *telnet, const char *fmt, va_list va) {
 		}
 
 		va_copy(va_temp, va);
-		rs = vsnprintf(output, rs + 1, fmt, va_temp);
+		rs = vsnprintf(output, len + 1u, fmt, va_temp);
 		va_end(va_temp);
+		if (rs < 0) {
+			_error(telnet, __LINE__, __func__, TELNET_EBADVAL, 0,
+					"vsnprintf() failed");
+			free(output);
+			return -1;
+		}
+		len = (size_t)rs;
 	}
 
 	/* send out the formatted data */
-	telnet_send(telnet, output, rs);
+	telnet_send(telnet, output, len);
 
 	/* release allocated memory, if any */
 	if (output != buffer) {
@@ -1666,4 +1699,3 @@ void telnet_begin_zmp(telnet_t *telnet, const char *cmd) {
 void telnet_zmp_arg(telnet_t *telnet, const char* arg) {
 	telnet_send(telnet, arg, strlen(arg) + 1);
 }
-
