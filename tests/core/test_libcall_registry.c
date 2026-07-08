@@ -101,25 +101,31 @@ static void assert_sys_log_float_output(void) {
   fclose(capture);
 }
 
-static void assert_invalid_args_float_detail_contains(const char *expected) {
+static void assert_invalid_args_detail_contains(const char *expected) {
   ITEM_t *err = find_item(config.itemroot, "error");
   ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(VALUE_int, err->value.type);
   ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
   ITEM_t *msg = find_item(config.itemroot, "error.msg");
   ASSERT_NOT_NULL(msg);
   ASSERT_EQ_INT(VALUE_str, msg->value.type);
-  ASSERT_TRUE(strstr(msg->value.s, "float") != NULL);
   ASSERT_TRUE(strstr(msg->value.s, expected) != NULL);
 }
 
-static void assert_float_string_libcall_returns_nil(uint8_t *(*func)(RuntimeContext *, uint8_t *, ITEM_t *)) {
+static void assert_invalid_args_float_detail_contains(const char *expected) {
+  assert_invalid_args_detail_contains("float");
+  assert_invalid_args_detail_contains(expected);
+}
+
+static void assert_float_string_libcall_returns_invalidargs_nil(
+    uint8_t *(*func)(RuntimeContext *, uint8_t *, ITEM_t *),
+    const char *expected) {
   VALUE_t arg = {VALUE_float, {.f = 1.25}};
   push_stack(config.vm->stack, arg);
   (void)func(test_ctx(), NULL, config.itemroot);
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
-  ASSERT_TRUE(find_item(config.itemroot, "error") == NULL);
-  ASSERT_TRUE(find_item(config.itemroot, "error.msg") == NULL);
+  assert_invalid_args_detail_contains(expected);
 }
 
 static uint8_t *test_noop_libcall(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -283,6 +289,7 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
   ITEM_t *err = find_item(config.itemroot, "error");
   ASSERT_NOT_NULL(err);
   ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+  assert_invalid_args_detail_contains("task.newgametask");
 
   VALUE_t bad_taskid = {VALUE_str, {.s = strdup("x")}};
   push_stack(config.vm->stack, bad_taskid);
@@ -292,6 +299,18 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
   err = find_item(config.itemroot, "error");
   ASSERT_NOT_NULL(err);
   ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+  assert_invalid_args_detail_contains("task.killtask");
+
+  VALUE_t missing_item = {VALUE_str, {.s = strdup("missing.task")}};
+  VALUE_t negative_start = {VALUE_int, {.i = -1}};
+  VALUE_t valid_repeat = {VALUE_int, {.i = 1}};
+  push_stack(config.vm->stack, missing_item);
+  push_stack(config.vm->stack, negative_start);
+  push_stack(config.vm->stack, valid_repeat);
+  (void)lc_task_newgametask(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("intervals");
 
   config.maxconns = 1;
   line = calloc((size_t)config.maxconns, sizeof(LINE_t));
@@ -306,6 +325,7 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
   err = find_item(config.itemroot, "error");
   ASSERT_NOT_NULL(err);
   ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+  assert_invalid_args_detail_contains("net.write");
 
   teardown_libcall_runtime();
 }
@@ -380,12 +400,15 @@ void test_libcall_float_integer_only_arguments_rejected(void) {
 }
 
 
-void test_str_libcalls_float_returns_nil_without_error(void) {
+void test_str_libcalls_float_returns_invalidargs_nil(void) {
   setup_libcall_runtime();
 
-  assert_float_string_libcall_returns_nil(lc_str_capitalise);
-  assert_float_string_libcall_returns_nil(lc_str_upper);
-  assert_float_string_libcall_returns_nil(lc_str_lower);
+  assert_float_string_libcall_returns_invalidargs_nil(lc_str_capitalise,
+      "str.capitalise");
+  assert_float_string_libcall_returns_invalidargs_nil(lc_str_upper,
+      "str.upper");
+  assert_float_string_libcall_returns_invalidargs_nil(lc_str_lower,
+      "str.lower");
 
   teardown_libcall_runtime();
 }

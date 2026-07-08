@@ -74,3 +74,14 @@ A libcall should push `VALUE_NIL`, `VALUE_FALSE`, or another explicit value for
 failure cases that are visible to Sinistra code. Returning `NULL` from a handler
 is reserved for fatal interpreter/opcode failures and causes interpretation to
 abort with `nil`.
+
+Invalid libcall argument types, ranges, or values have a shared runtime policy:
+the handler consumes and frees its arguments, sets `error` to
+`ERR_RUNTIME_INVALIDARGS`, sets `error.msg` to a handler-specific diagnostic when
+available, and pushes the documented failure value for that libcall. Handlers
+should use the helpers in `src/libcall_common.h`, such as
+`lc_invalid_args_return` or `lc_invalid_args_detail_return`, so the error item
+and stack result are updated consistently. Domain failures that are not invalid
+arguments, such as missing items, unknown task ids, inactive network lines, or
+compiler diagnostics from valid `sys.compile` source strings, continue to use
+their own documented errors or non-error return values.

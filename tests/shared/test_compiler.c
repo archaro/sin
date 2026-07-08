@@ -125,7 +125,7 @@ void test_libcall_invalid_arg_branches_return_contracts(void);
 void test_net_write_ignores_non_writable_lines(void);
 void test_libcall_float_integer_only_arguments_rejected(void);
 void test_net_write_formats_float_output(void);
-void test_str_libcalls_float_returns_nil_without_error(void);
+void test_str_libcalls_float_returns_invalidargs_nil(void);
 void test_relative_item_leading_dot_parse_accepts_deref_chain(void);
 void test_relative_item_leading_dot_nested_relative_deref_layers(void);
 void test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed(void);
@@ -325,7 +325,7 @@ static const test_case_t runtime_tests[] = {
     {"test_libcall_invalid_arg_branches_return_contracts", test_libcall_invalid_arg_branches_return_contracts},
     {"test_net_write_ignores_non_writable_lines", test_net_write_ignores_non_writable_lines},
     {"test_libcall_float_integer_only_arguments_rejected", test_libcall_float_integer_only_arguments_rejected},
-    {"test_str_libcalls_float_returns_nil_without_error", test_str_libcalls_float_returns_nil_without_error},
+    {"test_str_libcalls_float_returns_invalidargs_nil", test_str_libcalls_float_returns_invalidargs_nil},
     {"test_net_write_formats_float_output", test_net_write_formats_float_output},
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},
     {"test_runtime_benchmark_optin", test_runtime_benchmark_optin},

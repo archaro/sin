@@ -119,7 +119,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_libcall_registry_self_check_invalid_entries`
     - `test_libcall_invalid_arg_branches_return_contracts`
     - `test_libcall_float_integer_only_arguments_rejected`
-    - `test_str_libcalls_float_returns_nil_without_error`
+    - `test_str_libcalls_float_returns_invalidargs_nil`
     - `test_net_write_formats_float_output`
     - `test_net_write_ignores_non_writable_lines`
 - **Compiler/runtime integration for system libcall execution**
