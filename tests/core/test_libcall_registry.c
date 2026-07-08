@@ -1,6 +1,8 @@
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <unistd.h>
+#include <stdint.h>
 
 #include "libcall.h"
 #include "config.h"
@@ -131,6 +133,35 @@ static void assert_float_string_libcall_returns_invalidargs_nil(
 static uint8_t *test_noop_libcall(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)ctx; (void)item;
   return nextop;
+}
+
+static void assert_newgametask_invalid_interval_returns_nil(int64_t start_value,
+                                                            int64_t repeat_value) {
+  static int task_suffix = 0;
+  char task_name[32];
+  snprintf(task_name, sizeof(task_name), "valid.task.%d", task_suffix++);
+
+  uint8_t *bytecode = malloc(1);
+  ASSERT_NOT_NULL(bytecode);
+  bytecode[0] = 'h';
+  ITEM_t *task_item = insert_code_item(config.itemroot, task_name, 1, bytecode);
+  ASSERT_NOT_NULL(task_item);
+
+  RuntimeContext *ctx = test_ctx();
+  ctx->loop = NULL;
+
+  VALUE_t itemname = {VALUE_str, {.s = strdup(task_name)}};
+  VALUE_t start = {VALUE_int, {.i = start_value}};
+  VALUE_t repeat = {VALUE_int, {.i = repeat_value}};
+  push_stack(config.vm->stack, itemname);
+  push_stack(config.vm->stack, start);
+  push_stack(config.vm->stack, repeat);
+
+  (void)lc_task_newgametask(ctx, NULL, config.itemroot);
+
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("task.newgametask intervals must be non-negative and within timer range");
 }
 
 void test_libcall_registry_roundtrip(void) {
@@ -326,6 +357,18 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
   ASSERT_NOT_NULL(err);
   ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
   assert_invalid_args_detail_contains("net.write");
+
+  teardown_libcall_runtime();
+}
+
+void test_newgametask_rejects_invalid_intervals_before_timer_start(void) {
+  setup_libcall_runtime();
+
+  assert_newgametask_invalid_interval_returns_nil(-1, 1);
+  assert_newgametask_invalid_interval_returns_nil(1, -1);
+  assert_newgametask_invalid_interval_returns_nil(-1, -1);
+  assert_newgametask_invalid_interval_returns_nil((INT64_MAX / 100) + 1, 1);
+  assert_newgametask_invalid_interval_returns_nil(1, (INT64_MAX / 100) + 1);
 
   teardown_libcall_runtime();
 }
