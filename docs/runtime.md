@@ -56,6 +56,18 @@ validation failure or other failure before installation.
 the call. `load_itemstore` returns a newly allocated item tree on success; the
 caller owns that root and must release it with `destroy_item`.
 
+## Runtime diagnostics options
+
+`--strict-validation` enables bytecode verification before runtime execution of
+code items. `--strict-runtime-contracts` is a separate compatibility diagnostic
+mode for runtime argument contracts. In legacy/default mode, item fetch/call
+execution may silently discard supplied arguments when a code item receives too
+many arguments, when the target item is missing, or when the computed item name
+is invalid. With strict runtime contracts enabled, those stack effects and return
+values are preserved, but the interpreter also sets `error` to
+`ERR_RUNTIME_INVALIDARGS`, writes a detail string to `error.msg`, and logs a
+runtime contract violation.
+
 ## Libcall API boundary
 
 Libcall handlers use the same opcode-handler signature as bytecode opcodes. The

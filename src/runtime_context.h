@@ -48,6 +48,7 @@ struct RuntimeContext {
   LibcallNetworkDeps network;
   bool *safe_shutdown;
   bool strict_validation;
+  bool strict_runtime_contracts;
 
   // Owned by this RuntimeContext invocation and freely mutated while the
   // interpreter runs. The bytecode and ITEM_t objects referenced by these

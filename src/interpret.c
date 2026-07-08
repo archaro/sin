@@ -155,6 +155,13 @@ static void set_runtime_bytecode_error(const char *label, uint32_t offset,
   free(detail);
 }
 
+
+static void report_strict_runtime_contract(RuntimeContext *ctx, const char *detail) {
+  if (!ctx || !ctx->strict_runtime_contracts) return;
+  logerr("Runtime contract violation: %s.\n", detail ? detail : "<no detail>");
+  set_error_item(ERR_RUNTIME_INVALIDARGS, detail);
+}
+
 static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
   if (!ctx->strict_validation || !item || item->type != ITEM_code) return true;
 
@@ -776,6 +783,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       logerr("Unable to fetch item '%s': failed to resolve canonical name.\n", itemname.s);
       while (arg_count > 0) {
         DEBUG_LOG("Discarding argument for invalid canonical fetch name.\n");
+        report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded argument for invalid canonical fetch name");
         throwaway_stack(VM->stack);
         arg_count--;
       }
@@ -799,6 +807,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         // If so, lose 'em.
         while (arg_count > i->bytecode[1]) {
           DEBUG_LOG("Popping unneeded argument.\n");
+          report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded extra argument for target item");
           throwaway_stack(VM->stack);
           arg_count--;
         }
@@ -828,6 +837,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       // We need to lose any values on the stack which were passed as args.
         while (arg_count > 0) {
           DEBUG_LOG("Popping unneeded argument.\n");
+          report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded argument for missing target item");
           throwaway_stack(VM->stack);
           arg_count--;
         }
@@ -838,6 +848,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     logerr("Unable to fetch item: invalid item type for name: %d.\n", itemname.type);
     while (arg_count > 0) {
       DEBUG_LOG("Discarding argument for invalid item fetch name type.\n");
+      report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded argument for invalid item fetch name type");
       throwaway_stack(VM->stack);
       arg_count--;
     }

@@ -66,7 +66,7 @@ if error then
 endif;
 ```
 
-If you call `add` with no arguments, you are effectively calling `add{nil, nil};`, and so the result is `nil`.  Calling `add` with only one parameter also returns `nil` because if you add `nil` to anything, the result is always nil.  Calling `add{1, 2, 3};` returns 3, because the third argument is silently dropped.
+If you call `add` with no arguments, you are effectively calling `add{nil, nil};`, and so the result is `nil`.  Calling `add` with only one parameter also returns `nil` because if you add `nil` to anything, the result is always nil.  Calling `add{1, 2, 3};` returns 3, because the third argument is silently dropped. The default runtime keeps this legacy behavior for compatibility, including when arguments are supplied to a missing item or to an expression that does not resolve to an item name. Starting `sin` with `--strict-runtime-contracts` keeps executing with the same stack/result behavior, but records `ERR_RUNTIME_INVALIDARGS` in `error` and a diagnostic in `error.msg` whenever `F`/item-call evaluation has to discard those arguments.
 
 ## Comments ##
 
