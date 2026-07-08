@@ -229,6 +229,58 @@ void test_value_integer_arithmetic_helpers(void) {
 }
 
 
+
+void test_value_integer_overflow_contract(void) {
+  VALUE_t max = {VALUE_int, {.i = INT64_MAX}};
+  VALUE_t min = {VALUE_int, {.i = INT64_MIN}};
+  VALUE_t one = {VALUE_int, {.i = 1}};
+  VALUE_t minus_one = {VALUE_int, {.i = -1}};
+  VALUE_t large = {VALUE_int, {.i = INT64_C(3037000500)}};
+  VALUE_t zero = {VALUE_int, {.i = 0}};
+  VALUE_t result = VALUE_ZERO;
+
+  ASSERT_TRUE(!value_add(&max, &one, &result));
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_TRUE(!value_sub(&min, &one, &result));
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_TRUE(!value_mul(&large, &large, &result));
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_TRUE(!value_div(&min, &minus_one, &result));
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_TRUE(value_div(&one, &zero, &result));
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(0, result.i);
+
+  VALUE_t neg = min;
+  ASSERT_TRUE(!value_neg(&neg));
+  ASSERT_EQ_INT(VALUE_nil, neg.type);
+
+  setup_runtime();
+  uint8_t code[96] = {0};
+  size_t pos = 0;
+  code[pos++] = 0;
+  code[pos++] = 0;
+  code[pos++] = 'p'; emit_i64(code, &pos, INT64_MAX);
+  code[pos++] = 'p'; emit_i64(code, &pos, 1);
+  code[pos++] = 'a';
+  code[pos++] = 'h';
+  result = run_code("test.int_overflow_add", code, pos);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  value_free(&result);
+
+  pos = 0;
+  code[pos++] = 0;
+  code[pos++] = 0;
+  code[pos++] = 'p'; emit_i64(code, &pos, INT64_MIN);
+  code[pos++] = 'n';
+  code[pos++] = 'h';
+  result = run_code("test.int_overflow_neg", code, pos);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  value_free(&result);
+
+  teardown_runtime();
+}
+
 void test_value_push_int_interprets_i64_immediates(void) {
   setup_runtime();
 
