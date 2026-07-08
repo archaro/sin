@@ -91,7 +91,9 @@ bool value_is_numeric(const VALUE_t *value);
 VALUE_numeric_kind_e value_numeric_kind(const VALUE_t *value);
 // Arithmetic helpers support int and IEEE 754 binary64 float arithmetic.
 // OP_ADD intentionally preserves the VM quirk that nil participates as
-// integer 0. value_div preserves the VM invalid-operand result of int 0.
+// integer 0. Signed integer overflow returns false and VALUE_NIL; integer
+// divide by zero still succeeds with integer 0. value_div preserves the VM
+// invalid-operand result of int 0.
 bool value_add(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
 bool value_sub(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
 bool value_mul(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);

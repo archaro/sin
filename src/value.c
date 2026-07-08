@@ -243,11 +243,37 @@ static double float_sub(double lhs, double rhs) { return lhs - rhs; }
 static double float_mul(double lhs, double rhs) { return lhs * rhs; }
 static double float_div(double lhs, double rhs) { return lhs / rhs; }
 
+static bool value_int_add_overflows(int64_t lhs, int64_t rhs) {
+  return (rhs > 0 && lhs > INT64_MAX - rhs) ||
+         (rhs < 0 && lhs < INT64_MIN - rhs);
+}
+
+static bool value_int_sub_overflows(int64_t lhs, int64_t rhs) {
+  return (rhs > 0 && lhs < INT64_MIN + rhs) ||
+         (rhs < 0 && lhs > INT64_MAX + rhs);
+}
+
+static bool value_int_mul_overflows(int64_t lhs, int64_t rhs) {
+  if (lhs == 0 || rhs == 0) return false;
+  if (lhs == -1) return rhs == INT64_MIN;
+  if (rhs == -1) return lhs == INT64_MIN;
+  if (lhs > 0) {
+    if (rhs > 0) return lhs > INT64_MAX / rhs;
+    return rhs < INT64_MIN / lhs;
+  }
+  if (rhs > 0) return lhs < INT64_MIN / rhs;
+  return lhs < INT64_MAX / rhs;
+}
+
 bool value_add(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
   int64_t lhs;
   int64_t rhs;
   if (!result) return false;
   if (value_as_add_int_operand(left, &lhs) && value_as_add_int_operand(right, &rhs)) {
+    if (value_int_add_overflows(lhs, rhs)) {
+      *result = VALUE_NIL;
+      return false;
+    }
     result->type = VALUE_int;
     result->i = lhs + rhs;
     return true;
@@ -260,6 +286,10 @@ bool value_sub(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
   int64_t rhs;
   if (!result) return false;
   if (value_as_int_operand(left, &lhs) && value_as_int_operand(right, &rhs)) {
+    if (value_int_sub_overflows(lhs, rhs)) {
+      *result = VALUE_NIL;
+      return false;
+    }
     result->type = VALUE_int;
     result->i = lhs - rhs;
     return true;
@@ -272,6 +302,10 @@ bool value_mul(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
   int64_t rhs;
   if (!result) return false;
   if (value_as_int_operand(left, &lhs) && value_as_int_operand(right, &rhs)) {
+    if (value_int_mul_overflows(lhs, rhs)) {
+      *result = VALUE_NIL;
+      return false;
+    }
     result->type = VALUE_int;
     result->i = lhs * rhs;
     return true;
@@ -284,6 +318,10 @@ bool value_div(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
   int64_t rhs;
   if (!result) return false;
   if (value_as_int_operand(left, &lhs) && value_as_int_operand(right, &rhs)) {
+    if (lhs == INT64_MIN && rhs == -1) {
+      *result = VALUE_NIL;
+      return false;
+    }
     result->type = VALUE_int;
     result->i = rhs == 0 ? 0 : lhs / rhs;
     return true;
@@ -298,6 +336,10 @@ bool value_div(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
 bool value_neg(VALUE_t *value) {
   if (!value) return false;
   if (value->type == VALUE_int) {
+    if (value->i == INT64_MIN) {
+      *value = VALUE_NIL;
+      return false;
+    }
     value->i = -value->i;
     return true;
   }
