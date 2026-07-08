@@ -70,6 +70,13 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
         "task.newgametask expects string item name and integer start/repeat intervals; floats are invalid for intervals");
   }
+  // Intervals are given in 10ths of a second, but we need milliseconds.
+  if (startin.i < 0 || repeatin.i < 0 ||
+      startin.i > (INT64_MAX / 100) || repeatin.i > (INT64_MAX / 100)) {
+    FREE_STR(itemname);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "task.newgametask intervals must be non-negative and within timer range");
+  }
   ITEM_t *taskitem = find_item(ctx->itemroot, itemname.s);
   if (!taskitem) {
     // If the task item doesn't exist, it can't be run.
@@ -79,14 +86,7 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
     set_error_item(ERR_RUNTIME_NOSUCHITEM, NULL);
     return nextop;
   }
-  // We have the task item, and the start and repeat intervals.
-  // Intervals are given in 10ths of a second, but we need milliseconds.
-  if (startin.i < 0 || repeatin.i < 0 ||
-      startin.i > (INT64_MAX / 100) || repeatin.i > (INT64_MAX / 100)) {
-    FREE_STR(itemname);
-    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "task.newgametask intervals must be non-negative and within timer range");
-  }
+  // We have the task item, and the validated start and repeat intervals.
   uint64_t start_ms = (uint64_t)startin.i * 100u;
   uint64_t repeat_ms = (uint64_t)repeatin.i * 100u;
   TASK_t *newtask = make_task(itemname.s, repeat_ms);

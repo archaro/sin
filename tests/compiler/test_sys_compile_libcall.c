@@ -113,6 +113,11 @@ void test_sys_compile_libcall_runtime(void) {
   ASSERT_NOT_NULL(err_item);
   ASSERT_EQ_INT(VALUE_int, err_item->value.type);
   ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err_item->value.i);
+  msg_item = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(msg_item);
+  ASSERT_EQ_INT(VALUE_str, msg_item->value.type);
+  ASSERT_TRUE(strstr(msg_item->value.s, "sys.compile") != NULL);
+  ASSERT_TRUE(strstr(msg_item->value.s, "string") != NULL);
 
   int32_t baseline = config.vm->stack->current;
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
