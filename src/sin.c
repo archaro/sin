@@ -162,6 +162,8 @@ int main(int argc, char **argv) {
    * command-line option order. */
   config.strict_validation = flag_requested(argc, argv, "--strict-validation");
   config.strict_runtime_contracts = flag_requested(argc, argv, "--strict-runtime-contracts");
+  /* Runtime contract diagnostics are intentionally independent from bytecode
+   * validation and remain disabled unless explicitly requested. */
 
   // Do the very early preparations, for things which are needed
   // before even the options are processed.
