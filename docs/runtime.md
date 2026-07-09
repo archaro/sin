@@ -72,7 +72,9 @@ preserved, but the interpreter also sets `error` to `ERR_RUNTIME_INVALIDARGS`,
 writes a detail string to `error.msg`, and logs a runtime contract violation.
 Enabling `--strict-validation` alone does not enable these dropped-argument
 diagnostics; use `--strict-runtime-contracts` when you want runtime contract
-reporting.
+reporting. For example, `add{1, 2, 3}` and `missing.item{1}` keep their
+legacy-compatible return values, but strict runtime contracts also set
+`ERR_RUNTIME_INVALIDARGS` and describe the discarded argument in `error.msg`.
 
 ## Libcall API boundary
 
