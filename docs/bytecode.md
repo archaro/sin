@@ -68,10 +68,10 @@ arguments as described below.
 
 | Opcode | IR opcode(s) | Immediate bytes | Description |
 | --- | --- | --- | --- |
-| `a` | `IR_OP_ADD` | none | Pop the top two values. Add integers, add floats with int-to-float promotion when needed, concatenate strings, and push the result. Integer overflow pushes `nil`. Invalid mixed types push `nil`. |
+| `a` | `IR_OP_ADD` | none | Pop the top two values. Add integers, treating `nil` as integer `0`; add floats with int-to-float promotion when needed; concatenate strings; and push the result. Integer overflow pushes `nil`. Invalid mixed types push `nil`. |
 | `b` | `IR_OP_PUSH_BOOL` | `u8 value` | Push a boolean value; non-zero is true and zero is false. |
 | `c` | `IR_OP_STORE_LOCAL` | `u8 local_index` | Store the top stack value into the addressed local slot and pop it. |
-| `d` | `IR_OP_DIV` | none | Pop two numeric values, divide the previous value by the top value, and push the result. Integer-only divide by zero substitutes zero; integer overflow, including `INT64_MIN / -1`, pushes `nil`. Float division follows IEEE 754 after int-to-float promotion. Invalid operands produce `nil` or the historical integer-zero result for non-float invalid division. |
+| `d` | `IR_OP_DIV` | none | Pop two numeric values, divide the previous value by the top value, and push the result. Integer-only divide by zero substitutes zero; integer overflow, including `INT64_MIN / -1`, pushes `nil`. Float division follows IEEE 754 after int-to-float promotion. Invalid operands produce `nil` or the integer-zero result for non-float invalid division. |
 | `e` | `IR_OP_LOAD_LOCAL` | `u8 local_index` | Push a copy of the addressed local value. |
 | `f` | `IR_OP_INC_LOCAL` | `u8 local_index` | Increment an integer local; report an error for non-integers. |
 | `g` | `IR_OP_DEC_LOCAL` | `u8 local_index` | Decrement an integer local; report an error for non-integers. |
@@ -108,6 +108,16 @@ arguments as described below.
 | `Y` | `IR_OP_NTHNAME` | none | Pop an index and item name. Push the name of the indexed child, or `nil` if no such child exists. |
 | `Z` | `IR_OP_ROOTNAME` | none | Pop an index. Push the name of the indexed root child item, or `nil` if no such child exists. |
 
+
+## Numeric edge cases
+
+Integer arithmetic is signed 64-bit arithmetic with checked overflow. `IR_OP_ADD` is the only arithmetic opcode that treats `nil` as integer `0`; `IR_OP_SUB`, `IR_OP_MUL`, `IR_OP_DIV`, and `IR_OP_NEG` do not treat `nil` as numeric. Overflow in
+`IR_OP_ADD`, `IR_OP_SUB`, `IR_OP_MUL`, `IR_OP_DIV`, and integer `IR_OP_NEG`
+pushes `nil`; it does not wrap, saturate, or trap. Examples include
+`INT64_MAX + 1`, `INT64_MIN - 1`, `3037000500 * 3037000500`,
+`INT64_MIN / -1`, and `-INT64_MIN`. Integer division by zero pushes integer `0`. Float operations, including division
+by zero, use IEEE 754 binary64 results after any integer-to-float promotion.
+
 ## Shared `F` opcode behavior
 
 `IR_OP_ITEM_DEREF` and `IR_OP_CALL` intentionally share the encoded opcode byte
@@ -131,7 +141,11 @@ performs the same stack normalization and return-value behavior, but each
 discarded argument caused by an over-arity code-item call, invalid item name, or
 missing target item sets `error` to `ERR_RUNTIME_INVALIDARGS` and writes a
 diagnostic to `error.msg`. This option is separate from `--strict-validation`,
-which validates bytecode structure before execution.
+which validates bytecode structure before execution. For example, an over-arity
+call such as `add{1, 2, 3}` still returns the same value that `add{1, 2}` would
+return, and a missing-target call such as `missing.item{1}` still returns `nil`;
+strict runtime contracts additionally set `ERR_RUNTIME_INVALIDARGS` and explain
+that an argument was discarded.
 
 The IR schema distinguishes the two producers of `F`:
 
