@@ -874,6 +874,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         // - interpreter loop must transfer control to callee without recursion.
         ITEMDEBUG_LOG("Executing item %s\n", i->name);
         ctx->pending_call_item = i;
+        FREE_STR(itemname);
         return NULL;
       }
     } else {
