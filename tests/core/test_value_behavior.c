@@ -788,6 +788,17 @@ void test_strict_runtime_contracts_default_preserves_fetch_argument_drops(void) 
   teardown_runtime();
 }
 
+void test_strict_validation_alone_preserves_fetch_argument_drops(void) {
+  setup_runtime();
+  config.strict_validation = true;
+  config.strict_runtime_contracts = false;
+  VALUE_t name = {VALUE_str, {.s = "missing.strict_validation_only"}};
+  VALUE_t result = run_fetch_with_one_int_arg("strict_runtime.strict_validation_only_runner", name);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error_nil();
+  teardown_runtime();
+}
+
 void test_strict_runtime_contracts_reports_too_many_item_arguments(void) {
   setup_runtime();
   uint8_t target_code[] = {0, 0, 'h'};

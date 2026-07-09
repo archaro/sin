@@ -16,6 +16,7 @@ static RuntimeContext *test_ctx(void) {
   runtime_context_init(&test_runtime_ctx, config.vm);
   test_runtime_ctx.itemroot = config.itemroot;
   test_runtime_ctx.strict_validation = config.strict_validation;
+  test_runtime_ctx.strict_runtime_contracts = config.strict_runtime_contracts;
   return &test_runtime_ctx;
 }
 uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
