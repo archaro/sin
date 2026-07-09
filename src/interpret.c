@@ -130,9 +130,9 @@ static void set_runtime_bytecode_error(const char *label, uint32_t offset,
                                        const char *message) {
   const char *safe_label = label ? label : "<null>";
   const char *safe_message = message ? message : "<no diagnostic>";
-  const char *fmt =
-      "Runtime bytecode validation failed for item '%s' at offset %u: %s";
-  int needed = snprintf(NULL, 0, fmt, safe_label, offset, safe_message);
+  int needed = snprintf(NULL, 0,
+      "Runtime bytecode validation failed for item '%s' at offset %u: %s",
+      safe_label, offset, safe_message);
   if (needed < 0) {
     logerr("Runtime bytecode validation failed.\n");
     set_error_item(ERR_RUNTIME_BYTECODE,
@@ -149,7 +149,9 @@ static void set_runtime_bytecode_error(const char *label, uint32_t offset,
     return;
   }
 
-  snprintf(detail, detail_len, fmt, safe_label, offset, safe_message);
+  snprintf(detail, detail_len,
+      "Runtime bytecode validation failed for item '%s' at offset %u: %s",
+      safe_label, offset, safe_message);
   logerr("%s.\n", detail);
   set_error_item(ERR_RUNTIME_BYTECODE, detail);
   free(detail);

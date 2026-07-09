@@ -152,10 +152,10 @@ void test_error_item_preserves_compiler_diagnostic_fields(void) {
   ASSERT_EQ_INT(VALUE_str, file->value.type);
   ASSERT_TRUE(strcmp(file->value.s, "example.sin") == 0);
 
-  ITEM_t *line = find_item(config.itemroot, "error.line");
-  ASSERT_NOT_NULL(line);
-  ASSERT_EQ_INT(VALUE_int, line->value.type);
-  ASSERT_EQ_INT(7, line->value.i);
+  ITEM_t *line_item = find_item(config.itemroot, "error.line");
+  ASSERT_NOT_NULL(line_item);
+  ASSERT_EQ_INT(VALUE_int, line_item->value.type);
+  ASSERT_EQ_INT(7, line_item->value.i);
 
   ITEM_t *column = find_item(config.itemroot, "error.column");
   ASSERT_NOT_NULL(column);
