@@ -226,10 +226,10 @@ uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
   uint32_t k1 = 0;
   switch (len & 3) {
     case 3:
-      k1 ^= tail[2] << 16;
+      k1 ^= ((uint32_t)tail[2]) << 16;
       __attribute__((fallthrough));
     case 2:
-      k1 ^= tail[1] << 8;
+      k1 ^= ((uint32_t)tail[1]) << 8;
       __attribute__((fallthrough));
     case 1:
       k1 ^= tail[0];

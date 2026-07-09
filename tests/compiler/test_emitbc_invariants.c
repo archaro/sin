@@ -210,7 +210,7 @@ static void test_emitbc_label_heavy_jump_targets_in_bounds(void) {
     }
     if (op == 'p' || op == 'P') pc += 8;
     else if (op == 'l' || op == 'B') {
-      uint16_t n = (uint16_t)out.bytecode[pc] | ((uint16_t)out.bytecode[pc + 1] << 8);
+      uint16_t n = (uint16_t)(((uint16_t)out.bytecode[pc]) | ((uint16_t)out.bytecode[pc + 1] << 8));
       pc += 2 + n;
     } else if (op == 'e' || op == 'c' || op == 'f' || op == 'g') pc += 1;
     else if (op == 'F') pc += 2;
