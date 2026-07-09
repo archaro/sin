@@ -156,10 +156,53 @@ static void set_runtime_bytecode_error(const char *label, uint32_t offset,
 }
 
 
+static void set_runtime_context_error(RuntimeContext *ctx, int errnum,
+                                      const char *errdetail) {
+  if (!ctx || !ctx->itemroot) return;
+
+  VALUE_t e = {VALUE_int, {.i = errnum}};
+  set_item(ctx->itemroot, "error", e);
+
+  const char *base =
+      (errnum >= 0 && errnum < MAXERRORS && errmsg[errnum])
+          ? errmsg[errnum]
+          : "Unknown error";
+  int needed = errdetail ? snprintf(NULL, 0, "%s (%s)", base, errdetail)
+                         : snprintf(NULL, 0, "%s", base);
+  VALUE_t msg = VALUE_NIL;
+  if (needed >= 0) {
+    msg.type = VALUE_str;
+    msg.s = alloc_malloc((size_t)needed + 1u);
+    if (msg.s) {
+      if (errdetail) {
+        snprintf(msg.s, (size_t)needed + 1u, "%s (%s)", base, errdetail);
+      } else {
+        snprintf(msg.s, (size_t)needed + 1u, "%s", base);
+      }
+    }
+  }
+  if (msg.type != VALUE_str || !msg.s) {
+    msg.type = VALUE_str;
+    msg.s = strdup(base);
+  }
+  if (msg.s) {
+    set_item(ctx->itemroot, "error.msg", msg);
+  } else {
+    set_item(ctx->itemroot, "error.msg", VALUE_NIL);
+  }
+
+  set_item(ctx->itemroot, "error.code", VALUE_NIL);
+  set_item(ctx->itemroot, "error.stage", VALUE_NIL);
+  set_item(ctx->itemroot, "error.file", VALUE_NIL);
+  set_item(ctx->itemroot, "error.line", VALUE_NIL);
+  set_item(ctx->itemroot, "error.column", VALUE_NIL);
+  set_item(ctx->itemroot, "error.excerpt", VALUE_NIL);
+}
+
 static void report_strict_runtime_contract(RuntimeContext *ctx, const char *detail) {
   if (!ctx || !ctx->strict_runtime_contracts) return;
   logerr("Runtime contract violation: %s.\n", detail ? detail : "<no detail>");
-  set_error_item(ERR_RUNTIME_INVALIDARGS, detail);
+  set_runtime_context_error(ctx, ERR_RUNTIME_INVALIDARGS, detail);
 }
 
 static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {

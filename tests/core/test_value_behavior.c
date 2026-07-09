@@ -823,6 +823,49 @@ void test_strict_runtime_contracts_reports_missing_item_arguments(void) {
   teardown_runtime();
 }
 
+void test_strict_runtime_contracts_uses_context_itemroot(void) {
+  memset(&config, 0, sizeof(config));
+  init_errmsg();
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  VM_t *vm = make_vm();
+  ASSERT_NOT_NULL(vm);
+
+  uint8_t code[64] = {0};
+  size_t pos = 0;
+  code[pos++] = 0;
+  code[pos++] = 0;
+  code[pos++] = 'p'; emit_i64(code, &pos, 42);
+  code[pos++] = 'l'; emit_str(code, &pos, "strict_runtime.context_missing");
+  code[pos++] = 'F'; code[pos++] = 1; code[pos++] = 0;
+  code[pos++] = 'h';
+  uint8_t *bytecode = malloc(pos);
+  ASSERT_NOT_NULL(bytecode);
+  memcpy(bytecode, code, pos);
+  ITEM_t *runner = insert_code_item(root, "strict_runtime.context_runner",
+                                    (uint32_t)pos, bytecode);
+  ASSERT_NOT_NULL(runner);
+
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, vm);
+  ctx.itemroot = root;
+  ctx.strict_runtime_contracts = true;
+  VALUE_t result = interpret(&ctx, runner);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+
+  ITEM_t *err = find_item(root, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+  ITEM_t *msg = find_item(root, "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_EQ_INT(VALUE_str, msg->value.type);
+  ASSERT_TRUE(strstr(msg->value.s, "missing target item") != NULL);
+
+  destroy_vm(vm);
+  destroy_item(root);
+  memset(&config, 0, sizeof(config));
+}
+
 void test_strict_validation_runtime_opt_in(void) {
   setup_runtime();
   uint8_t code[] = {0, 0, 'e', 1, 'h'};
