@@ -14,7 +14,7 @@
 #include "runtime_context.h"
 
 CONFIG_t config;
-const char *test_harness_current_suite(void){return "network";} const char *test_harness_current_test(void){return "network";} void test_harness_failf(const char *file,int line,const char *fmt,...){fprintf(stderr,"fail %s:%d %s\n",file,line,fmt); exit(1);} 
+const char *test_harness_current_suite(void){return "network";} const char *test_harness_current_test(void){return "network";} void test_harness_failf(const char *file,int line_no,const char *fmt,...){fprintf(stderr,"fail %s:%d %s\n",file,line_no,fmt); exit(1);}
 
 typedef void (*test_fn_t)(void);
 typedef struct { const char *name; test_fn_t fn; } test_case_t;

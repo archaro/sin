@@ -130,9 +130,9 @@ static void set_runtime_bytecode_error(const char *label, uint32_t offset,
                                        const char *message) {
   const char *safe_label = label ? label : "<null>";
   const char *safe_message = message ? message : "<no diagnostic>";
-  const char *fmt =
-      "Runtime bytecode validation failed for item '%s' at offset %u: %s";
-  int needed = snprintf(NULL, 0, fmt, safe_label, offset, safe_message);
+  int needed = snprintf(NULL, 0,
+      "Runtime bytecode validation failed for item '%s' at offset %u: %s",
+      safe_label, offset, safe_message);
   if (needed < 0) {
     logerr("Runtime bytecode validation failed.\n");
     set_error_item(ERR_RUNTIME_BYTECODE,
@@ -149,10 +149,62 @@ static void set_runtime_bytecode_error(const char *label, uint32_t offset,
     return;
   }
 
-  snprintf(detail, detail_len, fmt, safe_label, offset, safe_message);
+  snprintf(detail, detail_len,
+      "Runtime bytecode validation failed for item '%s' at offset %u: %s",
+      safe_label, offset, safe_message);
   logerr("%s.\n", detail);
   set_error_item(ERR_RUNTIME_BYTECODE, detail);
   free(detail);
+}
+
+
+static void set_runtime_context_error(RuntimeContext *ctx, int errnum,
+                                      const char *errdetail) {
+  if (!ctx || !ctx->itemroot) return;
+
+  VALUE_t e = {VALUE_int, {.i = errnum}};
+  set_item(ctx->itemroot, "error", e);
+
+  const char *base =
+      (errnum >= 0 && errnum < MAXERRORS && errmsg[errnum])
+          ? errmsg[errnum]
+          : "Unknown error";
+  int needed = errdetail ? snprintf(NULL, 0, "%s (%s)", base, errdetail)
+                         : snprintf(NULL, 0, "%s", base);
+  VALUE_t msg = VALUE_NIL;
+  if (needed >= 0) {
+    msg.type = VALUE_str;
+    msg.s = alloc_malloc((size_t)needed + 1u);
+    if (msg.s) {
+      if (errdetail) {
+        snprintf(msg.s, (size_t)needed + 1u, "%s (%s)", base, errdetail);
+      } else {
+        snprintf(msg.s, (size_t)needed + 1u, "%s", base);
+      }
+    }
+  }
+  if (msg.type != VALUE_str || !msg.s) {
+    msg.type = VALUE_str;
+    msg.s = strdup(base);
+  }
+  if (msg.s) {
+    set_item(ctx->itemroot, "error.msg", msg);
+  } else {
+    set_item(ctx->itemroot, "error.msg", VALUE_NIL);
+  }
+
+  set_item(ctx->itemroot, "error.code", VALUE_NIL);
+  set_item(ctx->itemroot, "error.stage", VALUE_NIL);
+  set_item(ctx->itemroot, "error.file", VALUE_NIL);
+  set_item(ctx->itemroot, "error.line", VALUE_NIL);
+  set_item(ctx->itemroot, "error.column", VALUE_NIL);
+  set_item(ctx->itemroot, "error.excerpt", VALUE_NIL);
+}
+
+static void report_strict_runtime_contract(RuntimeContext *ctx, const char *detail) {
+  if (!ctx || !ctx->strict_runtime_contracts) return;
+  logerr("Runtime contract violation: %s.\n", detail ? detail : "<no detail>");
+  set_runtime_context_error(ctx, ERR_RUNTIME_INVALIDARGS, detail);
 }
 
 static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
@@ -776,6 +828,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       logerr("Unable to fetch item '%s': failed to resolve canonical name.\n", itemname.s);
       while (arg_count > 0) {
         DEBUG_LOG("Discarding argument for invalid canonical fetch name.\n");
+        report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded argument for invalid canonical fetch name");
         throwaway_stack(VM->stack);
         arg_count--;
       }
@@ -799,6 +852,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         // If so, lose 'em.
         while (arg_count > i->bytecode[1]) {
           DEBUG_LOG("Popping unneeded argument.\n");
+          report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded extra argument for target item");
           throwaway_stack(VM->stack);
           arg_count--;
         }
@@ -820,6 +874,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         // - interpreter loop must transfer control to callee without recursion.
         ITEMDEBUG_LOG("Executing item %s\n", i->name);
         ctx->pending_call_item = i;
+        FREE_STR(itemname);
         return NULL;
       }
     } else {
@@ -828,6 +883,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       // We need to lose any values on the stack which were passed as args.
         while (arg_count > 0) {
           DEBUG_LOG("Popping unneeded argument.\n");
+          report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded argument for missing target item");
           throwaway_stack(VM->stack);
           arg_count--;
         }
@@ -838,6 +894,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     logerr("Unable to fetch item: invalid item type for name: %d.\n", itemname.type);
     while (arg_count > 0) {
       DEBUG_LOG("Discarding argument for invalid item fetch name type.\n");
+      report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded argument for invalid item fetch name type");
       throwaway_stack(VM->stack);
       arg_count--;
     }

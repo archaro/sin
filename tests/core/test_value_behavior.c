@@ -53,6 +53,7 @@ static VALUE_t run_interpret(ITEM_t *item) {
   runtime_context_init(&ctx, config.vm);
   ctx.itemroot = config.itemroot;
   ctx.strict_validation = config.strict_validation;
+  ctx.strict_runtime_contracts = config.strict_runtime_contracts;
   return interpret(&ctx, item);
 }
 
@@ -151,10 +152,10 @@ void test_error_item_preserves_compiler_diagnostic_fields(void) {
   ASSERT_EQ_INT(VALUE_str, file->value.type);
   ASSERT_TRUE(strcmp(file->value.s, "example.sin") == 0);
 
-  ITEM_t *line = find_item(config.itemroot, "error.line");
-  ASSERT_NOT_NULL(line);
-  ASSERT_EQ_INT(VALUE_int, line->value.type);
-  ASSERT_EQ_INT(7, line->value.i);
+  ITEM_t *line_item = find_item(config.itemroot, "error.line");
+  ASSERT_NOT_NULL(line_item);
+  ASSERT_EQ_INT(VALUE_int, line_item->value.type);
+  ASSERT_EQ_INT(7, line_item->value.i);
 
   ITEM_t *column = find_item(config.itemroot, "error.column");
   ASSERT_NOT_NULL(column);
@@ -741,6 +742,128 @@ void test_interpreter_truncated_single_byte_operands(void) {
   assert_truncated_bytecode_for_opcode("test.truncated_getlocal", 'e', "OP_GETLOCAL");
   assert_truncated_bytecode_for_opcode("test.truncated_libcall_token", 'M', "OP_LIBCALL");
   teardown_runtime();
+}
+
+static void assert_error_nil(void) {
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(VALUE_nil, err->value.type);
+}
+
+static void assert_strict_runtime_contract_detail(const char *needle) {
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_EQ_INT(VALUE_str, msg->value.type);
+  ASSERT_TRUE(strstr(msg->value.s, needle) != NULL);
+}
+
+static VALUE_t run_fetch_with_one_int_arg(const char *runner_name, VALUE_t fetch_name) {
+  uint8_t code[256] = {0};
+  size_t pos = 0;
+  code[pos++] = 0;
+  code[pos++] = 0;
+  code[pos++] = 'p'; emit_i64(code, &pos, 42);
+  if (fetch_name.type == VALUE_str) {
+    code[pos++] = 'l'; emit_str(code, &pos, fetch_name.s);
+  } else if (fetch_name.type == VALUE_int) {
+    code[pos++] = 'p'; emit_i64(code, &pos, fetch_name.i);
+  } else {
+    ASSERT_TRUE(false);
+  }
+  code[pos++] = 'F'; code[pos++] = 1; code[pos++] = 0;
+  code[pos++] = 'h';
+  return run_code(runner_name, code, pos);
+}
+
+void test_strict_runtime_contracts_default_preserves_fetch_argument_drops(void) {
+  setup_runtime();
+  config.strict_runtime_contracts = false;
+  VALUE_t name = {VALUE_str, {.s = "missing.default"}};
+  VALUE_t result = run_fetch_with_one_int_arg("strict_runtime.default_runner", name);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error_nil();
+  teardown_runtime();
+}
+
+void test_strict_runtime_contracts_reports_too_many_item_arguments(void) {
+  setup_runtime();
+  uint8_t target_code[] = {0, 0, 'h'};
+  uint8_t *target = malloc(sizeof(target_code));
+  ASSERT_NOT_NULL(target);
+  memcpy(target, target_code, sizeof(target_code));
+  ASSERT_NOT_NULL(insert_code_item(config.itemroot, "strict_runtime.target", sizeof(target_code), target));
+  config.strict_runtime_contracts = true;
+  VALUE_t name = {VALUE_str, {.s = "strict_runtime.target"}};
+  VALUE_t result = run_fetch_with_one_int_arg("strict_runtime.too_many_runner", name);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_strict_runtime_contract_detail("extra argument for target item");
+  teardown_runtime();
+}
+
+void test_strict_runtime_contracts_reports_invalid_item_name_arguments(void) {
+  setup_runtime();
+  config.strict_runtime_contracts = true;
+  VALUE_t name = {VALUE_int, {.i = 7}};
+  VALUE_t result = run_fetch_with_one_int_arg("strict_runtime.invalid_name_runner", name);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_strict_runtime_contract_detail("invalid item fetch name type");
+  teardown_runtime();
+}
+
+void test_strict_runtime_contracts_reports_missing_item_arguments(void) {
+  setup_runtime();
+  config.strict_runtime_contracts = true;
+  VALUE_t name = {VALUE_str, {.s = "strict_runtime.missing"}};
+  VALUE_t result = run_fetch_with_one_int_arg("strict_runtime.missing_runner", name);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_strict_runtime_contract_detail("missing target item");
+  teardown_runtime();
+}
+
+void test_strict_runtime_contracts_uses_context_itemroot(void) {
+  memset(&config, 0, sizeof(config));
+  init_errmsg();
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  VM_t *vm = make_vm();
+  ASSERT_NOT_NULL(vm);
+
+  uint8_t code[64] = {0};
+  size_t pos = 0;
+  code[pos++] = 0;
+  code[pos++] = 0;
+  code[pos++] = 'p'; emit_i64(code, &pos, 42);
+  code[pos++] = 'l'; emit_str(code, &pos, "strict_runtime.context_missing");
+  code[pos++] = 'F'; code[pos++] = 1; code[pos++] = 0;
+  code[pos++] = 'h';
+  uint8_t *bytecode = malloc(pos);
+  ASSERT_NOT_NULL(bytecode);
+  memcpy(bytecode, code, pos);
+  ITEM_t *runner = insert_code_item(root, "strict_runtime.context_runner",
+                                    (uint32_t)pos, bytecode);
+  ASSERT_NOT_NULL(runner);
+
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, vm);
+  ctx.itemroot = root;
+  ctx.strict_runtime_contracts = true;
+  VALUE_t result = interpret(&ctx, runner);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+
+  ITEM_t *err = find_item(root, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+  ITEM_t *msg = find_item(root, "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_EQ_INT(VALUE_str, msg->value.type);
+  ASSERT_TRUE(strstr(msg->value.s, "missing target item") != NULL);
+
+  destroy_vm(vm);
+  destroy_item(root);
+  memset(&config, 0, sizeof(config));
 }
 
 void test_strict_validation_runtime_opt_in(void) {

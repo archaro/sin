@@ -31,4 +31,5 @@ typedef struct {
   size_t lastconn;      // Last connection processed by net.input
   bool safe_shutdown;   // Determins how to shut down.
   bool strict_validation; // Verify bytecode at runtime before execution.
+  bool strict_runtime_contracts; // Report runtime contract violations that legacy mode tolerates.
 } CONFIG_t;

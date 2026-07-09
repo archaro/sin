@@ -197,7 +197,7 @@ static bool read_u8(FILE *file, uint8_t *value, const char *context) {
 static bool read_u16_le(FILE *file, uint16_t *value, const char *context) {
   uint8_t bytes[2];
   if (!read_bytes(file, bytes, sizeof(bytes), context)) return false;
-  *value = (uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8);
+  *value = (uint16_t)(((uint16_t)bytes[0]) | ((uint16_t)bytes[1] << 8));
   return true;
 }
 

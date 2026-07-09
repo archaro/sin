@@ -52,6 +52,7 @@ static void runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
   ctx->network.inputline_name = config.inputline;
   ctx->network.inputtext_name = config.inputtext;
   ctx->strict_validation = config.strict_validation;
+  ctx->strict_runtime_contracts = config.strict_runtime_contracts;
   (void)runtime_init(ctx, vm);
 }
 
@@ -99,6 +100,9 @@ void usage() {
   logmsg("\t\t\t  given must exist or the interpreter will not run.\n");
   logmsg("     --strict-validation\n");
   logmsg("\t\t\t  Verify bytecode before runtime execution.\n");
+  logmsg("     --strict-runtime-contracts\n");
+  logmsg("\t\t\t  Report runtime argument contract violations that legacy\n");
+  logmsg("\t\t\t  mode silently tolerates.\n");
 }
 
 static ITEM_t *load_or_create_itemstore(const char *filename) {
@@ -123,9 +127,9 @@ static ITEM_t *load_or_create_itemstore(const char *filename) {
   return make_root_item("root");
 }
 
-static bool strict_validation_requested(int argc, char **argv) {
+static bool flag_requested(int argc, char **argv, const char *flag) {
   for (int i = 1; i < argc; i++) {
-    if (strcmp(argv[i], "--strict-validation") == 0) return true;
+    if (strcmp(argv[i], flag) == 0) return true;
   }
   return false;
 }
@@ -156,7 +160,8 @@ int main(int argc, char **argv) {
   /* Itemstores named with -i are loaded while options are processed. Detect
    * this global validation policy first so its effect is independent of
    * command-line option order. */
-  config.strict_validation = strict_validation_requested(argc, argv);
+  config.strict_validation = flag_requested(argc, argv, "--strict-validation");
+  config.strict_runtime_contracts = flag_requested(argc, argv, "--strict-runtime-contracts");
 
   // Do the very early preparations, for things which are needed
   // before even the options are processed.
@@ -184,6 +189,7 @@ int main(int argc, char **argv) {
     {"port", optional_argument, 0, 'p'},
     {"srcroot", required_argument, 0, 's'},
     {"strict-validation", no_argument, 0, 1000},
+    {"strict-runtime-contracts", no_argument, 0, 1001},
     {NULL, 0, 0, '\0'}
   };
   while ((opt = getopt_long(argc, argv, "bd:hi:l::n:o:p:s:", options, NULL)) != -1) {
@@ -302,6 +308,10 @@ int main(int argc, char **argv) {
       }
       case 1000: {
         config.strict_validation = true;
+        break;
+      }
+      case 1001: {
+        config.strict_runtime_contracts = true;
         break;
       }
       default: {

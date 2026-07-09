@@ -72,12 +72,12 @@ static char *normalize_text(char *text) {
 static int contains_all_lines(const char *expected_lines, const char *actual, int *missing_line) {
   char *copy = strdup(expected_lines);
   ASSERT_NOT_NULL(copy);
-  int line = 0;
+  int marker_line = 0;
   for (char *tok = strtok(copy, "\n"); tok; tok = strtok(NULL, "\n")) {
-    line++;
+    marker_line++;
     if (tok[0] == '\0') continue;
     if (!strstr(actual, tok)) {
-      *missing_line = line;
+      *missing_line = marker_line;
       free(copy);
       return 0;
     }
@@ -153,19 +153,19 @@ static void assert_run_matches(const char *case_name, const char *variant,
     ASSERT_EQ_INT(expected->exit_code, actual->exit_code);
   }
 
-  int line = -1;
-  if (!contains_all_lines(expected->stdout_text, actual->stdout_text, &line)) {
+  int missing_line = -1;
+  if (!contains_all_lines(expected->stdout_text, actual->stdout_text, &missing_line)) {
     fprintf(stderr,
             "[%s/%s] mismatch stdout: expected marker line %d not found\n",
-            case_name, variant, line);
+            case_name, variant, missing_line);
     ASSERT_TRUE(0);
   }
 
-  line = -1;
-  if (!contains_all_lines(expected->stderr_text, actual->stderr_text, &line)) {
+  missing_line = -1;
+  if (!contains_all_lines(expected->stderr_text, actual->stderr_text, &missing_line)) {
     fprintf(stderr,
             "[%s/%s] mismatch stderr: expected marker line %d not found\n",
-            case_name, variant, line);
+            case_name, variant, missing_line);
     ASSERT_TRUE(0);
   }
 }

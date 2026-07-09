@@ -125,6 +125,14 @@ then behaves as follows:
 * If the target does not exist or the item name is invalid, it discards supplied
   arguments and pushes `nil`.
 
+By default, discarding arguments in these cases is silent for compatibility. When
+the runtime is started with `--strict-runtime-contracts`, the `F` primitive still
+performs the same stack normalization and return-value behavior, but each
+discarded argument caused by an over-arity code-item call, invalid item name, or
+missing target item sets `error` to `ERR_RUNTIME_INVALIDARGS` and writes a
+diagnostic to `error.msg`. This option is separate from `--strict-validation`,
+which validates bytecode structure before execution.
+
 The IR schema distinguishes the two producers of `F`:
 
 * `IR_OP_ITEM_DEREF` is a plain item dereference and has no IR operand; the
