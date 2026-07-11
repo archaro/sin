@@ -128,6 +128,7 @@ void test_net_write_ignores_non_writable_lines(void);
 void test_libcall_float_integer_only_arguments_rejected(void);
 void test_net_write_formats_float_output(void);
 void test_str_libcalls_float_returns_invalidargs_nil(void);
+void test_str_len_returns_string_byte_length(void);
 void test_str_libcall_invalidargs_uses_context_itemroot(void);
 void test_relative_item_leading_dot_parse_accepts_deref_chain(void);
 void test_relative_item_leading_dot_nested_relative_deref_layers(void);
@@ -345,6 +346,7 @@ static const test_case_t runtime_tests[] = {
     {"test_net_write_ignores_non_writable_lines", test_net_write_ignores_non_writable_lines},
     {"test_libcall_float_integer_only_arguments_rejected", test_libcall_float_integer_only_arguments_rejected},
     {"test_str_libcalls_float_returns_invalidargs_nil", test_str_libcalls_float_returns_invalidargs_nil},
+    {"test_str_len_returns_string_byte_length", test_str_len_returns_string_byte_length},
     {"test_str_libcall_invalidargs_uses_context_itemroot", test_str_libcall_invalidargs_uses_context_itemroot},
     {"test_net_write_formats_float_output", test_net_write_formats_float_output},
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},

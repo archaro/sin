@@ -23,6 +23,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_capitalise(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_upper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_lower(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_len(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 extern LINE_t *line;
 extern CONFIG_t config;
@@ -484,6 +485,28 @@ void test_str_libcalls_float_returns_invalidargs_nil(void) {
       "str.upper");
   assert_float_string_libcall_returns_invalidargs_nil(lc_str_lower,
       "str.lower");
+  assert_float_string_libcall_returns_invalidargs_nil(lc_str_len,
+      "str.len");
+
+  teardown_libcall_runtime();
+}
+
+void test_str_len_returns_string_byte_length(void) {
+  setup_libcall_runtime();
+
+  VALUE_t text = {VALUE_str, {.s = strdup("hello")}};
+  push_stack(config.vm->stack, text);
+  (void)lc_str_len(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(5, ret.i);
+
+  VALUE_t empty = {VALUE_str, {.s = strdup("")}};
+  push_stack(config.vm->stack, empty);
+  (void)lc_str_len(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
 
   teardown_libcall_runtime();
 }
@@ -497,6 +520,8 @@ void test_str_libcall_invalidargs_uses_context_itemroot(void) {
       "str.upper");
   assert_float_string_libcall_uses_context_itemroot(lc_str_lower,
       "str.lower");
+  assert_float_string_libcall_uses_context_itemroot(lc_str_len,
+      "str.len");
 
   teardown_libcall_runtime();
 }

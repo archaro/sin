@@ -18,4 +18,5 @@
   X("net",  "write",       3, 1, 2, lc_net_write) \
   X("str",  "capitalise",  4, 0, 1, lc_str_capitalise) \
   X("str",  "upper",       4, 1, 1, lc_str_upper) \
-  X("str",  "lower",       4, 2, 1, lc_str_lower)
+  X("str",  "lower",       4, 2, 1, lc_str_lower) \
+  X("str",  "len",         4, 3, 1, lc_str_len)
