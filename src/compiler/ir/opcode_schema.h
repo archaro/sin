@@ -48,6 +48,7 @@ typedef struct {
   IR_OperandKind operand_kind;
   IR_SizePolicy size_policy;
   IR_Validator validator;
+  const char *runtime_handler_name;
 } IR_OpSchema;
 
 extern const IR_OpSchema g_ir_opcode_schema[];
