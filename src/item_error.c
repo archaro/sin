@@ -31,18 +31,28 @@ static const char *safe_error_message(const int errnum) {
   return "Unknown error";
 }
 
-static void set_string_error_field(const char *name, const char *value) {
+static void set_string_error_field_on_root(ITEM_t *root, const char *name,
+                                           const char *value) {
   VALUE_t v;
   v.type = VALUE_str;
   v.s = strdup(value ? value : "");
-  set_item(config.itemroot, name, v);
+  set_item(root, name, v);
 }
 
-static void set_int_error_field(const char *name, int64_t value) {
+static void set_string_error_field(const char *name, const char *value) {
+  set_string_error_field_on_root(config.itemroot, name, value);
+}
+
+static void set_int_error_field_on_root(ITEM_t *root, const char *name,
+                                        int64_t value) {
   VALUE_t v;
   v.type = VALUE_int;
   v.i = value;
-  set_item(config.itemroot, name, v);
+  set_item(root, name, v);
+}
+
+static void set_int_error_field(const char *name, int64_t value) {
+  set_int_error_field_on_root(config.itemroot, name, value);
 }
 
 void clear_error_item(void) {
@@ -57,12 +67,17 @@ void clear_error_item(void) {
 }
 
 void set_error_item(const int errnum, const char *errdetail) {
+  set_error_item_on_root(config.itemroot, errnum, errdetail);
+}
+
+void set_error_item_on_root(ITEM_t *root, const int errnum, const char *errdetail) {
+  if (!root) return;
   // Helper function to set the error item.
   VALUE_t e, emsg;
   const char *base = safe_error_message(errnum);
   e.type = VALUE_int;
   e.i = errnum;
-  set_item(config.itemroot, "error", e);
+  set_item(root, "error", e);
   emsg.type = VALUE_str;
   if (errdetail) {
     // It's possible that there is an extended error message.
@@ -74,13 +89,13 @@ void set_error_item(const int errnum, const char *errdetail) {
   } else {
     emsg.s = strdup(base);
   }
-  set_item(config.itemroot, "error.msg", emsg);
-  set_item(config.itemroot, "error.code", VALUE_NIL);
-  set_item(config.itemroot, "error.stage", VALUE_NIL);
-  set_item(config.itemroot, "error.file", VALUE_NIL);
-  set_item(config.itemroot, "error.line", VALUE_NIL);
-  set_item(config.itemroot, "error.column", VALUE_NIL);
-  set_item(config.itemroot, "error.excerpt", VALUE_NIL);
+  set_item(root, "error.msg", emsg);
+  set_item(root, "error.code", VALUE_NIL);
+  set_item(root, "error.stage", VALUE_NIL);
+  set_item(root, "error.file", VALUE_NIL);
+  set_item(root, "error.line", VALUE_NIL);
+  set_item(root, "error.column", VALUE_NIL);
+  set_item(root, "error.excerpt", VALUE_NIL);
 }
 
 void set_compiler_error_item(const CompilerDiagnostic *diag) {

@@ -131,6 +131,37 @@ static void assert_float_string_libcall_returns_invalidargs_nil(
   assert_invalid_args_detail_contains(expected);
 }
 
+static void assert_float_string_libcall_uses_context_itemroot(
+    uint8_t *(*func)(RuntimeContext *, uint8_t *, ITEM_t *),
+    const char *expected) {
+  ITEM_t *context_root = make_root_item("context-root");
+  ASSERT_NOT_NULL(context_root);
+
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = context_root;
+
+  VALUE_t arg = {VALUE_float, {.f = 1.25}};
+  push_stack(config.vm->stack, arg);
+  (void)func(&ctx, NULL, context_root);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+
+  ITEM_t *context_err = find_item(context_root, "error");
+  ASSERT_NOT_NULL(context_err);
+  ASSERT_EQ_INT(VALUE_int, context_err->value.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, context_err->value.i);
+  ITEM_t *context_msg = find_item(context_root, "error.msg");
+  ASSERT_NOT_NULL(context_msg);
+  ASSERT_EQ_INT(VALUE_str, context_msg->value.type);
+  ASSERT_TRUE(strstr(context_msg->value.s, expected) != NULL);
+
+  ITEM_t *global_err = find_item(config.itemroot, "error");
+  ASSERT_TRUE(global_err == NULL || global_err->value.type == VALUE_nil);
+
+  destroy_item(context_root);
+}
+
 static uint8_t *test_noop_libcall(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)ctx; (void)item;
   return nextop;
@@ -452,6 +483,19 @@ void test_str_libcalls_float_returns_invalidargs_nil(void) {
   assert_float_string_libcall_returns_invalidargs_nil(lc_str_upper,
       "str.upper");
   assert_float_string_libcall_returns_invalidargs_nil(lc_str_lower,
+      "str.lower");
+
+  teardown_libcall_runtime();
+}
+
+void test_str_libcall_invalidargs_uses_context_itemroot(void) {
+  setup_libcall_runtime();
+
+  assert_float_string_libcall_uses_context_itemroot(lc_str_capitalise,
+      "str.capitalise");
+  assert_float_string_libcall_uses_context_itemroot(lc_str_upper,
+      "str.upper");
+  assert_float_string_libcall_uses_context_itemroot(lc_str_lower,
       "str.lower");
 
   teardown_libcall_runtime();
