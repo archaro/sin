@@ -19,13 +19,13 @@ static uint8_t *bytecode;
 static int opt_raw = 0, opt_no_header = 0;
 
 void usage() {
-  logmsg("Syntax: sdiss <options>\n");
-  logmsg("Options:\n");
-  logmsg(" -h, --help\t\tThis message.\n");
-  logmsg("     --version\t\tShow version information.\n");
-  logmsg(" -o, --object <file>\tObject code to disassemble.\n");
-  logmsg("     --raw\t\tShow raw bytes per instruction.\n");
-  logmsg("     --no-header\tSkip locals/params header output.\n");
+  printf("Syntax: sdiss <options>\n");
+  printf("Options:\n");
+  printf(" -h, --help\t\tThis message.\n");
+  printf("     --version\t\tShow version information.\n");
+  printf(" -o, --object <file>\tObject code to disassemble.\n");
+  printf("     --raw\t\tShow raw bytes per instruction.\n");
+  printf("     --no-header\tSkip locals/params header output.\n");
 }
 
 static void usage_error(const char *message) {
@@ -54,11 +54,13 @@ int main(int argc, char **argv) {
     {"object", required_argument, 0, 'o'},
     {"raw", no_argument, 0, 1000},
     {"no-header", no_argument, 0, 1001},
+    {"quiet", no_argument, 0, 'q'},
+    {"verbose", no_argument, 0, 'v'},
     {NULL, 0, 0, '\0'}
   };
   opterr = 0;
   optind = 1;
-  while ((opt = getopt_long(argc, argv, "ho:", options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "ho:qv", options, NULL)) != -1) {
     switch (opt) {
       case 'h':
         usage();
@@ -66,6 +68,12 @@ int main(int argc, char **argv) {
       case OPT_VERSION:
         printf("sdiss %s\n", SINVERSION);
         exit(EXIT_SUCCESS);
+      case 'q':
+        log_set_level(LOG_LEVEL_QUIET);
+        break;
+      case 'v':
+        log_set_level(LOG_LEVEL_VERBOSE);
+        break;
       case 'o':
         in = fopen(optarg, "rb");
         if (!in) {
@@ -103,7 +111,7 @@ int main(int argc, char **argv) {
           exit(EXIT_FAILURE);
         }
         fclose(in);
-        logmsg("Bytecode loaded: %zu bytes.\n", filesize);
+        logverbose("Bytecode loaded: %zu bytes from %s.\n", filesize, optarg);
         break;
       case 1000:
         opt_raw = 1;
@@ -124,7 +132,8 @@ int main(int argc, char **argv) {
     usage_error("missing object file");
     exit(EXIT_FAILURE);
   }
-  logmsg("Beginning disassembly...\n");
+  logstatus("Beginning disassembly...\n");
+  logverbose("Disassembly options: raw=%d no_header=%d.\n", opt_raw, opt_no_header);
 
   SDissOptions dis_options = {.raw = opt_raw, .no_header = opt_no_header};
   SDissResult result = sdiss_disassemble_bytes(bytecode, (uint32_t)filesize,
@@ -137,7 +146,7 @@ int main(int argc, char **argv) {
     logerr("%s\n", result.diagnostic.message);
   }
 
-  logmsg("Shutting down.\n");
+  logstatus("Shutting down.\n");
   free(bytecode);
   return result.status == BC_VERIFY_ERROR ? EXIT_FAILURE : EXIT_SUCCESS;
 }

@@ -4,7 +4,6 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <getopt.h>
@@ -25,18 +24,7 @@ CONFIG_t config;
 typedef struct {
   const char *input_path;
   const char *output_path;
-  int quiet;
-  int verbose;
 } ScompOptions;
-
-static void scomp_log(const ScompOptions *opts, const char *fmt, ...) {
-  if (opts && opts->quiet) return;
-  va_list args;
-  va_start(args, fmt);
-  vfprintf(stderr, fmt, args);
-  fflush(stderr);
-  va_end(args);
-}
 
 static void print_usage(FILE *stream) {
   fprintf(stream,
@@ -202,8 +190,8 @@ static int parse_options(int argc, char **argv, ScompOptions *opts) {
       case OPT_VERSION: printf("scomp %s\n", SINVERSION); return 1;
       case 'i': opts->input_path = optarg; break;
       case 'o': opts->output_path = optarg; break;
-      case 'q': opts->quiet = 1; break;
-      case 'v': opts->verbose++; break;
+      case 'q': log_set_level(LOG_LEVEL_QUIET); break;
+      case 'v': log_set_level(LOG_LEVEL_VERBOSE); break;
       default:
         fprintf(stderr, "scomp: invalid option\n");
         fprintf(stderr, "Try 'scomp --help' for more information.\n");
@@ -243,8 +231,10 @@ int main(int argc, char **argv) {
   if (parse_rc > 0) return 0;
   if (parse_rc < 0) return EXIT_FAILURE;
 
-  if (strcmp(opts.output_path, "-") == 0) opts.quiet = 1;
-  if (opts.verbose) scomp_log(&opts, "Sinistra compiler version %s\n", SINVERSION);
+  if (strcmp(opts.output_path, "-") == 0 && log_get_level() == LOG_LEVEL_NORMAL) {
+    log_set_level(LOG_LEVEL_QUIET);
+  }
+  logverbose("Sinistra compiler version %s\n", SINVERSION);
 
   if (load_file_buffer(opts.input_path, &source, &source_len) != 0) {
     result = ERR_COMP_SYNTAX;
@@ -253,9 +243,9 @@ int main(int argc, char **argv) {
     compiler_diag_set_location(&diag, 1, 1, 1);
     goto compile_error;
   }
-  scomp_log(&opts, "Source loaded: %zu bytes.\n", source_len);
+  logverbose("Source loaded: %zu bytes from %s.\n", source_len, opts.input_path);
 
-  scomp_log(&opts, "Compiling...\n");
+  logstatus("Compiling...\n");
   ParseInput input = {source, source_len, strcmp(opts.input_path, "-") == 0 ? "<stdin>" : opts.input_path};
   result = compile_parse_input_to_bytecode_diag(&input, &out, &diag);
   if (result != ERR_NOERROR) {
@@ -263,7 +253,8 @@ int main(int argc, char **argv) {
   }
 
   size_t bytecode_len = (size_t)(out->nextbyte - out->bytecode);
-  scomp_log(&opts, "Compilation completed: %zu bytes.\n", bytecode_len);
+  logstatus("Compilation completed: %zu bytes.\n", bytecode_len);
+  logverbose("Writing bytecode to %s.\n", opts.output_path);
   FILE *output = strcmp(opts.output_path, "-") == 0 ? stdout : fopen(opts.output_path, "wb");
   if (!output) {
     logerr("Unable to open output file: %s\n", opts.output_path);

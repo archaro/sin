@@ -1,7 +1,7 @@
 ===stdout===
-Bytecode loaded: 45 bytes.
 Starting the chat server...
 ===stderr===
+Using 'srcroot' as the source root.
 Input item does not exist!  Cannot continue.
 ===exit===
 -1
