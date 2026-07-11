@@ -24,6 +24,60 @@ static char *read_text_file_for_diag_test(const char *path) {
   return buf;
 }
 
+
+static void test_scomp_cli_options(void) {
+  const char *src_path = "tests/fixtures/scomp-cli-options.tmp.src";
+  const char *pos_obj_path = "tests/fixtures/scomp-cli-options-pos.tmp.obj";
+  const char *opt_obj_path = "tests/fixtures/scomp-cli-options-opt.tmp.obj";
+  const char *stdio_obj_path = "tests/fixtures/scomp-cli-options-stdio.tmp.obj";
+  const char *help_path = "tests/fixtures/scomp-cli-options-help.tmp.txt";
+  const char *version_path = "tests/fixtures/scomp-cli-options-version.tmp.txt";
+  FILE *src = fopen(src_path, "wb");
+  ASSERT_NOT_NULL(src);
+  const char *program = "@x = 1;\n@x;\n";
+  ASSERT_EQ_INT((int)strlen(program), (int)fwrite(program, 1, strlen(program), src));
+  ASSERT_EQ_INT(0, fclose(src));
+
+  ASSERT_EQ_INT(0, system("./scomp --help > tests/fixtures/scomp-cli-options-help.tmp.txt 2>/dev/null"));
+  char *help = read_text_file_for_diag_test(help_path);
+  ASSERT_TRUE(strstr(help, "scomp <input file> <output file>") != NULL);
+  ASSERT_TRUE(strstr(help, "scomp -i <input file> -o <output file> [options]") != NULL);
+  free(help);
+
+  ASSERT_EQ_INT(0, system("./scomp --version > tests/fixtures/scomp-cli-options-version.tmp.txt 2>/dev/null"));
+  char *version = read_text_file_for_diag_test(version_path);
+  ASSERT_TRUE(strstr(version, "scomp ") != NULL);
+  free(version);
+
+  char cmd[1024];
+  int cmd_len = snprintf(cmd, sizeof(cmd), "./scomp %s %s >/dev/null 2>/dev/null", src_path, pos_obj_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_EQ_INT(0, system(cmd));
+
+  cmd_len = snprintf(cmd, sizeof(cmd), "./scomp -q -i %s -o %s >/dev/null 2>/dev/null", src_path, opt_obj_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_EQ_INT(0, system(cmd));
+
+  cmd_len = snprintf(cmd, sizeof(cmd), "cmp %s %s >/dev/null", pos_obj_path, opt_obj_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_EQ_INT(0, system(cmd));
+
+  cmd_len = snprintf(cmd, sizeof(cmd), "./scomp -q -i - -o - < %s > %s 2>/dev/null", src_path, stdio_obj_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_EQ_INT(0, system(cmd));
+
+  cmd_len = snprintf(cmd, sizeof(cmd), "cmp %s %s >/dev/null", pos_obj_path, stdio_obj_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_EQ_INT(0, system(cmd));
+
+  remove(src_path);
+  remove(pos_obj_path);
+  remove(opt_obj_path);
+  remove(stdio_obj_path);
+  remove(help_path);
+  remove(version_path);
+}
+
 static void test_scomp_cli_malformed_diagnostic_shape(void) {
   const char *src_path = "tests/fixtures/scomp-cli-malformed.tmp.src";
   const char *obj_path = "tests/fixtures/scomp-cli-malformed.tmp.obj";
@@ -116,6 +170,7 @@ void test_compiler_diag_pipeline(void){
   test_compiler_diag_repeated_set_reset_cycles();
   test_compiler_diag_rejects_256_locals();
   test_scomp_cli_malformed_diagnostic_shape();
+  test_scomp_cli_options();
   OUTPUT_t *out=NULL; CompilerDiagnostic d; compiler_diag_init(&d);
   int8_t rc = compile_source_to_bytecode_diag("^;",2,&out,&d);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc); ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, d.code); ASSERT_EQ_INT(DIAG_PHASE_PARSE, d.phase); ASSERT_NOT_NULL(d.message);
