@@ -1,7 +1,7 @@
 // Bytecode emitter
 
 // Licensed under the MIT License - see LICENSE file for details.
-#include "emitbc.h"
+#include "compiler/emitbc.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -9,7 +9,7 @@
 #include <string.h>
 
 #include "bytecode_verify.h"
-#include "compdiag.h"
+#include "compiler/compdiag.h"
 #include "compiler/ir/opcode_schema.h"
 #include "error.h"
 #include "memory.h"

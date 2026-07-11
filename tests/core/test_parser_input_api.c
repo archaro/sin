@@ -2,10 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "absyn.h"
-#include "compdiag.h"
+#include "compiler/absyn.h"
+#include "compiler/compdiag.h"
 #include "error.h"
-#include "parse_input.h"
+#include "compiler/parse_input.h"
 #include "parser.h"
 #include "test_assert.h"
 

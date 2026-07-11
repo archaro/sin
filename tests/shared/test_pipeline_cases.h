@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#include "absyn.h"
+#include "compiler/absyn.h"
 
 typedef AS_NODE *(*PipelineAstBuilder)(void);
 

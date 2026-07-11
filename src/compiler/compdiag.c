@@ -2,7 +2,7 @@
 
 // Licensed under the MIT License - see LICENSE file for details.
 
-#include "compdiag.h"
+#include "compiler/compdiag.h"
 
 #include <stdarg.h>
 #include <stdio.h>

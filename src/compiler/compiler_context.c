@@ -1,7 +1,7 @@
 // Compiler context - a handy package to hold compiler state
 
 // Licensed under the MIT License - see LICENSE file for details.
-#include "compiler_context.h"
+#include "compiler/compiler_context.h"
 
 #include <stdlib.h>
 #include <string.h>

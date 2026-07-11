@@ -8,9 +8,9 @@
 #include <string.h>
 #include <stdarg.h>
 
-#include "compdiag.h"
+#include "compiler/compdiag.h"
 #include "error.h"
-#include "ir.h"
+#include "compiler/ir.h"
 #include "compiler/ir/opcode_schema.h"
 #include "memory.h"
 

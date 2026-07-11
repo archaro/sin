@@ -1,11 +1,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include "compiler_pipeline.h"
-#include "compdiag.h"
-#include "semant.h"
-#include "lower.h"
-#include "ir.h"
+#include "compiler/compiler_pipeline.h"
+#include "compiler/compdiag.h"
+#include "compiler/semant.h"
+#include "compiler/lower.h"
+#include "compiler/ir.h"
 #include "error.h"
 #include "version.h"
 #include "test_assert.h"

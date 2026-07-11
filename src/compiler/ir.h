@@ -10,8 +10,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "absyn.h"
-#include "compdiag.h"
+#include "compiler/absyn.h"
+#include "compiler/compdiag.h"
 
 typedef enum {
   IR_OP_HALT = 0,

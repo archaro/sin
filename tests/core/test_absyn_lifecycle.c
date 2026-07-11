@@ -1,6 +1,6 @@
 #include <string.h>
 
-#include "absyn.h"
+#include "compiler/absyn.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 

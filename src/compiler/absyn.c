@@ -6,7 +6,7 @@
 
 #include "log.h"
 #include "memory.h"
-#include "absyn.h"
+#include "compiler/absyn.h"
 #include "floatconv.h"
 
 AS_VALUE *as_new_value(ENUM_VALUE valtype, uint64_t ival, char *sval) {

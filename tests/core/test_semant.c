@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 #include "error.h"
-#include "semant.h"
+#include "compiler/semant.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 

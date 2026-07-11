@@ -6,8 +6,8 @@
 
 #include <stdint.h>
 
-#include "ir.h"
-#include "compdiag.h"
+#include "compiler/ir.h"
+#include "compiler/compdiag.h"
 #include "parser.h"
 
 int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,

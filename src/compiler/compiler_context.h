@@ -7,10 +7,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "absyn.h"
-#include "emitbc.h"
-#include "ir.h"
-#include "semant.h"
+#include "compiler/absyn.h"
+#include "compiler/emitbc.h"
+#include "compiler/ir.h"
+#include "compiler/semant.h"
 
 typedef struct {
   const char *source;

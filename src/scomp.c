@@ -13,11 +13,11 @@
 #include "cli_io.h"
 #include "config.h"
 #include "error.h"
-#include "compiler_pipeline.h"
-#include "compdiag.h"
+#include "compiler/compiler_pipeline.h"
+#include "compiler/compdiag.h"
 #include "memory.h"
 #include "log.h"
-#include "emitbc.h"
+#include "compiler/emitbc.h"
 
 // Things which need to be known
 CONFIG_t config;

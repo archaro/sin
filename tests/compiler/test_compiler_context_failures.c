@@ -2,13 +2,13 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "compiler_context.h"
+#include "compiler/compiler_context.h"
 #include "error.h"
-#include "ir.h"
-#include "lower.h"
+#include "compiler/ir.h"
+#include "compiler/lower.h"
 #include "memory.h"
 #include "parser.h"
-#include "semant.h"
+#include "compiler/semant.h"
 #include "test_assert.h"
 
 static void test_context_parse_failure_cleanup(void) {

@@ -8,8 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "absyn.h"
-#include "compdiag.h"
+#include "compiler/absyn.h"
+#include "compiler/compdiag.h"
 
 typedef struct {
   char *name;
