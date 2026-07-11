@@ -205,7 +205,8 @@ static int parse_options(int argc, char **argv, ScompOptions *opts) {
       case 'q': opts->quiet = 1; break;
       case 'v': opts->verbose++; break;
       default:
-        fprintf(stderr, "Unknown option. Use --help for usage.\n");
+        fprintf(stderr, "scomp: invalid option\n");
+        fprintf(stderr, "Try 'scomp --help' for more information.\n");
         return -1;
     }
   }
@@ -215,12 +216,14 @@ static int parse_options(int argc, char **argv, ScompOptions *opts) {
     opts->input_path = argv[optind];
     opts->output_path = argv[optind + 1];
   } else if (positional_count != 0) {
-    fprintf(stderr, "Unexpected positional arguments. Use --help for usage.\n");
+    fprintf(stderr, "scomp: unexpected positional arguments\n");
+    fprintf(stderr, "Try 'scomp --help' for more information.\n");
     return -1;
   }
 
   if (!opts->input_path || !opts->output_path) {
-    print_usage(stderr);
+    fprintf(stderr, "scomp: missing input or output file\n");
+    fprintf(stderr, "Try 'scomp --help' for more information.\n");
     return -1;
   }
   return 0;
@@ -238,10 +241,10 @@ int main(int argc, char **argv) {
 
   int parse_rc = parse_options(argc, argv, &opts);
   if (parse_rc > 0) return 0;
-  if (parse_rc < 0) return 1;
+  if (parse_rc < 0) return EXIT_FAILURE;
 
   if (strcmp(opts.output_path, "-") == 0) opts.quiet = 1;
-  scomp_log(&opts, "Sinistra compiler version %s\n", SINVERSION);
+  if (opts.verbose) scomp_log(&opts, "Sinistra compiler version %s\n", SINVERSION);
 
   if (load_file_buffer(opts.input_path, &source, &source_len) != 0) {
     result = ERR_COMP_SYNTAX;

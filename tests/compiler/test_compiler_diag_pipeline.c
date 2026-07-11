@@ -7,6 +7,7 @@
 #include "lower.h"
 #include "ir.h"
 #include "error.h"
+#include "version.h"
 #include "test_assert.h"
 
 static char *read_text_file_for_diag_test(const char *path) {
@@ -24,6 +25,60 @@ static char *read_text_file_for_diag_test(const char *path) {
   return buf;
 }
 
+static void assert_cli_metadata_case(const char *tool, const char *flag,
+                                     int expected_status,
+                                     const char *stdout_contains,
+                                     const char *stdout_exact,
+                                     const char *stderr_contains,
+                                     int expect_empty_stdout,
+                                     int expect_empty_stderr) {
+  char out_path[256];
+  char err_path[256];
+  char cmd[1024];
+  int cmd_len = 0;
+  snprintf(out_path, sizeof(out_path), "tests/fixtures/%s-%s.out.tmp.txt",
+           tool, flag[0] == '-' && flag[1] == '-' ? flag + 2 : flag + 1);
+  snprintf(err_path, sizeof(err_path), "tests/fixtures/%s-%s.err.tmp.txt",
+           tool, flag[0] == '-' && flag[1] == '-' ? flag + 2 : flag + 1);
+
+  cmd_len = snprintf(cmd, sizeof(cmd),
+                     "./%s %s > %s 2> %s; test $? -eq %d",
+                     tool, flag, out_path, err_path, expected_status);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_EQ_INT(0, system(cmd));
+
+  char *out = read_text_file_for_diag_test(out_path);
+  char *err = read_text_file_for_diag_test(err_path);
+  if (expect_empty_stdout) ASSERT_EQ_INT(0, (int)strlen(out));
+  if (expect_empty_stderr) ASSERT_EQ_INT(0, (int)strlen(err));
+  if (stdout_contains) ASSERT_TRUE(strstr(out, stdout_contains) != NULL);
+  if (stdout_exact) ASSERT_TRUE(strcmp(out, stdout_exact) == 0);
+  if (stderr_contains) ASSERT_TRUE(strstr(err, stderr_contains) != NULL);
+
+  free(out);
+  free(err);
+  remove(out_path);
+  remove(err_path);
+}
+
+void test_cli_metadata_stdout_stderr_and_status(void) {
+  const char *tools[] = {"sin", "scomp", "sdiss"};
+  const char *usage[] = {"Syntax: sin <options>",
+                         "scomp <input file> <output file>",
+                         "Syntax: sdiss <options>"};
+  char expected_version[64];
+
+  for (size_t i = 0; i < sizeof(tools) / sizeof(tools[0]); i++) {
+    snprintf(expected_version, sizeof(expected_version), "%s %s\n", tools[i], SINVERSION);
+    assert_cli_metadata_case(tools[i], "--help", 0, usage[i], NULL, NULL, 0, 1);
+    assert_cli_metadata_case(tools[i], "-h", 0, usage[i], NULL, NULL, 0, 1);
+    assert_cli_metadata_case(tools[i], "--version", 0, NULL, expected_version, NULL, 0, 1);
+    assert_cli_metadata_case(tools[i], "--definitely-invalid-option", 1, NULL, NULL,
+                             "Try '", 1, 0);
+    assert_cli_metadata_case(tools[i], "--definitely-invalid-option", 1, NULL, NULL,
+                             "--help", 1, 0);
+  }
+}
 
 static void test_scomp_cli_options(void) {
   const char *src_path = "tests/fixtures/scomp-cli-options.tmp.src";

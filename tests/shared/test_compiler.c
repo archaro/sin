@@ -195,6 +195,7 @@ void test_sdiss_reads_compiler_operand_widths(void);
 void test_sdiss_malformed_fixture_reports_verifier_diagnostic(void);
 void test_compiler_context_failures(void);
 void test_compiler_diag_pipeline(void);
+void test_cli_metadata_stdout_stderr_and_status(void);
 void test_sys_compile_libcall_runtime(void);
 
 /* Runtime component tests. */
@@ -322,6 +323,7 @@ static const test_case_t compiler_tests[] = {
     {"test_sdiss_reads_compiler_operand_widths", test_sdiss_reads_compiler_operand_widths},
     {"test_compiler_context_failures", test_compiler_context_failures},
     {"test_compiler_diag_pipeline", test_compiler_diag_pipeline},
+    {"test_cli_metadata_stdout_stderr_and_status", test_cli_metadata_stdout_stderr_and_status},
 };
 
 static const test_case_t runtime_tests[] = {
