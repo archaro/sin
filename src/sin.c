@@ -72,12 +72,13 @@ void handle_sigusr1(int sig) {
 }
 
 void usage() {
-  logmsg("Syntax: sin <options>\n", SINVERSION);
+  logmsg("Syntax: sin <options>\n");
   logmsg("Options:\n");
   logmsg(" -b, --bootonly\t\tOnly execute the bootstrap code.\n");
   logmsg("\t\t\t  This option is used to compile items without running\n");
   logmsg("\t\t\t  the game.  Useful for initialisation.\n");
   logmsg(" -h, --help\t\tThis message.\n");
+  logmsg("     --version\t\tShow version information.\n");
   logmsg(" -i, --itemstore <file>\tItemstore file to load.\n");
   logmsg("\t\t\t  If this option is not supplied, the default filename\n");
   logmsg("\t\t\t  'items.dat' is used.  The file is created if it does\n");
@@ -103,6 +104,11 @@ void usage() {
   logmsg("     --strict-runtime-contracts\n");
   logmsg("\t\t\t  Report runtime argument contract violations that legacy\n");
   logmsg("\t\t\t  mode silently tolerates.\n");
+}
+
+static void usage_error(const char *message) {
+  logerr("sin: %s\n", message);
+  logerr("Try 'sin --help' for more information.\n");
 }
 
 static ITEM_t *load_or_create_itemstore(const char *filename) {
@@ -141,9 +147,8 @@ int main(int argc, char **argv) {
   uint8_t *bytecode = NULL;
   bool bootonly = false;
 
-  logmsg("Sinistra interpreter version %s.\n", SINVERSION);
   if (argc < 2) {
-    usage();
+    usage_error("missing object file");
     exit(EXIT_FAILURE);
   }
 
@@ -179,11 +184,13 @@ int main(int argc, char **argv) {
 
   // Are there any interesting options?
   int opt;
+  enum { OPT_VERSION = 1002 };
   const struct option options[] =
   {
     {"bootonly", no_argument, 0, 'b'},
     {"itemstore-durability", required_argument, 0, 'd'},
     {"help", no_argument, 0, 'h'},
+    {"version", no_argument, 0, OPT_VERSION},
     {"itemstore", required_argument, 0, 'i'},
     {"log", optional_argument, 0, 'l'},
     {"input", required_argument, 0, 'n'},
@@ -194,6 +201,8 @@ int main(int argc, char **argv) {
     {"strict-runtime-contracts", no_argument, 0, 1001},
     {NULL, 0, 0, '\0'}
   };
+  opterr = 0;
+  optind = 1;
   while ((opt = getopt_long(argc, argv, "bd:hi:l::n:o:p:s:", options, NULL)) != -1) {
     switch(opt) {
       case 'b': {
@@ -216,6 +225,10 @@ int main(int argc, char **argv) {
         usage();
         exit(EXIT_SUCCESS);
         break;
+      }
+      case OPT_VERSION: {
+        printf("sin %s\n", SINVERSION);
+        exit(EXIT_SUCCESS);
       }
       case 'i': {
         // Optional: if given use this filename for the itemstore.
@@ -317,10 +330,14 @@ int main(int argc, char **argv) {
         break;
       }
       default: {
-        usage();
+        usage_error("invalid option");
         return EXIT_FAILURE;
       }
     }
+  }
+  if (optind < argc) {
+    usage_error("unexpected positional arguments");
+    return EXIT_FAILURE;
   }
 
   // Before we continue, has the source root been defined?
@@ -368,7 +385,7 @@ int main(int argc, char **argv) {
 
   // Just check to see if we have been given some bytecode.
   if (!bytecode) {
-    logerr("No bytecode to process!\n");
+    usage_error("missing object file");
     exit(EXIT_FAILURE);
   }
 

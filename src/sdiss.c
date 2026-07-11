@@ -19,12 +19,18 @@ static uint8_t *bytecode;
 static int opt_raw = 0, opt_no_header = 0;
 
 void usage() {
-  logmsg("Sinistra disassembler version %s.\nSyntax: sdiss <options>\n", SINVERSION);
+  logmsg("Syntax: sdiss <options>\n");
   logmsg("Options:\n");
   logmsg(" -h, --help\t\tThis message.\n");
+  logmsg("     --version\t\tShow version information.\n");
   logmsg(" -o, --object <file>\tObject code to disassemble.\n");
   logmsg("     --raw\t\tShow raw bytes per instruction.\n");
   logmsg("     --no-header\tSkip locals/params header output.\n");
+}
+
+static void usage_error(const char *message) {
+  logerr("sdiss: %s\n", message);
+  logerr("Try 'sdiss --help' for more information.\n");
 }
 
 static void stdout_write(void *ctx, const char *data, size_t len) {
@@ -37,21 +43,28 @@ int main(int argc, char **argv) {
   size_t filesize = 0;
   bytecode = NULL;
   if (argc < 2) {
-    usage();
+    usage_error("missing object file");
     exit(EXIT_FAILURE);
   }
   int opt;
+  enum { OPT_VERSION = 1002 };
   const struct option options[] = {
     {"help", no_argument, 0, 'h'},
+    {"version", no_argument, 0, OPT_VERSION},
     {"object", required_argument, 0, 'o'},
     {"raw", no_argument, 0, 1000},
     {"no-header", no_argument, 0, 1001},
     {NULL, 0, 0, '\0'}
   };
+  opterr = 0;
+  optind = 1;
   while ((opt = getopt_long(argc, argv, "ho:", options, NULL)) != -1) {
     switch (opt) {
       case 'h':
         usage();
+        exit(EXIT_SUCCESS);
+      case OPT_VERSION:
+        printf("sdiss %s\n", SINVERSION);
         exit(EXIT_SUCCESS);
       case 'o':
         in = fopen(optarg, "rb");
@@ -99,12 +112,16 @@ int main(int argc, char **argv) {
         opt_no_header = 1;
         break;
       default:
-        usage();
+        usage_error("invalid option");
         return EXIT_FAILURE;
     }
   }
+  if (optind < argc) {
+    usage_error("unexpected positional arguments");
+    return EXIT_FAILURE;
+  }
   if (!bytecode) {
-    logerr("No bytecode to process!\n");
+    usage_error("missing object file");
     exit(EXIT_FAILURE);
   }
   logmsg("Beginning disassembly...\n");
