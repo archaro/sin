@@ -39,9 +39,6 @@ static void set_string_error_field_on_root(ITEM_t *root, const char *name,
   set_item(root, name, v);
 }
 
-static void set_string_error_field(const char *name, const char *value) {
-  set_string_error_field_on_root(config.itemroot, name, value);
-}
 
 static void set_int_error_field_on_root(ITEM_t *root, const char *name,
                                         int64_t value) {
@@ -51,19 +48,21 @@ static void set_int_error_field_on_root(ITEM_t *root, const char *name,
   set_item(root, name, v);
 }
 
-static void set_int_error_field(const char *name, int64_t value) {
-  set_int_error_field_on_root(config.itemroot, name, value);
+
+void clear_error_item_on_root(ITEM_t *root) {
+  if (!root) return;
+  set_item(root, "error", VALUE_NIL);
+  set_item(root, "error.msg", VALUE_NIL);
+  set_item(root, "error.code", VALUE_NIL);
+  set_item(root, "error.stage", VALUE_NIL);
+  set_item(root, "error.file", VALUE_NIL);
+  set_item(root, "error.line", VALUE_NIL);
+  set_item(root, "error.column", VALUE_NIL);
+  set_item(root, "error.excerpt", VALUE_NIL);
 }
 
 void clear_error_item(void) {
-  set_item(config.itemroot, "error", VALUE_NIL);
-  set_item(config.itemroot, "error.msg", VALUE_NIL);
-  set_item(config.itemroot, "error.code", VALUE_NIL);
-  set_item(config.itemroot, "error.stage", VALUE_NIL);
-  set_item(config.itemroot, "error.file", VALUE_NIL);
-  set_item(config.itemroot, "error.line", VALUE_NIL);
-  set_item(config.itemroot, "error.column", VALUE_NIL);
-  set_item(config.itemroot, "error.excerpt", VALUE_NIL);
+  clear_error_item_on_root(config.itemroot);
 }
 
 void set_error_item(const int errnum, const char *errdetail) {
@@ -98,9 +97,10 @@ void set_error_item_on_root(ITEM_t *root, const int errnum, const char *errdetai
   set_item(root, "error.excerpt", VALUE_NIL);
 }
 
-void set_compiler_error_item(const CompilerDiagnostic *diag) {
+void set_compiler_error_item_on_root(ITEM_t *root, const CompilerDiagnostic *diag) {
+  if (!root) return;
   if (!diag) {
-    set_error_item(ERR_COMP_UNKNOWN, NULL);
+    set_error_item_on_root(root, ERR_COMP_UNKNOWN, NULL);
     return;
   }
 
@@ -117,13 +117,13 @@ void set_compiler_error_item(const CompilerDiagnostic *diag) {
   VALUE_t e;
   e.type = VALUE_int;
   e.i = diag->code;
-  set_item(config.itemroot, "error", e);
+  set_item(root, "error", e);
 
   int needed = snprintf(NULL, 0,
       "%s stage=%s file=%s line=%d column=%d message=%s excerpt=%s",
       stable_code, stage, file, line, column, message, excerpt);
   if (needed < 0) {
-    set_error_item(diag->code, message);
+    set_error_item_on_root(root, diag->code, message);
     return;
   }
 
@@ -133,13 +133,17 @@ void set_compiler_error_item(const CompilerDiagnostic *diag) {
   snprintf(emsg.s, (size_t)needed + 1,
       "%s stage=%s file=%s line=%d column=%d message=%s excerpt=%s",
       stable_code, stage, file, line, column, message, excerpt);
-  set_item(config.itemroot, "error.msg", emsg);
+  set_item(root, "error.msg", emsg);
 
 
-  set_string_error_field("error.code", stable_code);
-  set_string_error_field("error.stage", stage);
-  set_string_error_field("error.file", file);
-  set_int_error_field("error.line", line);
-  set_int_error_field("error.column", column);
-  set_string_error_field("error.excerpt", excerpt);
+  set_string_error_field_on_root(root, "error.code", stable_code);
+  set_string_error_field_on_root(root, "error.stage", stage);
+  set_string_error_field_on_root(root, "error.file", file);
+  set_int_error_field_on_root(root, "error.line", line);
+  set_int_error_field_on_root(root, "error.column", column);
+  set_string_error_field_on_root(root, "error.excerpt", excerpt);
+}
+
+void set_compiler_error_item(const CompilerDiagnostic *diag) {
+  set_compiler_error_item_on_root(config.itemroot, diag);
 }

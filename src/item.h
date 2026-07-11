@@ -87,16 +87,20 @@ void set_item(ITEM_t *root, const char *item_name, VALUE_t value);
 void get_itemname(ITEM_t *item, char *itemname);
 // Returns a newly allocated source filename string owned by the caller; free it
 // with free(). The item is borrowed and not modified.
+char *get_itemfilename_in_srcroot(ITEM_t *item, const char *srcroot);
 char *get_itemfilename(ITEM_t *item);
 // Borrows item and source for the duration of the call. Does not take ownership
 // of source or modify/free it.
+bool save_itemsource_in_srcroot(ITEM_t *item, char *source, const char *srcroot);
 bool save_itemsource(ITEM_t *item, char *source);
 bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability);
 void itemstore_set_sync_hook_for_tests(ITEMSTORE_SYNC_HOOK_t hook);
+bool save_itemstore_with_options(const char *filename, ITEM_t *root, ITEMSTORE_DURABILITY_e durability);
 bool save_itemstore(const char *filename, ITEM_t *root);
 // Loads and returns a newly allocated item tree. The caller owns the returned
 // root and must destroy it with destroy_item(); NULL indicates failure and
 // transfers no ownership.
+ITEM_t *load_itemstore_with_options(const char *filename, bool strict_validation);
 ITEM_t *load_itemstore(const char *filename); 
 void dump_item(ITEM_t *item, char *item_name, bool isroot);
 uint64_t get_itemstore_generation(void);
@@ -106,4 +110,6 @@ bool is_valid_layer(const char *str);
 void set_error_item(const int errnum, const char *errdetail);
 void set_error_item_on_root(ITEM_t *root, const int errnum, const char *errdetail);
 void set_compiler_error_item(const CompilerDiagnostic *diag);
+void set_compiler_error_item_on_root(ITEM_t *root, const CompilerDiagnostic *diag);
 void clear_error_item(void);
+void clear_error_item_on_root(ITEM_t *root);

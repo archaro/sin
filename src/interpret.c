@@ -126,8 +126,8 @@ static const char *runtime_item_label(ITEM_t *item, char *buffer, size_t size) {
   return item->name;
 }
 
-static void set_runtime_bytecode_error(const char *label, uint32_t offset,
-                                       const char *message) {
+static void set_runtime_bytecode_error(RuntimeContext *ctx, const char *label,
+                                       uint32_t offset, const char *message) {
   const char *safe_label = label ? label : "<null>";
   const char *safe_message = message ? message : "<no diagnostic>";
   int needed = snprintf(NULL, 0,
@@ -135,8 +135,8 @@ static void set_runtime_bytecode_error(const char *label, uint32_t offset,
       safe_label, offset, safe_message);
   if (needed < 0) {
     logerr("Runtime bytecode validation failed.\n");
-    set_error_item(ERR_RUNTIME_BYTECODE,
-                   "Runtime bytecode validation failed.");
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
+                       "Runtime bytecode validation failed.");
     return;
   }
 
@@ -144,8 +144,8 @@ static void set_runtime_bytecode_error(const char *label, uint32_t offset,
   char *detail = alloc_malloc(detail_len);
   if (!detail) {
     logerr("Runtime bytecode validation failed: out of memory while formatting diagnostic.\n");
-    set_error_item(ERR_RUNTIME_BYTECODE,
-                   "Runtime bytecode validation failed: out of memory while formatting diagnostic.");
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
+                       "Runtime bytecode validation failed: out of memory while formatting diagnostic.");
     return;
   }
 
@@ -153,7 +153,7 @@ static void set_runtime_bytecode_error(const char *label, uint32_t offset,
       "Runtime bytecode validation failed for item '%s' at offset %u: %s",
       safe_label, offset, safe_message);
   logerr("%s.\n", detail);
-  set_error_item(ERR_RUNTIME_BYTECODE, detail);
+  set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE, detail);
   free(detail);
 }
 
@@ -170,7 +170,7 @@ static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
   char item_name[MAX_ITEM_NAME] = {0};
   const char *label = runtime_item_label(item, item_name, sizeof(item_name));
   if (!item->bytecode) {
-    set_runtime_bytecode_error(label, 0, "null bytecode pointer");
+    set_runtime_bytecode_error(ctx, label, 0, "null bytecode pointer");
     return false;
   }
   BC_VerifyOptions options = bc_verify_strict_options();
@@ -178,26 +178,26 @@ static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
       (uint32_t)item->bytecode_len, label, &options);
   if (result.status == BC_VERIFY_OK) return true;
 
-  set_runtime_bytecode_error(label, result.diagnostic.offset,
+  set_runtime_bytecode_error(ctx, label, result.diagnostic.offset,
                              result.diagnostic.message);
   return false;
 }
 
-static bool report_decode_status(RuntimeDecodeStatus status) {
+static bool report_decode_status(RuntimeContext *ctx, RuntimeDecodeStatus status) {
   if (runtime_decode_status_ok(status)) return true;
   if (status.code == RUNTIME_DECODE_TRUNCATED) {
     logerr("%s.\n", status.detail);
-    set_error_item(ERR_RUNTIME_TRUNCATED, status.detail);
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_TRUNCATED, status.detail);
   }
   return false;
 }
 
-static uint8_t *decode_next(RuntimeDecodeStatus status) {
-  return report_decode_status(status) ? status.next : NULL;
+static uint8_t *decode_next(RuntimeContext *ctx, RuntimeDecodeStatus status) {
+  return report_decode_status(ctx, status) ? status.next : NULL;
 }
 
 #define REQUIRE_BYTES(nextop, n, opname) \
-  do { if (!report_decode_status(require_bytes(&ctx->decoder, (nextop), (n), (opname)))) return NULL; } while (0)
+  do { if (!report_decode_status(ctx, require_bytes(&ctx->decoder, (nextop), (n), (opname)))) return NULL; } while (0)
 
 static void log_invalid_binary_operands(const char *opcode_name,
                                         const VALUE_t *left,
@@ -276,7 +276,7 @@ uint8_t *op_pushint(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   VALUE_t v;
   v.type = VALUE_int;
-  nextop = decode_next(bc_read_i64(&ctx->decoder, nextop, &v.i, "OP_PUSHINT"));
+  nextop = decode_next(ctx, bc_read_i64(&ctx->decoder, nextop, &v.i, "OP_PUSHINT"));
   if (!nextop) return NULL;
   push_stack(VM->stack, v);
   logverbose("OP_PUSHINT: %ld\n", v.i);
@@ -288,7 +288,7 @@ uint8_t *op_pushfloat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t v;
   v.type = VALUE_float;
   uint64_t bits;
-  nextop = decode_next(bc_read_u64_payload(&ctx->decoder, nextop, &bits, "OP_PUSHFLOAT"));
+  nextop = decode_next(ctx, bc_read_u64_payload(&ctx->decoder, nextop, &bits, "OP_PUSHFLOAT"));
   if (!nextop) return NULL;
   v.f = value_float_from_bits(bits);
   push_stack(VM->stack, v);
@@ -299,7 +299,7 @@ uint8_t *op_pushfloat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_pushbool(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   uint8_t raw;
-  nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw, "OP_PUSHBOOL"));
+  nextop = decode_next(ctx, bc_read_u8(&ctx->decoder, nextop, &raw, "OP_PUSHBOOL"));
   if (!nextop) return NULL;
   VALUE_t v;
   v.type = VALUE_bool;
@@ -314,7 +314,7 @@ uint8_t *op_inclocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // If that local is an int, increment it.  Otherwise complain.
   (void)item;
   uint8_t raw_index;
-  nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_INCLOCAL"));
+  nextop = decode_next(ctx, bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_INCLOCAL"));
   if (!nextop) return NULL;
   int32_t index = (int32_t)raw_index + VM->stack->base;
   if (index < 0 || index >= STACK_SIZE) return NULL;
@@ -332,7 +332,7 @@ uint8_t *op_declocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // If that local is an int, decrement it.  Otherwise complain.
   (void)item;
   uint8_t raw_index;
-  nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_DECLOCAL"));
+  nextop = decode_next(ctx, bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_DECLOCAL"));
   if (!nextop) return NULL;
   int32_t index = (int32_t)raw_index + VM->stack->base;
   if (index < 0 || index >= STACK_SIZE) return NULL;
@@ -350,7 +350,7 @@ uint8_t *op_jump(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // SIGNED int, and then modify the bytecode pointer by that amount.
   (void)item;
   int16_t offset;
-  nextop = decode_next(bc_read_i16(&ctx->decoder, nextop, &offset, "OP_JUMP"));
+  nextop = decode_next(ctx, bc_read_i16(&ctx->decoder, nextop, &offset, "OP_JUMP"));
   if (!nextop) return NULL;
   logverbose("OP_JUMP: offset is  %d.\n", offset);
   return nextop - sizeof(offset) + offset;
@@ -365,7 +365,7 @@ uint8_t *op_jumpfalse(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   int16_t offset;
   uint8_t *offset_start = nextop;
-  nextop = decode_next(bc_read_i16(&ctx->decoder, nextop, &offset, "OP_JUMPFALSE"));
+  nextop = decode_next(ctx, bc_read_i16(&ctx->decoder, nextop, &offset, "OP_JUMPFALSE"));
   if (!nextop) return NULL;
   VALUE_t v1;
   v1 = pop_stack(VM->stack);
@@ -388,7 +388,7 @@ uint8_t *op_savelocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the stack.
   (void)item;
   uint8_t raw_index;
-  nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_SAVELOCAL"));
+  nextop = decode_next(ctx, bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_SAVELOCAL"));
   if (!nextop) return NULL;
   int32_t index = (int32_t)raw_index + VM->stack->base;
   if (index < 0 || index >= STACK_SIZE) return NULL;
@@ -404,7 +404,7 @@ uint8_t *op_getlocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the stack.
   (void)item;
   uint8_t raw_index;
-  nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_GETLOCAL"));
+  nextop = decode_next(ctx, bc_read_u8(&ctx->decoder, nextop, &raw_index, "OP_GETLOCAL"));
   if (!nextop) return NULL;
   int32_t index = (int32_t)raw_index + VM->stack->base;
   if (index < 0 || index >= STACK_SIZE) return NULL;
@@ -432,7 +432,7 @@ uint8_t *op_pushstr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   v.type = VALUE_str;
   uint16_t len;
   // Get the length
-  nextop = decode_next(bc_read_u16(&ctx->decoder, nextop, &len, "OP_PUSHSTR length"));
+  nextop = decode_next(ctx, bc_read_u16(&ctx->decoder, nextop, &len, "OP_PUSHSTR length"));
   if (!nextop) return NULL;
   REQUIRE_BYTES(nextop, len, "OP_PUSHSTR payload");
   v.s = malloc((size_t)len + 1);
@@ -624,7 +624,7 @@ uint8_t *op_logicalor(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
 uint8_t *op_libcall_token(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   uint8_t token;
-  nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &token, "OP_LIBCALL"));
+  nextop = decode_next(ctx, bc_read_u8(&ctx->decoder, nextop, &token, "OP_LIBCALL"));
   if (!nextop) return NULL;
   logverbose("Calling libcall token %d.\n", token);
   OP_t libcall = libcall_registry_func_token(ctx->libcalls, token);
@@ -632,7 +632,7 @@ uint8_t *op_libcall_token(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     char detail[64];
     snprintf(detail, sizeof(detail), "Unknown libcall token %u", token);
     logerr("%s.\n", detail);
-    set_error_item(ERR_RUNTIME_INVLIB, detail);
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVLIB, detail);
     push_stack(VM->stack, VALUE_NIL);
   } else {
     nextop = libcall(ctx, nextop, item);
@@ -692,28 +692,28 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (*nextop == 'P') {
     nextop++;
     if (!decode_assigncode_params(ctx, &nextop, &in)) {
-      set_error_item(ERR_COMP_UNKNOWN, "Invalid parameter block in code assignment bytecode.");
+      set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN, "Invalid parameter block in code assignment bytecode.");
       goto cleanup;
     }
   }
 
   itemname = pop_stack(VM->stack);
   if (!decode_assigncode_source(ctx, &nextop, &in)) {
-    set_error_item(ERR_COMP_UNKNOWN, "Invalid source block in code assignment bytecode.");
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN, "Invalid source block in code assignment bytecode.");
     goto cleanup;
   }
 
   logverbose("Source to compile: %s\n", in.source);
   if (itemname.type != VALUE_str) {
     logerr("Unable to assign code item: invalid name type %d.\n", itemname.type);
-    set_error_item(ERR_COMP_UNKNOWN, "Invalid item name type for code assignment.");
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN, "Invalid item name type for code assignment.");
     goto cleanup;
   }
 
   if (itemname.type == VALUE_str) {
     char fullname[MAX_ITEM_NAME];
     if (!canonicalize_itemname(itemname.s, item, fullname)) {
-      set_error_item(ERR_COMP_UNKNOWN, "Invalid item name for code assignment.");
+      set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN, "Invalid item name for code assignment.");
       goto cleanup;
     }
     free(itemname.s);
@@ -722,12 +722,12 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   result = compile_and_insert_codeitem(ctx->itemroot, &itemname, &in, &errdetail);
   if (result == 0) {
-    persist_codeitem_source(ctx->itemroot, &itemname, &in);
+    persist_codeitem_source(ctx->itemroot, &itemname, &in, ctx ? ctx->srcroot : NULL);
     set_item(ctx->itemroot, "error", VALUE_NIL);
     set_item(ctx->itemroot, "error.msg", VALUE_NIL);
   } else {
     logerr("Compilation failed.\n");
-    set_error_item(result, errdetail);
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, result, errdetail);
   }
 
 cleanup:
@@ -770,7 +770,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   // First, let's get the number of arguments passed to this item
   uint16_t arg_count;
-  nextop = decode_next(bc_read_u16(&ctx->decoder, nextop, &arg_count, "OP_FETCHITEM arg-count"));
+  nextop = decode_next(ctx, bc_read_u16(&ctx->decoder, nextop, &arg_count, "OP_FETCHITEM arg-count"));
   if (!nextop) return NULL;
 
   // Now the item name.

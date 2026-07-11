@@ -58,13 +58,13 @@ bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability) {
   return durability != ITEMSTORE_DURABLE_FAST;
 }
 
-bool save_itemsource(ITEM_t *item, char *source) {
+bool save_itemsource_in_srcroot(ITEM_t *item, char *source, const char *srcroot) {
   // Saves the item source into srcroot.
   // If the source cannot be saved for whatever reason, this is
   // reported in the error log.  The function returns true if the
   // source was saved, otherwise false.
 
-  char *filename = get_itemfilename(item);
+  char *filename = get_itemfilename_in_srcroot(item, srcroot);
   // There is a much better way to do this, but I don't care right now.
   char *dircopy = strdup(filename);
   char *dir = dirname(dircopy);
@@ -89,6 +89,10 @@ bool save_itemsource(ITEM_t *item, char *source) {
   }
   free(filename);
   return true;
+}
+
+bool save_itemsource(ITEM_t *item, char *source) {
+  return save_itemsource_in_srcroot(item, source, NULL);
 }
 
 /* The on-disk contract is documented in docs/itemstore-format.md. */
@@ -123,6 +127,7 @@ typedef struct {
   uint32_t max_string_len;
   uint32_t max_bytecode_len;
   const char *filename;
+  bool strict_validation;
 } ITEMSTORE_READ_CTX_t;
 
 static bool write_bytes(FILE *file, const void *data, size_t length,
@@ -342,7 +347,8 @@ bool write_item(FILE *file, ITEM_t *item) {
   return true;
 }
 
-bool save_itemstore(const char *filename, ITEM_t *root) {
+bool save_itemstore_with_options(const char *filename, ITEM_t *root,
+                                 ITEMSTORE_DURABILITY_e durability) {
   FILE *file = NULL;
   char *temp_path = NULL;
   bool success = false;
@@ -381,7 +387,7 @@ bool save_itemstore(const char *filename, ITEM_t *root) {
     goto cleanup;
   }
 
-  if (itemstore_durability_requires_sync(config.itemstore_durability)
+  if (itemstore_durability_requires_sync(durability)
       && !itemstore_default_context()->sync_hook(file, temp_path)) {
     goto cleanup;
   }
@@ -444,7 +450,8 @@ static ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,
     .max_children_per_item = ITEMSTORE_MAX_CHILDREN_PER_ITEM,
     .max_string_len = ITEMSTORE_MAX_STRING_LEN,
     .max_bytecode_len = ITEMSTORE_MAX_BYTECODE_LEN,
-    .filename = filename
+    .filename = filename,
+    .strict_validation = false
   };
   return ctx;
 }
@@ -588,7 +595,7 @@ static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
       }
     }
 
-    if (config.strict_validation) {
+    if (ctx->strict_validation) {
       BC_VerifyOptions verify_options = bc_verify_strict_options();
       BC_VerifyResult verify = bc_verify_bytecode(bytecode, bytecode_len,
                                                   name, &verify_options);
@@ -672,7 +679,8 @@ static bool read_itemstore_header(FILE *file, const char *filename) {
   return true;
 }
 
-ITEM_t *load_itemstore(const char *filename) {
+ITEM_t *load_itemstore_with_options(const char *filename,
+                                    bool strict_validation) {
   FILE *file = fopen(filename, "rb");
   if (file == NULL) {
     logerr("Failed to open itemstore '%s' for reading: %s\n",
@@ -681,6 +689,7 @@ ITEM_t *load_itemstore(const char *filename) {
   }
 
   ITEMSTORE_READ_CTX_t ctx = itemstore_read_context(filename, 0);
+  ctx.strict_validation = strict_validation;
   ITEM_t *root = NULL;
   if (read_itemstore_header(file, filename)) {
     root = read_item_record(file, NULL, &ctx);
@@ -711,6 +720,14 @@ ITEM_t *load_itemstore(const char *filename) {
            filename);
   }
   return root;
+}
+
+ITEM_t *load_itemstore(const char *filename) {
+  return load_itemstore_with_options(filename, config.strict_validation);
+}
+
+bool save_itemstore(const char *filename, ITEM_t *root) {
+  return save_itemstore_with_options(filename, root, config.itemstore_durability);
 }
 
 void dump_item(ITEM_t *item, char *item_name, bool isroot) {

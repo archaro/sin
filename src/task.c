@@ -5,12 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "config.h"
 #include "memory.h"
 #include "log.h"
 #include "task.h"
 
-extern CONFIG_t config;
 
 static uint64_t next_taskid;
 static size_t top_of_id_stack;
