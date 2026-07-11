@@ -38,12 +38,23 @@ typedef struct {
 
 extern LINE_t *line;
 
+typedef struct {
+  uv_loop_t *loop;
+  uv_tcp_t *listener;
+  LINE_t **lines;
+  size_t maxconns;
+} NetworkRuntimeDeps;
+
+bool validate_network_deps(const NetworkRuntimeDeps *deps);
 bool validate_network_config();
+void init_networking_with_deps(NetworkRuntimeDeps *deps);
 void init_networking();
+void init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port);
 void init_listener(uint32_t port);
 void destroy_line(LINE_t *line);
 void input_processor(uv_idle_t* handle);
 char *get_input(LINE_t *line);
+void shutdown_listener_with_deps(NetworkRuntimeDeps *deps);
 void shutdown_listener();
 void shutdown_networking();
 bool line_can_accept_output(LINE_t *linep, size_t len);

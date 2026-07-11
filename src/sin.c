@@ -112,11 +112,12 @@ static void usage_error(const char *message) {
   logerr("Try 'sin --help' for more information.\n");
 }
 
-static ITEM_t *load_or_create_itemstore(const char *filename) {
+static ITEM_t *load_or_create_itemstore_with_options(const char *filename,
+                                                 bool strict_validation) {
   struct stat buffer;
   if (stat(filename, &buffer) == 0) {
     logstatus("Loading itemstore from %s.\n", filename);
-    ITEM_t *root = load_itemstore(filename);
+    ITEM_t *root = load_itemstore_with_options(filename, strict_validation);
     if (!root) {
       logerr("Existing itemstore '%s' could not be loaded; refusing to "
              "replace it.\n", filename);
@@ -231,7 +232,8 @@ static int parse_sin_options(int argc, char **argv, SinStartupOptions *startup) 
       case 'i':
         free(config.itemstore);
         config.itemstore = strdup(optarg);
-        config.itemroot = load_or_create_itemstore(config.itemstore);
+        config.itemroot = load_or_create_itemstore_with_options(config.itemstore,
+            config.strict_validation);
         if (!config.itemroot) return EXIT_FAILURE;
         break;
       case 'l':
@@ -321,7 +323,8 @@ static int ensure_source_root(void) {
 static int ensure_itemstore(void) {
   if (!config.itemroot) {
     config.itemstore = strdup("items.dat");
-    config.itemroot = load_or_create_itemstore(config.itemstore);
+    config.itemroot = load_or_create_itemstore_with_options(config.itemstore,
+            config.strict_validation);
     if (!config.itemroot) return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
@@ -389,22 +392,29 @@ static int run_network_loop(int listener_port) {
   config.input_vm = make_vm();
   config.maxconns = MAXCONNS;
   config.lastconn = config.maxconns;
+  uv_tcp_t listener;
+  NetworkRuntimeDeps network_deps = {
+    .loop = config.loop,
+    .listener = &listener,
+    .lines = &line,
+    .maxconns = config.maxconns
+  };
   runtime_context_from_config(&input_ctx, config.input_vm);
   uv_idle_init(config.loop, &input_task);
   input_task.data = &input_ctx;
   uv_idle_start(&input_task, input_processor);
 
   logstatus("Running...\n");
-  if (!validate_network_config()) return EXIT_FAILURE;
-  init_networking();
+  if (!validate_network_deps(&network_deps)) return EXIT_FAILURE;
+  init_networking_with_deps(&network_deps);
   if (listener_port < 0) {
     logerr("Listener port must be non-negative.\n");
     return EXIT_FAILURE;
   }
-  init_listener((uint32_t)listener_port);
+  init_listener_with_deps(&network_deps, (uint32_t)listener_port);
   int runloop_retval = uv_run(config.loop, UV_RUN_DEFAULT);
 
-  shutdown_listener();
+  shutdown_listener_with_deps(&network_deps);
   uv_idle_stop(&input_task);
   uv_walk(config.loop, close_all_tasks, NULL);
   uv_run(config.loop, UV_RUN_ONCE);
@@ -420,7 +430,8 @@ static int shutdown_runtime(bool bootonly, int runloop_retval) {
   (void)bootonly;
   uv_loop_close(config.loop);
   if (config.safe_shutdown) {
-    if (!save_itemstore(config.itemstore, config.itemroot)) {
+    if (!save_itemstore_with_options(config.itemstore, config.itemroot,
+                                     config.itemstore_durability)) {
       logerr("Shutdown could not persist itemstore '%s'.\n", config.itemstore);
       if (runloop_retval == 0) runloop_retval = EXIT_FAILURE;
     }

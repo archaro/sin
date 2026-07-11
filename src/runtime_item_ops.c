@@ -163,7 +163,7 @@ int8_t compile_and_insert_codeitem(ITEM_t *itemroot, const VALUE_t *itemname, co
   return rc;
 }
 
-void persist_codeitem_source(ITEM_t *itemroot, const VALUE_t *itemname, const CODEITEM_INPUT_t *in) {
+void persist_codeitem_source(ITEM_t *itemroot, const VALUE_t *itemname, const CODEITEM_INPUT_t *in, const char *srcroot) {
   ITEM_t *code_item = find_item(itemroot, itemname->s);
   STRBUILDER_t sb;
   size_t source_cap = in->source_len + in->total_param_len + 16u;
@@ -181,7 +181,7 @@ void persist_codeitem_source(ITEM_t *itemroot, const VALUE_t *itemname, const CO
   }
   sb_append_literal(&sb, in->source);
   sb_append_literal(&sb, ");\n");
-  if (!save_itemsource(code_item, sb.buf)) {
+  if (!save_itemsource_in_srcroot(code_item, sb.buf, srcroot)) {
     char fullname[MAX_ITEM_NAME];
     get_itemname(code_item, fullname);
     logerr("Source was not saved.\nItem: %s\n", fullname);

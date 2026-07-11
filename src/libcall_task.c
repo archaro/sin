@@ -83,7 +83,7 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
     // Ownership: free itemname once on this error path before returning.
     FREE_STR(itemname);
     push_stack(ctx->vm->stack, VALUE_NIL);
-    set_error_item(ERR_RUNTIME_NOSUCHITEM, NULL);
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_NOSUCHITEM, NULL);
     return nextop;
   }
   // We have the task item, and the validated start and repeat intervals.

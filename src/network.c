@@ -34,44 +34,74 @@ static const telnet_telopt_t telopts[] = {
 };
 
 LINE_t *line;
+static size_t network_maxconns;
+static uv_tcp_t legacy_listener;
+
+static NetworkRuntimeDeps legacy_network_deps(void) {
+  return (NetworkRuntimeDeps){
+    .loop = config.loop,
+    .listener = &legacy_listener,
+    .lines = &line,
+    .maxconns = config.maxconns
+  };
+}
+
+static NetworkRuntimeDeps *deps_from_server(uv_stream_t *server,
+                                            NetworkRuntimeDeps *fallback) {
+  return (server && server->data) ? (NetworkRuntimeDeps *)server->data : fallback;
+}
 
 void flush_output(LINE_t *linep);
 
-bool validate_network_config() {
-  if (config.maxconns == 0) {
+bool validate_network_deps(const NetworkRuntimeDeps *deps) {
+  size_t maxconns = deps ? deps->maxconns : 0;
+  if (maxconns == 0) {
     logerr("Invalid maxconns: must be greater than zero.\n");
     return false;
   }
-  if (config.maxconns > (size_t)LONG_MAX) {
+  if (maxconns > (size_t)LONG_MAX) {
     logerr("Invalid maxconns: %zu exceeds maximum line number %ld.\n",
-           config.maxconns, LONG_MAX);
+           maxconns, LONG_MAX);
     return false;
   }
-  if (config.maxconns > SIZE_MAX / sizeof(LINE_t)) {
+  if (maxconns > SIZE_MAX / sizeof(LINE_t)) {
     logerr("Invalid maxconns: %zu is too large to allocate.\n",
-           config.maxconns);
+           maxconns);
     return false;
   }
   return true;
 }
 
-void init_networking() {
+bool validate_network_config() {
+  NetworkRuntimeDeps deps = legacy_network_deps();
+  return validate_network_deps(&deps);
+}
+
+void init_networking_with_deps(NetworkRuntimeDeps *deps) {
   // Do that which needs to be done before starting the network interface
-  if (!validate_network_config()) {
+  if (!validate_network_deps(deps)) {
     exit(EXIT_FAILURE);
   }
 
-  line = calloc(config.maxconns, sizeof *line);
-  for (size_t l = 0; l < config.maxconns; l++) {
-    line[l].linenum = l;
+  LINE_t **lines = deps && deps->lines ? deps->lines : &line;
+  *lines = calloc(deps->maxconns, sizeof **lines);
+  line = *lines;
+  network_maxconns = deps->maxconns;
+  for (size_t l = 0; l < deps->maxconns; l++) {
+    (*lines)[l].linenum = l;
   }
+}
+
+void init_networking() {
+  NetworkRuntimeDeps deps = legacy_network_deps();
+  init_networking_with_deps(&deps);
 }
 
 LINE_t *add_line(uv_tcp_t *line_handle) {
   size_t l = 0;
   while (line[l].status != LINE_empty) {
     l++;
-    if (l >= config.maxconns) {
+    if (l >= (network_maxconns ? network_maxconns : config.maxconns)) {
       return NULL;
     }
   }
@@ -159,7 +189,7 @@ LINE_t *find_line(uv_tcp_t *client) {
   // Given a TCP client connection, find its associated line.
   // Return the line, or NULL if not found.
   size_t l = 0;
-  while (l < config.maxconns) {
+  while (l < (network_maxconns ? network_maxconns : config.maxconns)) {
     if (line[l].line_handle == client) {
       return &line[l];
     }
@@ -584,14 +614,14 @@ void on_new_connection(uv_stream_t *server, int status) {
     return;
   }
 
-  int err = uv_tcp_init(config.loop, client);
+  int err = uv_tcp_init(deps_from_server(server, &(NetworkRuntimeDeps){.loop = config.loop, .listener = &legacy_listener, .lines = &line, .maxconns = config.maxconns})->loop, client);
   if (err < 0) {
     logerr("Rejected connection: uv_tcp_init failed: %s\n", uv_strerror(err));
     free(client);
     return;
   }
 
-  err = uv_accept((uv_stream_t *)&config.listener, (uv_stream_t *)client);
+  err = uv_accept((uv_stream_t *)deps_from_server(server, &(NetworkRuntimeDeps){.loop = config.loop, .listener = &legacy_listener, .lines = &line, .maxconns = config.maxconns})->listener, (uv_stream_t *)client);
   if (err < 0) {
     logerr("Rejected connection: uv_accept failed: %s\n", uv_strerror(err));
     uv_close((uv_handle_t *)client, free_client_on_close);
@@ -603,7 +633,7 @@ void on_new_connection(uv_stream_t *server, int status) {
     uv_buf_t gamefull = {"Too many connections.\r\n", 23};
     uv_try_write((uv_stream_t *)client, &gamefull, 1);
     logmsg("Rejected connection: maximum connections (%zu) exceeded or allocation failed.\n",
-           config.maxconns);
+           (network_maxconns ? network_maxconns : config.maxconns));
     uv_close((uv_handle_t *)client, free_client_on_close);
     return;
   }
@@ -650,23 +680,30 @@ void on_new_connection(uv_stream_t *server, int status) {
   logmsg("Line %zu: %s connected.\n", newline->linenum, newline->address);
 }
 
-void init_listener(uint32_t port) {
+void init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port) {
   // Use libuv to elegantly create a listener
   struct sockaddr_in6 addr;
-  uv_tcp_init(config.loop, &config.listener);
+  uv_tcp_init(deps->loop, deps->listener);
+  deps->listener->data = deps;
   if (port > UINT16_MAX) {
     logerr("Invalid listener port %u.\n", port);
     return;
   }
   uv_ip6_addr("::", (int)port, &addr);
-  uv_tcp_bind(&config.listener, (const struct sockaddr *)&addr, 0);
-  uv_tcp_nodelay(&config.listener, 1);
-  int r = uv_listen((uv_stream_t *) &config.listener, 10, on_new_connection);
+  uv_tcp_bind(deps->listener, (const struct sockaddr *)&addr, 0);
+  uv_tcp_nodelay(deps->listener, 1);
+  int r = uv_listen((uv_stream_t *) deps->listener, 10, on_new_connection);
   if (r) {
     logerr("Failed to start listening: %s\n", uv_strerror(r));
   } else {
     logmsg("Listening on port %u.\n", port);
   }
+}
+
+void init_listener(uint32_t port) {
+  static NetworkRuntimeDeps deps;
+  deps = legacy_network_deps();
+  init_listener_with_deps(&deps, port);
 }
 
 void input_processor(uv_idle_t* handle) {
@@ -684,7 +721,8 @@ void input_processor(uv_idle_t* handle) {
   interpret(input_ctx, input);
   reset_stack(input_ctx->vm->stack);
   // Flush the output of every connected line
-  for (size_t l = 0; l < config.maxconns; l++) {
+  size_t maxconns = input_ctx->maxconns ? *input_ctx->maxconns : input_ctx->network.maxconns ? *input_ctx->network.maxconns : 0;
+  for (size_t l = 0; l < maxconns; l++) {
     if (line[l].status != LINE_empty 
                                   && line[l].status != LINE_disconnecting) {
       flush_output(&line[l]);
@@ -694,8 +732,13 @@ void input_processor(uv_idle_t* handle) {
   usleep(100);
 }
 
+void shutdown_listener_with_deps(NetworkRuntimeDeps *deps) {
+  if (deps && deps->listener) uv_close((uv_handle_t *)deps->listener, NULL);
+}
+
 void shutdown_listener() {
-  uv_close((uv_handle_t *)&config.listener, NULL);
+  NetworkRuntimeDeps deps = legacy_network_deps();
+  shutdown_listener_with_deps(&deps);
 }
 
 void shutdown_networking() {

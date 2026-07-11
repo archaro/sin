@@ -130,7 +130,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       compiler_diag_set_location(&diag, 1, 1, 1);
       compiler_diag_set_excerpt(&diag, val.s ? val.s : "");
     }
-    set_compiler_error_item(&diag);
+    set_compiler_error_item_on_root(ctx ? ctx->itemroot : NULL, &diag);
     if (out) {
       if (out->bytecode) {
         free(out->bytecode);
@@ -146,7 +146,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   int namelen = snprintf(tmpname, sizeof(tmpname),
       "__sys_compile_tmp__%llu", (unsigned long long)++tmpname_counter);
   if (namelen < 0 || namelen >= (int)sizeof(tmpname)) {
-    set_error_item(ERR_RUNTIME_INVALIDARGS,
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
         "Sys.compile temporary item name generation failed.");
     free(out->bytecode);
     free(out);
@@ -163,7 +163,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // within an already-active interpreter frame.
   ptrdiff_t raw_len = out->nextbyte - out->bytecode;
   if (raw_len < 0 || (uintmax_t)raw_len > UINT32_MAX) {
-    set_error_item(ERR_RUNTIME_INVALIDARGS,
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
         "Sys.compile bytecode output length is out of range.");
     free(out->bytecode);
     free(out);
@@ -178,7 +178,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (!tmpitem) {
     // Could not create temp item (likely in-use/name conflict).
     // out->bytecode/out and val.s are still owned here and must be freed once.
-    set_error_item(ERR_COMP_INUSE, NULL);
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_COMP_INUSE, NULL);
     free(out->bytecode);
     free(out);
     lc_cleanup_cstr(val.s);
@@ -198,7 +198,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   delete_item(ctx->itemroot, tmpname);
 
   // clear compiler/runtime error indicators on success
-  clear_error_item();
+  clear_error_item_on_root(ctx ? ctx->itemroot : NULL);
 
   free(out); // bytecode ownership moved into inserted item
   lc_cleanup_cstr(val.s);

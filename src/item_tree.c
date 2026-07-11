@@ -336,24 +336,29 @@ void get_itemname(ITEM_t *item, char *itemname) {
   }
 }
 
-char *get_itemfilename(ITEM_t *item) {
+char *get_itemfilename_in_srcroot(ITEM_t *item, const char *srcroot) {
   // Returns the filename of the item (only relevant if it is a source
   // item).  The return value will need to be freed by the caller.
   char *filename, *p;
   char itemname[MAX_ITEM_NAME];
   size_t l;
 
+  if (!srcroot) srcroot = "";
   itemname[0] = '\0';
   get_itemname(item, itemname);
-  l = strlen(itemname) + strlen(config.srcroot) + 13;
+  l = strlen(itemname) + strlen(srcroot) + 13;
   filename = malloc((size_t)l);
   p = itemname;
   while (*p) {
     if(*p == '.') *p = '/';
     p++;
   }
-  snprintf(filename, l, "%s/%s/source.sin", config.srcroot, itemname);
+  snprintf(filename, l, "%s/%s/source.sin", srcroot, itemname);
   return filename;
+}
+
+char *get_itemfilename(ITEM_t *item) {
+  return get_itemfilename_in_srcroot(item, config.srcroot);
 }
 
 bool is_valid_layer(const char *str) {
