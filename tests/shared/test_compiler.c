@@ -87,6 +87,7 @@ void test_bytecode_verify_local_index_bounds(void);
 void test_bytecode_verify_jump_targets(void);
 void test_bytecode_verify_stack_flow(void);
 void test_parser_input_api(void);
+void test_cli_io_helpers(void);
 void test_parser_float_literals_decimal_forms(void);
 void test_parser_float_literals_integer_still_int(void);
 void test_parser_float_literals_unary_minus_preserves_float_literals(void);
@@ -227,6 +228,7 @@ static const test_case_t core_tests[] = {
     {"test_bytecode_verify_jump_targets", test_bytecode_verify_jump_targets},
     {"test_bytecode_verify_stack_flow", test_bytecode_verify_stack_flow},
     {"test_parser_input_api", test_parser_input_api},
+    {"test_cli_io_helpers", test_cli_io_helpers},
     {"test_parser_float_literals_decimal_forms", test_parser_float_literals_decimal_forms},
     {"test_parser_float_literals_integer_still_int", test_parser_float_literals_integer_still_int},
     {"test_parser_float_literals_unary_minus_preserves_float_literals", test_parser_float_literals_unary_minus_preserves_float_literals},

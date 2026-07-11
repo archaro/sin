@@ -10,6 +10,7 @@
 #include <limits.h>
 
 #include "version.h"
+#include "cli_io.h"
 #include "config.h"
 #include "error.h"
 #include "compiler_pipeline.h"
@@ -108,66 +109,6 @@ static void print_compiler_diagnostic(const CompilerDiagnostic *diag,
   print_caret_marker(stderr, column, span);
 }
 
-int load_file_buffer(const char *path, char **out_data, size_t *out_len) {
-  FILE *in = NULL;
-  long file_len = 0;
-  char *buf = NULL;
-  size_t bytes_read = 0;
-
-  if (!path || !out_data || !out_len) return -1;
-
-  *out_data = NULL;
-  *out_len = 0;
-
-  if (strcmp(path, "-") == 0) {
-    size_t cap = 4096;
-    size_t len = 0;
-    buf = malloc(cap);
-    if (!buf) return -1;
-    for (;;) {
-      if (len == cap) {
-        if (cap > SIZE_MAX / 2) goto fail;
-        size_t next_cap = cap * 2;
-        char *next = realloc(buf, next_cap);
-        if (!next) goto fail;
-        buf = next;
-        cap = next_cap;
-      }
-      bytes_read = fread(buf + len, 1, cap - len, stdin);
-      len += bytes_read;
-      if (bytes_read == 0) {
-        if (ferror(stdin)) goto fail;
-        break;
-      }
-    }
-    *out_data = buf;
-    *out_len = len;
-    return 0;
-  }
-
-  in = fopen(path, "rb");
-  if (!in) return -1;
-  if (fseek(in, 0, SEEK_END) != 0) goto fail;
-  file_len = ftell(in);
-  if (file_len < 0 || file_len > INT_MAX) goto fail;
-  if (fseek(in, 0, SEEK_SET) != 0) goto fail;
-
-  buf = malloc((size_t)file_len);
-  if (file_len > 0 && !buf) goto fail;
-  bytes_read = fread(buf, sizeof(char), (size_t)file_len, in);
-  if (bytes_read != (size_t)file_len) goto fail;
-
-  fclose(in);
-  *out_data = buf;
-  *out_len = (size_t)file_len;
-  return 0;
-
-fail:
-  if (in) fclose(in);
-  if (buf) free(buf);
-  return -1;
-}
-
 static int parse_options(int argc, char **argv, ScompOptions *opts) {
   enum { OPT_VERSION = 1000 };
   static const struct option long_options[] = {
@@ -236,9 +177,12 @@ int main(int argc, char **argv) {
   }
   logverbose("Sinistra compiler version %s\n", SINVERSION);
 
-  if (load_file_buffer(opts.input_path, &source, &source_len) != 0) {
+  CliIoStatus read_status = cli_io_read_source_text(opts.input_path, &source,
+                                                     &source_len);
+  if (read_status.code != CLI_IO_OK) {
     result = ERR_COMP_SYNTAX;
-    compiler_diag_set(&diag, result, DIAG_PHASE_IO, "input file IO failure");
+    compiler_diag_set(&diag, result, DIAG_PHASE_IO,
+                      cli_io_status_detail(read_status));
     compiler_diag_set_source_name(&diag, opts.input_path);
     compiler_diag_set_location(&diag, 1, 1, 1);
     goto compile_error;
@@ -246,7 +190,9 @@ int main(int argc, char **argv) {
   logverbose("Source loaded: %zu bytes from %s.\n", source_len, opts.input_path);
 
   logstatus("Compiling...\n");
-  ParseInput input = {source, source_len, strcmp(opts.input_path, "-") == 0 ? "<stdin>" : opts.input_path};
+  ParseInput input = {source, source_len,
+                      strcmp(opts.input_path, "-") == 0 ? "<stdin>"
+                                                        : opts.input_path};
   result = compile_parse_input_to_bytecode_diag(&input, &out, &diag);
   if (result != ERR_NOERROR) {
     goto compile_error;
@@ -255,17 +201,13 @@ int main(int argc, char **argv) {
   size_t bytecode_len = (size_t)(out->nextbyte - out->bytecode);
   logstatus("Compilation completed: %zu bytes.\n", bytecode_len);
   logverbose("Writing bytecode to %s.\n", opts.output_path);
-  FILE *output = strcmp(opts.output_path, "-") == 0 ? stdout : fopen(opts.output_path, "wb");
-  if (!output) {
-    logerr("Unable to open output file: %s\n", opts.output_path);
-    result = ERR_COMP_UNKNOWN;
-    goto cleanup;
-  }
-  if (fwrite(out->bytecode, 1, bytecode_len, output) != bytecode_len) {
-    logerr("Unable to write output file: %s\n", opts.output_path);
+  CliIoStatus write_status = cli_io_write_bytes(opts.output_path, out->bytecode,
+                                                bytecode_len);
+  if (write_status.code != CLI_IO_OK) {
+    logerr("Unable to write output file '%s': %s\n", opts.output_path,
+           cli_io_status_detail(write_status));
     result = ERR_COMP_UNKNOWN;
   }
-  if (output != stdout) fclose(output);
   goto cleanup;
 
 compile_error:
