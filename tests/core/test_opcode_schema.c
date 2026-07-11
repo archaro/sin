@@ -15,6 +15,8 @@ void test_opcode_schema_consistency(void) {
     ASSERT_TRUE(meta->size_policy >= SIZE_FIXED_0 && meta->size_policy <= SIZE_ITEM_SAVE_CODE);
     ASSERT_TRUE(meta->validator >= VALIDATE_NONE && meta->validator <= VALIDATE_EMBEDDED_INDEX);
     ASSERT_TRUE(meta->operand_kind >= OPERAND_NONE && meta->operand_kind <= OPERAND_EMBEDDED_ID);
+    if (meta->requires_runtime_handler) ASSERT_NOT_NULL(meta->runtime_handler_name);
+    else ASSERT_TRUE(meta->runtime_handler_name == NULL);
     if (meta->op == IR_OP_LABEL) ASSERT_EQ_INT(0, meta->encoded_symbol);
     else ASSERT_TRUE(meta->encoded_symbol != 0);
   }
