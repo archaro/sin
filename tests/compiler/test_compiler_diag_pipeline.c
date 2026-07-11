@@ -114,6 +114,31 @@ static void test_shared_logging_cli_levels(void) {
   ASSERT_EQ_INT(0, (int)strlen(out));
   ASSERT_TRUE(strstr(err, "Error:") != NULL);
   ASSERT_TRUE(strstr(err, "Diagnostic") != NULL);
+  ASSERT_TRUE(strstr(err, "No such file") != NULL);
+  free(out);
+  free(err);
+
+  cmd_len = snprintf(cmd, sizeof(cmd), "./sdiss --quiet -o %s > %s 2> %s",
+                     bad_obj_path, stdout_path, stderr_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_TRUE(system(cmd) != 0);
+  out = read_text_file_for_diag_test(stdout_path);
+  err = read_text_file_for_diag_test(stderr_path);
+  ASSERT_EQ_INT(0, (int)strlen(out));
+  ASSERT_TRUE(strstr(err, "Unable to read object file") != NULL);
+  ASSERT_TRUE(strstr(err, "No such file") != NULL);
+  free(out);
+  free(err);
+
+  cmd_len = snprintf(cmd, sizeof(cmd), "./sin --quiet -o %s > %s 2> %s",
+                     bad_obj_path, stdout_path, stderr_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_TRUE(system(cmd) != 0);
+  out = read_text_file_for_diag_test(stdout_path);
+  err = read_text_file_for_diag_test(stderr_path);
+  ASSERT_EQ_INT(0, (int)strlen(out));
+  ASSERT_TRUE(strstr(err, "Unable to read object file") != NULL);
+  ASSERT_TRUE(strstr(err, "No such file") != NULL);
   free(out);
   free(err);
 

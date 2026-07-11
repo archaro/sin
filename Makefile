@@ -97,6 +97,7 @@ TEST_CORE_SOURCES := \
 	$(TEST_DIR)/core/test_ir_validate.c \
 	$(TEST_DIR)/core/test_opcode_schema.c \
 	$(TEST_DIR)/core/test_parser_input_api.c \
+	$(TEST_DIR)/core/test_cli_io.c \
 	$(TEST_DIR)/core/test_parser_float_literals.c \
 	$(TEST_DIR)/core/test_item_cache.c \
 	$(TEST_DIR)/core/test_itemstore_io.c \
@@ -129,7 +130,7 @@ TEST_SOURCES := $(TEST_SHARED_SOURCES) $(TEST_CORE_SOURCES) $(TEST_COMPILER_SOUR
 
 # Library of shared functions
 LIB := $(LIB_DIR)/libsinshared.a
-LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/bytecode_verify.o $(OBJ_DIR)/sdiss_core.o $(OBJ_DIR)/floatconv.o $(OBJ_DIR)/parser.o \
+LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/cli_io.o $(OBJ_DIR)/bytecode_verify.o $(OBJ_DIR)/sdiss_core.o $(OBJ_DIR)/floatconv.o $(OBJ_DIR)/parser.o \
                $(OBJ_DIR)/lexer.o $(OBJ_DIR)/compiler/absyn.o $(OBJ_DIR)/compiler/semant.o \
                $(OBJ_DIR)/compiler/ir.o $(OBJ_DIR)/compiler/lower.o $(OBJ_DIR)/compiler/compiler_context.o $(OBJ_DIR)/compiler/compiler_pipeline.o $(OBJ_DIR)/compiler/emitbc.o \
                $(OBJ_DIR)/compiler/compdiag.o $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcall_sys.o $(OBJ_DIR)/libcall_task.o $(OBJ_DIR)/libcall_net.o $(OBJ_DIR)/libcall_str.o $(OBJ_DIR)/libcall_registry.o $(OBJ_DIR)/libcall_table.o \

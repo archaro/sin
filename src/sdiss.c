@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 #include "config.h"
+#include "cli_io.h"
 #include "log.h"
 #include "memory.h"
 #include "sdiss_core.h"
@@ -39,7 +40,6 @@ static void stdout_write(void *ctx, const char *data, size_t len) {
 }
 
 int main(int argc, char **argv) {
-  FILE *in = NULL;
   size_t filesize = 0;
   bytecode = NULL;
   if (argc < 2) {
@@ -74,45 +74,28 @@ int main(int argc, char **argv) {
       case 'v':
         log_set_level(LOG_LEVEL_VERBOSE);
         break;
-      case 'o':
-        in = fopen(optarg, "rb");
-        if (!in) {
-          logerr("Unable to open input file: %s\n", optarg);
+      case 'o': {
+        uint8_t *new_bytecode = NULL;
+        size_t new_filesize = 0;
+        CliIoStatus io_status = cli_io_read_file_bytes(optarg, &new_bytecode,
+                                                       &new_filesize);
+        if (io_status.code != CLI_IO_OK) {
+          logerr("Unable to read object file '%s': %s\n", optarg,
+                 cli_io_status_detail(io_status));
+          free(new_bytecode);
           exit(EXIT_FAILURE);
         }
-        if (fseek(in, 0, SEEK_END) != 0) {
-          logerr("Unable to seek input file: %s\n", optarg);
-          fclose(in);
-          exit(EXIT_FAILURE);
-        }
-        long file_len = ftell(in);
-        if (file_len < 0 || (uint64_t)file_len > UINT32_MAX) {
+        if (new_filesize > UINT32_MAX) {
           logerr("Input file is too large to disassemble: %s\n", optarg);
-          fclose(in);
+          free(new_bytecode);
           exit(EXIT_FAILURE);
         }
-        filesize = (size_t)file_len;
-        if (fseek(in, 0, SEEK_SET) != 0) {
-          logerr("Unable to rewind input file: %s\n", optarg);
-          fclose(in);
-          exit(EXIT_FAILURE);
-        }
-        uint8_t *new_bytecode = realloc(bytecode, filesize);
-        if (filesize > 0 && !new_bytecode) {
-          logerr("Unable to allocate %zu bytes for input file: %s\n",
-                 filesize, optarg);
-          fclose(in);
-          exit(EXIT_FAILURE);
-        }
+        free(bytecode);
         bytecode = new_bytecode;
-        if (filesize > 0 && fread(bytecode, 1, filesize, in) != filesize) {
-          logerr("Unable to read complete input file: %s\n", optarg);
-          fclose(in);
-          exit(EXIT_FAILURE);
-        }
-        fclose(in);
+        filesize = new_filesize;
         logverbose("Bytecode loaded: %zu bytes from %s.\n", filesize, optarg);
         break;
+      }
       case 1000:
         opt_raw = 1;
         break;
