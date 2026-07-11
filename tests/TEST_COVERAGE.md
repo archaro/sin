@@ -14,9 +14,10 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - Core suite registration (`core_tests[]`)
 - **Fixture contract integrity / regeneration policy**
   - `tests/shared/test_fixture_policy.c`
-    - `test_fixture_policy_registry_integrity`
-    - `test_fixture_policy_files_present`
-    - `test_fixture_policy_no_generated_obj_tracked`
+    - `test_fixture_policy_declared_goldens_exist`
+      - Verifies hand-declared source/sdiss/expected fixtures exist and carry policy metadata.
+      - Verifies pipeline golden case names and fixture paths are unique.
+      - Verifies every shared pipeline golden fixture exists directly from `pipeline_golden_cases(...)`, avoiding a duplicate stale fixture list.
 - **Parser / AST / semantic edge behavior**
   - `tests/core/test_absyn_lifecycle.c`
   - `tests/core/test_semant.c`

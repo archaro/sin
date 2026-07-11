@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "shared/test_pipeline_cases.h"
 #include "test_assert.h"
 
 typedef struct {
@@ -20,6 +21,44 @@ static void assert_fixture_entry(const char *class_name, const FixtureEntry *ent
   (void)class_name;
 }
 
+static void assert_no_duplicate_fixture_entries(const FixtureEntry *entries, size_t count) {
+  for (size_t i = 0; i < count; i++) {
+    for (size_t j = i + 1; j < count; j++) {
+      if (strcmp(entries[i].name, entries[j].name) == 0) {
+        TEST_FAILF("duplicate fixture policy name: %s", entries[i].name);
+      }
+      if (strcmp(entries[i].path, entries[j].path) == 0) {
+        TEST_FAILF("duplicate fixture policy path: %s", entries[i].path);
+      }
+    }
+  }
+}
+
+static void assert_pipeline_golden_fixtures_present(void) {
+  size_t count = 0;
+  const PipelineGoldenCase *cases = pipeline_golden_cases(&count);
+
+  for (size_t i = 0; i < count; i++) {
+    ASSERT_NOT_NULL(cases[i].fixture_path);
+    FILE *f = fopen(cases[i].fixture_path, "rb");
+    if (f == NULL) {
+      TEST_FAILF("pipeline golden fixture missing for case %s: %s", cases[i].name,
+                 cases[i].fixture_path);
+    }
+    fclose(f);
+
+    for (size_t j = i + 1; j < count; j++) {
+      if (strcmp(cases[i].name, cases[j].name) == 0) {
+        TEST_FAILF("duplicate pipeline golden case name: %s", cases[i].name);
+      }
+      if (strcmp(cases[i].fixture_path, cases[j].fixture_path) == 0) {
+        TEST_FAILF("duplicate pipeline golden fixture path: %s",
+                   cases[i].fixture_path);
+      }
+    }
+  }
+}
+
 void test_fixture_policy_declared_goldens_exist(void) {
   static const FixtureEntry source_fixtures[] = {
       {"chat_boot_src", "examples/chat-boot.src", "SOT: examples/chat-boot.src | regen: authored source fixture"},
@@ -30,17 +69,6 @@ void test_fixture_policy_declared_goldens_exist(void) {
   };
 
   static const FixtureEntry bytecode_hex_fixtures[] = {
-      {"int_literal_hex", "tests/fixtures/int_literal.hex", "SOT: pipeline output for tests/fixtures/int_literal.src | regen: make regen-fixtures"},
-      {"string_literal_hex", "tests/fixtures/string_literal.hex", "SOT: AST builder in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
-      {"locals_store_load_hex", "tests/fixtures/locals_store_load.hex", "SOT: pipeline/source golden tables | regen: make regen-fixtures"},
-      {"arithmetic_add_hex", "tests/fixtures/arithmetic_add.hex", "SOT: pipeline/source golden tables | regen: make regen-fixtures"},
-      {"boolean_compare_hex", "tests/fixtures/boolean_compare.hex", "SOT: AST builder in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
-      {"simple_if_hex", "tests/fixtures/simple_if.hex", "SOT: AST builder in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
-      {"if_elsif_else_hex", "tests/fixtures/if_elsif_else.hex", "SOT: source case in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
-      {"locals_inc_hex", "tests/fixtures/locals_inc.hex", "SOT: source case in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
-      {"locals_dec_hex", "tests/fixtures/locals_dec.hex", "SOT: source case in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
-      {"libcall_exprstmt_hex", "tests/fixtures/libcall_exprstmt.hex", "SOT: source case in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
-      {"item_numeric_layer_hex", "tests/fixtures/item_numeric_layer.hex", "SOT: source case in tests/shared/test_pipeline_cases.c | regen: make regen-fixtures"},
       {"sdiss_basic_hex", "tests/fixtures/sdiss/basic.hex", "SOT: hand-authored disassembly sample | regen: manual update plus expected sync"},
   };
 
@@ -51,6 +79,15 @@ void test_fixture_policy_declared_goldens_exist(void) {
       {"echo_load_expected", "tests/fixtures/interpret/echo-load.expected.txt", "SOT: runtime output contract for echo-load | regen: ./scomp examples/echo-load.src tests/fixtures/interpret/echo-load.generated.obj && ./sin -o tests/fixtures/interpret/echo-load.generated.obj > tests/fixtures/interpret/echo-load.expected.txt"},
       {"sdiss_basic_expected", "tests/fixtures/sdiss/basic.expected.txt", "SOT: sdiss stdout for tests/fixtures/sdiss/basic.hex | regen: ./sdiss --no-header -o tests/fixtures/sdiss/basic.bin"},
   };
+
+  assert_no_duplicate_fixture_entries(source_fixtures,
+                                      sizeof(source_fixtures) / sizeof(source_fixtures[0]));
+  assert_no_duplicate_fixture_entries(bytecode_hex_fixtures,
+                                      sizeof(bytecode_hex_fixtures) / sizeof(bytecode_hex_fixtures[0]));
+  assert_no_duplicate_fixture_entries(interpret_output_fixtures,
+                                      sizeof(interpret_output_fixtures) /
+                                          sizeof(interpret_output_fixtures[0]));
+  assert_pipeline_golden_fixtures_present();
 
   for (size_t i = 0; i < sizeof(source_fixtures) / sizeof(source_fixtures[0]); i++) {
     assert_fixture_entry("source", &source_fixtures[i]);
