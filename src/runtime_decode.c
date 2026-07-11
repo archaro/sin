@@ -65,6 +65,10 @@ RuntimeDecodeStatus bc_read_i16(const RuntimeDecoder *decoder, uint8_t *nextop, 
 RuntimeDecodeStatus bc_read_u64_payload(const RuntimeDecoder *decoder, uint8_t *nextop, uint64_t *out, const char *opname) {
   RuntimeDecodeStatus status = require_bytes(decoder, nextop, sizeof(*out), opname);
   if (!runtime_decode_status_ok(status)) return status;
+  // Bytecode operands are byte-packed and commonly unaligned after a
+  // one-byte opcode. Keep this as memcpy rather than a uint64_t pointer cast:
+  // typed loads would have undefined behavior under C alignment/aliasing rules
+  // and may trap on stricter architectures.
   memcpy(out, nextop, sizeof(*out));
   return runtime_decode_ok(nextop + sizeof(*out));
 }
