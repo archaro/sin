@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "compiler_pipeline.h"
+#include "compiler/compiler_pipeline.h"
 #include "error.h"
 #include "test_assert.h"
 

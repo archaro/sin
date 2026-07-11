@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "compiler_pipeline.h"
+#include "compiler/compiler_pipeline.h"
 #include "error.h"
 #include "floatconv.h"
 #include "interpret.h"

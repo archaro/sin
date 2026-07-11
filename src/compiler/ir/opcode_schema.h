@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../../ir.h"
+#include "compiler/ir.h"
 
 typedef enum {
   OPERAND_NONE = 0,

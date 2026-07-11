@@ -6,9 +6,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "compiler_pipeline.h"
+#include "compiler/compiler_pipeline.h"
 #include "config.h"
-#include "emitbc.h"
+#include "compiler/emitbc.h"
 #include "error.h"
 #include "memory.h"
 

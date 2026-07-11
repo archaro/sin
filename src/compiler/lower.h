@@ -6,10 +6,10 @@
 
 #include <stdint.h>
 
-#include "absyn.h"
-#include "ir.h"
-#include "semant.h"
-#include "compdiag.h"
+#include "compiler/absyn.h"
+#include "compiler/ir.h"
+#include "compiler/semant.h"
+#include "compiler/compdiag.h"
 
 typedef struct {
   SEM_CTX *sem;

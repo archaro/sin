@@ -1,12 +1,12 @@
 // Compiler pipeline - inputs source, outputs bytecode
 
 // Licensed under the MIT License - see LICENSE file for details.
-#include "compiler_pipeline.h"
+#include "compiler/compiler_pipeline.h"
 
-#include "compiler_context.h"
-#include "compdiag.h"
+#include "compiler/compiler_context.h"
+#include "compiler/compdiag.h"
 #include "error.h"
-#include "lower.h"
+#include "compiler/lower.h"
 #include "parser.h"
 #include <stdlib.h>
 

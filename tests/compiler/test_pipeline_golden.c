@@ -4,8 +4,8 @@
 #include <string.h>
 
 #include "error.h"
-#include "lower.h"
-#include "semant.h"
+#include "compiler/lower.h"
+#include "compiler/semant.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 #include "shared/test_pipeline_cases.h"

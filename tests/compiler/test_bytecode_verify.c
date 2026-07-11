@@ -3,7 +3,7 @@
 #include <string.h>
 
 #include "bytecode_verify.h"
-#include "compiler_pipeline.h"
+#include "compiler/compiler_pipeline.h"
 #include "error.h"
 #include "test_assert.h"
 #include "test_helpers.h"

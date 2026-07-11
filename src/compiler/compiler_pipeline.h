@@ -7,9 +7,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "compdiag.h"
-#include "emitbc.h"
-#include "parse_input.h"
+#include "compiler/compdiag.h"
+#include "compiler/emitbc.h"
+#include "compiler/parse_input.h"
 
 int8_t compile_source_to_bytecode(const char *source, size_t len, OUTPUT_t **out, char **errdetail);
 int8_t compile_parse_input_to_bytecode(const ParseInput *input, OUTPUT_t **out, char **errdetail);

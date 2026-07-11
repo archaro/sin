@@ -8,11 +8,11 @@
 #include <string.h>
 
 #include "log.h"
-#include "absyn.h"
+#include "compiler/absyn.h"
 #include "error.h"
 #include "memory.h"
-#include "compdiag.h"
-#include "semant.h"
+#include "compiler/compdiag.h"
+#include "compiler/semant.h"
  
 static bool sem_has_local(SEM_CTX *ctx, const char *name) {
   return sem_get_local_index(ctx, name, NULL);

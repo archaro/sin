@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "runtime_item_ops.h"
-#include "compiler_pipeline.h"
+#include "compiler/compiler_pipeline.h"
 #include "error.h"
 #include "log.h"
 #include "runtime_decode.h"

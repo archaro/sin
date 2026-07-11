@@ -17,7 +17,7 @@
 #include "log.h"
 #include "memory.h"
 #include "parser.h"
-#include "compiler_pipeline.h"
+#include "compiler/compiler_pipeline.h"
 #include "bytecode_verify.h"
 #include "value.h"
 #include "stack.h"

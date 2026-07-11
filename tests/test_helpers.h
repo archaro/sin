@@ -3,9 +3,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "absyn.h"
-#include "emitbc.h"
-#include "ir.h"
+#include "compiler/absyn.h"
+#include "compiler/emitbc.h"
+#include "compiler/ir.h"
 
 AS_NODE *t_int(int64_t value);
 AS_NODE *t_local(const char *name);

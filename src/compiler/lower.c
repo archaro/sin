@@ -3,13 +3,13 @@
 
 // Licensed under the MIT License - see LICENSE file for details.
 
-#include "lower.h"
+#include "compiler/lower.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "compdiag.h"
+#include "compiler/compdiag.h"
 #include "error.h"
 #include "libcall.h"
 

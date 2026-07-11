@@ -14,9 +14,9 @@
   #include <stdbool.h>
   #include <stdint.h>
 
-  #include "absyn.h"
-  #include "parse_input.h"
-  #include "compdiag.h"
+  #include "compiler/absyn.h"
+  #include "compiler/parse_input.h"
+  #include "compiler/compdiag.h"
 
   typedef struct {
     unsigned char *bytecode;

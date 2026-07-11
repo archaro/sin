@@ -2,7 +2,7 @@
 #include <string.h>
 
 #include "error.h"
-#include "ir.h"
+#include "compiler/ir.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 
