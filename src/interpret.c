@@ -858,16 +858,77 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+typedef struct {
+  bool saw_missing_layer;
+  bool saw_non_missing_layer;
+  bool missing_layer_is_leading;
+  bool missing_layer_possibly_leading;
+} ItemAssemblyState;
+
+static bool append_layer_from_value(STRBUILDER_t *sb, const VALUE_t *value,
+                                    ItemAssemblyState *state,
+                                    const char *item_deref_name) {
+  switch (value->type) {
+    case VALUE_str: {
+      if (value->s[0] == '\0') {
+        if (!state->saw_non_missing_layer && !state->saw_missing_layer) {
+          state->saw_missing_layer = true;
+          state->missing_layer_possibly_leading = true;
+        } else {
+          logerr("Missing layer name in non-leading position.\n");
+          return false;
+        }
+      } else if (is_valid_layer(value->s)) {
+        sb_append_literal(sb, value->s);
+        state->saw_non_missing_layer = true;
+      } else {
+        logerr("Invalid layer name '%s'.\n", value->s);
+        return false;
+      }
+      return true;
+    }
+    case VALUE_int: {
+      sb_append_intstr(sb, value->i);
+      state->saw_non_missing_layer = true;
+      return true;
+    }
+    case VALUE_float: {
+      if (item_deref_name) {
+        logerr("Item dereference failed for '%s': float value cannot be used as an item layer name.\n",
+               item_deref_name);
+      } else {
+        logerr("Float value cannot be used as an item layer name.\n");
+      }
+      return false;
+    }
+    case VALUE_nil: {
+      if (!state->saw_non_missing_layer && !state->saw_missing_layer) {
+        state->saw_missing_layer = true;
+        state->missing_layer_possibly_leading = true;
+      } else {
+        logerr("Missing layer name in non-leading position.\n");
+        return false;
+      }
+      return true;
+    }
+    default: {
+      if (item_deref_name) {
+        logerr("Item dereference failed for '%s': invalid type.\n", item_deref_name);
+      } else {
+        logerr("Layer type (%d) not int or string.\n", value->type);
+      }
+      return false;
+    }
+  }
+}
+
 uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item, bool relative) {
   // Interpret the following bytecode as an item.  If an item can be
   // assembled, push the full item name onto the stack as a string.
   // Return a pointer to the bytecode after the item assembly.
   // May recurse - necessary for the handling of nested derefs.
   bool invalid = false;
-  bool saw_missing_layer = false;
-  bool saw_non_missing_layer = false;
-  bool missing_layer_is_leading = false;
-  bool missing_layer_possibly_leading = false;
+  ItemAssemblyState layer_state = {0};
   bool just_processed_layer = false;
   STRBUILDER_t sb;
   sb_init(&sb, 130);
@@ -896,7 +957,7 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
         REQUIRE_BYTES(nextop, (size_t)s, "OP_ASSEMBLEITEM layer bytes");
         sb_append_substr(&sb, (char *)nextop, (uint32_t)s);
         nextop += s;
-        saw_non_missing_layer = true;
+        layer_state.saw_non_missing_layer = true;
         just_processed_layer = true;
         break;
       }
@@ -908,57 +969,8 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
           case 'V': {
             REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM local index");
             int idx = *nextop++ + VM->stack->base; // Local variable index
-            switch (VM->stack->stack[idx].type) {
-              case VALUE_str: {
-                // This is easy, just concatenate the context of this local
-                // Assuming it is a valid layer name, anyway.
-                if (VM->stack->stack[idx].s[0] == '\0') {
-                  if (!saw_non_missing_layer && !saw_missing_layer) {
-                    saw_missing_layer = true;
-                    missing_layer_possibly_leading = true;
-                  } else {
-                    logerr("Missing layer name in non-leading position.\n");
-                    invalid = true;
-                  }
-                } else if (is_valid_layer(VM->stack->stack[idx].s)) {
-                  sb_append_literal(&sb, VM->stack->stack[idx].s);
-                  saw_non_missing_layer = true;
-                } else {
-                  logerr("Invalid layer name '%s'.\n", VM->stack->stack[idx].s);
-                  invalid = true;
-                }
-                just_processed_layer = true;
-                break;
-              }
-              case VALUE_int: {
-                // Slightly more complicated.  Turn the int into a string.
-                sb_append_intstr(&sb, VM->stack->stack[idx].i);
-                saw_non_missing_layer = true;
-                just_processed_layer = true;
-                break;
-              }
-              case VALUE_float: {
-                logerr("Float value cannot be used as an item layer name.\n");
-                invalid = true;
-                break;
-              }
-              case VALUE_nil: {
-                if (!saw_non_missing_layer && !saw_missing_layer) {
-                  saw_missing_layer = true;
-                  missing_layer_possibly_leading = true;
-                } else {
-                  logerr("Missing layer name in non-leading position.\n");
-                  invalid = true;
-                }
-                just_processed_layer = true;
-                break;
-              }
-              default: {
-                // Not a valid value type to convert into a layer name.
-                logerr("Layer type (%d) not int or string.\n", VM->stack->stack[idx].type);
-                invalid = true;
-              }
-            }
+            invalid = !append_layer_from_value(&sb, &VM->stack->stack[idx], &layer_state, NULL);
+            just_processed_layer = !invalid;
             break;
           }
           case 'I':
@@ -975,57 +987,9 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
               //  This is basically the same as op_fetchitem
               ITEM_t *i = find_item(ctx->itemroot, layername.s);
               if (i) {
-                // We have an item.  Only two value types are allowed.
-                switch (i->value.type) {
-                  case VALUE_str: {
-                    // This is the easiest one
-                    if (i->value.s[0] == '\0') {
-                      if (!saw_non_missing_layer && !saw_missing_layer) {
-                        saw_missing_layer = true;
-                        missing_layer_possibly_leading = true;
-                      } else {
-                        logerr("Missing layer name in non-leading position.\n");
-                        invalid = true;
-                      }
-                    } else if (is_valid_layer(i->value.s)) {
-                      sb_append_literal(&sb, i->value.s);
-                      saw_non_missing_layer = true;
-                    } else {
-                      logerr("Invalid layer name '%s'.\n", i->value.s);
-                      invalid = true;
-                    }
-                    just_processed_layer = true;
-                    break;
-                  }
-                  case VALUE_int: {
-                    // This needs to be converted to a string.
-                    sb_append_intstr(&sb, i->value.i);
-                    saw_non_missing_layer = true;
-                    just_processed_layer = true;
-                    break;
-                  }
-                  case VALUE_float: {
-                    logerr("Item dereference failed for '%s': float value cannot be used as an item layer name.\n",
-                           layername.s);
-                    invalid = true;
-                    break;
-                  }
-                  case VALUE_nil: {
-                    if (!saw_non_missing_layer && !saw_missing_layer) {
-                      saw_missing_layer = true;
-                      missing_layer_possibly_leading = true;
-                    } else {
-                      logerr("Missing layer name in non-leading position.\n");
-                      invalid = true;
-                    }
-                    just_processed_layer = true;
-                    break;
-                  }
-                  default: {
-                    logerr("Item dereference failed for '%s': invalid type.\n", layername.s);
-                    invalid = true;
-                  }
-                }
+                // We have an item.  Convert its value into the dereferenced layer.
+                invalid = !append_layer_from_value(&sb, &i->value, &layer_state, layername.s);
+                just_processed_layer = !invalid;
               } else {
                 logerr("Item dereference failed for '%s'.\n", layername.s);
                 invalid = true;
@@ -1052,15 +1016,15 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
     if (invalid) {
       break;
     }
-    if (missing_layer_possibly_leading && saw_non_missing_layer) {
-      missing_layer_is_leading = true;
-      missing_layer_possibly_leading = false;
+    if (layer_state.missing_layer_possibly_leading && layer_state.saw_non_missing_layer) {
+      layer_state.missing_layer_is_leading = true;
+      layer_state.missing_layer_possibly_leading = false;
     }
     if (*nextop != 'E') {
       // Another layer to process, so add a dot separator.
-      if (just_processed_layer && saw_non_missing_layer) {
+      if (just_processed_layer && layer_state.saw_non_missing_layer) {
         sb_append_literal(&sb, ".");
-      } else if (just_processed_layer && saw_missing_layer && !saw_non_missing_layer) {
+      } else if (just_processed_layer && layer_state.saw_missing_layer && !layer_state.saw_non_missing_layer) {
         // Leading missing layer candidate: don't emit a separator yet.
       }
     } else {
@@ -1070,8 +1034,8 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
     just_processed_layer = false;
   }
 
-  if (!invalid && saw_missing_layer) {
-    if (!missing_layer_is_leading || !saw_non_missing_layer) {
+  if (!invalid && layer_state.saw_missing_layer) {
+    if (!layer_state.missing_layer_is_leading || !layer_state.saw_non_missing_layer) {
       invalid = true;
     }
   }
