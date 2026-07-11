@@ -80,6 +80,108 @@ void test_cli_metadata_stdout_stderr_and_status(void) {
   }
 }
 
+
+static void test_shared_logging_cli_levels(void) {
+  const char *src_path = "tests/fixtures/log-level.tmp.src";
+  const char *obj_path = "tests/fixtures/log-level.tmp.obj";
+  const char *stdout_path = "tests/fixtures/log-level.tmp.out";
+  const char *stderr_path = "tests/fixtures/log-level.tmp.err";
+  const char *bad_obj_path = "tests/fixtures/log-level-missing.tmp.obj";
+  FILE *src = fopen(src_path, "wb");
+  ASSERT_NOT_NULL(src);
+  const char *program = "@x = 1;\n@x;\n";
+  ASSERT_EQ_INT((int)strlen(program), (int)fwrite(program, 1, strlen(program), src));
+  ASSERT_EQ_INT(0, fclose(src));
+
+  char cmd[1024];
+  int cmd_len = snprintf(cmd, sizeof(cmd), "./scomp --quiet -i %s -o %s > %s 2> %s",
+                         src_path, obj_path, stdout_path, stderr_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_EQ_INT(0, system(cmd));
+  char *out = read_text_file_for_diag_test(stdout_path);
+  char *err = read_text_file_for_diag_test(stderr_path);
+  ASSERT_EQ_INT(0, (int)strlen(out));
+  ASSERT_EQ_INT(0, (int)strlen(err));
+  free(out);
+  free(err);
+
+  cmd_len = snprintf(cmd, sizeof(cmd), "./scomp --quiet -i %s -o %s > %s 2> %s",
+                     "tests/fixtures/does-not-exist.src", bad_obj_path, stdout_path, stderr_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_TRUE(system(cmd) != 0);
+  out = read_text_file_for_diag_test(stdout_path);
+  err = read_text_file_for_diag_test(stderr_path);
+  ASSERT_EQ_INT(0, (int)strlen(out));
+  ASSERT_TRUE(strstr(err, "Error:") != NULL);
+  ASSERT_TRUE(strstr(err, "Diagnostic") != NULL);
+  free(out);
+  free(err);
+
+  cmd_len = snprintf(cmd, sizeof(cmd), "./scomp --verbose -i %s -o %s > %s 2> %s",
+                     src_path, obj_path, stdout_path, stderr_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_EQ_INT(0, system(cmd));
+  out = read_text_file_for_diag_test(stdout_path);
+  err = read_text_file_for_diag_test(stderr_path);
+  ASSERT_EQ_INT(0, (int)strlen(out));
+  ASSERT_TRUE(strstr(err, "Source loaded:") != NULL);
+  ASSERT_TRUE(strstr(err, "Compilation completed:") != NULL);
+  free(out);
+  free(err);
+
+  cmd_len = snprintf(cmd, sizeof(cmd), "./scomp --verbose -i %s -o - > %s 2> %s",
+                     src_path, stdout_path, stderr_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_EQ_INT(0, system(cmd));
+  out = read_text_file_for_diag_test(stdout_path);
+  err = read_text_file_for_diag_test(stderr_path);
+  ASSERT_TRUE(strlen(out) > 0);
+  ASSERT_TRUE(strstr(out, "Compiling") == NULL);
+  ASSERT_TRUE(strstr(err, "Compiling") != NULL);
+  free(out);
+  free(err);
+
+  cmd_len = snprintf(cmd, sizeof(cmd), "./sdiss --quiet --no-header -o %s > %s 2> %s",
+                     obj_path, stdout_path, stderr_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_EQ_INT(0, system(cmd));
+  out = read_text_file_for_diag_test(stdout_path);
+  err = read_text_file_for_diag_test(stderr_path);
+  ASSERT_TRUE(strlen(out) > 0);
+  ASSERT_TRUE(strstr(out, "Beginning disassembly") == NULL);
+  ASSERT_EQ_INT(0, (int)strlen(err));
+  free(out);
+  free(err);
+
+  cmd_len = snprintf(cmd, sizeof(cmd), "./sin --quiet -o %s > %s 2> %s",
+                     obj_path, stdout_path, stderr_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_TRUE(system(cmd) != 0);
+  out = read_text_file_for_diag_test(stdout_path);
+  err = read_text_file_for_diag_test(stderr_path);
+  ASSERT_TRUE(strstr(out, "Using 'srcroot'") == NULL);
+  ASSERT_TRUE(strstr(err, "Using 'srcroot'") == NULL);
+  free(out);
+  free(err);
+
+  cmd_len = snprintf(cmd, sizeof(cmd), "./sin --verbose -o %s > %s 2> %s",
+                     obj_path, stdout_path, stderr_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_TRUE(system(cmd) != 0);
+  out = read_text_file_for_diag_test(stdout_path);
+  err = read_text_file_for_diag_test(stderr_path);
+  ASSERT_TRUE(strstr(err, "Runtime options:") != NULL);
+  ASSERT_TRUE(strstr(out, "Runtime options:") == NULL);
+  free(out);
+  free(err);
+
+  remove(src_path);
+  remove(obj_path);
+  remove(stdout_path);
+  remove(stderr_path);
+  remove(bad_obj_path);
+}
+
 static void test_scomp_cli_options(void) {
   const char *src_path = "tests/fixtures/scomp-cli-options.tmp.src";
   const char *pos_obj_path = "tests/fixtures/scomp-cli-options-pos.tmp.obj";
@@ -226,6 +328,7 @@ void test_compiler_diag_pipeline(void){
   test_compiler_diag_rejects_256_locals();
   test_scomp_cli_malformed_diagnostic_shape();
   test_scomp_cli_options();
+  test_shared_logging_cli_levels();
   OUTPUT_t *out=NULL; CompilerDiagnostic d; compiler_diag_init(&d);
   int8_t rc = compile_source_to_bytecode_diag("^;",2,&out,&d);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc); ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, d.code); ASSERT_EQ_INT(DIAG_PHASE_PARSE, d.phase); ASSERT_NOT_NULL(d.message);

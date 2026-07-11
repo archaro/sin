@@ -1,7 +1,7 @@
 ===stdout===
-Bytecode loaded: 36 bytes.
 Starting the echo server...
 ===stderr===
+Using 'srcroot' as the source root.
 Input item does not exist!  Cannot continue.
 ===exit===
 -1

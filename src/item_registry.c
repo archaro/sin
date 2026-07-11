@@ -38,7 +38,7 @@ ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
       && strcmp(entry->key, item_name) == 0) {
     ctx->fetchitem_cache_hits++;
     if (found) *found = entry->found;
-    DISASS_LOG("itemcache hit: %s (hits=%llu misses=%llu)\n", item_name,
+    logverbose("itemcache hit: %s (hits=%llu misses=%llu)\n", item_name,
                (unsigned long long)ctx->fetchitem_cache_hits,
                (unsigned long long)ctx->fetchitem_cache_misses);
     return entry->item;
@@ -54,7 +54,7 @@ ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
   strncpy(entry->key, item_name, MAX_ITEM_NAME - 1);
   entry->key[MAX_ITEM_NAME - 1] = '\0';
   if (found) *found = entry->found;
-  DISASS_LOG("itemcache miss: %s (hits=%llu misses=%llu)\n", item_name,
+  logverbose("itemcache miss: %s (hits=%llu misses=%llu)\n", item_name,
              (unsigned long long)ctx->fetchitem_cache_hits,
              (unsigned long long)ctx->fetchitem_cache_misses);
   return item;

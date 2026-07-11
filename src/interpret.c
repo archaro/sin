@@ -294,7 +294,7 @@ static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const cha
   push_stack(vm->stack, result);
   (void)opcode_tag;
   if (!result.i) {
-    DISASS_LOG("%s: types %d and %d\n", opcode_tag, v1_type, v2_type);
+    logverbose("%s: types %d and %d\n", opcode_tag, v1_type, v2_type);
   }
   return result.i != 0;
 }
@@ -322,7 +322,7 @@ uint8_t *op_pushint(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   nextop = decode_next(bc_read_i64(&ctx->decoder, nextop, &v.i, "OP_PUSHINT"));
   if (!nextop) return NULL;
   push_stack(VM->stack, v);
-  DISASS_LOG("OP_PUSHINT: %ld\n", v.i);
+  logverbose("OP_PUSHINT: %ld\n", v.i);
   return nextop;
 }
 
@@ -335,7 +335,7 @@ uint8_t *op_pushfloat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (!nextop) return NULL;
   v.f = value_float_from_bits(bits);
   push_stack(VM->stack, v);
-  DISASS_LOG("OP_PUSHFLOAT: %g (0x%016llx)\n", v.f, (unsigned long long)bits);
+  logverbose("OP_PUSHFLOAT: %g (0x%016llx)\n", v.f, (unsigned long long)bits);
   return nextop;
 }
 
@@ -348,7 +348,7 @@ uint8_t *op_pushbool(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   v.type = VALUE_bool;
   v.i = (raw != 0) ? 1 : 0;
   push_stack(VM->stack, v);
-  DISASS_LOG("OP_PUSHBOOL: %ld\n", v.i);
+  logverbose("OP_PUSHBOOL: %ld\n", v.i);
   return nextop;
 }
 
@@ -366,7 +366,7 @@ uint8_t *op_inclocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   } else {
     logerr("Trying to increment non integer local variable.\n");
   }
-  DISASS_LOG("OP_INCLOCAL: index %d\n", index);
+  logverbose("OP_INCLOCAL: index %d\n", index);
   return nextop;
 }
 
@@ -384,7 +384,7 @@ uint8_t *op_declocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   } else {
     logerr("Trying to decrement non integer local variable.\n");
   }
-  DISASS_LOG("OP_DECLOCAL: index %d\n", index);
+  logverbose("OP_DECLOCAL: index %d\n", index);
   return nextop;
 }
 
@@ -395,7 +395,7 @@ uint8_t *op_jump(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   int16_t offset;
   nextop = decode_next(bc_read_i16(&ctx->decoder, nextop, &offset, "OP_JUMP"));
   if (!nextop) return NULL;
-  DISASS_LOG("OP_JUMP: offset is  %d.\n", offset);
+  logverbose("OP_JUMP: offset is  %d.\n", offset);
   return nextop - sizeof(offset) + offset;
 }
 
@@ -415,12 +415,12 @@ uint8_t *op_jumpfalse(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (value_is_truthy(&v1)) {
     // A true value means that we don't branch.  Skip over
     // the next two bytes.
-    DISASS_LOG("OP_JUMPFALSE: evaluates to true (no jump).\n");
+    logverbose("OP_JUMPFALSE: evaluates to true (no jump).\n");
     value_free(&v1);
     return nextop;
   } else {
     // If not true then it must be false.  That's logic.
-    DISASS_LOG("OP_JUMPFALSE: evaluates to false (jump offset %d).\n", offset);
+    logverbose("OP_JUMPFALSE: evaluates to false (jump offset %d).\n", offset);
     value_free(&v1);
     return offset_start + offset;
   }
@@ -438,7 +438,7 @@ uint8_t *op_savelocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // First check if the current value is a string.  If so, free it.
   VALUE_t top = pop_stack(VM->stack);
   value_move(&VM->stack->stack[index], &top);
-  DISASS_LOG("OP_SAVELOCAL: index %d\n", index);
+  logverbose("OP_SAVELOCAL: index %d\n", index);
   return nextop;
 }
 
@@ -453,20 +453,18 @@ uint8_t *op_getlocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (index < 0 || index >= STACK_SIZE) return NULL;
 
   push_stack(VM->stack, value_clone(&VM->stack->stack[index]));
-#ifdef DISASS
   VALUE_t v;
   v = peek_stack(VM->stack);
   switch (v.type) {
     case VALUE_int:
-      DISASS_LOG("OP_GETLOCAL: index %d value %d.\n", index, v.i);
+      logverbose("OP_GETLOCAL: index %d value %d.\n", index, v.i);
       break;
     case VALUE_str:
-      DISASS_LOG("OP_GETLOCAL: index %d value '%s'.\n", index, v.s);
+      logverbose("OP_GETLOCAL: index %d value '%s'.\n", index, v.s);
       break;
     default:
-      DISASS_LOG("OP_GETLOCAL: index %d type %d.\n", index, v.type);
+      logverbose("OP_GETLOCAL: index %d type %d.\n", index, v.type);
   }
-#endif
   return nextop;
 }
 
@@ -484,7 +482,7 @@ uint8_t *op_pushstr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   memcpy(v.s, nextop, len);
   v.s[len] = 0;
   push_stack(VM->stack, v);
-  DISASS_LOG("OP_PUSHSTR: %s\n", v.s);
+  logverbose("OP_PUSHSTR: %s\n", v.s);
   return nextop + len;
 }
 
@@ -512,7 +510,7 @@ uint8_t *op_add(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
           value_type_name(left_type), value_type_name(right_type));
     push_stack(VM->stack, VALUE_NIL);
   }
-  DISASS_LOG("OP_ADD: types %d and %d\n", v1.type, v2.type);
+  logverbose("OP_ADD: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
@@ -526,10 +524,10 @@ uint8_t *op_subtract(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   v2 = pop_stack(VM->stack);
   VALUE_t result;
   if (value_sub(&v2, &v1, &result)) {
-    DISASS_LOG("OP_SUB: operand types %d and %d\n", v2.type, v1.type);
+    logverbose("OP_SUB: operand types %d and %d\n", v2.type, v1.type);
   } else {
     log_invalid_binary_operands("OP_SUB", &v2, &v1);
-    DISASS_LOG("OP_SUB: invalid operand types %d and %d\n", v2.type, v1.type);
+    logverbose("OP_SUB: invalid operand types %d and %d\n", v2.type, v1.type);
   }
   value_free_runtime(&v1);
   value_free_runtime(&v2);
@@ -551,10 +549,10 @@ uint8_t *op_divide(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     if (v1.type == VALUE_int && v1.i == 0) {
       logerr("Attempt to divide by zero.  Substitute zero as result.\n");
     }
-    DISASS_LOG("OP_DIV: operand types %d and %d\n", v2.type, v1.type);
+    logverbose("OP_DIV: operand types %d and %d\n", v2.type, v1.type);
   } else {
     log_invalid_binary_operands("OP_DIV", &v2, &v1);
-    DISASS_LOG("OP_DIV: invalid operand types %d and %d\n", v2.type, v1.type);
+    logverbose("OP_DIV: invalid operand types %d and %d\n", v2.type, v1.type);
   }
   value_free_runtime(&v1);
   value_free_runtime(&v2);
@@ -571,10 +569,10 @@ uint8_t *op_multiply(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   v2 = pop_stack(VM->stack);
   VALUE_t result;
   if (value_mul(&v2, &v1, &result)) {
-    DISASS_LOG("OP_MUL: operand types %d and %d\n", v2.type, v1.type);
+    logverbose("OP_MUL: operand types %d and %d\n", v2.type, v1.type);
   } else {
     log_invalid_binary_operands("OP_MUL", &v2, &v1);
-    DISASS_LOG("OP_MUL: invalid operand types %d and %d\n", v2.type, v1.type);
+    logverbose("OP_MUL: invalid operand types %d and %d\n", v2.type, v1.type);
   }
   value_free_runtime(&v1);
   value_free_runtime(&v2);
@@ -590,7 +588,7 @@ uint8_t *op_negate(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     logerr("Attempt to negate a value of type '%d'.\n",
                                  VM->stack->stack[VM->stack->current].type);
   }
-  DISASS_LOG("OP_NEGATE: type %d\n", VM->stack->stack[VM->stack->current].type);
+  logverbose("OP_NEGATE: type %d\n", VM->stack->stack[VM->stack->current].type);
   return nextop;
 }
 
@@ -671,7 +669,7 @@ uint8_t *op_libcall_token(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   uint8_t token;
   nextop = decode_next(bc_read_u8(&ctx->decoder, nextop, &token, "OP_LIBCALL"));
   if (!nextop) return NULL;
-  DISASS_LOG("Calling libcall token %d.\n", token);
+  logverbose("Calling libcall token %d.\n", token);
   OP_t libcall = libcall_registry_func_token(ctx->libcalls, token);
   if (!libcall) {
     char detail[64];
@@ -748,7 +746,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     goto cleanup;
   }
 
-  DISASS_LOG("Source to compile: %s\n", in.source);
+  logverbose("Source to compile: %s\n", in.source);
   if (itemname.type != VALUE_str) {
     logerr("Unable to assign code item: invalid name type %d.\n", itemname.type);
     set_error_item(ERR_COMP_UNKNOWN, "Invalid item name type for code assignment.");
@@ -827,7 +825,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     if (!canonicalize_itemname(itemname.s, item, fullname)) {
       logerr("Unable to fetch item '%s': failed to resolve canonical name.\n", itemname.s);
       while (arg_count > 0) {
-        DEBUG_LOG("Discarding argument for invalid canonical fetch name.\n");
+        logverbose("Discarding argument for invalid canonical fetch name.\n");
         report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded argument for invalid canonical fetch name");
         throwaway_stack(VM->stack);
         arg_count--;
@@ -838,7 +836,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     }
     ITEM_t *i = find_item_cached(ctx->itemroot, fullname, NULL);
     if (i) {
-      ITEMDEBUG_LOG("Fetched item %s (called with %d arguments).\n", fullname, arg_count);
+      logverbose("Fetched item %s (called with %d arguments).\n", fullname, arg_count);
       // Just push the item value onto the stack.
       if (i->type == ITEM_value) {
         VALUE_t v = value_clone(&i->value);
@@ -851,14 +849,14 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         // Are there any arguments in excess of what this item takes?
         // If so, lose 'em.
         while (arg_count > i->bytecode[1]) {
-          DEBUG_LOG("Popping unneeded argument.\n");
+          logverbose("Popping unneeded argument.\n");
           report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded extra argument for target item");
           throwaway_stack(VM->stack);
           arg_count--;
         }
         // Contrariwise, do we have fewer arguments than we should?
         while (arg_count < i->bytecode[1]) {
-          DEBUG_LOG("Pushing additional nil-value argument.\n");
+          logverbose("Pushing additional nil-value argument.\n");
           push_stack(VM->stack, VALUE_NIL);
           arg_count++;
         }
@@ -872,17 +870,17 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         // - caller VM stack/base/locals/params are captured in callstack.
         // - caller continuation (item + nextop + bytecode bounds) is captured.
         // - interpreter loop must transfer control to callee without recursion.
-        ITEMDEBUG_LOG("Executing item %s\n", i->name);
+        logverbose("Executing item %s\n", i->name);
         ctx->pending_call_item = i;
         FREE_STR(itemname);
         return NULL;
       }
     } else {
       // Item not found.
-      ITEMDEBUG_LOG("Item '%s' not found.\n", fullname);
+      logverbose("Item '%s' not found.\n", fullname);
       // We need to lose any values on the stack which were passed as args.
         while (arg_count > 0) {
-          DEBUG_LOG("Popping unneeded argument.\n");
+          logverbose("Popping unneeded argument.\n");
           report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded argument for missing target item");
           throwaway_stack(VM->stack);
           arg_count--;
@@ -893,7 +891,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   } else {
     logerr("Unable to fetch item: invalid item type for name: %d.\n", itemname.type);
     while (arg_count > 0) {
-      DEBUG_LOG("Discarding argument for invalid item fetch name type.\n");
+      logverbose("Discarding argument for invalid item fetch name type.\n");
       report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded argument for invalid item fetch name type");
       throwaway_stack(VM->stack);
       arg_count--;
@@ -1130,7 +1128,7 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
     name.type = VALUE_str;
     name.s = sb.buf; // Don't free - it's on the stack!
     push_stack(VM->stack, name);
-    ITEMDEBUG_LOG("Item assembled: %s\n", sb.buf);
+    logverbose("Item assembled: %s\n", sb.buf);
   }
   REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM terminator");
   return nextop + 1;
@@ -1175,7 +1173,7 @@ uint8_t *op_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     logerr("OP_DELETE invalid item name type: %d. No action taken.\n", val.type);
   }
   FREE_STR(val);
-  DISASS_LOG("OP_DELETE\n");
+  logverbose("OP_DELETE\n");
   return nextop;
 }
 
@@ -1199,7 +1197,7 @@ uint8_t *op_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   ITEM_t *i = find_item(ctx->itemroot, fullname);
   FREE_STR(val);
   push_stack(VM->stack, i ? VALUE_TRUE : VALUE_FALSE);
-  DISASS_LOG("OP_EXISTS\n");
+  logverbose("OP_EXISTS\n");
   return nextop;
 }
 

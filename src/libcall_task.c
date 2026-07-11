@@ -13,7 +13,7 @@
 void execute_task_cb(uv_timer_t *req) {
   // This callback is for executing tasks when they are due.
   TASK_t *task = req->data;
-  DEBUG_LOG("Executing task %s (id: %d)\n", task->itemname, task->id);
+  logverbose("Executing task %s (id: %d)\n", task->itemname, task->id);
   // Each task runs in its own VM (which may not be necessary, but
   // we will keep it up for now).
   RuntimeContext *task_ctx = &task->runtime_context;

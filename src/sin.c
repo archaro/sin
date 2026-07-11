@@ -72,38 +72,38 @@ void handle_sigusr1(int sig) {
 }
 
 void usage() {
-  logmsg("Syntax: sin <options>\n");
-  logmsg("Options:\n");
-  logmsg(" -b, --bootonly\t\tOnly execute the bootstrap code.\n");
-  logmsg("\t\t\t  This option is used to compile items without running\n");
-  logmsg("\t\t\t  the game.  Useful for initialisation.\n");
-  logmsg(" -h, --help\t\tThis message.\n");
-  logmsg("     --version\t\tShow version information.\n");
-  logmsg(" -i, --itemstore <file>\tItemstore file to load.\n");
-  logmsg("\t\t\t  If this option is not supplied, the default filename\n");
-  logmsg("\t\t\t  'items.dat' is used.  The file is created if it does\n");
-  logmsg("\t\t\t  not exist.\n");
-  logmsg(" -d, --itemstore-durability <full|fast>\n");
-  logmsg("\t\t\t  Full durability synchronizes itemstore data before\n");
-  logmsg("\t\t\t  replacement; fast mode skips that synchronization.\n");
-  logmsg(" -l, --log [file]\tLog output to <file>.\n");
-  logmsg("\t\t\t  If no filename is given, the default filename, 'sin'\n");
-  logmsg("\t\t\t  is used.  The filename is suffixed with .log for\n");
-  logmsg("\t\t\t  stdout and .err for stderr.\n");
-  logmsg(" -n, --input <item>\tName of input-handler item.\n");
-  logmsg("\t\t\t  If not supplied, this defaults to 'input'.\n");
-  logmsg(" -o, --object <file>\tObject code to interpret.\n");
-  logmsg(" -p, --port <port>\tPort to listen on.\n");
-  logmsg(" -s, --srcroot <dir>\tRoot of source tree.\n");
-  logmsg("\t\t\t  If this option is not supplied, the default directory\n");
-  logmsg("\t\t\t  './srcroot' is used, which will be created if it does\n");
-  logmsg("\t\t\t  not exist.  If this option is supplied the directory\n");
-  logmsg("\t\t\t  given must exist or the interpreter will not run.\n");
-  logmsg("     --strict-validation\n");
-  logmsg("\t\t\t  Verify bytecode before runtime execution.\n");
-  logmsg("     --strict-runtime-contracts\n");
-  logmsg("\t\t\t  Report runtime argument contract violations that legacy\n");
-  logmsg("\t\t\t  mode silently tolerates.\n");
+  printf("Syntax: sin <options>\n");
+  printf("Options:\n");
+  printf(" -b, --bootonly\t\tOnly execute the bootstrap code.\n");
+  printf("\t\t\t  This option is used to compile items without running\n");
+  printf("\t\t\t  the game.  Useful for initialisation.\n");
+  printf(" -h, --help\t\tThis message.\n");
+  printf("     --version\t\tShow version information.\n");
+  printf(" -i, --itemstore <file>\tItemstore file to load.\n");
+  printf("\t\t\t  If this option is not supplied, the default filename\n");
+  printf("\t\t\t  'items.dat' is used.  The file is created if it does\n");
+  printf("\t\t\t  not exist.\n");
+  printf(" -d, --itemstore-durability <full|fast>\n");
+  printf("\t\t\t  Full durability synchronizes itemstore data before\n");
+  printf("\t\t\t  replacement; fast mode skips that synchronization.\n");
+  printf(" -l, --log [file]\tLog output to <file>.\n");
+  printf("\t\t\t  If no filename is given, the default filename, 'sin'\n");
+  printf("\t\t\t  is used.  The filename is suffixed with .log for\n");
+  printf("\t\t\t  stdout and .err for stderr.\n");
+  printf(" -n, --input <item>\tName of input-handler item.\n");
+  printf("\t\t\t  If not supplied, this defaults to 'input'.\n");
+  printf(" -o, --object <file>\tObject code to interpret.\n");
+  printf(" -p, --port <port>\tPort to listen on.\n");
+  printf(" -s, --srcroot <dir>\tRoot of source tree.\n");
+  printf("\t\t\t  If this option is not supplied, the default directory\n");
+  printf("\t\t\t  './srcroot' is used, which will be created if it does\n");
+  printf("\t\t\t  not exist.  If this option is supplied the directory\n");
+  printf("\t\t\t  given must exist or the interpreter will not run.\n");
+  printf("     --strict-validation\n");
+  printf("\t\t\t  Verify bytecode before runtime execution.\n");
+  printf("     --strict-runtime-contracts\n");
+  printf("\t\t\t  Report runtime argument contract violations that legacy\n");
+  printf("\t\t\t  mode silently tolerates.\n");
 }
 
 static void usage_error(const char *message) {
@@ -114,7 +114,7 @@ static void usage_error(const char *message) {
 static ITEM_t *load_or_create_itemstore(const char *filename) {
   struct stat buffer;
   if (stat(filename, &buffer) == 0) {
-    logmsg("Loading itemstore from %s.\n", filename);
+    logstatus("Loading itemstore from %s.\n", filename);
     ITEM_t *root = load_itemstore(filename);
     if (!root) {
       logerr("Existing itemstore '%s' could not be loaded; refusing to "
@@ -129,7 +129,7 @@ static ITEM_t *load_or_create_itemstore(const char *filename) {
     return NULL;
   }
 
-  logmsg("Creating a new itemstore, which will be saved as %s.\n", filename);
+  logstatus("Creating a new itemstore, which will be saved as %s.\n", filename);
   return make_root_item("root");
 }
 
@@ -199,12 +199,22 @@ int main(int argc, char **argv) {
     {"srcroot", required_argument, 0, 's'},
     {"strict-validation", no_argument, 0, 1000},
     {"strict-runtime-contracts", no_argument, 0, 1001},
+    {"quiet", no_argument, 0, 'q'},
+    {"verbose", no_argument, 0, 'v'},
     {NULL, 0, 0, '\0'}
   };
   opterr = 0;
   optind = 1;
-  while ((opt = getopt_long(argc, argv, "bd:hi:l::n:o:p:s:", options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "bd:hi:l::n:o:p:s:qv", options, NULL)) != -1) {
     switch(opt) {
+      case 'q': {
+        log_set_level(LOG_LEVEL_QUIET);
+        break;
+      }
+      case 'v': {
+        log_set_level(LOG_LEVEL_VERBOSE);
+        break;
+      }
       case 'b': {
         bootonly = true;
         break;
@@ -308,7 +318,7 @@ int main(int argc, char **argv) {
           exit(EXIT_FAILURE);
         }
         fclose(in);
-        logmsg("Bytecode loaded: %zu bytes.\n", filesize);
+        logverbose("Bytecode loaded: %zu bytes from %s.\n", filesize, optarg);
         break;
       }
       case 'p': {
@@ -349,7 +359,7 @@ int main(int argc, char **argv) {
     if (err == -1) {
       // Doesn't exist, so create it.
       mkdir(config.srcroot, 0777);
-      logmsg("Creating new source root in current directory.\n");
+      logstatus("Creating new source root in current directory.\n");
     } else {
       if(!S_ISDIR(s.st_mode)) {
         // Exists, but not a directory.  Panic.
@@ -381,7 +391,8 @@ int main(int argc, char **argv) {
       }
     }
   }
-  logmsg("Using '%s' as the source root.\n", config.srcroot);
+  logstatus("Using '%s' as the source root.\n", config.srcroot);
+  logverbose("Runtime options: bootonly=%d strict_validation=%d strict_runtime_contracts=%d.\n", bootonly, config.strict_validation, config.strict_runtime_contracts);
 
   // Just check to see if we have been given some bytecode.
   if (!bytecode) {
@@ -390,10 +401,6 @@ int main(int argc, char **argv) {
   }
 
   // Do some preparations
-  DEBUG_LOG("DEBUG IS DEFINED\n");
-  ITEMDEBUG_LOG("ITEMDEBUG IS DEFINED\n");
-  STRINGDEBUG_LOG("STRINGDEBUG IS DEFINED\n");
-  DISASS_LOG("DISASS IS DEFINED\n");
   config.vm = make_vm();
   RuntimeContext boot_ctx;
   // If the itemstore hasn't been loaded, do so now.
@@ -418,7 +425,7 @@ int main(int argc, char **argv) {
   // This is a relatively safe restart point if things turn ugly.
   // This will need to be revisited once the eventloop is running.
   if (setjmp(recovery) == 0) {
-    logmsg("Setting up error handler.\n");
+    logstatus("Setting up error handler.\n");
   } else {
     logerr("SIGUSR1 received.  Restarting boot item.\n");
     logerr("Destroying and recreating all stacks.\n");
@@ -430,21 +437,21 @@ int main(int argc, char **argv) {
   // the main game.  It must not be an infinite loop!
   VALUE_t ret = interpret(&boot_ctx, boot);
   if (ret.type == VALUE_int) {
-    logmsg("Bytecode interpreter returned: %ld\n", ret.i);
+    logstatus("Bytecode interpreter returned: %ld\n", ret.i);
   } else if (ret.type == VALUE_str) {
-    logmsg("Bytecode interpreter returned: %s\n", ret.s);
+    logstatus("Bytecode interpreter returned: %s\n", ret.s);
     free(ret.s);
   } else if (ret.type == VALUE_float) {
     char fbuffer[64];
     if (sin_format_binary64_buf(ret.f, fbuffer, sizeof(fbuffer))) {
-      logmsg("Bytecode interpreter returned: %s\n", fbuffer);
+      logstatus("Bytecode interpreter returned: %s\n", fbuffer);
     } else {
-      logmsg("Bytecode interpreter returned: <float-format-error>\n");
+      logstatus("Bytecode interpreter returned: <float-format-error>\n");
     }
   } else if (ret.type == VALUE_bool) {
-    logmsg("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
+    logstatus("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
   } else if (ret.type == VALUE_nil) {
-    logmsg("Bytecode interpreter returned nil.\n");
+    logstatus("Bytecode interpreter returned nil.\n");
   } else {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }
@@ -458,7 +465,7 @@ int main(int argc, char **argv) {
   RuntimeContext input_ctx = {0};
   if (!bootonly) {
     // Set up the item which handles input.
-    logmsg("Using `%s` as the input item.\n", config.input);
+    logstatus("Using `%s` as the input item.\n", config.input);
     config.input_vm = make_vm();
     config.maxconns = MAXCONNS;
     config.lastconn = config.maxconns;
@@ -467,7 +474,7 @@ int main(int argc, char **argv) {
     input_task.data = &input_ctx;
     uv_idle_start(&input_task, input_processor);
     // Here we go...
-    logmsg("Running...\n");
+    logstatus("Running...\n");
     if (!validate_network_config()) {
       exit(EXIT_FAILURE);
     }
@@ -482,10 +489,6 @@ int main(int argc, char **argv) {
 
   // Clean up before shutdown.
   logmsg("Shutting down.\n");
-  DEBUG_LOG("DEBUG IS DEFINED\n");
-  ITEMDEBUG_LOG("ITEMDEBUG IS DEFINED\n");
-  STRINGDEBUG_LOG("STRINGDEBUG IS DEFINED\n");
-  DISASS_LOG("DISASS IS DEFINED\n");
   if (!bootonly) {
     shutdown_listener();
     uv_idle_stop(&input_task);

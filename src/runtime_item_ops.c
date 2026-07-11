@@ -31,7 +31,7 @@ void assignitem(ITEM_t *itemroot, VALUE_t *itemname, VALUE_t val) {
       logerr("Unable to create item '%s'.\n", itemname->s);
       FREE_STR(val);
     }
-    ITEMDEBUG_LOG("Saved value of type %d in item %s\n", val.type, itemname->s);
+    logverbose("Saved value of type %d in item %s\n", val.type, itemname->s);
   } else {
     logerr("Unable to create item: invalid name type %d\n", itemname->type);
     FREE_STR(val);
