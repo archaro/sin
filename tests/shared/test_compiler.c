@@ -130,6 +130,8 @@ void test_net_write_formats_float_output(void);
 void test_str_libcalls_float_returns_invalidargs_nil(void);
 void test_str_len_returns_string_byte_length(void);
 void test_str_trim_libcalls_return_trimmed_strings(void);
+void test_str_substr_returns_requested_byte_range(void);
+void test_str_substr_invalid_args_return_nil(void);
 void test_str_libcall_invalidargs_uses_context_itemroot(void);
 void test_relative_item_leading_dot_parse_accepts_deref_chain(void);
 void test_relative_item_leading_dot_nested_relative_deref_layers(void);
@@ -352,6 +354,8 @@ static const test_case_t runtime_tests[] = {
     {"test_str_libcalls_float_returns_invalidargs_nil", test_str_libcalls_float_returns_invalidargs_nil},
     {"test_str_len_returns_string_byte_length", test_str_len_returns_string_byte_length},
     {"test_str_trim_libcalls_return_trimmed_strings", test_str_trim_libcalls_return_trimmed_strings},
+    {"test_str_substr_returns_requested_byte_range", test_str_substr_returns_requested_byte_range},
+    {"test_str_substr_invalid_args_return_nil", test_str_substr_invalid_args_return_nil},
     {"test_str_libcall_invalidargs_uses_context_itemroot", test_str_libcall_invalidargs_uses_context_itemroot},
     {"test_net_write_formats_float_output", test_net_write_formats_float_output},
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},

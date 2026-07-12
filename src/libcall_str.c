@@ -175,3 +175,79 @@ uint8_t *lc_str_rtrim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
   return nextop;
 }
+
+uint8_t *lc_str_substr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // The stack contains 3 values:
+  // top: (len) the length of the substring to return
+  // top-1: (start) the starting offset of the substring
+  // top-2: (text) the text value to extract the substring from
+  // All three values should be consumed
+  // If text is not a string, push nil.
+  // Otherwise:
+  // If start is greater than the length of the text, push an empty string.
+  // If len < 1, push nil.
+  // If start + len is greater than the length of the text from start, push
+  //   a new string from start to the end of the original string.
+  // Otherwise push a new string that is the requested substring.
+  (void)item;
+
+  VALUE_t len = pop_stack(ctx->vm->stack);
+  VALUE_t start = pop_stack(ctx->vm->stack);
+  VALUE_t text = pop_stack(ctx->vm->stack);
+
+  if (text.type != VALUE_str || start.type != VALUE_int || len.type != VALUE_int) {
+    VALUE_t args[] = {len, start, text};
+    lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "str.substr text must be a string and start/len must be integers");
+  }
+
+  if (start.i < 0) {
+    VALUE_t args[] = {len, start, text};
+    lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "str.substr start must be non-negative");
+  }
+
+  if (len.i < 1) {
+    FREE_STR(text);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+
+  const char *src = text.s;
+  size_t text_len = strlen(src);
+  size_t start_pos = (size_t)start.i;
+
+  if (start_pos > text_len) {
+    FREE_STR(text);
+    VALUE_t ret = {VALUE_str, {.s = malloc(1)}};
+    if (!ret.s) {
+      push_stack(ctx->vm->stack, VALUE_NIL);
+      return nextop;
+    }
+    ret.s[0] = '\0';
+    push_stack(ctx->vm->stack, ret);
+    return nextop;
+  }
+
+  size_t available = text_len - start_pos;
+  uint64_t requested_u64 = (uint64_t)len.i;
+  size_t out_len = requested_u64 > (uint64_t)available
+      ? available
+      : (size_t)requested_u64;
+
+  char *out = malloc(out_len + 1);
+  if (!out) {
+    FREE_STR(text);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+  memcpy(out, src + start_pos, out_len);
+  out[out_len] = '\0';
+
+  FREE_STR(text);
+  VALUE_t ret = {VALUE_str, {.s = out}};
+  push_stack(ctx->vm->stack, ret);
+  return nextop;
+}

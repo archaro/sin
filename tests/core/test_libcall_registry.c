@@ -27,6 +27,7 @@ uint8_t *lc_str_len(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_trim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_ltrim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_rtrim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_substr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 extern LINE_t *line;
 extern CONFIG_t config;
@@ -173,6 +174,18 @@ static void assert_str_unary_result(
   VALUE_t text = {VALUE_str, {.s = strdup(input)}};
   push_stack(config.vm->stack, text);
   (void)func(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, ret.type);
+  ASSERT_TRUE(strcmp(ret.s, expected) == 0);
+  FREE_STR(ret);
+}
+
+static void assert_str_substr_result(const char *input, int64_t start,
+                                     int64_t len, const char *expected) {
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(input)}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = start}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = len}});
+  (void)lc_str_substr(test_ctx(), NULL, config.itemroot);
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, ret.type);
   ASSERT_TRUE(strcmp(ret.s, expected) == 0);
@@ -549,6 +562,55 @@ void test_str_trim_libcalls_return_trimmed_strings(void) {
                           " \t hello world");
   assert_str_unary_result(lc_str_rtrim, "   \t\n", "");
   assert_str_unary_result(lc_str_rtrim, "already clean", "already clean");
+
+  teardown_libcall_runtime();
+}
+
+void test_str_substr_returns_requested_byte_range(void) {
+  setup_libcall_runtime();
+
+  assert_str_substr_result("abcdef", 0, 3, "abc");
+  assert_str_substr_result("abcdef", 2, 3, "cde");
+  assert_str_substr_result("abcdef", 4, 99, "ef");
+  assert_str_substr_result("abcdef", 6, 2, "");
+  assert_str_substr_result("abcdef", 7, 2, "");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("abcdef")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 2}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  (void)lc_str_substr(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+
+  teardown_libcall_runtime();
+}
+
+void test_str_substr_invalid_args_return_nil(void) {
+  setup_libcall_runtime();
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_str_substr(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.substr");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("abcdef")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_str_substr(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.substr");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("abcdef")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_str_substr(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.substr start");
 
   teardown_libcall_runtime();
 }
