@@ -47,6 +47,17 @@ static void str_trim_inplace(char *s) {
   s[len] = '\0';
 }
 
+static bool str_find_popped(VALUE_t haystack, VALUE_t needle,
+                            const char **match) {
+  if (haystack.type != VALUE_str || needle.type != VALUE_str) {
+    VALUE_t args[] = {needle, haystack};
+    lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+    return false;
+  }
+  *match = strstr(haystack.s, needle.s);
+  return true;
+}
+
 uint8_t *lc_str_capitalise(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Mutate the string on top of the stack by uppercasing its first byte.
   // Invalid input is consumed and replaced with nil.
@@ -213,6 +224,67 @@ uint8_t *lc_str_substr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   FREE_STR(text);
   VALUE_t ret = {VALUE_str, {.s = out}};
+  push_stack(ctx->vm->stack, ret);
+  return nextop;
+}
+
+uint8_t *lc_str_find(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume haystack and needle from the stack and push the index of the
+  // needle, or -1 if the needle is not found..
+  // Stack order is haystack, needle, with needle on top.
+  // Invalid input is consumed and replaced with nil.
+  (void)item;
+
+// Instructions:
+// Always pop both arguments.
+// If haystack or needle are not string values, push nil.  Otherwise:
+// If needle is found in haystack, push the offset at which it is found.
+// If needle is not found in haystack, push -1
+
+  VALUE_t needle = pop_stack(ctx->vm->stack);
+  VALUE_t haystack = pop_stack(ctx->vm->stack);
+  const char *match = NULL;
+  if (!str_find_popped(haystack, needle, &match)) {
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "str.find haystack and needle must be strings");
+  }
+
+  VALUE_t ret = {VALUE_int, {.i = -1}};
+  if (match) {
+    ret.i = (int64_t)(match - haystack.s);
+  }
+  FREE_STR(needle);
+  FREE_STR(haystack);
+  push_stack(ctx->vm->stack, ret);
+  return nextop;
+}
+
+uint8_t *lc_str_contains(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume haystack and needle from the stack and push true if the needle
+  // is found, false if not.
+  // Stack order is haystack, needle, with needle on top.
+  // Invalid input is consumed and replaced with false.
+  (void)item;
+
+// Instructions:
+// This is essentially the same as lc_str_find, and differs only in
+// what is pushed onto the stack at the end.
+// Always pop both arguments.
+// If haystack or needle are not string values, push false.  Otherwise:
+// If needle is found in haystack, push true.
+// If needle is not found in haystack, push false
+
+  VALUE_t needle = pop_stack(ctx->vm->stack);
+  VALUE_t haystack = pop_stack(ctx->vm->stack);
+  const char *match = NULL;
+  if (!str_find_popped(haystack, needle, &match)) {
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_FALSE,
+        "str.contains haystack and needle must be strings");
+  }
+
+  VALUE_t ret = match ? VALUE_TRUE : VALUE_FALSE;
+  FREE_STR(needle);
+  FREE_STR(haystack);
   push_stack(ctx->vm->stack, ret);
   return nextop;
 }

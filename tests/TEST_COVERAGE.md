@@ -126,6 +126,8 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_str_trim_libcalls_return_trimmed_strings`
     - `test_str_substr_returns_requested_byte_range`
     - `test_str_substr_invalid_args_return_nil`
+    - `test_str_find_and_contains_return_expected_results`
+    - `test_str_find_and_contains_invalid_args_return_contracts`
     - `test_str_libcall_invalidargs_uses_context_itemroot`
     - `test_libcall_output_formats_values`
     - `test_net_write_ignores_non_writable_lines`

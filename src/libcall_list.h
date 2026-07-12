@@ -23,4 +23,6 @@
   X("str",  "trim",        4, 4, 1, lc_str_trim) \
   X("str",  "ltrim",       4, 5, 1, lc_str_ltrim) \
   X("str",  "rtrim",       4, 6, 1, lc_str_rtrim) \
-  X("str",  "substr",       4, 7, 3, lc_str_substr)
+  X("str",  "substr",      4, 7, 3, lc_str_substr) \
+  X("str",  "find",        4, 8, 2, lc_str_find) \
+  X("str",  "contains",    4, 9, 2, lc_str_contains)

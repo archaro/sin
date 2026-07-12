@@ -133,6 +133,8 @@ void test_str_case_libcalls_mutate_strings_in_place(void);
 void test_str_trim_libcalls_return_trimmed_strings(void);
 void test_str_substr_returns_requested_byte_range(void);
 void test_str_substr_invalid_args_return_nil(void);
+void test_str_find_and_contains_return_expected_results(void);
+void test_str_find_and_contains_invalid_args_return_contracts(void);
 void test_str_libcall_invalidargs_uses_context_itemroot(void);
 void test_relative_item_leading_dot_parse_accepts_deref_chain(void);
 void test_relative_item_leading_dot_nested_relative_deref_layers(void);
@@ -358,6 +360,8 @@ static const test_case_t runtime_tests[] = {
     {"test_str_trim_libcalls_return_trimmed_strings", test_str_trim_libcalls_return_trimmed_strings},
     {"test_str_substr_returns_requested_byte_range", test_str_substr_returns_requested_byte_range},
     {"test_str_substr_invalid_args_return_nil", test_str_substr_invalid_args_return_nil},
+    {"test_str_find_and_contains_return_expected_results", test_str_find_and_contains_return_expected_results},
+    {"test_str_find_and_contains_invalid_args_return_contracts", test_str_find_and_contains_invalid_args_return_contracts},
     {"test_str_libcall_invalidargs_uses_context_itemroot", test_str_libcall_invalidargs_uses_context_itemroot},
     {"test_libcall_output_formats_values", test_libcall_output_formats_values},
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},
