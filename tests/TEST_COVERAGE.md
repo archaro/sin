@@ -157,7 +157,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
 ## Network tests
 
 The dedicated `make test-network` target builds `tests/network/test_network.c`, which
-includes `src/network.c` with local libuv and libtelnet stubs. These tests assume
+includes `src/net/network.c` with local libuv and libtelnet stubs. These tests assume
 that connection-management behavior can be validated without opening real sockets:
 libuv accept/read/write/close calls are captured by stubs, write callbacks are
 invoked explicitly by the test, and allocation/telnet failures are injected by the

@@ -166,6 +166,6 @@ When adding a new opcode, update exactly one schema row (`OP(...)`) with:
 - size policy
 - validator policy
 
-`ir.c` materializes the schema into `g_ir_opcode_schema` and `emitbc.c` consumes it for encoding, size accounting, and validator dispatch. Add any truly custom payload writing logic in `emitbc.c` only when the schema policy requires variable-length handling.
+`src/compiler/ir.c` materializes the schema into `g_ir_opcode_schema` and `src/compiler/emitbc.c` consumes it for encoding, size accounting, and validator dispatch. Add any truly custom payload writing logic in `src/compiler/emitbc.c` only when the schema policy requires variable-length handling.
 
 Run `make test` to validate schema consistency checks and emitter behavior.

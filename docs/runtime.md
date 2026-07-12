@@ -99,7 +99,7 @@ Invalid libcall argument types, ranges, or values have a shared runtime policy:
 the handler consumes and frees its arguments, sets `error` to
 `ERR_RUNTIME_INVALIDARGS`, sets `error.msg` to a handler-specific diagnostic when
 available, and pushes the documented failure value for that libcall. Handlers
-should use the helpers in `src/libcall_common.h`, such as
+should use the helpers in `src/libcall/libcall_common.h`, such as
 `lc_invalid_args_return` or `lc_invalid_args_detail_return`, so the error item
 and stack result are updated consistently. Domain failures that are not invalid
 arguments, such as missing items, unknown task ids, inactive network lines, or

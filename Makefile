@@ -12,7 +12,7 @@ LIB_DIR := lib
 GENERATED_DIR := $(OBJ_DIR)/generated
 
 BASE_CFLAGS := -std=$(CSTD) -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -MMD -MP
-CPPFLAGS := -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=700 -I$(SRC_DIR) -I$(GENERATED_DIR)
+CPPFLAGS := -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=700 -I$(SRC_DIR) -I$(SRC_DIR)/common -I$(SRC_DIR)/bytecode -I$(SRC_DIR)/runtime -I$(SRC_DIR)/itemstore -I$(SRC_DIR)/libcall -I$(SRC_DIR)/net -I$(GENERATED_DIR)
 DEBUG_CFLAGS := -g -O0 -DDEBUG=1
 RELEASE_CFLAGS := -O2 -DNDEBUG
 SANITIZE_CFLAGS := -g -O1 -DDEBUG=1
@@ -130,22 +130,22 @@ TEST_SOURCES := $(TEST_SHARED_SOURCES) $(TEST_CORE_SOURCES) $(TEST_COMPILER_SOUR
 
 # Library of shared functions
 LIB := $(LIB_DIR)/libsinshared.a
-LIB_OBJECTS := $(OBJ_DIR)/log.o $(OBJ_DIR)/memory.o $(OBJ_DIR)/cli_io.o $(OBJ_DIR)/bytecode_verify.o $(OBJ_DIR)/sdiss_core.o $(OBJ_DIR)/floatconv.o $(OBJ_DIR)/parser.o \
+LIB_OBJECTS := $(OBJ_DIR)/common/log.o $(OBJ_DIR)/common/memory.o $(OBJ_DIR)/common/cli_io.o $(OBJ_DIR)/bytecode/bytecode_verify.o $(OBJ_DIR)/bytecode/sdiss_core.o $(OBJ_DIR)/common/floatconv.o $(OBJ_DIR)/parser.o \
                $(OBJ_DIR)/lexer.o $(OBJ_DIR)/compiler/absyn.o $(OBJ_DIR)/compiler/semant.o \
                $(OBJ_DIR)/compiler/ir.o $(OBJ_DIR)/compiler/lower.o $(OBJ_DIR)/compiler/compiler_context.o $(OBJ_DIR)/compiler/compiler_pipeline.o $(OBJ_DIR)/compiler/emitbc.o \
-               $(OBJ_DIR)/compiler/compdiag.o $(OBJ_DIR)/error.o $(OBJ_DIR)/util.o $(OBJ_DIR)/libcall_sys.o $(OBJ_DIR)/libcall_task.o $(OBJ_DIR)/libcall_net.o $(OBJ_DIR)/libcall_str.o $(OBJ_DIR)/libcall_registry.o $(OBJ_DIR)/libcall_table.o \
-               $(OBJ_DIR)/stack.o $(OBJ_DIR)/value.o $(OBJ_DIR)/item.o $(OBJ_DIR)/item_hash.o $(OBJ_DIR)/item_tree.o $(OBJ_DIR)/item_registry.o $(OBJ_DIR)/item_persist.o $(OBJ_DIR)/item_error.o \
-               $(OBJ_DIR)/vm.o $(OBJ_DIR)/task.o $(OBJ_DIR)/runtime_decode.o $(OBJ_DIR)/runtime_value.o $(OBJ_DIR)/runtime_item_ops.o $(OBJ_DIR)/runtime_opcode.o $(OBJ_DIR)/interpret.o \
-               $(OBJ_DIR)/network.o $(OBJ_DIR)/libtelnet.o
+               $(OBJ_DIR)/compiler/compdiag.o $(OBJ_DIR)/common/error.o $(OBJ_DIR)/common/util.o $(OBJ_DIR)/libcall/libcall_sys.o $(OBJ_DIR)/libcall/libcall_task.o $(OBJ_DIR)/libcall/libcall_net.o $(OBJ_DIR)/libcall/libcall_str.o $(OBJ_DIR)/libcall/libcall_registry.o $(OBJ_DIR)/libcall/libcall_table.o \
+               $(OBJ_DIR)/runtime/stack.o $(OBJ_DIR)/runtime/value.o $(OBJ_DIR)/itemstore/item.o $(OBJ_DIR)/itemstore/item_hash.o $(OBJ_DIR)/itemstore/item_tree.o $(OBJ_DIR)/itemstore/item_registry.o $(OBJ_DIR)/itemstore/item_persist.o $(OBJ_DIR)/itemstore/item_error.o \
+               $(OBJ_DIR)/runtime/vm.o $(OBJ_DIR)/runtime/task.o $(OBJ_DIR)/runtime/runtime_decode.o $(OBJ_DIR)/runtime/runtime_value.o $(OBJ_DIR)/runtime/runtime_item_ops.o $(OBJ_DIR)/runtime/runtime_opcode.o $(OBJ_DIR)/runtime/interpret.o \
+               $(OBJ_DIR)/net/network.o $(OBJ_DIR)/net/libtelnet.o
 
 # Parser files for library
-PARSER_SOURCES := $(SRC_DIR)/parser.y
+PARSER_SOURCES := $(SRC_DIR)/compiler/parser.y
 PARSER_C := $(GENERATED_DIR)/parser.c
 PARSER_H := $(GENERATED_DIR)/parser.h
 PARSER_GENERATED := $(PARSER_C) $(PARSER_H)
 
 # Lexer files for library
-LEXER_SOURCES := $(SRC_DIR)/lexer.l
+LEXER_SOURCES := $(SRC_DIR)/compiler/lexer.l
 LEXER_C := $(GENERATED_DIR)/lexer.c
 LEXER_GENERATED := $(LEXER_C)
 
@@ -269,7 +269,7 @@ test-lsan: clean
 $(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
 	$(CC) $(CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
-$(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/network.c $(SRC_DIR)/network.h
+$(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/net/network.c $(SRC_DIR)/net/network.h
 	$(CC) $(CFLAGS) -I$(TEST_DIR) -MF $(NETWORK_TEST_DEPS) \
 		-o $@ $(TEST_DIR)/network/test_network.c $(LDFLAGS) $(LIBS)
 

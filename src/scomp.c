@@ -1,4 +1,4 @@
-// This is the wrapper for the standalone compiler (parser.y and lexer.l)
+// This is the wrapper for the standalone compiler grammar and lexer.
 
 // Licensed under the MIT License - see LICENSE file for details.
 

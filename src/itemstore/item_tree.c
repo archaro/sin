@@ -21,7 +21,7 @@
 #include "log.h"
 #include "item_internal.h"
 
-// The configuration object, defined in sin.c
+// The configuration object, defined in src/sin.c
 extern CONFIG_t config;
 
 bool validate_item_name(const char *item_name,

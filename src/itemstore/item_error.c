@@ -21,7 +21,7 @@
 #include "log.h"
 #include "item_internal.h"
 
-// The configuration object, defined in sin.c
+// The configuration object, defined in src/sin.c
 extern CONFIG_t config;
 
 static const char *safe_error_message(const int errnum) {

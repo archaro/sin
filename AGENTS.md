@@ -16,14 +16,20 @@ The codebase intentionally contains a mixture of older and newer C styles. Prefe
 
 ## Repository map
 
-- `src/`: production C sources and headers.
+For module boundaries, ownership, dependency direction, and key entry points,
+see `docs/architecture.md`. Keep that architecture map current whenever files
+are added, deleted, or relocated.
+
+- `src/`: production C sources and headers. Top-level `src/scomp.c`, `src/sdiss.c`, and `src/sin.c` are CLI entry points; `src/config.h` and `src/version.h` are integration headers.
+  - `src/common/`: shared diagnostics, allocation wrappers, CLI helpers, numeric formatting, and small utilities.
+  - `src/bytecode/`: bytecode verification and disassembly helpers.
   - `src/compiler/`: parser-facing compiler pipeline, AST/semantic analysis, IR lowering, diagnostics, and bytecode emission.
   - `src/compiler/ir/`: opcode schema definitions shared by compiler and tests.
-  - `src/parser.y` and `src/lexer.l`: Bison/Flex grammar sources. Generated files belong under `obj/generated/` during normal builds.
-  - `src/runtime_*`, `src/interpret.*`, `src/vm.*`, `src/task.*`: runtime, VM, task, and opcode execution paths.
-  - `src/item*`, `src/value*`: object/item persistence, value representation, registries, and caches.
-  - `src/libcall*`: host library-call implementations and registry plumbing.
-  - `src/network.*`, `src/libtelnet.*`: networking and Telnet support.
+  - `src/compiler/parser.y` and `src/compiler/lexer.l`: Bison/Flex grammar sources. Generated files belong under `obj/generated/` during normal builds.
+  - `src/runtime/`: runtime, VM, task, stack, value, and opcode execution paths.
+  - `src/itemstore/`: object/item persistence, registries, caches, and structured error-item helpers.
+  - `src/libcall/`: host library-call implementations and registry plumbing.
+  - `src/net/`: networking and Telnet support.
 - `tests/`: unit, integration, golden, network, benchmark, and fuzz tests.
   - `tests/core/`: focused tests for low-level components.
   - `tests/compiler/`: compiler, bytecode, parser, and disassembler tests.
@@ -112,16 +118,16 @@ FUZZ_RUNS=5000 FUZZ_TIME=60 make fuzz-smoke
 
 Language and bytecode changes must be kept coherent across the pipeline. When adding, removing, or changing language constructs or bytecode operations, check whether all of these need updates:
 
-- grammar in `src/parser.y`
-- lexer rules in `src/lexer.l`
+- grammar in `src/compiler/parser.y`
+- lexer rules in `src/compiler/lexer.l`
 - AST declarations and lifecycle code in `src/compiler/absyn.*`
 - semantic checks in `src/compiler/semant.*`
 - IR definitions and validation in `src/compiler/ir.*` and `src/compiler/ir/`
 - lowering in `src/compiler/lower.*`
 - bytecode emission in `src/compiler/emitbc.*`
-- bytecode verification in `src/bytecode_verify.*`
-- runtime decoding and execution in `src/runtime_decode.*`, `src/runtime_opcode.*`, and `src/interpret.*`
-- disassembly in `src/sdiss_core.*`
+- bytecode verification in `src/bytecode/bytecode_verify.*`
+- runtime decoding and execution in `src/runtime/runtime_decode.*`, `src/runtime/runtime_opcode.*`, and `src/runtime/interpret.*`
+- disassembly in `src/bytecode/sdiss_core.*`
 - documentation in `docs/bytecode.md`, `docs/concepts.md`, or another relevant document
 - positive and negative tests in `tests/compiler/`, `tests/core/`, or `tests/interpreter/`
 - fixtures and golden output under `tests/fixtures/`
@@ -169,6 +175,7 @@ Update documentation when behavior, commands, formats, or public development wor
 - `docs/itemstore-format.md` for persistence format changes.
 - `docs/libcalls.md` for library-call behavior.
 - `docs/concepts.md` for language/runtime concepts.
+- `docs/architecture.md` for module boundaries, ownership, dependency direction, and key entry points. Update it whenever source files are added, deleted, or relocated.
 
 Keep docs accurate and concise. Prefer adding examples when they clarify a command or format.
 
