@@ -7,188 +7,153 @@
 #include "runtime_context.h"
 #include "stack.h"
 
+static uint8_t *lc_str_invalid_top(RuntimeContext *ctx, uint8_t *nextop,
+                                   const char *detail) {
+  VALUE_t val = pop_stack(ctx->vm->stack);
+  FREE_STR(val);
+  return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL, detail);
+}
+
+static VALUE_t *lc_str_peek_string(RuntimeContext *ctx) {
+  VALUE_t *val = peek_stack(ctx->vm->stack);
+  return (val && val->type == VALUE_str) ? val : NULL;
+}
+
+static void str_ltrim_inplace(char *s) {
+  char *start = s;
+  while (*start && isspace((unsigned char)*start)) start++;
+  if (start != s) memmove(s, start, strlen(start) + 1);
+}
+
+static void str_rtrim_inplace(char *s) {
+  size_t len = strlen(s);
+  while (len > 0 && isspace((unsigned char)s[len - 1])) len--;
+  s[len] = '\0';
+}
+
+static void str_trim_inplace(char *s) {
+  char *start = s;
+  while (*start && isspace((unsigned char)*start)) start++;
+
+  char *scan = start;
+  char *end = start;
+  while (*scan) {
+    if (!isspace((unsigned char)*scan)) end = scan + 1;
+    scan++;
+  }
+
+  size_t len = (size_t)(end - start);
+  if (start != s && len > 0) memmove(s, start, len);
+  s[len] = '\0';
+}
+
 uint8_t *lc_str_capitalise(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // If the value on the top of the stack is a string, capitalise the
-  // first letter. Otherwise report invalid arguments and return nil.
+  // Mutate the string on top of the stack by uppercasing its first byte.
+  // Invalid input is consumed and replaced with nil.
   (void)item;
 
-  if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
-    ctx->vm->stack->stack[ctx->vm->stack->current].s[0] =
-        (char)toupper((unsigned char)ctx->vm->stack->stack[ctx->vm->stack->current].s[0]);
-  } else {
-    VALUE_t val = pop_stack(ctx->vm->stack);
-    FREE_STR(val);
-    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "str.capitalise text must be a string");
+  VALUE_t *val = lc_str_peek_string(ctx);
+  if (val) {
+    val->s[0] = (char)toupper((unsigned char)val->s[0]);
+    return nextop;
   }
-  return nextop;
+  return lc_str_invalid_top(ctx, nextop, "str.capitalise text must be a string");
 }
 
 uint8_t *lc_str_upper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // If the value on the top of the stack is a string, make it
-  // uppercase. Otherwise report invalid arguments and return nil.
+  // Mutate the string on top of the stack by uppercasing each byte.
+  // Invalid input is consumed and replaced with nil.
   (void)item;
 
-  if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
-    char *c = ctx->vm->stack->stack[ctx->vm->stack->current].s;
+  VALUE_t *val = lc_str_peek_string(ctx);
+  if (val) {
+    char *c = val->s;
     while (*c) {
       *c = (char)toupper((unsigned char)*c);
       c++;
     }
-  } else {
-    VALUE_t val = pop_stack(ctx->vm->stack);
-    FREE_STR(val);
-    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "str.upper text must be a string");
+    return nextop;
   }
-  return nextop;
+  return lc_str_invalid_top(ctx, nextop, "str.upper text must be a string");
 }
 
 uint8_t *lc_str_lower(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // If the value on the top of the stack is a string, make it
-  // lowercase. Otherwise report invalid arguments and return nil.
+  // Mutate the string on top of the stack by lowercasing each byte.
+  // Invalid input is consumed and replaced with nil.
   (void)item;
 
-  if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
-    char *c = ctx->vm->stack->stack[ctx->vm->stack->current].s;
+  VALUE_t *val = lc_str_peek_string(ctx);
+  if (val) {
+    char *c = val->s;
     while (*c) {
       *c = (char)tolower((unsigned char)*c);
       c++;
     }
-  } else {
-    VALUE_t val = pop_stack(ctx->vm->stack);
-    FREE_STR(val);
-    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "str.lower text must be a string");
+    return nextop;
   }
-  return nextop;
+  return lc_str_invalid_top(ctx, nextop, "str.lower text must be a string");
 }
 
 uint8_t *lc_str_len(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // If the value on the top of the stack is a string, return its length
-  // (excluding the terminating null character)
-  // If the value is anything else, return nil.
-  // In any case, always pop the top of the stack and push the result.
+  // Consume the string on top of the stack and push its byte length, excluding
+  // the terminating null byte. Invalid input is consumed and replaced with nil.
   (void)item;
 
-  if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
+  if (lc_str_peek_string(ctx)) {
     VALUE_t val = pop_stack(ctx->vm->stack);
     size_t len = strlen(val.s);
     FREE_STR(val);
     val.type = VALUE_int;
     val.i = (int64_t)len;
     push_stack(ctx->vm->stack, val);
-  } else {
-    VALUE_t val = pop_stack(ctx->vm->stack);
-    FREE_STR(val);
-    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "str.len text must be a string");
+    return nextop;
   }
-  return nextop;
+  return lc_str_invalid_top(ctx, nextop, "str.len text must be a string");
 }
 
 uint8_t *lc_str_trim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // If the value on the top of the stack is a string, trim whitespace
-  // at both ends.
-  // If the value is anything else, return nil.
-  // In any case, always pop the top of the stack and push the result.
+  // Mutate the string on top of the stack by trimming leading and trailing
+  // whitespace bytes. Invalid input is consumed and replaced with nil.
   (void)item;
 
-  if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
-    // Note we are peeking, not popping!
-    VALUE_t *val = peek_stack(ctx->vm->stack);
-    char *result;
-    char *begin = val->s;
-    char *end;
-    while (*begin && isspace((unsigned char)*begin)) begin++;
-    if (*begin == '\0') {
-      // All spaces - result is empty string
-      result = strdup("");
-    } else {
-      // Trimmed the left, now trim the right.
-      end = begin + strlen((const char *)begin) - 1;
-      while (isspace((unsigned char)*end)) end--;
-      *(end+1) = '\0'; // Mutation is ok, we are about to free this string.
-      result = strdup(begin);
-    }
-    free(val->s);
-    val->s = result;
-    // No need to push - we haven't popped the stack, only peeked at it.
-  } else {
-    VALUE_t val = pop_stack(ctx->vm->stack);
-    FREE_STR(val);
-    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "str.trim text must be a string");
+  VALUE_t *val = lc_str_peek_string(ctx);
+  if (val) {
+    str_trim_inplace(val->s);
+    return nextop;
   }
-  return nextop;
+  return lc_str_invalid_top(ctx, nextop, "str.trim text must be a string");
 }
 
 uint8_t *lc_str_ltrim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // If the value on the top of the stack is a string, trim whitespace to left.
-  // If the value is anything else, return nil.
-  // In any case, always pop the top of the stack and push the result.
+  // Mutate the string on top of the stack by trimming leading whitespace bytes.
+  // Invalid input is consumed and replaced with nil.
   (void)item;
 
-  if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
-    // Note we are peeking, not popping!
-    VALUE_t *val = peek_stack(ctx->vm->stack);
-    char *result;
-    const char *begin = val->s;
-    while (*begin && isspace((unsigned char)*begin)) begin++;
-    // This will create the correct string, even if it is empty ("").
-    result = strdup(begin);
-    free(val->s);
-    val->s = result;
-    // No need to push - we haven't popped the stack, only peeked at it.
-  } else {
-    VALUE_t val = pop_stack(ctx->vm->stack);
-    FREE_STR(val);
-    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "str.ltrim text must be a string");
+  VALUE_t *val = lc_str_peek_string(ctx);
+  if (val) {
+    str_ltrim_inplace(val->s);
+    return nextop;
   }
-  return nextop;
+  return lc_str_invalid_top(ctx, nextop, "str.ltrim text must be a string");
 }
 
 uint8_t *lc_str_rtrim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // If the value on the top of the stack is a string, trim whitespace to right.
-  // If the value is anything else, return nil.
-  // In any case, always pop the top of the stack and push the result.
+  // Mutate the string on top of the stack by trimming trailing whitespace bytes.
+  // Invalid input is consumed and replaced with nil.
   (void)item;
 
-  if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
-    // Note we are peeking, not popping!
-    VALUE_t *val = peek_stack(ctx->vm->stack);
-    char *result;
-    size_t len = strlen(val->s);
-    while (len > 0 && isspace((unsigned char)val->s[len - 1]))
-      len--;
-    val->s[len] = '\0'; // Mutation is ok, we are about to free this string.
-    result = strdup(val->s);
-    free(val->s);
-    val->s = result;
-    // No need to push - we haven't popped the stack, only peeked at it.
-  } else {
-    VALUE_t val = pop_stack(ctx->vm->stack);
-    FREE_STR(val);
-    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "str.rtrim text must be a string");
+  VALUE_t *val = lc_str_peek_string(ctx);
+  if (val) {
+    str_rtrim_inplace(val->s);
+    return nextop;
   }
-  return nextop;
+  return lc_str_invalid_top(ctx, nextop, "str.rtrim text must be a string");
 }
 
 uint8_t *lc_str_substr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // The stack contains 3 values:
-  // top: (len) the length of the substring to return
-  // top-1: (start) the starting offset of the substring
-  // top-2: (text) the text value to extract the substring from
-  // All three values should be consumed
-  // If text is not a string, push nil.
-  // Otherwise:
-  // If start is greater than the length of the text, push an empty string.
-  // If len < 1, push nil.
-  // If start + len is greater than the length of the text from start, push
-  //   a new string from start to the end of the original string.
-  // Otherwise push a new string that is the requested substring.
+  // Consume text, start, and len from the stack and push a new byte substring.
+  // Stack order is text, start, len, with len on top. Invalid input is consumed
+  // and replaced with nil.
   (void)item;
 
   VALUE_t len = pop_stack(ctx->vm->stack);

@@ -85,14 +85,18 @@ static void capture_telnet_event(telnet_t *telnet, telnet_event_t *event, void *
   telnet_capture[telnet_capture_len] = '\0';
 }
 
-static void assert_sys_log_float_output(void) {
+static void reset_telnet_capture(void) {
+  telnet_capture[0] = '\0';
+  telnet_capture_len = 0;
+}
+
+static void assert_sys_log_output(VALUE_t out, const char *expected) {
   FILE *capture = tmpfile();
   ASSERT_NOT_NULL(capture);
   int saved_stdout = dup(STDOUT_FILENO);
   ASSERT_TRUE(saved_stdout >= 0);
   ASSERT_TRUE(dup2(fileno(capture), STDOUT_FILENO) >= 0);
 
-  VALUE_t out = {VALUE_float, {.f = 3.5}};
   push_stack(config.vm->stack, out);
   (void)lc_sys_log(test_ctx(), NULL, config.itemroot);
   VALUE_t ret = pop_stack(config.vm->stack);
@@ -102,11 +106,22 @@ static void assert_sys_log_float_output(void) {
   ASSERT_TRUE(dup2(saved_stdout, STDOUT_FILENO) >= 0);
   close(saved_stdout);
   rewind(capture);
-  char buffer[16] = {0};
+  char buffer[128] = {0};
   size_t n = fread(buffer, 1, sizeof(buffer) - 1, capture);
   buffer[n] = '\0';
-  ASSERT_TRUE(strcmp(buffer, "3.5") == 0);
+  ASSERT_TRUE(strcmp(buffer, expected) == 0);
   fclose(capture);
+}
+
+static void assert_net_write_output(VALUE_t out, const char *expected) {
+  reset_telnet_capture();
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  push_stack(config.vm->stack, out);
+  (void)lc_net_write(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  ASSERT_TRUE(strcmp(telnet_capture, expected) == 0);
 }
 
 static void assert_invalid_args_detail_contains(const char *expected) {
@@ -237,11 +252,26 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_EQ_INT(1, args);
 
   ASSERT_NOT_NULL(libcall_func_token(token));
+  args = 0;
+  ASSERT_TRUE(libcall_token_arg_count(token, &args));
+  ASSERT_EQ_INT(1, args);
   ASSERT_TRUE(libcall_func_token(255) == NULL);
+  ASSERT_TRUE(!libcall_token_arg_count(255, &args));
 
   ASSERT_TRUE(libcall_lookup_token("task", "newgametask", &token, &args));
   ASSERT_EQ_INT(3, args);
+  args = 0;
+  ASSERT_TRUE(libcall_token_arg_count(token, &args));
+  ASSERT_EQ_INT(3, args);
   ASSERT_TRUE(!libcall_lookup_token("missing", "missing", &token, &args));
+
+  alloc_test_fail_after(0);
+  token = 0;
+  args = 0;
+  ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
+  ASSERT_EQ_INT(1, args);
+  ASSERT_TRUE(!libcall_lookup_token("missing", "missing", &token, &args));
+  alloc_test_fail_after(-1);
 }
 
 void test_libcall_registry_init_failure_has_no_partial_state(void) {
@@ -546,6 +576,18 @@ void test_str_len_returns_string_byte_length(void) {
   teardown_libcall_runtime();
 }
 
+void test_str_case_libcalls_mutate_strings_in_place(void) {
+  setup_libcall_runtime();
+
+  assert_str_unary_result(lc_str_capitalise, "hello", "Hello");
+  assert_str_unary_result(lc_str_capitalise, "aLREADY", "ALREADY");
+  assert_str_unary_result(lc_str_capitalise, "", "");
+  assert_str_unary_result(lc_str_upper, "MiXeD 123!", "MIXED 123!");
+  assert_str_unary_result(lc_str_lower, "MiXeD 123!", "mixed 123!");
+
+  teardown_libcall_runtime();
+}
+
 void test_str_trim_libcalls_return_trimmed_strings(void) {
   setup_libcall_runtime();
 
@@ -612,6 +654,14 @@ void test_str_substr_invalid_args_return_nil(void) {
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.substr start");
 
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("abcdef")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.0}});
+  (void)lc_str_substr(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.substr");
+
   teardown_libcall_runtime();
 }
 
@@ -633,12 +683,36 @@ void test_str_libcall_invalidargs_uses_context_itemroot(void) {
   assert_float_string_libcall_uses_context_itemroot(lc_str_rtrim,
       "str.rtrim");
 
+  ITEM_t *context_root = make_root_item("context-root");
+  ASSERT_NOT_NULL(context_root);
+
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = context_root;
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("abcdef")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_str_substr(&ctx, NULL, context_root);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+
+  ITEM_t *context_msg = find_item(context_root, "error.msg");
+  ASSERT_NOT_NULL(context_msg);
+  ASSERT_EQ_INT(VALUE_str, context_msg->value.type);
+  ASSERT_TRUE(strstr(context_msg->value.s, "str.substr start") != NULL);
+
+  destroy_item(context_root);
+
   teardown_libcall_runtime();
 }
 
-void test_net_write_formats_float_output(void) {
+void test_libcall_output_formats_values(void) {
   setup_libcall_runtime();
-  assert_sys_log_float_output();
+
+  assert_sys_log_output((VALUE_t){VALUE_float, {.f = 3.5}}, "3.5");
+  assert_sys_log_output((VALUE_t){VALUE_str, {.s = strdup("%s literal")}},
+                        "%s literal");
 
   config.maxconns = 1;
   line = calloc((size_t)config.maxconns, sizeof(LINE_t));
@@ -646,17 +720,14 @@ void test_net_write_formats_float_output(void) {
   line[0].status = LINE_idle;
   line[0].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
   ASSERT_NOT_NULL(line[0].telnet);
-  telnet_capture[0] = '\0';
-  telnet_capture_len = 0;
 
-  VALUE_t target_line = {VALUE_int, {.i = 0}};
-  VALUE_t out = {VALUE_float, {.f = 3.5}};
-  push_stack(config.vm->stack, target_line);
-  push_stack(config.vm->stack, out);
-  (void)lc_net_write(test_ctx(), NULL, config.itemroot);
-  VALUE_t ret = pop_stack(config.vm->stack);
-  ASSERT_EQ_INT(VALUE_nil, ret.type);
-  ASSERT_TRUE(strcmp(telnet_capture, "3.5") == 0);
+  assert_net_write_output((VALUE_t){VALUE_str, {.s = strdup("hello")}},
+                          "hello");
+  assert_net_write_output((VALUE_t){VALUE_int, {.i = -42}}, "-42");
+  assert_net_write_output((VALUE_t){VALUE_float, {.f = 3.5}}, "3.5");
+  assert_net_write_output((VALUE_t){VALUE_bool, {.i = 1}}, "true");
+  assert_net_write_output((VALUE_t){VALUE_bool, {.i = 0}}, "false");
+  assert_net_write_output(VALUE_NIL, "");
 
   teardown_libcall_runtime();
 }

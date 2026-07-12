@@ -25,7 +25,6 @@ typedef struct {
 typedef struct {
   OP_t func;
   uint8_t args;
-  bool present;
 } LIBCALL_REG_ENTRY_t;
 
 typedef struct {
@@ -45,7 +44,7 @@ typedef struct {
   size_t height;
   size_t name_count;
   OP_t token_funcs[256];
-  bool token_present[256];
+  uint8_t token_args[256];
   bool ready;
 } LibcallRegistry;
 
@@ -56,6 +55,7 @@ void libcall_registry_destroy(LibcallRegistry *registry);
 bool libcall_registry_validate(LibcallRegistry *registry);
 bool libcall_registry_lookup_token(LibcallRegistry *registry, const char *libname, const char *callname, uint8_t *token, uint8_t *args);
 OP_t libcall_registry_func_token(LibcallRegistry *registry, uint8_t token);
+bool libcall_registry_token_arg_count(LibcallRegistry *registry, uint8_t token, uint8_t *args);
 
 bool libcall_lookup_token(const char *libname, const char *callname, uint8_t *token, uint8_t *args);
 bool libcall_token_arg_count(uint8_t token, uint8_t *args);

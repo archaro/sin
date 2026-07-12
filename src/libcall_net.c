@@ -1,4 +1,3 @@
-#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -21,148 +20,140 @@ static LibcallNetworkDeps lc_net_deps(RuntimeContext *ctx) {
   return net;
 }
 
-uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  LibcallNetworkDeps deps = lc_net_deps(ctx);
-  LibcallNetworkDeps *net = &deps;
-  // Called by the task which checks for player input.
-  // We operate a fair queuing process here.  Everyone
-  // gets a turn.  Find the next activity.
-  (void)item;
-  (*net->lastconn)++;
-  if ((*net->maxconns) == 0 || (*net->lastconn) >= (*net->maxconns)) {
-    (*net->lastconn) = 0;
+static void lc_net_push_int(RuntimeContext *ctx, int64_t value) {
+  VALUE_t ret = {VALUE_int, {.i = value}};
+  push_stack(ctx->vm->stack, ret);
+}
+
+static void lc_net_set_input_line(RuntimeContext *ctx,
+                                  const LibcallNetworkDeps *net,
+                                  size_t line_index) {
+  VALUE_t val = {VALUE_int, {.i = (int64_t)line_index}};
+  set_item(ctx->itemroot, net->inputline_name, val);
+}
+
+static bool lc_net_line_can_write(const LINE_t *linep) {
+  return linep->telnet != NULL &&
+         (linep->status == LINE_data || linep->status == LINE_idle);
+}
+
+static bool lc_net_send_text(LINE_t *linep, size_t line_index,
+                             const char *text, size_t len) {
+  if (linep->outbuf && !line_can_accept_output(linep, len)) {
+    logerr("net.write rejected for line %zu: output buffer limit or backpressure.\n",
+           line_index);
+    return false;
   }
-  while ((*net->lastconn) < (*net->maxconns)) {
-    VALUE_t val = {VALUE_int, {0}};
-    // Find some activity.
-    switch (net->lines[(*net->lastconn)].status) {
+  telnet_send_text(linep->telnet, text, len);
+  return true;
+}
+
+uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Advance the fair-queue cursor, publish input.line/input.text for the first
+  // active connection event, and push event code 0-3.
+  LibcallNetworkDeps deps = lc_net_deps(ctx);
+  size_t *lastconn = deps.lastconn;
+  size_t maxconns = *deps.maxconns;
+  (void)item;
+
+  (*lastconn)++;
+  if (maxconns == 0 || *lastconn >= maxconns) {
+    *lastconn = 0;
+  }
+  while (*lastconn < maxconns) {
+    size_t line_index = *lastconn;
+    LINE_t *linep = &deps.lines[line_index];
+
+    switch (linep->status) {
       case LINE_connecting:
-        net->lines[(*net->lastconn)].status = LINE_idle;
-        // Set the input item to the current line
-        val.i = (long)(*net->lastconn);
-        set_item(ctx->itemroot, net->inputline_name, val);
-        // And return a value from this libcall to say what happened.
-        val.i = 1;
-        push_stack(ctx->vm->stack, val);
+        linep->status = LINE_idle;
+        lc_net_set_input_line(ctx, &deps, line_index);
+        lc_net_push_int(ctx, 1);
         return nextop;
       case LINE_disconnecting:
-        destroy_line(&net->lines[(*net->lastconn)]);
-        net->lines[(*net->lastconn)].status = LINE_empty;
-        // Set the input item to the current line
-        val.i = (long)(*net->lastconn);
-        set_item(ctx->itemroot, net->inputline_name, val);
-        val.i = 2;
-        push_stack(ctx->vm->stack, val);
+        destroy_line(linep);
+        linep->status = LINE_empty;
+        lc_net_set_input_line(ctx, &deps, line_index);
+        lc_net_push_int(ctx, 2);
         return nextop;
-      case LINE_data:
-        // Set the input item to the current line
-        val.i = (long)(*net->lastconn);
-        set_item(ctx->itemroot, net->inputline_name, val);
-        // And grab some data.
+      case LINE_data: {
+        lc_net_set_input_line(ctx, &deps, line_index);
         VALUE_t str = {VALUE_str, {0}};
-        str.s = get_input(&net->lines[(*net->lastconn)]);
-        set_item(ctx->itemroot, net->inputtext_name, str);
-        val.i = 3;
-        push_stack(ctx->vm->stack, val);
+        str.s = get_input(linep);
+        set_item(ctx->itemroot, deps.inputtext_name, str);
+        lc_net_push_int(ctx, 3);
         return nextop;
+      }
       default:
-        (*net->lastconn)++;
+        (*lastconn)++;
     }
   }
-  // No activity found.
   push_stack(ctx->vm->stack, VALUE_ZERO);
   return nextop;
 }
 
 uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume line and value, send value text to an active connection, and push
+  // nil on success/no-op, false on output backpressure, or nil+invalidargs for
+  // an invalid line argument.
   LibcallNetworkDeps deps = lc_net_deps(ctx);
-  LibcallNetworkDeps *net = &deps;
-  // Write data out to a line
-  // Validate the parameters before creating the task.
   (void)item;
+
   VALUE_t out = pop_stack(ctx->vm->stack);
   VALUE_t linenum = pop_stack(ctx->vm->stack);
-  size_t line_index = 0;
 
   if (!lc_value_is_type(linenum, VALUE_int) || linenum.i < 0 ||
-      (size_t)linenum.i >= (*net->maxconns)) {
-    FREE_STR(out);
-    FREE_STR(linenum);
+      (size_t)linenum.i >= *deps.maxconns) {
+    VALUE_t args[] = {out, linenum};
+    lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
         "net.write line must be an integer connection index; floats are invalid");
-  } else {
-    line_index = (size_t)linenum.i;
-    if ((net->lines[line_index].status != LINE_data
-        && net->lines[line_index].status != LINE_idle)
-        || net->lines[line_index].telnet == NULL) {
-      FREE_STR(out);
-      push_stack(ctx->vm->stack, VALUE_NIL);
-      return nextop;
-    }
-    switch(out.type) {
-      case VALUE_str:
-        if (net->lines[line_index].outbuf &&
-            !line_can_accept_output(&net->lines[line_index], strlen(out.s))) {
-          logerr("net.write rejected for line %zu: output buffer limit or backpressure.\n",
-                 line_index);
-          FREE_STR(out);
-          push_stack(ctx->vm->stack, VALUE_FALSE);
-          return nextop;
-        }
-        telnet_send_text(net->lines[line_index].telnet, out.s, strlen(out.s));
-        FREE_STR(out);
-        break;
-      case VALUE_int: {
-        char buffer[22];
-        snprintf(buffer, sizeof(buffer), "%" PRId64, out.i);
-        if (net->lines[line_index].outbuf &&
-            !line_can_accept_output(&net->lines[line_index], strlen(buffer))) {
-          logerr("net.write rejected for line %zu: output buffer limit or backpressure.\n",
-                 line_index);
-          push_stack(ctx->vm->stack, VALUE_FALSE);
-          return nextop;
-        }
-        telnet_send_text(net->lines[line_index].telnet, buffer, strlen(buffer));
-        break;
-      }
-      case VALUE_float: {
-        char fbuffer[64];
-        if (sin_format_binary64_buf(out.f, fbuffer, sizeof(fbuffer))) {
-          if (net->lines[line_index].outbuf &&
-              !line_can_accept_output(&net->lines[line_index], strlen(fbuffer))) {
-            logerr("net.write rejected for line %zu: output buffer limit or backpressure.\n",
-                   line_index);
-            push_stack(ctx->vm->stack, VALUE_FALSE);
-            return nextop;
-          }
-          telnet_send_text(net->lines[line_index].telnet, fbuffer, strlen(fbuffer));
-        }
-        break;
-      }
-      case VALUE_nil:
-        // Nothing to output
-        break;
-      case VALUE_bool: {
-        char *t = "true";
-        char *f = "false";
-        if (net->lines[line_index].outbuf &&
-            !line_can_accept_output(&net->lines[line_index], strlen(out.i?t:f))) {
-          logerr("net.write rejected for line %zu: output buffer limit or backpressure.\n",
-                 line_index);
-          push_stack(ctx->vm->stack, VALUE_FALSE);
-          return nextop;
-        }
-        telnet_send_text(net->lines[line_index].telnet, out.i?t:f,
-                                                        strlen(out.i?t:f));
-        break;
-      }
-    }
   }
-  if (net->lines[line_index].status == LINE_disconnecting) {
+
+  size_t line_index = (size_t)linenum.i;
+  LINE_t *linep = &deps.lines[line_index];
+  if (!lc_net_line_can_write(linep)) {
+    FREE_STR(out);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+
+  bool sent = true;
+  switch(out.type) {
+    case VALUE_str: {
+      size_t len = strlen(out.s);
+      sent = lc_net_send_text(linep, line_index, out.s, len);
+      FREE_STR(out);
+      break;
+    }
+    case VALUE_int: {
+      char buffer[22];
+      int len = snprintf(buffer, sizeof(buffer), "%ld", out.i);
+      if (len > 0) {
+        sent = lc_net_send_text(linep, line_index, buffer, (size_t)len);
+      }
+      break;
+    }
+    case VALUE_float: {
+      char buffer[64];
+      if (sin_format_binary64_buf(out.f, buffer, sizeof(buffer))) {
+        sent = lc_net_send_text(linep, line_index, buffer, strlen(buffer));
+      }
+      break;
+    }
+    case VALUE_bool: {
+      const char *text = out.i ? "true" : "false";
+      sent = lc_net_send_text(linep, line_index, text, strlen(text));
+      break;
+    }
+    case VALUE_nil:
+      break;
+  }
+
+  if (!sent || linep->status == LINE_disconnecting) {
     push_stack(ctx->vm->stack, VALUE_FALSE);
     return nextop;
   }
-  // Libcalls always return a value
   push_stack(ctx->vm->stack, VALUE_NIL);
   return nextop;
 }

@@ -126,9 +126,10 @@ void test_libcall_invalid_arg_branches_return_contracts(void);
 void test_newgametask_rejects_invalid_intervals_before_timer_start(void);
 void test_net_write_ignores_non_writable_lines(void);
 void test_libcall_float_integer_only_arguments_rejected(void);
-void test_net_write_formats_float_output(void);
+void test_libcall_output_formats_values(void);
 void test_str_libcalls_float_returns_invalidargs_nil(void);
 void test_str_len_returns_string_byte_length(void);
+void test_str_case_libcalls_mutate_strings_in_place(void);
 void test_str_trim_libcalls_return_trimmed_strings(void);
 void test_str_substr_returns_requested_byte_range(void);
 void test_str_substr_invalid_args_return_nil(void);
@@ -353,11 +354,12 @@ static const test_case_t runtime_tests[] = {
     {"test_libcall_float_integer_only_arguments_rejected", test_libcall_float_integer_only_arguments_rejected},
     {"test_str_libcalls_float_returns_invalidargs_nil", test_str_libcalls_float_returns_invalidargs_nil},
     {"test_str_len_returns_string_byte_length", test_str_len_returns_string_byte_length},
+    {"test_str_case_libcalls_mutate_strings_in_place", test_str_case_libcalls_mutate_strings_in_place},
     {"test_str_trim_libcalls_return_trimmed_strings", test_str_trim_libcalls_return_trimmed_strings},
     {"test_str_substr_returns_requested_byte_range", test_str_substr_returns_requested_byte_range},
     {"test_str_substr_invalid_args_return_nil", test_str_substr_invalid_args_return_nil},
     {"test_str_libcall_invalidargs_uses_context_itemroot", test_str_libcall_invalidargs_uses_context_itemroot},
-    {"test_net_write_formats_float_output", test_net_write_formats_float_output},
+    {"test_libcall_output_formats_values", test_libcall_output_formats_values},
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},
     {"test_runtime_benchmark_optin", test_runtime_benchmark_optin},
 };

@@ -1,4 +1,3 @@
-#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
@@ -15,35 +14,67 @@
 #include "log.h"
 #include "stack.h"
 
+static uint8_t *lc_sys_return(RuntimeContext *ctx, uint8_t *nextop,
+                              VALUE_t ret) {
+  push_stack(ctx->vm->stack, ret);
+  return nextop;
+}
+
+static uint8_t *lc_sys_return_nil(RuntimeContext *ctx, uint8_t *nextop) {
+  return lc_sys_return(ctx, nextop, VALUE_NIL);
+}
+
+static uint8_t *lc_sys_return_false(RuntimeContext *ctx, uint8_t *nextop) {
+  return lc_sys_return(ctx, nextop, VALUE_FALSE);
+}
+
+static void lc_sys_free_output(OUTPUT_t *out, bool free_bytecode) {
+  if (!out) return;
+  if (free_bytecode) free(out->bytecode);
+  free(out);
+}
+
+static uint8_t *lc_sys_compile_fail(RuntimeContext *ctx, uint8_t *nextop,
+                                    VALUE_t *source, OUTPUT_t *out,
+                                    bool free_bytecode,
+                                    CompilerDiagnostic *diag) {
+  lc_sys_free_output(out, free_bytecode);
+  value_free(source);
+  compiler_diag_reset(diag);
+  return lc_sys_return_false(ctx, nextop);
+}
+
 uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // Create a backup of the itemstore.
-  // All of the following is a long-winded way to get a backup filename.
+  // Save a timestamped itemstore backup and push nil. Backup I/O failures are
+  // logged but are not exposed through the return value.
   (void)item;
+
   char timestamp[64];
   time_t now = time(NULL);
   struct tm *tm_now = localtime(&now);
   strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S", tm_now);
-  char backupfile[strlen(ctx->itemstore_filename)+strlen(timestamp)+2];
+  size_t filename_len = strlen(ctx->itemstore_filename);
+  size_t timestamp_len = strlen(timestamp);
+  char backupfile[filename_len + timestamp_len + 2];
   snprintf(backupfile, sizeof(backupfile), "%s_%s", ctx->itemstore_filename,
                                                                 timestamp);
   if (!save_itemstore(backupfile, ctx->itemroot)) {
     logerr("sys.backup failed to persist itemstore backup '%s'.\n",
            backupfile);
   }
-  // libcalls always return a value.
-  push_stack(ctx->vm->stack, VALUE_NIL);
-  return nextop;
+  return lc_sys_return_nil(ctx, nextop);
 }
 
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // Pop the top of the stack and write it to the syslog
-  // Try to do something sensible if the type is not a string.
+  // Consume one value, write its text representation to the system log, and
+  // push nil. Strings are freed after logging.
   (void)item;
+
   VALUE_t val = pop_stack(ctx->vm->stack);
   switch (val.type) {
     case VALUE_str:
-      logmsg(val.s);
-      free(val.s);
+      logmsg("%s", val.s);
+      FREE_STR(val);
       break;
     case VALUE_int:
       logmsg("%ld", val.i);
@@ -58,7 +89,6 @@ uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       break;
     }
     case VALUE_nil:
-      // One cannot logically output nil.
       break;
     case VALUE_bool:
       logmsg("%s", val.i?"true":"false");
@@ -66,41 +96,34 @@ uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     default:
       logmsg("Sys.log called with unknown value type.\n");
   }
-  // libcalls always return a value.
-  push_stack(ctx->vm->stack, VALUE_NIL);
-  return nextop;
+  return lc_sys_return_nil(ctx, nextop);
 }
 
 uint8_t *lc_sys_shutdown(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // End the game loop, thereby shutting down neatly, and
-  // saving the itemstore.
-  // This call takes no parameters.
+  // Stop the event loop, mark shutdown as safe, and push nil.
   (void)item;
+
   logmsg("Sys.shutdown called.  Shutting down.\n");
   (*ctx->safe_shutdown) = true;
   uv_stop(ctx->loop);
-  // libcalls always return a value.
-  push_stack(ctx->vm->stack, VALUE_NIL);
-  return nextop;
+  return lc_sys_return_nil(ctx, nextop);
 }
 
 uint8_t *lc_sys_abort(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // End the game loop, thereby aborting, and not
-  // saving the itemstore.
-  // This call takes no parameters.
+  // Stop the event loop, mark shutdown as unsafe, and push nil.
   (void)item;
+
   logmsg("Sys.abort called.  Immediate (and messy) shutdown.\n");
   (*ctx->safe_shutdown) = false;
   uv_stop(ctx->loop);
-  // libcalls always return a value.
-  push_stack(ctx->vm->stack, VALUE_NIL);
-  return nextop;
+  return lc_sys_return_nil(ctx, nextop);
 }
 
 uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // Compile and execute some Sinistra code.
-  // This call takes one parameter, expected to be a string.
+  // Consume a source string, compile it into a temporary code item, execute it,
+  // discard values produced by that execution, and push true/false.
   (void)item;
+
   VALUE_t val = pop_stack(ctx->vm->stack);
 
   if (!lc_value_is_type(val, VALUE_str)) {
@@ -110,7 +133,6 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         "sys.compile source must be a string; non-string values, including floats, are invalid");
   }
 
-  int8_t result = 0;
   CompilerDiagnostic diag;
   compiler_diag_init(&diag);
   OUTPUT_t *out = NULL;
@@ -118,10 +140,9 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   static uint64_t tmpname_counter = 0;
 
   // Compile source -> bytecode
-  result = compile_source_to_bytecode_diag(val.s, strlen(val.s), &out, &diag);
+  int8_t result = compile_source_to_bytecode_diag(val.s, strlen(val.s), &out, &diag);
 
   if (result != 0 || !out || !out->bytecode) {
-    // Compile failed; preserve structured compiler diagnostics.
     if (result == 0) {
       compiler_diag_reset(&diag);
       compiler_diag_set(&diag, ERR_COMP_UNKNOWN, DIAG_PHASE_COMPILE,
@@ -131,16 +152,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       compiler_diag_set_excerpt(&diag, val.s ? val.s : "");
     }
     set_compiler_error_item_on_root(ctx ? ctx->itemroot : NULL, &diag);
-    if (out) {
-      if (out->bytecode) {
-        free(out->bytecode);
-      }
-      free(out);
-    }
-    lc_cleanup_cstr(val.s);
-    compiler_diag_reset(&diag);
-    push_stack(ctx->vm->stack, VALUE_FALSE);
-    return nextop;
+    return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
   }
 
   int namelen = snprintf(tmpname, sizeof(tmpname),
@@ -148,45 +160,25 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (namelen < 0 || namelen >= (int)sizeof(tmpname)) {
     set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
         "Sys.compile temporary item name generation failed.");
-    free(out->bytecode);
-    free(out);
-    lc_cleanup_cstr(val.s);
-    compiler_diag_reset(&diag);
-    push_stack(ctx->vm->stack, VALUE_FALSE);
-    return nextop;
+    return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
   }
 
-  // Compile succeeded: execute compiled code in a temporary code item.
-  // Contract: Sys.compile must preserve the caller's stack frame below the
-  // pre-call depth while discarding only temporary values produced by the
-  // nested interpret() run. This keeps Sys.compile safe when invoked from
-  // within an already-active interpreter frame.
   ptrdiff_t raw_len = out->nextbyte - out->bytecode;
   if (raw_len < 0 || (uintmax_t)raw_len > UINT32_MAX) {
     set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
         "Sys.compile bytecode output length is out of range.");
-    free(out->bytecode);
-    free(out);
-    lc_cleanup_cstr(val.s);
-    compiler_diag_reset(&diag);
-    push_stack(ctx->vm->stack, VALUE_FALSE);
-    return nextop;
+    return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
   }
   uint32_t len = (uint32_t)raw_len;
   ITEM_t *tmpitem = insert_code_item(ctx->itemroot, tmpname, len, out->bytecode);
 
   if (!tmpitem) {
-    // Could not create temp item (likely in-use/name conflict).
-    // out->bytecode/out and val.s are still owned here and must be freed once.
     set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_COMP_INUSE, NULL);
-    free(out->bytecode);
-    free(out);
-    lc_cleanup_cstr(val.s);
-    compiler_diag_reset(&diag);
-    push_stack(ctx->vm->stack, VALUE_FALSE);
-    return nextop;
+    return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
   }
 
+  // Preserve the caller frame below the pre-call depth; discard only values
+  // produced by the nested interpret() run.
   int32_t stack_top_before_interpret = ctx->vm->stack->current;
   (void)interpret(ctx, tmpitem);
   while (ctx->vm->stack->current > stack_top_before_interpret) {
@@ -194,16 +186,12 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     value_free(&dropped);
   }
 
-  // Best-effort cleanup of temp item
   delete_item(ctx->itemroot, tmpname);
-
-  // clear compiler/runtime error indicators on success
   clear_error_item_on_root(ctx ? ctx->itemroot : NULL);
 
-  free(out); // bytecode ownership moved into inserted item
-  lc_cleanup_cstr(val.s);
+  lc_sys_free_output(out, false);
+  value_free(&val);
   compiler_diag_reset(&diag);
 
-  push_stack(ctx->vm->stack, VALUE_TRUE);
-  return nextop;
+  return lc_sys_return(ctx, nextop, VALUE_TRUE);
 }
