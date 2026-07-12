@@ -67,9 +67,8 @@ uint8_t *lc_str_lower(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 uint8_t *lc_str_len(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // If the value on the top of the stack is a string, return its length
   // (excluding the terminating null character)
-  // If the value on the top of the stack is anything other than a string,
-  // return nil.
-  // In any case, the top of the stack is popped, and the result is pushed.
+  // If the value is anything else, return nil.
+  // In any case, always pop the top of the stack and push the result.
   (void)item;
 
   if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
@@ -84,6 +83,95 @@ uint8_t *lc_str_len(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     FREE_STR(val);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
         "str.len text must be a string");
+  }
+  return nextop;
+}
+
+uint8_t *lc_str_trim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // If the value on the top of the stack is a string, trim whitespace
+  // at both ends.
+  // If the value is anything else, return nil.
+  // In any case, always pop the top of the stack and push the result.
+  (void)item;
+
+  if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
+    // Note we are peeking, not popping!
+    VALUE_t *val = peek_stack(ctx->vm->stack);
+    char *result;
+    char *begin = val->s;
+    char *end;
+    while (*begin && isspace((unsigned char)*begin)) begin++;
+    if (*begin == '\0') {
+      // All spaces - result is empty string
+      result = strdup("");
+    } else {
+      // Trimmed the left, now trim the right.
+      end = begin + strlen((const char *)begin) - 1;
+      while (isspace((unsigned char)*end)) end--;
+      *(end+1) = '\0'; // Mutation is ok, we are about to free this string.
+      result = strdup(begin);
+    }
+    free(val->s);
+    val->s = result;
+    // No need to push - we haven't popped the stack, only peeked at it.
+  } else {
+    VALUE_t val = pop_stack(ctx->vm->stack);
+    FREE_STR(val);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "str.trim text must be a string");
+  }
+  return nextop;
+}
+
+uint8_t *lc_str_ltrim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // If the value on the top of the stack is a string, trim whitespace to left.
+  // If the value is anything else, return nil.
+  // In any case, always pop the top of the stack and push the result.
+  (void)item;
+
+  if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
+    // Note we are peeking, not popping!
+    VALUE_t *val = peek_stack(ctx->vm->stack);
+    char *result;
+    const char *begin = val->s;
+    while (*begin && isspace((unsigned char)*begin)) begin++;
+    // This will create the correct string, even if it is empty ("").
+    result = strdup(begin);
+    free(val->s);
+    val->s = result;
+    // No need to push - we haven't popped the stack, only peeked at it.
+  } else {
+    VALUE_t val = pop_stack(ctx->vm->stack);
+    FREE_STR(val);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "str.ltrim text must be a string");
+  }
+  return nextop;
+}
+
+uint8_t *lc_str_rtrim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // If the value on the top of the stack is a string, trim whitespace to right.
+  // If the value is anything else, return nil.
+  // In any case, always pop the top of the stack and push the result.
+  (void)item;
+
+  if (ctx->vm->stack->stack[ctx->vm->stack->current].type == VALUE_str) {
+    // Note we are peeking, not popping!
+    VALUE_t *val = peek_stack(ctx->vm->stack);
+    char *result;
+    size_t len = strlen(val->s);
+    while (len > 0 && isspace((unsigned char)val->s[len - 1]))
+      len--;
+    val->s[len] = '\0'; // Mutation is ok, we are about to free this string.
+    result = strdup(val->s);
+    free(val->s);
+    val->s = result;
+    // No need to push - we haven't popped the stack, only peeked at it.
+  } else {
+    VALUE_t val = pop_stack(ctx->vm->stack);
+    FREE_STR(val);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "str.rtrim text must be a string");
   }
   return nextop;
 }

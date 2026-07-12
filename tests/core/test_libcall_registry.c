@@ -24,6 +24,9 @@ uint8_t *lc_str_capitalise(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_upper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_lower(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_len(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_trim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_ltrim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_rtrim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 extern LINE_t *line;
 extern CONFIG_t config;
@@ -161,6 +164,19 @@ static void assert_float_string_libcall_uses_context_itemroot(
   ASSERT_TRUE(global_err == NULL || global_err->value.type == VALUE_nil);
 
   destroy_item(context_root);
+}
+
+static void assert_str_unary_result(
+    uint8_t *(*func)(RuntimeContext *, uint8_t *, ITEM_t *),
+    const char *input,
+    const char *expected) {
+  VALUE_t text = {VALUE_str, {.s = strdup(input)}};
+  push_stack(config.vm->stack, text);
+  (void)func(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, ret.type);
+  ASSERT_TRUE(strcmp(ret.s, expected) == 0);
+  FREE_STR(ret);
 }
 
 static uint8_t *test_noop_libcall(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -487,6 +503,12 @@ void test_str_libcalls_float_returns_invalidargs_nil(void) {
       "str.lower");
   assert_float_string_libcall_returns_invalidargs_nil(lc_str_len,
       "str.len");
+  assert_float_string_libcall_returns_invalidargs_nil(lc_str_trim,
+      "str.trim");
+  assert_float_string_libcall_returns_invalidargs_nil(lc_str_ltrim,
+      "str.ltrim");
+  assert_float_string_libcall_returns_invalidargs_nil(lc_str_rtrim,
+      "str.rtrim");
 
   teardown_libcall_runtime();
 }
@@ -511,6 +533,26 @@ void test_str_len_returns_string_byte_length(void) {
   teardown_libcall_runtime();
 }
 
+void test_str_trim_libcalls_return_trimmed_strings(void) {
+  setup_libcall_runtime();
+
+  assert_str_unary_result(lc_str_trim, " \t hello world \r\n", "hello world");
+  assert_str_unary_result(lc_str_trim, "   \t\n", "");
+  assert_str_unary_result(lc_str_trim, "already clean", "already clean");
+
+  assert_str_unary_result(lc_str_ltrim, " \t hello world \r\n",
+                          "hello world \r\n");
+  assert_str_unary_result(lc_str_ltrim, "   \t\n", "");
+  assert_str_unary_result(lc_str_ltrim, "already clean", "already clean");
+
+  assert_str_unary_result(lc_str_rtrim, " \t hello world \r\n",
+                          " \t hello world");
+  assert_str_unary_result(lc_str_rtrim, "   \t\n", "");
+  assert_str_unary_result(lc_str_rtrim, "already clean", "already clean");
+
+  teardown_libcall_runtime();
+}
+
 void test_str_libcall_invalidargs_uses_context_itemroot(void) {
   setup_libcall_runtime();
 
@@ -522,6 +564,12 @@ void test_str_libcall_invalidargs_uses_context_itemroot(void) {
       "str.lower");
   assert_float_string_libcall_uses_context_itemroot(lc_str_len,
       "str.len");
+  assert_float_string_libcall_uses_context_itemroot(lc_str_trim,
+      "str.trim");
+  assert_float_string_libcall_uses_context_itemroot(lc_str_ltrim,
+      "str.ltrim");
+  assert_float_string_libcall_uses_context_itemroot(lc_str_rtrim,
+      "str.rtrim");
 
   teardown_libcall_runtime();
 }
