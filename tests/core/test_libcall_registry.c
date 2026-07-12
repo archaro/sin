@@ -721,13 +721,13 @@ void test_str_startswith_and_endswith_return_expected_results(void) {
   setup_libcall_runtime();
 
   assert_str_affix_result(lc_str_startswith, "abcdef", "abc", 1);
-  assert_str_affix_result(lc_str_startswith, "abcdef", "abC", 1);
+  assert_str_affix_result(lc_str_startswith, "abcdef", "abC", 0);
   assert_str_affix_result(lc_str_startswith, "abcdef", "bc", 0);
   assert_str_affix_result(lc_str_startswith, "abcdef", "abcdefg", 0);
   assert_str_affix_result(lc_str_startswith, "abcdef", "", 1);
 
   assert_str_affix_result(lc_str_endswith, "abcdef", "def", 1);
-  assert_str_affix_result(lc_str_endswith, "abcdef", "dEf", 1);
+  assert_str_affix_result(lc_str_endswith, "abcdef", "dEf", 0);
   assert_str_affix_result(lc_str_endswith, "abcdef", "de", 0);
   assert_str_affix_result(lc_str_endswith, "abcdef", "zabcdef", 0);
   assert_str_affix_result(lc_str_endswith, "abcdef", "", 1);

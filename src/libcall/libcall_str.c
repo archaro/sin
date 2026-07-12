@@ -58,15 +58,6 @@ static bool str_find_popped(VALUE_t haystack, VALUE_t needle,
   return true;
 }
 
-static bool str_case_equal_prefix(const char *a, const char *b, size_t len) {
-  for (size_t i = 0; i < len; i++) {
-    unsigned char ca = (unsigned char)a[i];
-    unsigned char cb = (unsigned char)b[i];
-    if (tolower(ca) != tolower(cb)) return false;
-  }
-  return true;
-}
-
 static uint8_t *lc_str_affix(RuntimeContext *ctx, uint8_t *nextop,
                              bool suffix, const char *detail) {
   VALUE_t needle = pop_stack(ctx->vm->stack);
@@ -84,7 +75,7 @@ static uint8_t *lc_str_affix(RuntimeContext *ctx, uint8_t *nextop,
   if (needle_len <= haystack_len) {
     const char *start = suffix ? haystack.s + haystack_len - needle_len
         : haystack.s;
-    matched = str_case_equal_prefix(start, needle.s, needle_len);
+    matched = memcmp(start, needle.s, needle_len) == 0;
   }
 
   FREE_STR(needle);
@@ -334,8 +325,7 @@ uint8_t *lc_str_startswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Instructions:
   // If the needle is longer than the haystack, return false.
   // If the needle is the empty string, return true.
-  // If the needle is not equal (case-insensitive) to the start
-  //   of the haystack, return false.
+  // If the needle is not equal to the start of the haystack, return false.
   // Otherwise return true.
 
   return lc_str_affix(ctx, nextop, false,
@@ -352,8 +342,7 @@ uint8_t *lc_str_endswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Instructions:
   // If the needle is longer than the haystack, return false.
   // If the needle is the empty string, return true.
-  // If the needle is not equal (case-insensitive) to the end
-  //   of the haystack, return false.
+  // If the needle is not equal to the end of the haystack, return false.
   // Otherwise return true.
 
   return lc_str_affix(ctx, nextop, true,
