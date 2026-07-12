@@ -30,6 +30,8 @@ uint8_t *lc_str_rtrim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_substr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_find(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_contains(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_startswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_endswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 extern LINE_t *line;
 extern CONFIG_t config;
@@ -224,6 +226,17 @@ static void assert_str_contains_result(const char *haystack, const char *needle,
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(haystack)}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(needle)}});
   (void)lc_str_contains(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(expected, ret.i);
+}
+
+static void assert_str_affix_result(
+    uint8_t *(*func)(RuntimeContext *, uint8_t *, ITEM_t *),
+    const char *haystack, const char *needle, int expected) {
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(haystack)}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(needle)}});
+  (void)func(test_ctx(), NULL, config.itemroot);
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(expected, ret.i);
@@ -704,6 +717,24 @@ void test_str_find_and_contains_return_expected_results(void) {
   teardown_libcall_runtime();
 }
 
+void test_str_startswith_and_endswith_return_expected_results(void) {
+  setup_libcall_runtime();
+
+  assert_str_affix_result(lc_str_startswith, "abcdef", "abc", 1);
+  assert_str_affix_result(lc_str_startswith, "abcdef", "abC", 1);
+  assert_str_affix_result(lc_str_startswith, "abcdef", "bc", 0);
+  assert_str_affix_result(lc_str_startswith, "abcdef", "abcdefg", 0);
+  assert_str_affix_result(lc_str_startswith, "abcdef", "", 1);
+
+  assert_str_affix_result(lc_str_endswith, "abcdef", "def", 1);
+  assert_str_affix_result(lc_str_endswith, "abcdef", "dEf", 1);
+  assert_str_affix_result(lc_str_endswith, "abcdef", "de", 0);
+  assert_str_affix_result(lc_str_endswith, "abcdef", "zabcdef", 0);
+  assert_str_affix_result(lc_str_endswith, "abcdef", "", 1);
+
+  teardown_libcall_runtime();
+}
+
 void test_str_find_and_contains_invalid_args_return_contracts(void) {
   setup_libcall_runtime();
 
@@ -728,6 +759,28 @@ void test_str_find_and_contains_invalid_args_return_contracts(void) {
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
   assert_invalid_args_detail_contains("str.contains");
+
+  teardown_libcall_runtime();
+}
+
+void test_str_startswith_and_endswith_invalid_args_return_contracts(void) {
+  setup_libcall_runtime();
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("needle")}});
+  (void)lc_str_startswith(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  assert_invalid_args_detail_contains("str.startswith");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("haystack")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
+  (void)lc_str_endswith(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  assert_invalid_args_detail_contains("str.endswith");
 
   teardown_libcall_runtime();
 }

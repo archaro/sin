@@ -58,6 +58,41 @@ static bool str_find_popped(VALUE_t haystack, VALUE_t needle,
   return true;
 }
 
+static bool str_case_equal_prefix(const char *a, const char *b, size_t len) {
+  for (size_t i = 0; i < len; i++) {
+    unsigned char ca = (unsigned char)a[i];
+    unsigned char cb = (unsigned char)b[i];
+    if (tolower(ca) != tolower(cb)) return false;
+  }
+  return true;
+}
+
+static uint8_t *lc_str_affix(RuntimeContext *ctx, uint8_t *nextop,
+                             bool suffix, const char *detail) {
+  VALUE_t needle = pop_stack(ctx->vm->stack);
+  VALUE_t haystack = pop_stack(ctx->vm->stack);
+
+  if (haystack.type != VALUE_str || needle.type != VALUE_str) {
+    VALUE_t args[] = {needle, haystack};
+    lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_FALSE, detail);
+  }
+
+  size_t haystack_len = strlen(haystack.s);
+  size_t needle_len = strlen(needle.s);
+  bool matched = false;
+  if (needle_len <= haystack_len) {
+    const char *start = suffix ? haystack.s + haystack_len - needle_len
+        : haystack.s;
+    matched = str_case_equal_prefix(start, needle.s, needle_len);
+  }
+
+  FREE_STR(needle);
+  FREE_STR(haystack);
+  push_stack(ctx->vm->stack, matched ? VALUE_TRUE : VALUE_FALSE);
+  return nextop;
+}
+
 uint8_t *lc_str_capitalise(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Mutate the string on top of the stack by uppercasing its first byte.
   // Invalid input is consumed and replaced with nil.
@@ -235,11 +270,11 @@ uint8_t *lc_str_find(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Invalid input is consumed and replaced with nil.
   (void)item;
 
-// Instructions:
-// Always pop both arguments.
-// If haystack or needle are not string values, push nil.  Otherwise:
-// If needle is found in haystack, push the offset at which it is found.
-// If needle is not found in haystack, push -1
+  // Instructions:
+  // Always pop both arguments.
+  // If haystack or needle are not string values, push nil.  Otherwise:
+  // If needle is found in haystack, push the offset at which it is found.
+  // If needle is not found in haystack, push -1
 
   VALUE_t needle = pop_stack(ctx->vm->stack);
   VALUE_t haystack = pop_stack(ctx->vm->stack);
@@ -266,13 +301,13 @@ uint8_t *lc_str_contains(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Invalid input is consumed and replaced with false.
   (void)item;
 
-// Instructions:
-// This is essentially the same as lc_str_find, and differs only in
-// what is pushed onto the stack at the end.
-// Always pop both arguments.
-// If haystack or needle are not string values, push false.  Otherwise:
-// If needle is found in haystack, push true.
-// If needle is not found in haystack, push false
+  // Instructions:
+  // This is essentially the same as lc_str_find, and differs only in
+  // what is pushed onto the stack at the end.
+  // Always pop both arguments.
+  // If haystack or needle are not string values, push false.  Otherwise:
+  // If needle is found in haystack, push true.
+  // If needle is not found in haystack, push false
 
   VALUE_t needle = pop_stack(ctx->vm->stack);
   VALUE_t haystack = pop_stack(ctx->vm->stack);
@@ -287,4 +322,40 @@ uint8_t *lc_str_contains(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   FREE_STR(haystack);
   push_stack(ctx->vm->stack, ret);
   return nextop;
+}
+
+uint8_t *lc_str_startswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume haystack and needle from the stack and push true if the needle
+  // is found at the start of the haystack, false if not.
+  // Stack order is haystack, needle, with needle on top.
+  // Invalid input is consumed and replaced with false.
+  (void)item;
+
+  // Instructions:
+  // If the needle is longer than the haystack, return false.
+  // If the needle is the empty string, return true.
+  // If the needle is not equal (case-insensitive) to the start
+  //   of the haystack, return false.
+  // Otherwise return true.
+
+  return lc_str_affix(ctx, nextop, false,
+      "str.startswith haystack and needle must be strings");
+}
+
+uint8_t *lc_str_endswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume haystack and needle from the stack and push true if the needle
+  // is found at the end of the haystack, false if not.
+  // Stack order is haystack, needle, with needle on top.
+  // Invalid input is consumed and replaced with false.
+  (void)item;
+
+  // Instructions:
+  // If the needle is longer than the haystack, return false.
+  // If the needle is the empty string, return true.
+  // If the needle is not equal (case-insensitive) to the end
+  //   of the haystack, return false.
+  // Otherwise return true.
+
+  return lc_str_affix(ctx, nextop, true,
+      "str.endswith haystack and needle must be strings");
 }
