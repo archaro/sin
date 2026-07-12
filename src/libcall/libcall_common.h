@@ -20,13 +20,15 @@ static inline bool lc_value_is_type(VALUE_t v, VALUE_e type) {
 }
 
 static inline uint8_t *lc_invalid_args_return(RuntimeContext *ctx, uint8_t *nextop, VALUE_t ret) {
-  set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS, NULL);
+  set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
+                         NULL, ctx ? ctx->current_item : NULL);
   push_stack(ctx->vm->stack, ret);
   return nextop;
 }
 
 static inline uint8_t *lc_invalid_args_detail_return(RuntimeContext *ctx, uint8_t *nextop, VALUE_t ret, const char *detail) {
-  set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS, detail);
+  set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
+                         detail, ctx ? ctx->current_item : NULL);
   push_stack(ctx->vm->stack, ret);
   return nextop;
 }

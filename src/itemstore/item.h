@@ -108,7 +108,8 @@ uint64_t get_itemstore_generation(void);
 // Other item-related API functions
 bool is_valid_layer(const char *str);
 void set_error_item(const int errnum, const char *errdetail);
-void set_error_item_on_root(ITEM_t *root, const int errnum, const char *errdetail);
+void set_error_item_on_root(ITEM_t *root, const int errnum,
+                            const char *errdetail, ITEM_t *current_item);
 void set_compiler_error_item(const CompilerDiagnostic *diag);
 void set_compiler_error_item_on_root(ITEM_t *root, const CompilerDiagnostic *diag);
 void clear_error_item(void);

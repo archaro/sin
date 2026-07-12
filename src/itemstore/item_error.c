@@ -53,6 +53,7 @@ void clear_error_item_on_root(ITEM_t *root) {
   if (!root) return;
   set_item(root, "error", VALUE_NIL);
   set_item(root, "error.msg", VALUE_NIL);
+  set_item(root, "error.item", VALUE_NIL);
   set_item(root, "error.code", VALUE_NIL);
   set_item(root, "error.stage", VALUE_NIL);
   set_item(root, "error.file", VALUE_NIL);
@@ -66,10 +67,11 @@ void clear_error_item(void) {
 }
 
 void set_error_item(const int errnum, const char *errdetail) {
-  set_error_item_on_root(config.itemroot, errnum, errdetail);
+  set_error_item_on_root(config.itemroot, errnum, errdetail, NULL);
 }
 
-void set_error_item_on_root(ITEM_t *root, const int errnum, const char *errdetail) {
+void set_error_item_on_root(ITEM_t *root, const int errnum,
+                            const char *errdetail, ITEM_t *current_item) {
   if (!root) return;
   // Helper function to set the error item.
   VALUE_t e, emsg;
@@ -89,6 +91,13 @@ void set_error_item_on_root(ITEM_t *root, const int errnum, const char *errdetai
     emsg.s = strdup(base);
   }
   set_item(root, "error.msg", emsg);
+  if (current_item) {
+    char itemname[MAX_ITEM_NAME] = {0};
+    get_itemname(current_item, itemname);
+    set_string_error_field_on_root(root, "error.item", itemname);
+  } else {
+    set_item(root, "error.item", VALUE_NIL);
+  }
   set_item(root, "error.code", VALUE_NIL);
   set_item(root, "error.stage", VALUE_NIL);
   set_item(root, "error.file", VALUE_NIL);
@@ -100,7 +109,7 @@ void set_error_item_on_root(ITEM_t *root, const int errnum, const char *errdetai
 void set_compiler_error_item_on_root(ITEM_t *root, const CompilerDiagnostic *diag) {
   if (!root) return;
   if (!diag) {
-    set_error_item_on_root(root, ERR_COMP_UNKNOWN, NULL);
+    set_error_item_on_root(root, ERR_COMP_UNKNOWN, NULL, NULL);
     return;
   }
 
@@ -123,7 +132,7 @@ void set_compiler_error_item_on_root(ITEM_t *root, const CompilerDiagnostic *dia
       "%s stage=%s file=%s line=%d column=%d message=%s excerpt=%s",
       stable_code, stage, file, line, column, message, excerpt);
   if (needed < 0) {
-    set_error_item_on_root(root, diag->code, message);
+    set_error_item_on_root(root, diag->code, message, NULL);
     return;
   }
 
@@ -134,6 +143,7 @@ void set_compiler_error_item_on_root(ITEM_t *root, const CompilerDiagnostic *dia
       "%s stage=%s file=%s line=%d column=%d message=%s excerpt=%s",
       stable_code, stage, file, line, column, message, excerpt);
   set_item(root, "error.msg", emsg);
+  set_item(root, "error.item", VALUE_NIL);
 
 
   set_string_error_field_on_root(root, "error.code", stable_code);

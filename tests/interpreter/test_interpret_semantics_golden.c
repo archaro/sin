@@ -246,6 +246,10 @@ void test_interpret_rejects_malformed_bytecode_before_execution(void) {
   ASSERT_EQ_INT(VALUE_str, msg->value.type);
   ASSERT_TRUE(strstr(msg->value.s, "Runtime bytecode validation failed") != NULL);
   ASSERT_TRUE(strstr(msg->value.s, "truncated") != NULL);
+  ITEM_t *error_item = find_item(config.itemroot, "error.item");
+  ASSERT_NOT_NULL(error_item);
+  ASSERT_EQ_INT(VALUE_str, error_item->value.type);
+  ASSERT_TRUE(strcmp(error_item->value.s, "malformed") == 0);
 
   destroy_vm(config.vm);
   destroy_item(config.itemroot);

@@ -105,3 +105,7 @@ and stack result are updated consistently. Domain failures that are not invalid
 arguments, such as missing items, unknown task ids, inactive network lines, or
 compiler diagnostics from valid `sys.compile` source strings, continue to use
 their own documented errors or non-error return values.
+
+Runtime errors also set `error.item` to the full name of the code item executing
+when the error was reported. Compiler diagnostics clear `error.item` to `nil`
+because they describe source text rather than the currently executing item.

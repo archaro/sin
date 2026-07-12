@@ -99,6 +99,9 @@ void test_sys_compile_libcall_runtime(void) {
   ASSERT_TRUE(strstr(msg_item->value.s, "column=") != NULL);
   ASSERT_TRUE(strstr(msg_item->value.s, "message=") != NULL);
   ASSERT_TRUE(strstr(msg_item->value.s, "excerpt=sys.log{;") != NULL);
+  ITEM_t *error_item = find_item(config.itemroot, "error.item");
+  ASSERT_NOT_NULL(error_item);
+  ASSERT_EQ_INT(VALUE_nil, error_item->value.type);
   assert_string_item("error.code", "SIN-PARSE-");
   assert_string_item("error.stage", "PARSE");
   assert_string_item("error.file", "<memory>");

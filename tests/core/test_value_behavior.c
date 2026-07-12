@@ -138,6 +138,10 @@ void test_error_item_preserves_compiler_diagnostic_fields(void) {
   ASSERT_TRUE(strstr(msg->value.s, "message=parse: unexpected character") != NULL);
   ASSERT_TRUE(strstr(msg->value.s, "excerpt=bad ^ token") != NULL);
 
+  ITEM_t *error_item = find_item(config.itemroot, "error.item");
+  ASSERT_NOT_NULL(error_item);
+  ASSERT_EQ_INT(VALUE_nil, error_item->value.type);
+
   ITEM_t *code = find_item(config.itemroot, "error.code");
   ASSERT_NOT_NULL(code);
   ASSERT_EQ_INT(VALUE_str, code->value.type);
@@ -956,6 +960,10 @@ void test_strict_validation_runtime_opt_in(void) {
   ASSERT_TRUE(strstr(msg->value.s, "test.strict_invalid_local") != NULL);
   ASSERT_TRUE(strstr(msg->value.s, "offset") != NULL);
   ASSERT_TRUE(strstr(msg->value.s, "local index") != NULL);
+  ITEM_t *error_item = find_item(config.itemroot, "error.item");
+  ASSERT_NOT_NULL(error_item);
+  ASSERT_EQ_INT(VALUE_str, error_item->value.type);
+  ASSERT_TRUE(strcmp(error_item->value.s, "test.strict_invalid_local") == 0);
   teardown_runtime();
 }
 
