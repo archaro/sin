@@ -4,7 +4,7 @@ LIBUV_PC ?= libuv
 # Default `make`/`make all` builds the debug variant. Override with
 # `BUILD=release` or `BUILD=sanitize`, or use the variant targets below.
 BUILD ?= debug
-CSTD ?= c18
+CSTD ?= c17
 
 SRC_DIR := src
 OBJ_DIR := obj
@@ -211,7 +211,7 @@ help:
 		'' \
 		'Common variables:' \
 		'  BUILD=debug|release|sanitize  Select build variant; default debug' \
-		'  CSTD=c18                      Select C standard passed as -std=$(CSTD)' \
+		'  CSTD=c17                      Select C standard passed as -std=$(CSTD)' \
 		'  CC=gcc                        Select compiler' \
 		'  PKG_CONFIG=pkg-config         Dependency discovery command' \
 		'  LIBUV_PC=libuv                pkg-config module for libuv' \
