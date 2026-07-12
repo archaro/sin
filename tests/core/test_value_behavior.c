@@ -9,6 +9,7 @@
 #include "interpret.h"
 #include "item.h"
 #include "compiler/compdiag.h"
+#include "stack.h"
 #include "test_assert.h"
 #include "value.h"
 #include "vm.h"
@@ -513,6 +514,41 @@ void test_value_bool_nil_truthiness_helpers(void) {
 
   value_free(&empty);
   value_free(&text);
+}
+
+void test_stack_peek_returns_top_pointer_without_popping(void) {
+  STACK_t *stack = make_stack();
+  ASSERT_NOT_NULL(stack);
+
+  ASSERT_TRUE(peek_stack(stack) == NULL);
+  ASSERT_EQ_INT(0, size_stack(stack));
+
+  VALUE_t first = {VALUE_int, {.i = 10}};
+  VALUE_t second = {VALUE_int, {.i = 20}};
+  push_stack(stack, first);
+  push_stack(stack, second);
+
+  int32_t current_before = stack->current;
+  VALUE_t *top = peek_stack(stack);
+  ASSERT_NOT_NULL(top);
+  ASSERT_TRUE(top == &stack->stack[current_before]);
+  ASSERT_EQ_INT(VALUE_int, top->type);
+  ASSERT_EQ_INT(20, top->i);
+  ASSERT_EQ_INT(current_before, stack->current);
+  ASSERT_EQ_INT(2, size_stack(stack));
+
+  top->i = 99;
+  VALUE_t popped = pop_stack(stack);
+  ASSERT_EQ_INT(VALUE_int, popped.type);
+  ASSERT_EQ_INT(99, popped.i);
+  ASSERT_EQ_INT(current_before - 1, stack->current);
+
+  popped = pop_stack(stack);
+  ASSERT_EQ_INT(VALUE_int, popped.type);
+  ASSERT_EQ_INT(10, popped.i);
+  ASSERT_TRUE(peek_stack(stack) == NULL);
+
+  destroy_stack(stack);
 }
 
 

@@ -83,14 +83,14 @@ void throwaway_stack(STACK_t *stack) {
   logerr("Stack cleared.\n");
 }
 
-VALUE_t peek_stack(STACK_t *stack) {
-  // Given a stack, return the value on the top of the stack
+VALUE_t *peek_stack(STACK_t *stack) {
+  // Given a stack, return a pointer to the value on the top of the stack
   // but DO NOT decrement the stack pointer.
   if (stack->current >= 0) {
-    return stack->stack[stack->current];
+    return &stack->stack[stack->current];
   }
   logerr("Peeking at empty stack.\n");
-  return VALUE_NIL;
+  return NULL;
 }
 
 int size_stack(STACK_t *stack) {

@@ -149,6 +149,7 @@ void test_value_float_arithmetic_helpers(void);
 void test_value_float_arithmetic_interpreter_bytecode(void);
 void test_value_string_concat_helpers(void);
 void test_value_bool_nil_truthiness_helpers(void);
+void test_stack_peek_returns_top_pointer_without_popping(void);
 void test_value_float_construction_copy_truthiness_cleanup(void);
 void test_value_string_local_load_store_clones(void);
 void test_value_float_item_fetch_preserves_bits(void);
@@ -277,6 +278,8 @@ static const test_case_t core_tests[] = {
     {"test_value_float_arithmetic_interpreter_bytecode", test_value_float_arithmetic_interpreter_bytecode},
     {"test_value_string_concat_helpers", test_value_string_concat_helpers},
     {"test_value_bool_nil_truthiness_helpers", test_value_bool_nil_truthiness_helpers},
+    {"test_stack_peek_returns_top_pointer_without_popping",
+     test_stack_peek_returns_top_pointer_without_popping},
     {"test_value_float_construction_copy_truthiness_cleanup", test_value_float_construction_copy_truthiness_cleanup},
     {"test_value_string_local_load_store_clones", test_value_string_local_load_store_clones},
     {"test_value_float_item_fetch_preserves_bits", test_value_float_item_fetch_preserves_bits},

@@ -410,17 +410,17 @@ uint8_t *op_getlocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (index < 0 || index >= STACK_SIZE) return NULL;
 
   push_stack(VM->stack, value_clone(&VM->stack->stack[index]));
-  VALUE_t v;
-  v = peek_stack(VM->stack);
-  switch (v.type) {
+  VALUE_t *v = peek_stack(VM->stack);
+  if (!v) return NULL;
+  switch (v->type) {
     case VALUE_int:
-      logverbose("OP_GETLOCAL: index %d value %d.\n", index, v.i);
+      logverbose("OP_GETLOCAL: index %d value %d.\n", index, v->i);
       break;
     case VALUE_str:
-      logverbose("OP_GETLOCAL: index %d value '%s'.\n", index, v.s);
+      logverbose("OP_GETLOCAL: index %d value '%s'.\n", index, v->s);
       break;
     default:
-      logverbose("OP_GETLOCAL: index %d type %d.\n", index, v.type);
+      logverbose("OP_GETLOCAL: index %d type %d.\n", index, v->type);
   }
   return nextop;
 }
