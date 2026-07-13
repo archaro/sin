@@ -58,6 +58,21 @@ static bool str_find_popped(VALUE_t haystack, VALUE_t needle,
   return true;
 }
 
+static bool str_equal_casei(const char *left, const char *right) {
+  while (*left && *right) {
+    unsigned char l = (unsigned char)*left;
+    unsigned char r = (unsigned char)*right;
+    if (l != r) {
+      if (l >= 'A' && l <= 'Z') l = (unsigned char)(l + ('a' - 'A'));
+      if (r >= 'A' && r <= 'Z') r = (unsigned char)(r + ('a' - 'A'));
+      if (l != r) return false;
+    }
+    left++;
+    right++;
+  }
+  return *left == *right;
+}
+
 static uint8_t *lc_str_affix(RuntimeContext *ctx, uint8_t *nextop,
                              bool suffix, const char *detail) {
   VALUE_t needle = pop_stack(ctx->vm->stack);
@@ -347,4 +362,33 @@ uint8_t *lc_str_endswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   return lc_str_affix(ctx, nextop, true,
       "str.endswith haystack and needle must be strings");
+}
+
+uint8_t *lc_str_eqcasei(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume two strings from the stack and push true if they match
+  // (case-insensitive), otherwise false.
+  // Stack order is left, right, with right on top.
+  // Invalid input is consumed and replaced with false.
+  (void)item;
+
+  // Instructions:
+  // If either value is not a string, return false.
+  // If the strings are a case-insensitive match return true.
+  // Otherwise return false.
+
+  VALUE_t right = pop_stack(ctx->vm->stack);
+  VALUE_t left = pop_stack(ctx->vm->stack);
+
+  if (left.type != VALUE_str || right.type != VALUE_str) {
+    VALUE_t args[] = {right, left};
+    lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_FALSE,
+        "str.eqcasei arguments must be strings");
+  }
+
+  VALUE_t ret = str_equal_casei(left.s, right.s) ? VALUE_TRUE : VALUE_FALSE;
+  FREE_STR(right);
+  FREE_STR(left);
+  push_stack(ctx->vm->stack, ret);
+  return nextop;
 }

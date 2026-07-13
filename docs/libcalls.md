@@ -14,7 +14,8 @@ consumes the argument values, sets `error` to `ERR_RUNTIME_INVALIDARGS`, sets
 `error.msg` to a libcall-specific diagnostic, and returns that libcall's
 documented invalid-argument value. Current invalid-argument return shapes are
 `false` for `sys.compile{source}`, `str.contains`, `str.startswith`, and
-`str.endswith`; `nil` for task, network, and other string libcalls.
+`str.endswith`, and `str.eqcasei`; `nil` for task, network, and other string
+libcalls.
 Failures that are not invalid arguments keep their own contract; for example a
 missing task item sets the no-such-item error, an unknown task id returns
 `false` without changing `error`, and an inactive network line returns `nil`
@@ -50,3 +51,4 @@ Examples:
 | `str.lower{text}` | `str` | `lower` | 1 | `text` must evaluate to a string; non-string values are invalid. | The same string value with all bytes lowercased; `nil` for invalid non-string input. | Mutates the string value on top of the VM stack. | Non-string input sets the runtime invalid-arguments error and returns `nil`. | `@quiet = str.lower{"LOUD"};` |
 | `str.startswith{text, prefix}` | `str` | `startswith` | 2 | `text` and `prefix` must evaluate to strings. | `true` when `text` starts with `prefix`, case-sensitively; otherwise `false`. Empty `prefix` matches. | None. | Invalid argument types set the runtime invalid-arguments error and return `false`. | `str.startswith{"look north", "look"};` |
 | `str.endswith{text, suffix}` | `str` | `endswith` | 2 | `text` and `suffix` must evaluate to strings. | `true` when `text` ends with `suffix`, case-sensitively; otherwise `false`. Empty `suffix` matches. | None. | Invalid argument types set the runtime invalid-arguments error and return `false`. | `str.endswith{"read sign", "sign"};` |
+| `str.eqcasei{left, right}` | `str` | `eqcasei` | 2 | `left` and `right` must evaluate to strings. | `true` when the strings are equal after ASCII case folding; otherwise `false`. | None. | Invalid argument types set the runtime invalid-arguments error and return `false`. | `str.eqcasei{"Look", "look"};` |

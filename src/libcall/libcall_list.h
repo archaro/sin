@@ -27,4 +27,5 @@
   X("str",  "find",        4,  8, 2, lc_str_find) \
   X("str",  "contains",    4,  9, 2, lc_str_contains) \
   X("str",  "startswith",  4, 10, 2, lc_str_startswith) \
-  X("str",  "endswith",    4, 11, 2, lc_str_endswith)
+  X("str",  "endswith",    4, 11, 2, lc_str_endswith) \
+  X("str",  "eqcasei",     4, 12, 2, lc_str_eqcasei)

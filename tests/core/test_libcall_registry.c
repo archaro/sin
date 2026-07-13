@@ -32,6 +32,7 @@ uint8_t *lc_str_find(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_contains(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_startswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_endswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_eqcasei(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 extern LINE_t *line;
 extern CONFIG_t config;
@@ -735,6 +736,19 @@ void test_str_startswith_and_endswith_return_expected_results(void) {
   teardown_libcall_runtime();
 }
 
+void test_str_eqcasei_returns_expected_results(void) {
+  setup_libcall_runtime();
+
+  assert_str_affix_result(lc_str_eqcasei, "abcdef", "ABCDEF", 1);
+  assert_str_affix_result(lc_str_eqcasei, "MiXeD 123!", "mixed 123!", 1);
+  assert_str_affix_result(lc_str_eqcasei, "", "", 1);
+  assert_str_affix_result(lc_str_eqcasei, "abcdef", "abcdeg", 0);
+  assert_str_affix_result(lc_str_eqcasei, "abcdef", "abc", 0);
+  assert_str_affix_result(lc_str_eqcasei, "abc", "abcdef", 0);
+
+  teardown_libcall_runtime();
+}
+
 void test_str_find_and_contains_invalid_args_return_contracts(void) {
   setup_libcall_runtime();
 
@@ -781,6 +795,28 @@ void test_str_startswith_and_endswith_invalid_args_return_contracts(void) {
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
   assert_invalid_args_detail_contains("str.endswith");
+
+  teardown_libcall_runtime();
+}
+
+void test_str_eqcasei_invalid_args_return_contracts(void) {
+  setup_libcall_runtime();
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("right")}});
+  (void)lc_str_eqcasei(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  assert_invalid_args_detail_contains("str.eqcasei");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("left")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
+  (void)lc_str_eqcasei(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  assert_invalid_args_detail_contains("str.eqcasei");
 
   teardown_libcall_runtime();
 }

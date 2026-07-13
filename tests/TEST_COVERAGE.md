@@ -130,6 +130,8 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_str_find_and_contains_invalid_args_return_contracts`
     - `test_str_startswith_and_endswith_return_expected_results`
     - `test_str_startswith_and_endswith_invalid_args_return_contracts`
+    - `test_str_eqcasei_returns_expected_results`
+    - `test_str_eqcasei_invalid_args_return_contracts`
     - `test_str_libcall_invalidargs_uses_context_itemroot`
     - `test_libcall_output_formats_values`
     - `test_net_write_ignores_non_writable_lines`
