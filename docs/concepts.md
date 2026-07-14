@@ -150,10 +150,11 @@ The `task` library is for anything relating to network activity:
 `task.newgametask{<expr>, <integer>, <integer>}` evaluates the first argument and, if it comes out as an existing code item, evaluate the second and third arguments.  The second argument, if it evaluates to a non-negative integer, is the number of tenths of a second after which the item in the first argument will be executed.  The third argument, if it evaluates to a non-negative integer, is the interval (expressed in tenths of a second) between executions of the item.  Negative start or repeat intervals are invalid, as are intervals above `INT64_MAX / 100` because they cannot be safely converted to timer milliseconds.  If both the second and third arguments evaluate to 0, the task is scheduled immediately and does not repeat.  If the interval is greater than 0, the task will repeat endlessly until killed.  Returns an integer, which is the task id.
 `task.killtask{<integer>}` takes one argument, which evaluates to the id of the task to be killed.  If the argument is not an integer, the libcall sets `ERR_RUNTIME_INVALIDARGS` and returns `nil`.  If the task does not exist, the libcall returns `false` without changing `error`.  Otherwise, the task is removed from the list of scheduled tasks and the libcall returns `true`.
 
-The `str` library contains libcalls which operate on string values.  They have no effect on non-string values:  
+The `str` library contains libcalls which operate on or produce string values:  
 `str.capitalise{<expr>}` capitalises the first letter of the given string.  
 `str.lower{<expr>}` converts the whole string to lowercase.  
 `str.upper{<expr>}` converts the whole string to uppercase.  
+`str.valtostr{<expr>}` converts a value to a string, passing strings through unchanged.  
 
 
 ## Opcode schema workflow

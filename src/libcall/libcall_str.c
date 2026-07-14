@@ -1,6 +1,9 @@
 #include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include "floatconv.h"
 #include "item.h"
 #include "libcall_common.h"
 #include "libcall_handlers.h"
@@ -390,5 +393,44 @@ uint8_t *lc_str_eqcasei(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   FREE_STR(right);
   FREE_STR(left);
   push_stack(ctx->vm->stack, ret);
+  return nextop;
+}
+
+uint8_t *lc_str_valtostr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Convert the value on top of the stack to string text. Strings are already
+  // stack-owned string values, so they are passed through unchanged.
+  (void)item;
+
+  VALUE_t *top = peek_stack(ctx->vm->stack);
+  if (!top) return nextop;
+  if (top->type == VALUE_str) return nextop;
+
+  VALUE_t val = pop_stack(ctx->vm->stack);
+  char *out = NULL;
+  switch (val.type) {
+    case VALUE_int: {
+      char buffer[22];
+      int len = snprintf(buffer, sizeof(buffer), "%ld", val.i);
+      if (len > 0) out = strdup(buffer);
+      break;
+    }
+    case VALUE_float:
+      out = sin_format_binary64(val.f);
+      break;
+    case VALUE_bool:
+      out = strdup(val.i ? "true" : "false");
+      break;
+    case VALUE_nil:
+      out = strdup("nil");
+      break;
+    case VALUE_str:
+      break;
+  }
+
+  if (!out) {
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = out}});
   return nextop;
 }

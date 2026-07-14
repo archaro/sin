@@ -24,6 +24,7 @@ uint8_t *lc_str_capitalise(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_upper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_lower(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_len(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_valtostr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_trim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_ltrim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_rtrim(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -212,6 +213,15 @@ static void assert_str_substr_result(const char *input, int64_t start,
   FREE_STR(ret);
 }
 
+static void assert_str_valtostr_result(VALUE_t input, const char *expected) {
+  push_stack(config.vm->stack, input);
+  (void)lc_str_valtostr(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, ret.type);
+  ASSERT_TRUE(strcmp(ret.s, expected) == 0);
+  FREE_STR(ret);
+}
+
 static void assert_str_find_result(const char *haystack, const char *needle,
                                    int64_t expected) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(haystack)}});
@@ -300,6 +310,10 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_TRUE(libcall_token_arg_count(token, &args));
   ASSERT_EQ_INT(3, args);
   ASSERT_TRUE(!libcall_lookup_token("missing", "missing", &token, &args));
+
+  ASSERT_TRUE(libcall_lookup_token("str", "valtostr", &token, &args));
+  ASSERT_EQ_INT(1, args);
+  ASSERT_NOT_NULL(libcall_func_token(token));
 
   alloc_test_fail_after(0);
   token = 0;
@@ -608,6 +622,28 @@ void test_str_len_returns_string_byte_length(void) {
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_int, ret.type);
   ASSERT_EQ_INT(0, ret.i);
+
+  teardown_libcall_runtime();
+}
+
+void test_str_valtostr_converts_values_to_strings(void) {
+  setup_libcall_runtime();
+
+  assert_str_valtostr_result((VALUE_t){VALUE_int, {.i = -42}}, "-42");
+  assert_str_valtostr_result((VALUE_t){VALUE_float, {.f = 3.5}}, "3.5");
+  assert_str_valtostr_result((VALUE_t){VALUE_bool, {.i = 1}}, "true");
+  assert_str_valtostr_result((VALUE_t){VALUE_bool, {.i = 0}}, "false");
+  assert_str_valtostr_result(VALUE_NIL, "nil");
+
+  char *original = strdup("already text");
+  ASSERT_NOT_NULL(original);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = original}});
+  (void)lc_str_valtostr(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, ret.type);
+  ASSERT_TRUE(ret.s == original);
+  ASSERT_TRUE(strcmp(ret.s, "already text") == 0);
+  FREE_STR(ret);
 
   teardown_libcall_runtime();
 }

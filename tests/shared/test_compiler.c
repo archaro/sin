@@ -129,6 +129,7 @@ void test_libcall_float_integer_only_arguments_rejected(void);
 void test_libcall_output_formats_values(void);
 void test_str_libcalls_float_returns_invalidargs_nil(void);
 void test_str_len_returns_string_byte_length(void);
+void test_str_valtostr_converts_values_to_strings(void);
 void test_str_case_libcalls_mutate_strings_in_place(void);
 void test_str_trim_libcalls_return_trimmed_strings(void);
 void test_str_substr_returns_requested_byte_range(void);
@@ -360,6 +361,7 @@ static const test_case_t runtime_tests[] = {
     {"test_libcall_float_integer_only_arguments_rejected", test_libcall_float_integer_only_arguments_rejected},
     {"test_str_libcalls_float_returns_invalidargs_nil", test_str_libcalls_float_returns_invalidargs_nil},
     {"test_str_len_returns_string_byte_length", test_str_len_returns_string_byte_length},
+    {"test_str_valtostr_converts_values_to_strings", test_str_valtostr_converts_values_to_strings},
     {"test_str_case_libcalls_mutate_strings_in_place", test_str_case_libcalls_mutate_strings_in_place},
     {"test_str_trim_libcalls_return_trimmed_strings", test_str_trim_libcalls_return_trimmed_strings},
     {"test_str_substr_returns_requested_byte_range", test_str_substr_returns_requested_byte_range},
