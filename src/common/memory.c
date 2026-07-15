@@ -59,6 +59,17 @@ bool alloc_grow_array(void **ptr, size_t newcap, size_t elem_size) {
   return true;
 }
 
+bool alloc_grow_array_capacity(void **ptr, size_t *capacity, size_t required,
+                               size_t elem_size) {
+  size_t newcap = 0;
+  if (!ptr || !capacity) return false;
+  if (required <= *capacity) return true;
+  if (!alloc_grow_capacity(*capacity, required, &newcap)) return false;
+  if (!alloc_grow_array(ptr, newcap, elem_size)) return false;
+  *capacity = newcap;
+  return true;
+}
+
 void alloc_test_fail_after(long nth_allocation) { g_fail_after = nth_allocation; g_alloc_counter = 0; }
 
 void* alloc_malloc(size_t size) {

@@ -20,4 +20,6 @@ bool alloc_mul_overflow(size_t a, size_t b, size_t *out);
 bool alloc_add_overflow(size_t a, size_t b, size_t *out);
 bool alloc_grow_capacity(size_t oldcap, size_t needed, size_t *newcap);
 bool alloc_grow_array(void **ptr, size_t newcap, size_t elem_size);
+bool alloc_grow_array_capacity(void **ptr, size_t *capacity, size_t required,
+                               size_t elem_size);
 void alloc_test_fail_after(long nth_allocation);

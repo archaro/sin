@@ -59,19 +59,12 @@ void retire_task_id(uint64_t id) {
     return;
   }
   if (top_of_id_stack == capacity_of_id_stack) {
-    size_t new_capacity = capacity_of_id_stack ? capacity_of_id_stack * 2u : 256u;
-    size_t bytes = 0;
-    if (new_capacity < capacity_of_id_stack ||
-        alloc_mul_overflow(new_capacity, sizeof *id_stack, &bytes)) {
-      logerr("Unable to retire task id: id stack size overflow.\n");
-      return;
-    }
-    uint64_t *new_stack = realloc(id_stack, bytes);
-    if (!new_stack) {
+    size_t new_capacity = capacity_of_id_stack;
+    if (!alloc_grow_array_capacity((void **)&id_stack, &new_capacity,
+                                   top_of_id_stack + 1u, sizeof *id_stack)) {
       logerr("Unable to retire task id: id stack allocation failed.\n");
       return;
     }
-    id_stack = new_stack;
     capacity_of_id_stack = new_capacity;
   }
   id_stack[top_of_id_stack++] = id;

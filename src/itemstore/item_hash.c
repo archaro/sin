@@ -76,19 +76,13 @@ void resize_ordered_array(ITEM_t *item) {
   if (item->ordered_size < item->ordered_capacity) return;
 
   size_t required = item->ordered_size + 1;
-  size_t new_capacity = item->ordered_capacity > 0
-      ? item->ordered_capacity
-      : ITEM_ARRAY_INIT_CAPACITY;
-  while (new_capacity < required) {
-    if (new_capacity > SIZE_MAX / 2) {
-      logerr("Cannot grow ordered item array beyond %zu entries.\n",
-             new_capacity);
-      abort();
-    }
-    new_capacity *= 2;
+  size_t new_capacity = item->ordered_capacity > 0 ? item->ordered_capacity : ITEM_ARRAY_INIT_CAPACITY;
+  if (!alloc_grow_array_capacity((void **)&item->ordered_array, &new_capacity,
+                                 required, sizeof *item->ordered_array)) {
+    logerr("Cannot grow ordered item array beyond %zu entries.\n",
+           item->ordered_capacity);
+    abort();
   }
-  item->ordered_array = (ITEM_t **)realloc(
-      item->ordered_array, new_capacity * sizeof(ITEM_t *));
   item->ordered_capacity = new_capacity;
 }
 

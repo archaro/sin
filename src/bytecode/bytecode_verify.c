@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "libcall.h"
+#include "memory.h"
 #include "stack.h"
 #include "string_limits.h"
 
@@ -338,11 +339,13 @@ static int bc_validate_local_index(BC_Decoder *d, const uint8_t *p,
 static int bc_record_jump(BC_Decoder *d, const uint8_t *operand_start,
                           uint8_t opcode) {
   if (d->jump_count == d->jump_capacity) {
-    uint32_t new_capacity = d->jump_capacity == 0 ? 8 : d->jump_capacity * 2;
-    BC_JumpRef *new_jumps = realloc(d->jumps, new_capacity * sizeof(*new_jumps));
-    if (!new_jumps) return bc_fail(d, operand_start, opcode, "out of memory recording jump target");
-    d->jumps = new_jumps;
-    d->jump_capacity = new_capacity;
+    size_t new_capacity = d->jump_capacity;
+    if (!alloc_grow_array_capacity((void **)&d->jumps, &new_capacity,
+                                   (size_t)d->jump_count + 1u, sizeof *d->jumps) ||
+        new_capacity > UINT32_MAX) {
+      return bc_fail(d, operand_start, opcode, "out of memory recording jump target");
+    }
+    d->jump_capacity = (uint32_t)new_capacity;
   }
   uint16_t raw = (uint16_t)operand_start[0] | ((uint16_t)operand_start[1] << 8);
   d->jumps[d->jump_count++] = (BC_JumpRef){

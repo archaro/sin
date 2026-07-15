@@ -66,9 +66,10 @@ static void sem_set_oom_error(SEM_CTX *ctx, const char *what) {
 
 static bool sem_grow_local_tables(SEM_CTX *ctx) {
   if (ctx->count == ctx->capacity) {
-    size_t new_capacity = ctx->capacity == 0 ? 8u : (size_t)ctx->capacity * 2u;
-    if (new_capacity > UINT32_MAX ||
-        !alloc_grow_array((void **)&ctx->locals, new_capacity, sizeof *ctx->locals)) {
+    size_t new_capacity = ctx->capacity;
+    if (!alloc_grow_array_capacity((void **)&ctx->locals, &new_capacity,
+                                   (size_t)ctx->count + 1u, sizeof *ctx->locals) ||
+        new_capacity > UINT32_MAX) {
       sem_set_oom_error(ctx, "out of memory growing local table");
       return false;
     }
@@ -76,9 +77,10 @@ static bool sem_grow_local_tables(SEM_CTX *ctx) {
   }
 
   if (ctx->count == ctx->index_capacity) {
-    size_t new_capacity = ctx->index_capacity == 0 ? 8u : (size_t)ctx->index_capacity * 2u;
-    if (new_capacity > UINT32_MAX ||
-        !alloc_grow_array((void **)&ctx->local_index, new_capacity, sizeof *ctx->local_index)) {
+    size_t new_capacity = ctx->index_capacity;
+    if (!alloc_grow_array_capacity((void **)&ctx->local_index, &new_capacity,
+                                   (size_t)ctx->count + 1u, sizeof *ctx->local_index) ||
+        new_capacity > UINT32_MAX) {
       sem_set_oom_error(ctx, "out of memory growing local index");
       return false;
     }
