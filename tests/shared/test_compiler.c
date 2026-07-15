@@ -186,6 +186,7 @@ void test_value_comparison_float_ieee754_helpers(void);
 void test_value_comparison_string_helpers(void);
 void test_value_comparison_mismatched_type_equality_quirk(void);
 void test_value_comparison_unsupported_ordering_is_false(void);
+void test_runtime_decode_requires_frame_bounds(void);
 void test_interpreter_truncated_single_byte_operands(void);
 void test_strict_runtime_contracts_default_preserves_fetch_argument_drops(void);
 void test_strict_validation_alone_preserves_fetch_argument_drops(void);
@@ -318,6 +319,7 @@ static const test_case_t core_tests[] = {
     {"test_value_comparison_string_helpers", test_value_comparison_string_helpers},
     {"test_value_comparison_mismatched_type_equality_quirk", test_value_comparison_mismatched_type_equality_quirk},
     {"test_value_comparison_unsupported_ordering_is_false", test_value_comparison_unsupported_ordering_is_false},
+    {"test_runtime_decode_requires_frame_bounds", test_runtime_decode_requires_frame_bounds},
     {"test_interpreter_truncated_single_byte_operands", test_interpreter_truncated_single_byte_operands},
     {"test_strict_runtime_contracts_default_preserves_fetch_argument_drops", test_strict_runtime_contracts_default_preserves_fetch_argument_drops},
     {"test_strict_validation_alone_preserves_fetch_argument_drops", test_strict_validation_alone_preserves_fetch_argument_drops},

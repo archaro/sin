@@ -33,9 +33,10 @@ void runtime_decoder_init(RuntimeDecoder *decoder, const uint8_t *frame_start, c
 
 /*
  * Ensure that bytes are available at nextop without advancing nextop.
+ * Callers must pass a decoder initialized with the active bytecode frame
+ * bounds; missing bounds are treated as a truncated decode.
  * Returns RUNTIME_DECODE_TRUNCATED with a stable detail string when the
- * requested range is outside the decoder frame. A decoder with a NULL start
- * or end is treated as unbounded for compatibility with legacy callers.
+ * requested range is outside the decoder frame.
  */
 RuntimeDecodeStatus require_bytes(const RuntimeDecoder *decoder, uint8_t *nextop, size_t bytes, const char *opname);
 

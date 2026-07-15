@@ -9,6 +9,7 @@
 #include "interpret.h"
 #include "item.h"
 #include "compiler/compdiag.h"
+#include "runtime_decode.h"
 #include "runtime_value.h"
 #include "stack.h"
 #include "string_limits.h"
@@ -84,6 +85,24 @@ static void assert_truncated_bytecode_for_opcode(const char *name, uint8_t opcod
   ASSERT_EQ_INT(VALUE_str, msg->value.type);
   ASSERT_TRUE(strstr(msg->value.s, opname) != NULL);
   ASSERT_TRUE(strstr(msg->value.s, "truncated bytecode read") != NULL);
+}
+
+void test_runtime_decode_requires_frame_bounds(void) {
+  uint8_t code[] = {1, 2, 3};
+  RuntimeDecodeStatus status = require_bytes(NULL, code, 1, "TEST");
+  ASSERT_EQ_INT(RUNTIME_DECODE_TRUNCATED, status.code);
+  ASSERT_TRUE(status.next == NULL);
+  ASSERT_TRUE(strstr(status.detail, "TEST") != NULL);
+
+  RuntimeDecoder decoder;
+  runtime_decoder_init(&decoder, code, code + sizeof(code));
+  status = require_bytes(&decoder, code, sizeof(code), "TEST");
+  ASSERT_EQ_INT(RUNTIME_DECODE_OK, status.code);
+  ASSERT_TRUE(status.next == code);
+
+  status = require_bytes(&decoder, code + sizeof(code), 1, "TEST");
+  ASSERT_EQ_INT(RUNTIME_DECODE_TRUNCATED, status.code);
+  ASSERT_TRUE(status.next == NULL);
 }
 
 static VALUE_t run_float_unary(uint64_t bits, uint8_t op, const char *name) {

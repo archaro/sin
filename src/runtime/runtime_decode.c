@@ -34,7 +34,9 @@ static RuntimeDecodeStatus runtime_decode_truncated(size_t bytes, const char *op
 }
 
 RuntimeDecodeStatus require_bytes(const RuntimeDecoder *decoder, uint8_t *nextop, size_t bytes, const char *opname) {
-  if (!decoder || !decoder->frame_start || !decoder->frame_end) return runtime_decode_ok(nextop);
+  if (!decoder || !decoder->frame_start || !decoder->frame_end) {
+    return runtime_decode_truncated(bytes, opname);
+  }
   if ((const uint8_t *)nextop > decoder->frame_end || (size_t)(decoder->frame_end - (const uint8_t *)nextop) < bytes) {
     return runtime_decode_truncated(bytes, opname);
   }
