@@ -48,6 +48,17 @@ void execute_task_cb(uv_timer_t *req) {
   }
 }
 
+static uint8_t *lc_task_timer_setup_failed(RuntimeContext *ctx, uint8_t *nextop,
+                                           TASK_t *task, VALUE_t *itemname,
+                                           const char *detail) {
+  if (task) destroy_task(task);
+  if (itemname) FREE_STR(*itemname);
+  push_stack(ctx->vm->stack, VALUE_NIL);
+  set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
+                         detail, ctx ? ctx->current_item : NULL);
+  return nextop;
+}
+
 uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Create a new game task.  There are three values on the stack:
   // name of the item to execute, time until first execution, and
@@ -107,14 +118,27 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   (void)runtime_init(&newtask->runtime_context, newtask->vm);
   newtask->runtime_context.itemroot = newtask->itemroot;
   newtask->runtime_context.loop = newtask->loop;
-  // Success path: this is the only free on this path (the !taskitem branch returns).
-  FREE_STR(itemname);
   // Now add the task to the game loop starting at the correct interval
-  uv_timer_init(ctx->loop, newtask->timer);
+  if (!ctx->loop) {
+    return lc_task_timer_setup_failed(ctx, nextop, newtask, &itemname,
+                                      "task.newgametask requires an active event loop");
+  }
+  int timer_rc = uv_timer_init(ctx->loop, newtask->timer);
+  if (timer_rc != 0) {
+    return lc_task_timer_setup_failed(ctx, nextop, newtask, &itemname,
+                                      "task.newgametask failed to initialize timer");
+  }
   // The handle needs to be able to access its task
   newtask->timer->data = newtask;
   // Off we go!
-  uv_timer_start(newtask->timer, execute_task_cb, start_ms, repeat_ms);
+  timer_rc = uv_timer_start(newtask->timer, execute_task_cb, start_ms, repeat_ms);
+  if (timer_rc != 0) {
+    uv_timer_stop(newtask->timer);
+    return lc_task_timer_setup_failed(ctx, nextop, newtask, &itemname,
+                                      "task.newgametask failed to start timer");
+  }
+  // Success path: this is the only free on this path (the !taskitem branch returns).
+  FREE_STR(itemname);
 
   // libcalls always return a value. In this case, the id of the task.
   VALUE_t ret = {VALUE_int, {(int64_t)newtask->id}};

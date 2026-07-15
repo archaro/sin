@@ -124,6 +124,7 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void);
 void test_libcall_registry_self_check_invalid_entries(void);
 void test_libcall_invalid_arg_branches_return_contracts(void);
 void test_newgametask_rejects_invalid_intervals_before_timer_start(void);
+void test_newgametask_rejects_missing_event_loop_before_returning_task_id(void);
 void test_net_write_ignores_non_writable_lines(void);
 void test_libcall_float_integer_only_arguments_rejected(void);
 void test_libcall_output_formats_values(void);
@@ -368,6 +369,7 @@ static const test_case_t runtime_tests[] = {
     {"test_libcall_registry_self_check_invalid_entries", test_libcall_registry_self_check_invalid_entries},
     {"test_libcall_invalid_arg_branches_return_contracts", test_libcall_invalid_arg_branches_return_contracts},
     {"test_newgametask_rejects_invalid_intervals_before_timer_start", test_newgametask_rejects_invalid_intervals_before_timer_start},
+    {"test_newgametask_rejects_missing_event_loop_before_returning_task_id", test_newgametask_rejects_missing_event_loop_before_returning_task_id},
     {"test_net_write_ignores_non_writable_lines", test_net_write_ignores_non_writable_lines},
     {"test_libcall_float_integer_only_arguments_rejected", test_libcall_float_integer_only_arguments_rejected},
     {"test_str_libcalls_float_returns_invalidargs_nil", test_str_libcalls_float_returns_invalidargs_nil},

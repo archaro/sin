@@ -10,6 +10,7 @@
 #include "interpret.h"
 #include "item.h"
 #include "test_assert.h"
+#include "task.h"
 #include "vm.h"
 #include "memory.h"
 #include "string_limits.h"
@@ -564,6 +565,30 @@ void test_newgametask_rejects_invalid_intervals_before_timer_start(void) {
   assert_newgametask_invalid_interval_returns_nil(-1, -1);
   assert_newgametask_invalid_interval_returns_nil((INT64_MAX / 100) + 1, 1);
   assert_newgametask_invalid_interval_returns_nil(1, (INT64_MAX / 100) + 1);
+
+  teardown_libcall_runtime();
+}
+
+void test_newgametask_rejects_missing_event_loop_before_returning_task_id(void) {
+  setup_libcall_runtime();
+
+  uint8_t *bytecode = malloc(1);
+  ASSERT_NOT_NULL(bytecode);
+  bytecode[0] = 'h';
+  ASSERT_NOT_NULL(insert_code_item(config.itemroot, "valid.loopless.task", 1, bytecode));
+
+  RuntimeContext *ctx = test_ctx();
+  ctx->loop = NULL;
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("valid.loopless.task")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_task_newgametask(ctx, NULL, config.itemroot);
+
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("task.newgametask requires an active event loop");
+  ASSERT_TRUE(find_task_by_id(1) == NULL);
 
   teardown_libcall_runtime();
 }
