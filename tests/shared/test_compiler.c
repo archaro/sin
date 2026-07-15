@@ -144,6 +144,8 @@ void test_str_replace_returns_expected_results(void);
 void test_str_replace_invalid_args_return_nil(void);
 void test_str_repeat_returns_expected_results(void);
 void test_str_repeat_invalid_args_return_nil(void);
+void test_str_padleft_and_padright_return_expected_results(void);
+void test_str_padleft_and_padright_invalid_args_return_nil(void);
 void test_str_libcall_invalidargs_uses_context_itemroot(void);
 void test_relative_item_leading_dot_parse_accepts_deref_chain(void);
 void test_relative_item_leading_dot_nested_relative_deref_layers(void);
@@ -380,6 +382,8 @@ static const test_case_t runtime_tests[] = {
     {"test_str_replace_invalid_args_return_nil", test_str_replace_invalid_args_return_nil},
     {"test_str_repeat_returns_expected_results", test_str_repeat_returns_expected_results},
     {"test_str_repeat_invalid_args_return_nil", test_str_repeat_invalid_args_return_nil},
+    {"test_str_padleft_and_padright_return_expected_results", test_str_padleft_and_padright_return_expected_results},
+    {"test_str_padleft_and_padright_invalid_args_return_nil", test_str_padleft_and_padright_invalid_args_return_nil},
     {"test_str_libcall_invalidargs_uses_context_itemroot", test_str_libcall_invalidargs_uses_context_itemroot},
     {"test_libcall_output_formats_values", test_libcall_output_formats_values},
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},

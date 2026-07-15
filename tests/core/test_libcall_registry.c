@@ -36,6 +36,8 @@ uint8_t *lc_str_endswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_eqcasei(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_replace(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_repeat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_padleft(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_padright(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 extern LINE_t *line;
 extern CONFIG_t config;
@@ -248,6 +250,18 @@ static void assert_str_repeat_result(const char *text, int64_t count,
   FREE_STR(ret);
 }
 
+static void assert_str_pad_result(
+    uint8_t *(*func)(RuntimeContext *, uint8_t *, ITEM_t *),
+    const char *text, int64_t width, const char *expected) {
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(text)}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = width}});
+  (void)func(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, ret.type);
+  ASSERT_TRUE(strcmp(ret.s, expected) == 0);
+  FREE_STR(ret);
+}
+
 static void assert_str_find_result(const char *haystack, const char *needle,
                                    int64_t expected) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(haystack)}});
@@ -344,6 +358,12 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_EQ_INT(3, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
   ASSERT_TRUE(libcall_lookup_token("str", "repeat", &token, &args));
+  ASSERT_EQ_INT(2, args);
+  ASSERT_NOT_NULL(libcall_func_token(token));
+  ASSERT_TRUE(libcall_lookup_token("str", "padleft", &token, &args));
+  ASSERT_EQ_INT(2, args);
+  ASSERT_NOT_NULL(libcall_func_token(token));
+  ASSERT_TRUE(libcall_lookup_token("str", "padright", &token, &args));
   ASSERT_EQ_INT(2, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
 
@@ -841,6 +861,19 @@ void test_str_repeat_returns_expected_results(void) {
   teardown_libcall_runtime();
 }
 
+void test_str_padleft_and_padright_return_expected_results(void) {
+  setup_libcall_runtime();
+
+  assert_str_pad_result(lc_str_padleft, "abc", 5, "  abc");
+  assert_str_pad_result(lc_str_padright, "abc", 5, "abc  ");
+  assert_str_pad_result(lc_str_padleft, "abc", 3, "abc");
+  assert_str_pad_result(lc_str_padright, "abc", 2, "abc");
+  assert_str_pad_result(lc_str_padleft, "", 2, "  ");
+  assert_str_pad_result(lc_str_padright, "", 2, "  ");
+
+  teardown_libcall_runtime();
+}
+
 void test_str_find_and_contains_invalid_args_return_contracts(void) {
   setup_libcall_runtime();
 
@@ -966,6 +999,40 @@ void test_str_repeat_invalid_args_return_nil(void) {
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.repeat");
+
+  teardown_libcall_runtime();
+}
+
+void test_str_padleft_and_padright_invalid_args_return_nil(void) {
+  setup_libcall_runtime();
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 5}});
+  (void)lc_str_padleft(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.padleft");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 5.0}});
+  (void)lc_str_padright(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.padright");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  (void)lc_str_padleft(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.padleft");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
+  (void)lc_str_padright(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.padright");
 
   teardown_libcall_runtime();
 }

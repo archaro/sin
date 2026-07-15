@@ -102,6 +102,52 @@ static uint8_t *lc_str_affix(RuntimeContext *ctx, uint8_t *nextop,
   return nextop;
 }
 
+static uint8_t *lc_str_pad(RuntimeContext *ctx, uint8_t *nextop, bool left,
+                           const char *detail) {
+  VALUE_t width = pop_stack(ctx->vm->stack);
+  VALUE_t text = pop_stack(ctx->vm->stack);
+
+  if (text.type != VALUE_str || width.type != VALUE_int || width.i <= 0) {
+    VALUE_t args[] = {width, text};
+    lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL, detail);
+  }
+
+  size_t text_len = strlen(text.s);
+  uint64_t width_u = (uint64_t)width.i;
+  if (width_u <= (uint64_t)text_len) {
+    push_stack(ctx->vm->stack, text);
+    return nextop;
+  }
+  if (width_u > (uint64_t)SIZE_MAX - 1) {
+    FREE_STR(text);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+
+  size_t out_len = (size_t)width_u;
+  char *out = malloc(out_len + 1);
+  if (!out) {
+    FREE_STR(text);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+
+  size_t pad_len = out_len - text_len;
+  if (left) {
+    memset(out, ' ', pad_len);
+    memcpy(out + pad_len, text.s, text_len);
+  } else {
+    memcpy(out, text.s, text_len);
+    memset(out + text_len, ' ', pad_len);
+  }
+  out[out_len] = '\0';
+
+  FREE_STR(text);
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = out}});
+  return nextop;
+}
+
 uint8_t *lc_str_capitalise(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Mutate the string on top of the stack by uppercasing its first byte.
   // Invalid input is consumed and replaced with nil.
@@ -553,4 +599,22 @@ uint8_t *lc_str_repeat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   FREE_STR(text);
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = out}});
   return nextop;
+}
+
+uint8_t *lc_str_padleft(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume text and width from the stack and left-pad text with spaces up to
+  // width bytes. Stack order is text, width, with width on top.
+  (void)item;
+
+  return lc_str_pad(ctx, nextop, true,
+      "str.padleft text must be a string and width must be a positive integer");
+}
+
+uint8_t *lc_str_padright(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume text and width from the stack and right-pad text with spaces up to
+  // width bytes. Stack order is text, width, with width on top.
+  (void)item;
+
+  return lc_str_pad(ctx, nextop, false,
+      "str.padright text must be a string and width must be a positive integer");
 }

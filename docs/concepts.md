@@ -157,6 +157,7 @@ The `str` library contains libcalls which operate on or produce string values:
 `str.valtostr{<expr>}` converts a value to a string, passing strings through unchanged.  
 `str.replace{<text>, <old>, <new>}` replaces all occurrences of `old` in `text` with `new`.  
 `str.repeat{<text>, <count>}` repeats `text` `count` times.  
+`str.padleft{<text>, <width>}` and `str.padright{<text>, <width>}` pad text with spaces up to `width`.  
 
 
 ## Opcode schema workflow

@@ -31,4 +31,6 @@
   X("str",  "eqcasei",     4, 12, 2, lc_str_eqcasei) \
   X("str",  "valtostr",    4, 13, 1, lc_str_valtostr) \
   X("str",  "replace",     4, 14, 3, lc_str_replace) \
-  X("str",  "repeat",      4, 15, 2, lc_str_repeat)
+  X("str",  "repeat",      4, 15, 2, lc_str_repeat) \
+  X("str",  "padleft",     4, 16, 2, lc_str_padleft) \
+  X("str",  "padright",    4, 17, 2, lc_str_padright)
