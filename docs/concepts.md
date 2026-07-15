@@ -13,6 +13,10 @@ When the runtime engine starts up, it first loads and executes the bootstrap cod
 
 The fundamental unit in Sinistra is the *item*.  An item can contain many things: integers, floats, strings, Boolean values or `nil`, or it can contain code.  A value item simply returns its value, whereas a code item executes its code and returns the result.  All items return a value (even if the value is `nil`).  Items can also call other items.
 
+String values are byte strings and are capped at 65,535 bytes. Source string
+literals, persisted string values, and runtime string-building operations fail
+rather than constructing a larger value.
+
 Items are nominally hierarchical, although this is only an organisational strategy – there is no inheritance.  Thus the following are items:  
 `foo`  
 `foo.bar`  

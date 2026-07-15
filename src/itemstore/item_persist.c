@@ -21,6 +21,7 @@
 #include "log.h"
 #include "item_internal.h"
 #include "bytecode_verify.h"
+#include "string_limits.h"
 
 // The configuration object, defined in src/sin.c
 extern CONFIG_t config;
@@ -117,7 +118,6 @@ enum {
 
 #define ITEMSTORE_MAX_DEPTH 8u
 #define ITEMSTORE_MAX_CHILDREN_PER_ITEM 250u
-#define ITEMSTORE_MAX_STRING_LEN (16u * 1024u * 1024u)
 #define ITEMSTORE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
 
 typedef struct {
@@ -298,10 +298,10 @@ bool write_item(FILE *file, ITEM_t *item) {
       case VALUE_str:
       {
         size_t length = strlen(item->value.s);
-        if (length > ITEMSTORE_MAX_STRING_LEN) {
+        if (length > SIN_MAX_STRING_BYTES) {
           logerr("Failed to write itemstore string payload for '%s': length "
-                 "%zu exceeds maximum %u.\n", item->name, length,
-                 ITEMSTORE_MAX_STRING_LEN);
+                 "%zu exceeds maximum %zu.\n", item->name, length,
+                 SIN_MAX_STRING_BYTES);
           return false;
         }
         if (!write_u32_le(file, (uint32_t)length, "string length")
@@ -448,7 +448,7 @@ static ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,
     .depth = depth,
     .max_depth = ITEMSTORE_MAX_DEPTH,
     .max_children_per_item = ITEMSTORE_MAX_CHILDREN_PER_ITEM,
-    .max_string_len = ITEMSTORE_MAX_STRING_LEN,
+    .max_string_len = (uint32_t)SIN_MAX_STRING_BYTES,
     .max_bytecode_len = ITEMSTORE_MAX_BYTECODE_LEN,
     .filename = filename,
     .strict_validation = false

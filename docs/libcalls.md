@@ -35,6 +35,9 @@ Examples:
 
 ## Registered libcalls
 
+String values are limited to 65,535 bytes. String calls that would construct a
+larger result return `nil`.
+
 | Libcall | Library | Call | Arity | Argument expectations | Return value | Side effects | Failure behaviour | Example |
 | --- | --- | --- | ---: | --- | --- | --- | --- | --- |
 | `sys.backup` | `sys` | `backup` | 0 | None. | `nil`. | Saves a backup copy of the current in-memory itemstore.  The filename is the configured itemstore name followed by a timestamp suffix. | The call does not report backup errors through its return value, but failures are written to the error log. | `sys.backup;` |

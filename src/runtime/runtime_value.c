@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "runtime_value.h"
+#include "string_limits.h"
 
 typedef struct strbuf_meta {
   char *ptr;
@@ -79,6 +80,12 @@ static size_t strbuf_growth_capacity(size_t needed) {
 VALUE_t concat_two_strings(VALUE_t left, VALUE_t right) {
   size_t left_len = strlen(left.s);
   size_t right_len = strlen(right.s);
+  if (left_len > SIN_MAX_STRING_BYTES ||
+      right_len > SIN_MAX_STRING_BYTES - left_len) {
+    free_runtime_string(left.s);
+    free_runtime_string(right.s);
+    return VALUE_NIL;
+  }
   size_t needed = left_len + right_len + 1;
   strbuf_meta_t *left_meta = strbuf_find(left.s);
   char *out = NULL;
@@ -95,6 +102,11 @@ VALUE_t concat_two_strings(VALUE_t left, VALUE_t right) {
       out_cap = strbuf_growth_capacity(needed);
     }
     out = malloc(out_cap);
+    if (!out) {
+      free_runtime_string(left.s);
+      free_runtime_string(right.s);
+      return VALUE_NIL;
+    }
     memcpy(out, left.s, left_len);
     memcpy(out + left_len, right.s, right_len + 1);
     free_runtime_string(left.s);

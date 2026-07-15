@@ -12,6 +12,7 @@
 #include "error.h"
 #include "log.h"
 #include "runtime_decode.h"
+#include "string_limits.h"
 
 #define REQUIRE_BYTES(nextop, n, opname) \
   do { if (!runtime_decode_status_ok(require_bytes(&ctx->decoder, (nextop), (n), (opname)))) return false; } while (0)
@@ -103,7 +104,6 @@ static void sb_append_literal(STRBUILDER_t *sb, const char *literal) {
 bool decode_assigncode_params(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_INPUT_t *in) {
   // Format assumption for params block: <u16 len><bytes> repeated, terminated by <u16 0>.
   const size_t MAX_ASSIGNCODE_PARAMS = 1024;
-  const size_t MAX_ASSIGNCODE_PARAM_BYTES = 65535;
   while (1) {
     REQUIRE_BYTES(*opcodep, 2, "OP_ASSIGNCODEITEM param-len");
     uint16_t param_len = 0;
@@ -111,7 +111,7 @@ bool decode_assigncode_params(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_I
     *opcodep += 2;
     if (param_len == 0) break;
     if (in->param_count >= MAX_ASSIGNCODE_PARAMS) return false;
-    if ((in->total_param_len + param_len) > MAX_ASSIGNCODE_PARAM_BYTES) return false;
+    if ((in->total_param_len + param_len) > SIN_MAX_STRING_BYTES) return false;
     REQUIRE_BYTES(*opcodep, param_len, "OP_ASSIGNCODEITEM param-bytes");
     char *param = malloc((size_t)param_len + 1);
     memcpy(param, *opcodep, param_len);
@@ -167,7 +167,7 @@ void persist_codeitem_source(ITEM_t *itemroot, const VALUE_t *itemname, const CO
   ITEM_t *code_item = find_item(itemroot, itemname->s);
   STRBUILDER_t sb;
   size_t source_cap = in->source_len + in->total_param_len + 16u;
-  if (source_cap > UINT32_MAX) return;
+  if (source_cap > SIN_MAX_STRING_BYTES || source_cap > UINT32_MAX) return;
   sb_init(&sb, (uint32_t)source_cap);
   if (in->param_count > 0) {
     sb_append_literal(&sb, "code {");

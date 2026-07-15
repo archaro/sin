@@ -78,6 +78,7 @@ const char *value_type_name(VALUE_e type);
 const char *value_debug_string(const VALUE_t *value, char *buffer, size_t buffer_size);
 bool value_is_type(const VALUE_t *value, VALUE_e type);
 void value_free(VALUE_t *value);
+bool value_string_within_limit(const VALUE_t *value);
 VALUE_t value_clone(const VALUE_t *value);
 void value_move(VALUE_t *dst, VALUE_t *src);
 void value_replace(VALUE_t *dst, VALUE_t src);

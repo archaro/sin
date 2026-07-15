@@ -11,6 +11,7 @@
 #define VALUE_INTERNAL
 #include "value.h"
 #include "floatconv.h"
+#include "string_limits.h"
 
 const VALUE_t VALUE_NIL = {.type = VALUE_nil, .i = 0};
 const VALUE_t VALUE_TRUE = {.type = VALUE_bool, .i = 1};
@@ -53,17 +54,29 @@ void value_free(VALUE_t *value) {
   value->i = 0;
 }
 
+bool value_string_within_limit(const VALUE_t *value) {
+  return value == NULL || value->type != VALUE_str ||
+      strlen(value->s ? value->s : "") <= SIN_MAX_STRING_BYTES;
+}
+
 VALUE_t value_clone(const VALUE_t *value) {
   if (!value) return VALUE_NIL;
   VALUE_t out = *value;
   if (value->type == VALUE_str) {
+    if (!value_string_within_limit(value)) return VALUE_NIL;
     out.s = value->s ? strdup(value->s) : strdup("");
+    if (!out.s) return VALUE_NIL;
   }
   return out;
 }
 
 void value_move(VALUE_t *dst, VALUE_t *src) {
   if (!dst || !src || dst == src) return;
+  if (!value_string_within_limit(src)) {
+    value_free(dst);
+    value_free(src);
+    return;
+  }
   value_free(dst);
   *dst = *src;
   src->type = VALUE_nil;
@@ -72,6 +85,11 @@ void value_move(VALUE_t *dst, VALUE_t *src) {
 
 void value_replace(VALUE_t *dst, VALUE_t src) {
   if (!dst) {
+    value_free(&src);
+    return;
+  }
+  if (!value_string_within_limit(&src)) {
+    value_free(dst);
     value_free(&src);
     return;
   }

@@ -7,6 +7,7 @@
 #include "error.h"
 #include "compiler/parse_input.h"
 #include "parser.h"
+#include "string_limits.h"
 #include "test_assert.h"
 
 void test_parser_input_api(void) {
@@ -63,4 +64,23 @@ void test_parser_input_api(void) {
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   rc = parse_source(&empty_input, &absyn, NULL);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+
+  size_t literal_len = SIN_MAX_STRING_BYTES + 1;
+  size_t source_len = literal_len + 3;
+  char *large_literal = malloc(source_len + 1);
+  ASSERT_NOT_NULL(large_literal);
+  large_literal[0] = '"';
+  memset(large_literal + 1, 'x', literal_len);
+  large_literal[literal_len + 1] = '"';
+  large_literal[literal_len + 2] = ';';
+  large_literal[source_len] = '\0';
+  ParseInput large_input = {large_literal, source_len, "large-string.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&large_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strstr(errdetail, "String literal too long.") != NULL);
+  free(errdetail);
+  free(large_literal);
 }

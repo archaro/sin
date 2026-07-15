@@ -9,7 +9,9 @@
 #include "interpret.h"
 #include "item.h"
 #include "compiler/compdiag.h"
+#include "runtime_value.h"
 #include "stack.h"
+#include "string_limits.h"
 #include "test_assert.h"
 #include "value.h"
 #include "vm.h"
@@ -500,6 +502,40 @@ void test_value_string_concat_helpers(void) {
   ASSERT_EQ_INT(VALUE_str, result.type);
   ASSERT_TRUE(strcmp(result.s, "hello world") == 0);
   value_free(&result);
+  teardown_runtime();
+}
+
+void test_value_string_concat_enforces_string_limit(void) {
+  char *left_s = malloc(SIN_MAX_STRING_BYTES + 1);
+  ASSERT_NOT_NULL(left_s);
+  memset(left_s, 'x', SIN_MAX_STRING_BYTES);
+  left_s[SIN_MAX_STRING_BYTES] = '\0';
+  VALUE_t left = {VALUE_str, {.s = left_s}};
+  VALUE_t right = {VALUE_str, {.s = strdup("y")}};
+
+  VALUE_t result = concat_two_strings(left, right);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+}
+
+void test_value_string_boundaries_enforce_string_limit(void) {
+  char *too_long = malloc(SIN_MAX_STRING_BYTES + 2);
+  ASSERT_NOT_NULL(too_long);
+  memset(too_long, 'x', SIN_MAX_STRING_BYTES + 1);
+  too_long[SIN_MAX_STRING_BYTES + 1] = '\0';
+
+  VALUE_t source = {VALUE_str, {.s = too_long}};
+  VALUE_t clone = value_clone(&source);
+  ASSERT_EQ_INT(VALUE_nil, clone.type);
+  value_free(&source);
+
+  setup_runtime();
+  too_long = malloc(SIN_MAX_STRING_BYTES + 2);
+  ASSERT_NOT_NULL(too_long);
+  memset(too_long, 'x', SIN_MAX_STRING_BYTES + 1);
+  too_long[SIN_MAX_STRING_BYTES + 1] = '\0';
+  VALUE_t stored = {VALUE_str, {.s = too_long}};
+  ASSERT_TRUE(insert_item(config.itemroot, "oversized.value", stored) == NULL);
+  ASSERT_TRUE(find_item(config.itemroot, "oversized.value") == NULL);
   teardown_runtime();
 }
 

@@ -2,8 +2,10 @@
   // The Sinistra lexer - tokenise the input.
   // Licensed under the MIT License - see LICENSE file for details.
   #include <limits.h>
+  #include <stdbool.h>
   #include "log.h"
   #include "parser.h"
+  #include "string_limits.h"
 
   static int sin_utf8_columns(const char *text, int len) {
     int cols = 0;
@@ -44,34 +46,53 @@
 
   #define YY_USER_ACTION sin_update_location(yylloc, yyextra, yytext, yyleng);
 
-  void str_append_str(char **buf, char **bufptr,
-                      int *len, int *max, char *append) {
+  static bool str_append_bytes(char **buf, char **bufptr, int *len, int *max,
+                               const char *append, size_t append_len) {
     // A helper function for string handling.
-    // Should only be called from <STRINGLIT> rules.
-    int l = strlen(append);
-    if (l + *len >= *max) {
-      *max = (*max * 2) + l + 1;
-      *buf = (char *)realloc(*buf, *max);
+    // Should only be called from string-building lexer rules.
+    if (*len < 0) return false;
+    size_t current_len = (size_t)*len;
+    if (append_len > SIN_MAX_STRING_BYTES - current_len) {
+      *len = -1;
+      return false;
+    }
+    size_t needed = current_len + append_len + 1;
+    if (needed > (size_t)*max) {
+      size_t newmax = (size_t)*max;
+      while (newmax < needed) {
+        size_t grown = (newmax * 2) + append_len + 1;
+        if (grown <= newmax || grown > SIN_MAX_STRING_BYTES + 1) {
+          grown = SIN_MAX_STRING_BYTES + 1;
+        }
+        newmax = grown;
+      }
+      char *newbuf = (char *)realloc(*buf, newmax);
+      if (!newbuf) {
+        *len = -1;
+        return false;
+      }
+      *max = (int)newmax;
+      *buf = newbuf;
       *bufptr = *buf + *len;
     }
-    memcpy(*bufptr, append, l);
-    *bufptr += l;
-    *len += l;
+    memcpy(*bufptr, append, append_len);
+    *bufptr += append_len;
+    *len += (int)append_len;
+    return true;
+  }
+
+  void str_append_str(char **buf, char **bufptr,
+                      int *len, int *max, char *append) {
+    (void)str_append_bytes(buf, bufptr, len, max, append, strlen(append));
   }
 
   void str_append_char(char **buf, char **bufptr,
                       int *len, int *max, char append) {
-    // A helper function for string handling.
-    // Should only be called from <STRINGLIT> rules.
-    // Same as str_append_str, but only appends a single character
-    if (*len + 1 >= *max) {
-      *max = (*max * 2) + 1;
-      *buf = (char *)realloc(*buf, *max);
-      *bufptr = *buf + *len;
-    }
-    **bufptr = append;
-    *bufptr += 1;
-    *len += 1;
+    (void)str_append_bytes(buf, bufptr, len, max, &append, 1);
+  }
+
+  static char *strbuf_too_long_msg(void) {
+    return strdup("String literal too long.");
   }
 
   char *strdup_lc(const char *s) {
@@ -156,6 +177,10 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   "\""          { 
                   strbuf_capacity = 4;
                   strbuf = (char *)malloc(strbuf_capacity + 1);
+                  if (!strbuf) {
+                    yylval->TSTRINGLIT = strdup("Out of memory.");
+                    return TUNKNOWNCHAR;
+                  }
                   strbuf_ptr = strbuf;
                   strbuf_size = 0;
                   BEGIN(STRINGLIT);
@@ -172,6 +197,11 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
 <STRINGLIT>{
   \"            { /* saw closing quote - all done */
                   BEGIN(INITIAL);
+                  if (strbuf_size < 0) {
+                    yylval->TSTRINGLIT = strbuf_too_long_msg();
+                    free(strbuf);
+                    return TUNKNOWNCHAR;
+                  }
                   *strbuf_ptr = '\0';
                   yylval->TSTRINGLIT = strdup(strbuf);
                   free(strbuf);
@@ -215,6 +245,10 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   "("           { code_paren = 1;
                   strbuf_capacity = 512;
                   strbuf = (char *)malloc(strbuf_capacity + 1);
+                  if (!strbuf) {
+                    yylval->TSTRINGLIT = strdup("Out of memory.");
+                    return TUNKNOWNCHAR;
+                  }
                   strbuf_ptr = strbuf;
                   strbuf_size = 0;
                   BEGIN(CODEBODY);
@@ -243,6 +277,11 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                   } else {
                     // This ends the code segment.  Return the buffer.
                     BEGIN(INITIAL);
+                    if (strbuf_size < 0) {
+                      yylval->TSTRINGLIT = strbuf_too_long_msg();
+                      free(strbuf);
+                      return TUNKNOWNCHAR;
+                    }
                     *strbuf_ptr = '\0';
                     yylval->TSTRINGLIT = strdup(strbuf);
                     free(strbuf);
@@ -287,19 +326,22 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
 }
 <STRINGLIT><<EOF>> {
   BEGIN(INITIAL);
-  yylval->TSTRINGLIT = strdup("Unterminated string literal.");
+  yylval->TSTRINGLIT = strbuf_size < 0 ? strbuf_too_long_msg() :
+      strdup("Unterminated string literal.");
   free(strbuf);
   return TUNKNOWNCHAR;
 }
 <CODEBODY><<EOF>> {
   BEGIN(INITIAL);
-  yylval->TSTRINGLIT = strdup("Unterminated code(...) body.");
+  yylval->TSTRINGLIT = strbuf_size < 0 ? strbuf_too_long_msg() :
+      strdup("Unterminated code(...) body.");
   free(strbuf);
   return TUNKNOWNCHAR;
 }
 <CODESTREMBED><<EOF>> {
   BEGIN(INITIAL);
-  yylval->TSTRINGLIT = strdup("Unterminated quoted string inside code(...) body.");
+  yylval->TSTRINGLIT = strbuf_size < 0 ? strbuf_too_long_msg() :
+      strdup("Unterminated quoted string inside code(...) body.");
   free(strbuf);
   return TUNKNOWNCHAR;
 }

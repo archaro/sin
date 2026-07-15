@@ -20,6 +20,7 @@
 #include "memory.h"
 #include "log.h"
 #include "item_internal.h"
+#include "string_limits.h"
 
 // The configuration object, defined in src/sin.c
 extern CONFIG_t config;
@@ -156,6 +157,12 @@ void destroy_item(ITEM_t *item) {
 
 ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
   // Function to insert a new item into the tree at the specified node.
+  if (!value_string_within_limit(&value)) {
+    logerr("insert_item called with string longer than maximum %zu bytes.\n",
+           SIN_MAX_STRING_BYTES);
+    value_free(&value);
+    return NULL;
+  }
   if (!validate_item_name(item_name, "insert_item")) {
     return NULL;
   }
@@ -308,6 +315,12 @@ void delete_item(ITEM_t *root, const char *item_name) {
 
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value) {
   // Find an item, and set its value.
+  if (!value_string_within_limit(&value)) {
+    logerr("set_item called with string longer than maximum %zu bytes.\n",
+           SIN_MAX_STRING_BYTES);
+    value_free(&value);
+    return;
+  }
   if (!validate_item_name(item_name, "set_item")) {
     return;
   }

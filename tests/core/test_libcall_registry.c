@@ -12,6 +12,7 @@
 #include "test_assert.h"
 #include "vm.h"
 #include "memory.h"
+#include "string_limits.h"
 
 #include "network.h"
 
@@ -999,6 +1000,35 @@ void test_str_repeat_invalid_args_return_nil(void) {
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.repeat");
+
+  teardown_libcall_runtime();
+}
+
+void test_str_growth_libcalls_enforce_string_limit(void) {
+  setup_libcall_runtime();
+
+  char *text = malloc(40001);
+  ASSERT_NOT_NULL(text);
+  memset(text, 'a', 40000);
+  text[40000] = '\0';
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = text}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("a")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("aa")}});
+  (void)lc_str_replace(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("0123456789")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 7000}});
+  (void)lc_str_repeat(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = (int64_t)SIN_MAX_STRING_BYTES + 1}});
+  (void)lc_str_padleft(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
 
   teardown_libcall_runtime();
 }

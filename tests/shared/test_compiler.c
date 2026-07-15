@@ -144,6 +144,7 @@ void test_str_replace_returns_expected_results(void);
 void test_str_replace_invalid_args_return_nil(void);
 void test_str_repeat_returns_expected_results(void);
 void test_str_repeat_invalid_args_return_nil(void);
+void test_str_growth_libcalls_enforce_string_limit(void);
 void test_str_padleft_and_padright_return_expected_results(void);
 void test_str_padleft_and_padright_invalid_args_return_nil(void);
 void test_str_libcall_invalidargs_uses_context_itemroot(void);
@@ -165,6 +166,8 @@ void test_value_push_float_interprets_binary64_payloads(void);
 void test_value_float_arithmetic_helpers(void);
 void test_value_float_arithmetic_interpreter_bytecode(void);
 void test_value_string_concat_helpers(void);
+void test_value_string_concat_enforces_string_limit(void);
+void test_value_string_boundaries_enforce_string_limit(void);
 void test_value_bool_nil_truthiness_helpers(void);
 void test_stack_peek_returns_top_pointer_without_popping(void);
 void test_value_float_construction_copy_truthiness_cleanup(void);
@@ -294,6 +297,8 @@ static const test_case_t core_tests[] = {
     {"test_value_float_arithmetic_helpers", test_value_float_arithmetic_helpers},
     {"test_value_float_arithmetic_interpreter_bytecode", test_value_float_arithmetic_interpreter_bytecode},
     {"test_value_string_concat_helpers", test_value_string_concat_helpers},
+    {"test_value_string_concat_enforces_string_limit", test_value_string_concat_enforces_string_limit},
+    {"test_value_string_boundaries_enforce_string_limit", test_value_string_boundaries_enforce_string_limit},
     {"test_value_bool_nil_truthiness_helpers", test_value_bool_nil_truthiness_helpers},
     {"test_stack_peek_returns_top_pointer_without_popping",
      test_stack_peek_returns_top_pointer_without_popping},
@@ -382,6 +387,7 @@ static const test_case_t runtime_tests[] = {
     {"test_str_replace_invalid_args_return_nil", test_str_replace_invalid_args_return_nil},
     {"test_str_repeat_returns_expected_results", test_str_repeat_returns_expected_results},
     {"test_str_repeat_invalid_args_return_nil", test_str_repeat_invalid_args_return_nil},
+    {"test_str_growth_libcalls_enforce_string_limit", test_str_growth_libcalls_enforce_string_limit},
     {"test_str_padleft_and_padright_return_expected_results", test_str_padleft_and_padright_return_expected_results},
     {"test_str_padleft_and_padright_invalid_args_return_nil", test_str_padleft_and_padright_invalid_args_return_nil},
     {"test_str_libcall_invalidargs_uses_context_itemroot", test_str_libcall_invalidargs_uses_context_itemroot},

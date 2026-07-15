@@ -6,12 +6,12 @@
 
 #include "libcall.h"
 #include "stack.h"
+#include "string_limits.h"
 
 #define BC_CTX_STMT BC_CONTEXT_STATEMENT
 #define BC_CTX_ITEM BC_CONTEXT_ITEM_EXPRESSION
 #define BC_CTX_DEREF BC_CONTEXT_DEREFERENCE
 #define BC_MAX_ASSIGNCODE_PARAMS 1024u
-#define BC_MAX_ASSIGNCODE_PARAM_BYTES 65535u
 typedef BC_Context BC_DecodeContext;
 
 typedef struct {
@@ -646,9 +646,9 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
             return bc_fail(d, *cursor, op,
                            "embedded parameter count exceeds maximum 1024");
           }
-          if (total_param_len + param_len > BC_MAX_ASSIGNCODE_PARAM_BYTES) {
+          if (total_param_len + param_len > SIN_MAX_STRING_BYTES) {
             return bc_fail(d, *cursor, op,
-                           "embedded parameter bytes exceed maximum 65535");
+                           "embedded parameter bytes exceed maximum string size");
           }
           if (!bc_need(d, *cursor, param_len, op,
                        "embedded parameter name")) return 0;

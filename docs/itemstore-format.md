@@ -88,7 +88,7 @@ The v1 reader and writer enforce these limits:
 | Item depth | Root is depth 0; maximum record depth is 8 |
 | Name length | 32 bytes |
 | Children of one item | 250 |
-| String payload | 16 MiB (`16 * 1024 * 1024` bytes) |
+| String payload | 65,535 bytes (`SIN_MAX_STRING_BYTES`) |
 | Bytecode payload | 64 MiB (`64 * 1024 * 1024` bytes) |
 
 Non-root names must contain between 1 and 32 bytes and consist only of ASCII

@@ -26,7 +26,7 @@ those tools and the test harnesses.
 
 Files: `src/common/log.*`, `src/common/memory.*`, `src/common/error.*`,
 `src/common/util.*`, `src/common/cli_io.*`, `src/common/floatconv.*`,
-`src/config.h`, `src/version.h`.
+`src/common/string_limits.h`, `src/config.h`, `src/version.h`.
 
 Ownership: process-wide diagnostics, allocation wrappers, CLI helpers, numeric
 formatting, and small utilities. These modules should not depend on compiler,

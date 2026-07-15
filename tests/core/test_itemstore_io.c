@@ -7,6 +7,7 @@
 #include "config.h"
 #include "item.h"
 #include "item_internal.h"
+#include "string_limits.h"
 #include "test_assert.h"
 
 extern CONFIG_t config;
@@ -25,7 +26,6 @@ enum {
 #define WIRE_VERSION 1u
 #define WIRE_MAX_DEPTH 8u
 #define WIRE_MAX_CHILDREN 250u
-#define WIRE_MAX_STRING_LEN (16u * 1024u * 1024u)
 #define WIRE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
 
 static void put_bytes(FILE *file, const void *bytes, size_t length) {
@@ -472,7 +472,7 @@ void test_load_itemstore_rejects_resource_limit_violations(void) {
   put_header(file, WIRE_VERSION);
   put_record_prefix(file, "root", WIRE_ITEM_VALUE);
   put_u8(file, WIRE_VALUE_STRING);
-  put_u32_le(file, WIRE_MAX_STRING_LEN + 1u);
+  put_u32_le(file, (uint32_t)SIN_MAX_STRING_BYTES + 1u);
   assert_fixture_rejected(file, path);
 
   file = replace_fixture(path);

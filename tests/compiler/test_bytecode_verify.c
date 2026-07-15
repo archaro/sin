@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "bytecode_verify.h"
+#include "string_limits.h"
 #include "compiler/compiler_pipeline.h"
 #include "error.h"
 #include "test_assert.h"
@@ -144,7 +145,8 @@ void test_bytecode_verify_truncated_operand_widths(void) {
                        "embedded parameter count exceeds maximum 1024");
   free(too_many_params);
 
-  const size_t excessive_param_bytes_len = 2 + 2 + 2 + 65535 + 2 + 1 + 2 + 2;
+  const size_t excessive_param_bytes_len = 2 + 2 + 2 +
+      SIN_MAX_STRING_BYTES + 2 + 1 + 2 + 2;
   uint8_t *excessive_param_bytes = malloc(excessive_param_bytes_len);
   ASSERT_NOT_NULL(excessive_param_bytes);
   pos = 0;
@@ -154,8 +156,8 @@ void test_bytecode_verify_truncated_operand_widths(void) {
   excessive_param_bytes[pos++] = 'P';
   excessive_param_bytes[pos++] = 0xFF;
   excessive_param_bytes[pos++] = 0xFF;
-  memset(excessive_param_bytes + pos, 'a', 65535);
-  pos += 65535;
+  memset(excessive_param_bytes + pos, 'a', SIN_MAX_STRING_BYTES);
+  pos += SIN_MAX_STRING_BYTES;
   excessive_param_bytes[pos++] = 1;
   excessive_param_bytes[pos++] = 0;
   excessive_param_bytes[pos++] = 'b';
@@ -167,7 +169,7 @@ void test_bytecode_verify_truncated_operand_widths(void) {
   assert_verify_status(excessive_param_bytes,
                        (uint32_t)excessive_param_bytes_len,
                        BC_VERIFY_ERROR, "excessive_embedded_parameter_bytes",
-                       "embedded parameter bytes exceed maximum 65535");
+                       "embedded parameter bytes exceed maximum string size");
   free(excessive_param_bytes);
 }
 

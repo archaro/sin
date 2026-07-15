@@ -9,6 +9,7 @@
 #include "libcall_handlers.h"
 #include "runtime_context.h"
 #include "stack.h"
+#include "string_limits.h"
 
 static uint8_t *lc_str_invalid_top(RuntimeContext *ctx, uint8_t *nextop,
                                    const char *detail) {
@@ -115,6 +116,11 @@ static uint8_t *lc_str_pad(RuntimeContext *ctx, uint8_t *nextop, bool left,
 
   size_t text_len = strlen(text.s);
   uint64_t width_u = (uint64_t)width.i;
+  if (width_u > (uint64_t)SIN_MAX_STRING_BYTES) {
+    FREE_STR(text);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
   if (width_u <= (uint64_t)text_len) {
     push_stack(ctx->vm->stack, text);
     return nextop;
@@ -530,6 +536,12 @@ uint8_t *lc_str_replace(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   } else {
     out_len -= count * (old_len - new_len);
   }
+  if (out_len > SIN_MAX_STRING_BYTES) {
+    VALUE_t args[] = {new_text, old_text, text};
+    lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
 
   char *out = malloc(out_len + 1);
   if (!out) {
@@ -575,7 +587,8 @@ uint8_t *lc_str_repeat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   size_t text_len = strlen(text.s);
   size_t repeat_count = (size_t)count.i;
-  if (text_len > 0 && repeat_count > SIZE_MAX / text_len) {
+  if (text_len > 0 && (repeat_count > SIZE_MAX / text_len ||
+      repeat_count > SIN_MAX_STRING_BYTES / text_len)) {
     FREE_STR(text);
     push_stack(ctx->vm->stack, VALUE_NIL);
     return nextop;
