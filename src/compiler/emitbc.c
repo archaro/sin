@@ -195,7 +195,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case IR_OP_PUSH_STRING: {
         const char *s = (const char *)(intptr_t)in->imm;
         size_t len = strlen(s);
-        if (len > SIN_MAX_STRING_BYTES || len > UINT16_MAX) {
+        if (len > SIN_MAX_STRING_BYTES) {
           free(pos);
           int8_t errnum = ERR_NOERROR;
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "string literal too long: %zu", len);

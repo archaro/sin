@@ -125,7 +125,7 @@ layer       [a-z0-9_]+
 integer     [0-9]+
 float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
 %%
-                // Maximum length of string literal is uint16_t
+                // String literal payloads are capped by SIN_MAX_STRING_BYTES.
                 char *strbuf, *strbuf_ptr;
                 int strbuf_size, strbuf_capacity;
                 int code_paren = 0;
