@@ -119,6 +119,20 @@ void test_compiler_context_failures(void) {
   }
   alloc_test_fail_after(-1);
 
+  {
+    IR_EmbeddedCodePayload payload = {0};
+    AS_NODE *params = as_new_node(N_ARGLIST, as_new_valnode(V_LOCAL, strdup("who")), NULL);
+    ASSERT_NOT_NULL(params);
+    alloc_test_fail_after(0);
+    ASSERT_TRUE(!ir_embedded_locals_from_params(params, &payload));
+    ASSERT_TRUE(payload.params == NULL);
+    ASSERT_TRUE(payload.locals == NULL);
+    ASSERT_TRUE(payload.param_count == 0);
+    ASSERT_TRUE(payload.local_count == 0);
+    alloc_test_fail_after(-1);
+    as_delete(params);
+  }
+
   alloc_test_fail_after(3);
   {
     OUTPUT_t out = {0};

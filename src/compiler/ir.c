@@ -109,7 +109,23 @@ int32_t ir_add_embedded_code_payload(IR_Unit* unit, IR_EmbeddedCodePayload paylo
   return (int32_t)idx;
 }
 
+static void ir_reset_embedded_payload_locals(IR_EmbeddedCodePayload* payload) {
+  free(payload->params);
+  free(payload->locals);
+  payload->param_count = 0;
+  payload->params = NULL;
+  payload->local_count = 0;
+  payload->locals = NULL;
+}
+
 bool ir_embedded_locals_from_params(AS_NODE* params, IR_EmbeddedCodePayload* payload) {
+  if (!payload) return false;
+
+  payload->param_count = 0;
+  payload->params = NULL;
+  payload->local_count = 0;
+  payload->locals = NULL;
+
   AS_NODE* cursor = params;
   size_t count = 0;
   while (cursor) {
@@ -119,18 +135,29 @@ bool ir_embedded_locals_from_params(AS_NODE* params, IR_EmbeddedCodePayload* pay
   }
 
   payload->param_count = count;
-  size_t allocation_count = count > 0 ? count : 1;
-  payload->params = malloc(sizeof *payload->params * allocation_count);
-  payload->locals = malloc(sizeof *payload->locals * allocation_count);
   payload->local_count = count;
+  if (count > 0) {
+    payload->params = alloc_calloc(count, sizeof *payload->params);
+    payload->locals = alloc_calloc(count, sizeof *payload->locals);
+    if (!payload->params || !payload->locals) {
+      ir_reset_embedded_payload_locals(payload);
+      return false;
+    }
+  }
 
   cursor = params;
   for (size_t i = 0; i < count; i++) {
     AS_NODE* param = (AS_NODE*)cursor->lhs;
     AS_VALUE* value;
-    if (!param || param->nodetype != N_VALUE) return false;
+    if (!param || param->nodetype != N_VALUE) {
+      ir_reset_embedded_payload_locals(payload);
+      return false;
+    }
     value = (AS_VALUE*)param->lhs;
-    if (!value || value->valtype != V_LOCAL || !value->value.s) return false;
+    if (!value || value->valtype != V_LOCAL || !value->value.s) {
+      ir_reset_embedded_payload_locals(payload);
+      return false;
+    }
     payload->params[i] = value->value.s;
     payload->locals[i].name = value->value.s;
     payload->locals[i].index = (uint8_t)i;

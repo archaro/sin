@@ -557,10 +557,16 @@ static bool lower_build_embedded_payload(LOWER_CTX *ctx, AS_NODE *node, int32_t 
   }
   payload.source = val->value.s;
   if (!ir_embedded_locals_from_params((AS_NODE *)node->lhs, &payload)) {
-    lower_set_unsupported(ctx, node, "code params must be local arg list");
+    lower_set_error(ctx, ERR_COMP_INUSE, "failed to build embedded code parameter metadata");
     return false;
   }
   *payload_index = ir_add_embedded_code_payload(ctx->ir, payload);
+  if (*payload_index < 0) {
+    free(payload.params);
+    free(payload.locals);
+    lower_set_error(ctx, ERR_COMP_INUSE, "failed to store embedded code payload");
+    return false;
+  }
   return true;
 }
 
