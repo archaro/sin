@@ -155,6 +155,7 @@ The `str` library contains libcalls which operate on or produce string values:
 `str.lower{<expr>}` converts the whole string to lowercase.  
 `str.upper{<expr>}` converts the whole string to uppercase.  
 `str.valtostr{<expr>}` converts a value to a string, passing strings through unchanged.  
+`str.replace{<text>, <old>, <new>}` replaces all occurrences of `old` in `text` with `new`.  
 
 
 ## Opcode schema workflow

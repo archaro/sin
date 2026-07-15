@@ -34,6 +34,7 @@ uint8_t *lc_str_contains(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_startswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_endswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_eqcasei(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_replace(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 extern LINE_t *line;
 extern CONFIG_t config;
@@ -222,6 +223,19 @@ static void assert_str_valtostr_result(VALUE_t input, const char *expected) {
   FREE_STR(ret);
 }
 
+static void assert_str_replace_result(const char *text, const char *old_text,
+                                      const char *new_text,
+                                      const char *expected) {
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(text)}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(old_text)}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(new_text)}});
+  (void)lc_str_replace(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, ret.type);
+  ASSERT_TRUE(strcmp(ret.s, expected) == 0);
+  FREE_STR(ret);
+}
+
 static void assert_str_find_result(const char *haystack, const char *needle,
                                    int64_t expected) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(haystack)}});
@@ -313,6 +327,9 @@ void test_libcall_registry_roundtrip(void) {
 
   ASSERT_TRUE(libcall_lookup_token("str", "valtostr", &token, &args));
   ASSERT_EQ_INT(1, args);
+  ASSERT_NOT_NULL(libcall_func_token(token));
+  ASSERT_TRUE(libcall_lookup_token("str", "replace", &token, &args));
+  ASSERT_EQ_INT(3, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
 
   alloc_test_fail_after(0);
@@ -785,6 +802,19 @@ void test_str_eqcasei_returns_expected_results(void) {
   teardown_libcall_runtime();
 }
 
+void test_str_replace_returns_expected_results(void) {
+  setup_libcall_runtime();
+
+  assert_str_replace_result("one two one", "one", "three", "three two three");
+  assert_str_replace_result("aaaa", "aa", "b", "bb");
+  assert_str_replace_result("abc", "x", "y", "abc");
+  assert_str_replace_result("abc", "", "x", "abc");
+  assert_str_replace_result("abc", "b", "", "ac");
+  assert_str_replace_result("", "x", "y", "");
+
+  teardown_libcall_runtime();
+}
+
 void test_str_find_and_contains_invalid_args_return_contracts(void) {
   setup_libcall_runtime();
 
@@ -853,6 +883,36 @@ void test_str_eqcasei_invalid_args_return_contracts(void) {
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
   assert_invalid_args_detail_contains("str.eqcasei");
+
+  teardown_libcall_runtime();
+}
+
+void test_str_replace_invalid_args_return_nil(void) {
+  setup_libcall_runtime();
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("old")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("new")}});
+  (void)lc_str_replace(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.replace");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("new")}});
+  (void)lc_str_replace(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.replace");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("old")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
+  (void)lc_str_replace(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.replace");
 
   teardown_libcall_runtime();
 }

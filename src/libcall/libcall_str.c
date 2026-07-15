@@ -434,3 +434,79 @@ uint8_t *lc_str_valtostr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = out}});
   return nextop;
 }
+
+uint8_t *lc_str_replace(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume text, old, and new from the stack and replace every non-overlapping
+  // occurrence of old in text with new. Stack order is text, old, new, with new
+  // on top. Invalid input is consumed and replaced with nil.
+  (void)item;
+
+  VALUE_t new_text = pop_stack(ctx->vm->stack);
+  VALUE_t old_text = pop_stack(ctx->vm->stack);
+  VALUE_t text = pop_stack(ctx->vm->stack);
+
+  if (text.type != VALUE_str || old_text.type != VALUE_str ||
+      new_text.type != VALUE_str) {
+    VALUE_t args[] = {new_text, old_text, text};
+    lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "str.replace text, old, and new must be strings");
+  }
+
+  size_t old_len = strlen(old_text.s);
+  if (old_len == 0) {
+    FREE_STR(new_text);
+    FREE_STR(old_text);
+    push_stack(ctx->vm->stack, text);
+    return nextop;
+  }
+
+  size_t text_len = strlen(text.s);
+  size_t new_len = strlen(new_text.s);
+  size_t count = 0;
+  const char *scan = text.s;
+  const char *match = NULL;
+  while ((match = strstr(scan, old_text.s)) != NULL) {
+    count++;
+    scan = match + old_len;
+  }
+
+  size_t out_len = text_len;
+  if (new_len > old_len) {
+    size_t delta = new_len - old_len;
+    if (count > (SIZE_MAX - text_len) / delta) {
+      VALUE_t args[] = {new_text, old_text, text};
+      lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+      push_stack(ctx->vm->stack, VALUE_NIL);
+      return nextop;
+    }
+    out_len += count * delta;
+  } else {
+    out_len -= count * (old_len - new_len);
+  }
+
+  char *out = malloc(out_len + 1);
+  if (!out) {
+    VALUE_t args[] = {new_text, old_text, text};
+    lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+
+  char *dst = out;
+  scan = text.s;
+  while ((match = strstr(scan, old_text.s)) != NULL) {
+    size_t prefix_len = (size_t)(match - scan);
+    memcpy(dst, scan, prefix_len);
+    dst += prefix_len;
+    memcpy(dst, new_text.s, new_len);
+    dst += new_len;
+    scan = match + old_len;
+  }
+  strcpy(dst, scan);
+
+  VALUE_t args[] = {new_text, old_text, text};
+  lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = out}});
+  return nextop;
+}
