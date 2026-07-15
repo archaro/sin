@@ -50,8 +50,8 @@ void itemstore_bump_generation(void);
 bool itemstore_default_sync_hook(FILE *file, const char *path);
 
 bool validate_item_name(const char *item_name, const char *func_name);
-void create_ordered_array(ITEM_t *item);
-void resize_ordered_array(ITEM_t *item);
+bool create_ordered_array(ITEM_t *item);
+bool resize_ordered_array(ITEM_t *item);
 ITEM_t *make_loaded_item(const char *name, ITEM_t *parent, ITEM_e type,
                          VALUE_t value, uint8_t *bytecode, int len,
                          uint32_t expected_children);
@@ -63,7 +63,7 @@ uint32_t simple_hash(const char *key, size_t len);
 HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize);
 float calculate_load_factor(HASHTABLE_t *hashTable);
 HASHTABLE_t *maybe_resize_hashtable(HASHTABLE_t *hashtable);
-void insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child);
+bool insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child);
 ITEM_t *search_hashtable(HASHTABLE_t *hashtable, const char *key);
 void delete_hashtable(HASHTABLE_t *hashtable, const char *key);
 void free_hashtable(HASHTABLE_t *hashtable);

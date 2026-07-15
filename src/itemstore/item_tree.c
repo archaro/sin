@@ -63,20 +63,25 @@ bool validate_item_name(const char *item_name,
 }
 
 
-static void create_ordered_array_with_capacity(ITEM_t *item,
+static bool create_ordered_array_with_capacity(ITEM_t *item,
                                                size_t capacity) {
   item->ordered_size = 0;
   item->ordered_capacity = capacity;
   item->ordered_array = capacity > 0
       ? (ITEM_t **)malloc(sizeof(ITEM_t *) * capacity)
       : NULL;
+  if (capacity > 0 && !item->ordered_array) {
+    item->ordered_capacity = 0;
+    return false;
+  }
+  return true;
 }
 
-void create_ordered_array(ITEM_t *item) {
+bool create_ordered_array(ITEM_t *item) {
   // This must be called after a new hashtable has been created,
   // but must not be called when a hashtable is resized, or memory
   // will leak like a very leaky thing.
-  create_ordered_array_with_capacity(item, ITEM_ARRAY_INIT_CAPACITY);
+  return create_ordered_array_with_capacity(item, ITEM_ARRAY_INIT_CAPACITY);
 }
 
 static uint32_t hashtable_buckets_for_entries(uint32_t entry_count) {
@@ -89,6 +94,7 @@ static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
                               uint32_t expected_children,
                               bool presize_children) {
   ITEM_t *item = allocate_item();
+  if (!item) return NULL;
   item->parent = parent;
   item->inuse = false;
   item->type = type;
@@ -103,7 +109,13 @@ static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
     item->bytecode = bytecode;
     item->bytecode_len = len < 0 ? 0u : (uint32_t)len;
   }
-  strcpy(item->name, name);
+  int name_len = snprintf(item->name, sizeof item->name, "%s", name);
+  if (name_len < 0 || (size_t)name_len >= sizeof item->name) {
+    if (type == ITEM_value) value_free(&value);
+    else free(bytecode);
+    deallocate_item(item);
+    return NULL;
+  }
   uint32_t bucket_count = presize_children
       ? hashtable_buckets_for_entries(expected_children)
       : 16u;
@@ -111,12 +123,31 @@ static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
       ? expected_children
       : ITEM_ARRAY_INIT_CAPACITY;
   item->children = create_hashtable((int)bucket_count);
-  create_ordered_array_with_capacity(item, ordered_capacity);
+  if (!item->children ||
+      !create_ordered_array_with_capacity(item, ordered_capacity)) {
+    free_hashtable(item->children);
+    if (type == ITEM_value) value_free(&item->value);
+    else free(item->bytecode);
+    deallocate_item(item);
+    return NULL;
+  }
 
   if (parent != NULL) {
-    insert_hashtable(parent->children, name, item);
+    if (!insert_hashtable(parent->children, name, item)) {
+      destroy_item(item);
+      return NULL;
+    }
     parent->children = maybe_resize_hashtable(parent->children);
-    resize_ordered_array(parent);
+    if (!resize_ordered_array(parent)) {
+      delete_hashtable(parent->children, name);
+      destroy_item(item);
+      return NULL;
+    }
+    if (!parent->ordered_array || parent->ordered_size >= parent->ordered_capacity) {
+      delete_hashtable(parent->children, name);
+      destroy_item(item);
+      return NULL;
+    }
     parent->ordered_array[parent->ordered_size++] = item;
   }
   return item;

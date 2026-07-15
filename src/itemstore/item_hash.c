@@ -25,9 +25,14 @@ HASHTABLE_t *create_hashtable(int size) {
   // Create a hashtable with the given number of buckets
   if (size <= 0) size = 1;
   HASHTABLE_t *hashtable = allocate_hashtable();
+  if (!hashtable) return NULL;
   hashtable->size = (uint32_t)size;
   hashtable->entry_count = 0;
   hashtable->table = calloc((size_t)size, sizeof *hashtable->table);
+  if (!hashtable->table) {
+    deallocate_hashtable(hashtable);
+    return NULL;
+  }
   return hashtable;
 }
 
@@ -41,6 +46,7 @@ uint32_t simple_hash(const char *key, size_t len) {
 HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize) {
   // Create a new hash table with the new size
   HASHTABLE_t *newhashtable = create_hashtable(newsize);
+  if (!newhashtable) return oldhashtable;
   newhashtable->entry_count = oldhashtable->entry_count;
   // Rehash all the existing entries
   for (uint32_t i = 0; i < (oldhashtable)->size; i++) {
@@ -72,8 +78,8 @@ HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize) {
   return newhashtable;
 }
 
-void resize_ordered_array(ITEM_t *item) {
-  if (item->ordered_size < item->ordered_capacity) return;
+bool resize_ordered_array(ITEM_t *item) {
+  if (item->ordered_size < item->ordered_capacity) return true;
 
   size_t required = item->ordered_size + 1;
   size_t new_capacity = item->ordered_capacity > 0 ? item->ordered_capacity : ITEM_ARRAY_INIT_CAPACITY;
@@ -81,9 +87,10 @@ void resize_ordered_array(ITEM_t *item) {
                                  required, sizeof *item->ordered_array)) {
     logerr("Cannot grow ordered item array beyond %zu entries.\n",
            item->ordered_capacity);
-    abort();
+    return false;
   }
   item->ordered_capacity = new_capacity;
+  return true;
 }
 
 float calculate_load_factor(HASHTABLE_t *hashtable) {
@@ -103,7 +110,8 @@ HASHTABLE_t *maybe_resize_hashtable(HASHTABLE_t *hashtable) {
   return hashtable;
 }
 
-void insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child) {
+bool insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child) {
+  if (!hashtable || !hashtable->table || !key) return false;
   size_t keylen = strlen(key);
   uint32_t hashindex;
   // Compute the hash - use the key itself if 4 bytes or less
@@ -117,14 +125,21 @@ void insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child) {
   hashindex %= hashtable->size;
   // Create a new entry
   ENTRY_t *newEntry = allocate_entry();
+  if (!newEntry) return false;
   newEntry->key = strdup(key);
+  if (!newEntry->key) {
+    deallocate_entry(newEntry);
+    return false;
+  }
   newEntry->child = child;
   newEntry->next = hashtable->table[hashindex];
   hashtable->table[hashindex] = newEntry;
   hashtable->entry_count++;
+  return true;
 }
 
 ITEM_t *search_hashtable(HASHTABLE_t *hashtable, const char *key) {
+  if (!hashtable || !hashtable->table || !key) return NULL;
   size_t keylen = strlen(key);
   uint32_t hashindex;
   // Check if the key is less than or equal to 4 characters.
@@ -148,7 +163,8 @@ ITEM_t *search_hashtable(HASHTABLE_t *hashtable, const char *key) {
 }
 
 void delete_hashtable(HASHTABLE_t *hashtable, const char *key) {
-    size_t keylen = strlen(key);
+  if (!hashtable || !hashtable->table || !key) return;
+  size_t keylen = strlen(key);
   uint32_t hashindex;
 
   // Check if the key is less than or equal to 4 characters.
@@ -182,6 +198,7 @@ void delete_hashtable(HASHTABLE_t *hashtable, const char *key) {
 }
 
 void free_hashtable(HASHTABLE_t* hashtable) {
+  if (!hashtable) return;
   for (uint32_t i = 0; i < hashtable->size; i++) {
     ENTRY_t *current = hashtable->table[i];
     while (current) {
