@@ -35,20 +35,9 @@ static const telnet_telopt_t telopts[] = {
 
 LINE_t *line;
 static size_t network_maxconns;
-static uv_tcp_t legacy_listener;
 
-static NetworkRuntimeDeps legacy_network_deps(void) {
-  return (NetworkRuntimeDeps){
-    .loop = config.loop,
-    .listener = &legacy_listener,
-    .lines = &line,
-    .maxconns = config.maxconns
-  };
-}
-
-static NetworkRuntimeDeps *deps_from_server(uv_stream_t *server,
-                                            NetworkRuntimeDeps *fallback) {
-  return (server && server->data) ? (NetworkRuntimeDeps *)server->data : fallback;
+static NetworkRuntimeDeps *deps_from_server(uv_stream_t *server) {
+  return (server && server->data) ? (NetworkRuntimeDeps *)server->data : NULL;
 }
 
 void flush_output(LINE_t *linep);
@@ -72,11 +61,6 @@ bool validate_network_deps(const NetworkRuntimeDeps *deps) {
   return true;
 }
 
-bool validate_network_config() {
-  NetworkRuntimeDeps deps = legacy_network_deps();
-  return validate_network_deps(&deps);
-}
-
 void init_networking_with_deps(NetworkRuntimeDeps *deps) {
   // Do that which needs to be done before starting the network interface
   if (!validate_network_deps(deps)) {
@@ -90,11 +74,6 @@ void init_networking_with_deps(NetworkRuntimeDeps *deps) {
   for (size_t l = 0; l < deps->maxconns; l++) {
     (*lines)[l].linenum = l;
   }
-}
-
-void init_networking() {
-  NetworkRuntimeDeps deps = legacy_network_deps();
-  init_networking_with_deps(&deps);
 }
 
 LINE_t *add_line(uv_tcp_t *line_handle) {
@@ -603,9 +582,13 @@ void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
 }
 
 void on_new_connection(uv_stream_t *server, int status) {
-  (void)server;
   if (status < 0) {
     logerr("Error on new connection: %s\n", uv_strerror(status));
+    return;
+  }
+  NetworkRuntimeDeps *deps = deps_from_server(server);
+  if (!deps || !deps->loop || !deps->listener) {
+    logerr("Rejected connection: network runtime dependencies are missing.\n");
     return;
   }
   uv_tcp_t *client = (uv_tcp_t *) malloc(sizeof(uv_tcp_t));
@@ -614,14 +597,14 @@ void on_new_connection(uv_stream_t *server, int status) {
     return;
   }
 
-  int err = uv_tcp_init(deps_from_server(server, &(NetworkRuntimeDeps){.loop = config.loop, .listener = &legacy_listener, .lines = &line, .maxconns = config.maxconns})->loop, client);
+  int err = uv_tcp_init(deps->loop, client);
   if (err < 0) {
     logerr("Rejected connection: uv_tcp_init failed: %s\n", uv_strerror(err));
     free(client);
     return;
   }
 
-  err = uv_accept((uv_stream_t *)deps_from_server(server, &(NetworkRuntimeDeps){.loop = config.loop, .listener = &legacy_listener, .lines = &line, .maxconns = config.maxconns})->listener, (uv_stream_t *)client);
+  err = uv_accept((uv_stream_t *)deps->listener, (uv_stream_t *)client);
   if (err < 0) {
     logerr("Rejected connection: uv_accept failed: %s\n", uv_strerror(err));
     uv_close((uv_handle_t *)client, free_client_on_close);
@@ -700,12 +683,6 @@ void init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port) {
   }
 }
 
-void init_listener(uint32_t port) {
-  static NetworkRuntimeDeps deps;
-  deps = legacy_network_deps();
-  init_listener_with_deps(&deps, port);
-}
-
 void input_processor(uv_idle_t* handle) {
   // Called once per iteration of the game loop
   RuntimeContext *input_ctx = handle ? (RuntimeContext *)handle->data : NULL;
@@ -734,11 +711,6 @@ void input_processor(uv_idle_t* handle) {
 
 void shutdown_listener_with_deps(NetworkRuntimeDeps *deps) {
   if (deps && deps->listener) uv_close((uv_handle_t *)deps->listener, NULL);
-}
-
-void shutdown_listener() {
-  NetworkRuntimeDeps deps = legacy_network_deps();
-  shutdown_listener_with_deps(&deps);
 }
 
 void shutdown_networking() {
