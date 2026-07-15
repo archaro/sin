@@ -1,8 +1,9 @@
 # Sinistra Library Calls
 
-This reference is derived from the registered `libcalls[]` table in
-`src/libcall/libcall_table.c`.  Library calls are pseudo-items of the form
-`library.call{arguments}` and always push a return value.  Calls with arity `0`
+This reference is derived from the canonical registration list in
+`src/libcall/libcall_list.h`, which is materialized as the `libcalls[]` table in
+`src/libcall/libcall_table.c`. Library calls are pseudo-items of the form
+`library.call{arguments}` and always push a return value. Calls with arity `0`
 are written without an argument list in normal Sinistra source, for example
 `net.input`.
 
@@ -35,8 +36,9 @@ Examples:
 
 ## Registered libcalls
 
-String values are limited to 65,535 bytes. String calls that would construct a
-larger result return `nil`.
+String values are limited by `SIN_MAX_STRING_BYTES` in
+`src/common/string_limits.h`, currently 65,535 bytes. String calls that would
+construct a larger result return `nil`.
 
 | Libcall | Library | Call | Arity | Argument expectations | Return value | Side effects | Failure behaviour | Example |
 | --- | --- | --- | ---: | --- | --- | --- | --- | --- |
@@ -52,6 +54,13 @@ larger result return `nil`.
 | `str.capitalise{text}` | `str` | `capitalise` | 1 | `text` must evaluate to a string; non-string values are invalid. | The same string value with its first byte uppercased; `nil` for invalid non-string input. | Mutates the string value on top of the VM stack. | Non-string input sets the runtime invalid-arguments error and returns `nil`. | `@name = str.capitalise{"sinistra"};` |
 | `str.upper{text}` | `str` | `upper` | 1 | `text` must evaluate to a string; non-string values are invalid. | The same string value with all bytes uppercased; `nil` for invalid non-string input. | Mutates the string value on top of the VM stack. | Non-string input sets the runtime invalid-arguments error and returns `nil`. | `@shout = str.upper{"hello"};` |
 | `str.lower{text}` | `str` | `lower` | 1 | `text` must evaluate to a string; non-string values are invalid. | The same string value with all bytes lowercased; `nil` for invalid non-string input. | Mutates the string value on top of the VM stack. | Non-string input sets the runtime invalid-arguments error and returns `nil`. | `@quiet = str.lower{"LOUD"};` |
+| `str.len{text}` | `str` | `len` | 1 | `text` must evaluate to a string; non-string values are invalid. | The byte length of `text` as an integer; `nil` for invalid non-string input. | Consumes the input string. | Non-string input sets the runtime invalid-arguments error and returns `nil`. | `@n = str.len{"hello"};` |
+| `str.trim{text}` | `str` | `trim` | 1 | `text` must evaluate to a string; non-string values are invalid. | The same string value with leading and trailing C whitespace bytes removed; `nil` for invalid non-string input. | Mutates the string value on top of the VM stack. | Non-string input sets the runtime invalid-arguments error and returns `nil`. | `@clean = str.trim{"  hello\n"};` |
+| `str.ltrim{text}` | `str` | `ltrim` | 1 | `text` must evaluate to a string; non-string values are invalid. | The same string value with leading C whitespace bytes removed; `nil` for invalid non-string input. | Mutates the string value on top of the VM stack. | Non-string input sets the runtime invalid-arguments error and returns `nil`. | `@clean = str.ltrim{"  hello"};` |
+| `str.rtrim{text}` | `str` | `rtrim` | 1 | `text` must evaluate to a string; non-string values are invalid. | The same string value with trailing C whitespace bytes removed; `nil` for invalid non-string input. | Mutates the string value on top of the VM stack. | Non-string input sets the runtime invalid-arguments error and returns `nil`. | `@clean = str.rtrim{"hello  "};` |
+| `str.substr{text, start, len}` | `str` | `substr` | 3 | `text` must evaluate to a string; `start` and `len` must be integers. `start` must be non-negative. | A new byte substring starting at zero-based byte offset `start` and containing up to `len` bytes. If `start` is beyond the end of `text`, returns the empty string. If `len < 1`, returns `nil`. | Consumes all three arguments and pushes the substring result. | Invalid argument types or negative `start` set the runtime invalid-arguments error and return `nil`; allocation failure returns `nil`. | `@mid = str.substr{"abcdef", 2, 3};` |
+| `str.find{text, needle}` | `str` | `find` | 2 | `text` and `needle` must evaluate to strings. | The zero-based byte offset of the first occurrence of `needle` in `text`, or `-1` when not found; `nil` for invalid non-string input. Empty `needle` matches at offset `0`. | Consumes both arguments. | Invalid argument types set the runtime invalid-arguments error and return `nil`. | `@pos = str.find{"look north", "north"};` |
+| `str.contains{text, needle}` | `str` | `contains` | 2 | `text` and `needle` must evaluate to strings. | `true` when `needle` occurs in `text`, otherwise `false`. Empty `needle` matches. | Consumes both arguments. | Invalid argument types set the runtime invalid-arguments error and return `false`. | `str.contains{"look north", "north"};` |
 | `str.valtostr{value}` | `str` | `valtostr` | 1 | Any value. | A string representation of the value; existing strings are returned unchanged. | Consumes non-string values and pushes a new string. | Allocation or float-formatting failure returns `nil`. | `@text = str.valtostr{42};` |
 | `str.replace{text, old, new}` | `str` | `replace` | 3 | `text`, `old`, and `new` must evaluate to strings. | A new string with every non-overlapping occurrence of `old` replaced by `new`; empty `old` leaves `text` unchanged. | Consumes all three arguments and pushes the replacement result. | Invalid argument types set the runtime invalid-arguments error and return `nil`; allocation overflow or failure returns `nil`. | `@text = str.replace{"one two one", "one", "three"};` |
 | `str.repeat{text, count}` | `str` | `repeat` | 2 | `text` must evaluate to a string; `count` must be a non-negative integer. | A new string containing `text` repeated `count` times; `count` of `0` returns the empty string. | Consumes both arguments and pushes the repeated string. | Invalid argument types or negative `count` set the runtime invalid-arguments error and return `nil`; allocation overflow or failure returns `nil`. | `@line = str.repeat{"-", 72};` |

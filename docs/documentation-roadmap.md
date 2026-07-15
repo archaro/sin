@@ -7,13 +7,6 @@ and reviewable increments rather than prematurely freezing syntax or semantics.
 
 ## Near-term tasks
 
-### Create a documentation index
-
-Add a `docs/README.md` index that explains the purpose and stability level of
-each document. The index should help readers choose between the quickstart,
-conceptual overview, bytecode reference, libcall reference, history, test
-coverage map, and future language reference.
-
 ### Split the concepts guide into reader-focused pages
 
 Break `docs/concepts.md` into smaller pages with stable responsibilities:
@@ -108,9 +101,8 @@ for syntax, bytecode, library calls, and itemstore/runtime behaviour.
 
 ## Suggested first documentation issues
 
-1. Add `docs/README.md` and link it from `README.md`.
+1. Link `docs/README.md` from `README.md`.
 2. Split `docs/concepts.md` into focused concept pages without changing content
    semantics.
-3. Add a `docs/tools.md` reference for `sin`, `scomp`, and `sdiss`.
-4. Add `docs/troubleshooting.md` for diagnostics, logs, and generated state.
-5. Add a provisional `docs/language-reference.md` skeleton with stability notes.
+3. Add a troubleshooting page for diagnostics, logs, and generated state.
+4. Add a provisional language-reference skeleton with stability notes.

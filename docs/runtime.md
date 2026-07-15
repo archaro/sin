@@ -63,18 +63,21 @@ code items and while loading itemstores. It only checks whether encoded bytecode
 is structurally valid for execution; failures are reported as
 `ERR_RUNTIME_BYTECODE` (or reject the persisted code item during load).
 
-`--strict-runtime-contracts` is a separate compatibility diagnostic mode for
-runtime argument contracts. In default mode, item fetch/call execution may
-silently discard supplied arguments when a code item receives too many arguments,
-when the target item is missing, or when the computed item name is invalid. With
-strict runtime contracts enabled, those stack effects and return values are
-preserved, but the interpreter also sets `error` to `ERR_RUNTIME_INVALIDARGS`,
-writes a detail string to `error.msg`, and logs a runtime contract violation.
-Enabling `--strict-validation` alone does not enable these dropped-argument
-diagnostics; use `--strict-runtime-contracts` when you want runtime contract
-reporting. For example, `add{1, 2, 3}` and `missing.item{1}` keep their
-legacy-compatible return values, but strict runtime contracts also set
-`ERR_RUNTIME_INVALIDARGS` and describe the discarded argument in `error.msg`.
+`--strict-runtime-contracts` is a separate diagnostic mode for runtime argument
+contracts. In default mode, item fetch/call execution may intentionally discard
+supplied arguments when a code item receives too many arguments, when the target
+item is missing, or when the computed item name is invalid. This is a live-update
+design choice: code can keep running while callers and callees are updated to
+match a changed parameter list. With strict runtime contracts enabled, those
+stack effects and return values are preserved, but the interpreter performs
+extra checks, sets `error` to `ERR_RUNTIME_INVALIDARGS`, writes a detail string
+to `error.msg`, and logs a runtime contract violation. Enabling
+`--strict-validation` alone does not enable these dropped-argument diagnostics;
+use `--strict-runtime-contracts` when you want runtime contract reporting and can
+accept the extra runtime overhead. For example, `add{1, 2, 3}` and
+`missing.item{1}` keep their normal return values, but strict runtime contracts
+also set `ERR_RUNTIME_INVALIDARGS` and describe the discarded argument in
+`error.msg`.
 
 ## Libcall API boundary
 

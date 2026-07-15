@@ -2,7 +2,7 @@
 
 This document is the canonical reference for the on-disk itemstore format.
 The current format version is `1`. Compatibility is guaranteed only for
-versioned itemstores beginning with v1; unversioned legacy files are rejected.
+versioned itemstores beginning with v1.
 
 ## Encoding conventions
 

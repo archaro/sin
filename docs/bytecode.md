@@ -102,7 +102,7 @@ arguments as described below.
 | `L` | `IR_OP_ITEM_PUSH_LAYER` | `u8 length`, bytes | Inside item assembly, append a literal layer name. |
 | `M` | `IR_OP_LIBCALL_TOKEN` | `u8 token` | Dispatch a prevalidated library-call registry token. |
 | `R` | `IR_OP_ITEM_BEGIN_REL` | item layers until `E` | Begin relative item-name assembly using the current item as context. |
-| `V` | deref payload byte | `u8 local_index` | Inside a `D` dereference payload, turn the addressed local value into a layer name. |
+| `V` | `IR_OP_ITEM_PUSH_DEREF_LOCAL` | `u8 local_index` | Inside a `D` dereference payload, turn the addressed local value into a layer name. |
 | `W` | `IR_OP_DELETE` | none | Pop an item name. Delete the item when it exists; push nothing. |
 | `X` | `IR_OP_EXISTS` | none | Pop an item name and push true if it resolves to an item, otherwise false. |
 | `Y` | `IR_OP_NTHNAME` | none | Pop an index and item name. Push the name of the indexed child, or `nil` if no such child exists. |
@@ -135,17 +135,20 @@ then behaves as follows:
 * If the target does not exist or the item name is invalid, it discards supplied
   arguments and pushes `nil`.
 
-By default, discarding arguments in these cases is silent for compatibility. When
-the runtime is started with `--strict-runtime-contracts`, the `F` primitive still
-performs the same stack normalization and return-value behavior, but each
-discarded argument caused by an over-arity code-item call, invalid item name, or
-missing target item sets `error` to `ERR_RUNTIME_INVALIDARGS` and writes a
-diagnostic to `error.msg`. This option is separate from `--strict-validation`,
-which validates bytecode structure before execution. For example, an over-arity
-call such as `add{1, 2, 3}` still returns the same value that `add{1, 2}` would
-return, and a missing-target call such as `missing.item{1}` still returns `nil`;
-strict runtime contracts additionally set `ERR_RUNTIME_INVALIDARGS` and explain
-that an argument was discarded.
+By default, discarding arguments in these cases is silent by design. This lets
+running worlds tolerate live code updates while callers and callees are being
+brought back into agreement after a parameter-list change. When the runtime is
+started with `--strict-runtime-contracts`, the `F` primitive still performs the
+same stack normalization and return-value behavior, but each discarded argument
+caused by an over-arity code-item call, invalid item name, or missing target item
+sets `error` to `ERR_RUNTIME_INVALIDARGS` and writes a diagnostic to `error.msg`.
+This option is separate from `--strict-validation`, which validates bytecode
+structure before execution, and it has a runtime cost because it performs extra
+contract checks. For example, an over-arity call such as `add{1, 2, 3}` still
+returns the same value that `add{1, 2}` would return, and a missing-target call
+such as `missing.item{1}` still returns `nil`; strict runtime contracts
+additionally set `ERR_RUNTIME_INVALIDARGS` and explain that an argument was
+discarded.
 
 The IR schema distinguishes the two producers of `F`:
 

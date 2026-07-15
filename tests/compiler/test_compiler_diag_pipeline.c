@@ -282,7 +282,7 @@ static void test_scomp_cli_malformed_diagnostic_shape(void) {
   ASSERT_TRUE(strstr(err, "line: 3") != NULL);
   ASSERT_TRUE(strstr(err, "column: 1") != NULL);
   ASSERT_TRUE(strstr(err, "message:") != NULL);
-  ASSERT_TRUE(strstr(err, "legacy: ERR_") != NULL);
+  ASSERT_TRUE(strstr(err, "errno: ERR_") != NULL);
   ASSERT_TRUE(strstr(err, "source:") != NULL);
   ASSERT_TRUE(strstr(err, "    ^;") != NULL);
   ASSERT_TRUE(strstr(err, "    ^") != NULL);

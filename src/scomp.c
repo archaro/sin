@@ -101,7 +101,7 @@ static void print_compiler_diagnostic(const CompilerDiagnostic *diag,
   logerr("  line: %d\n", line);
   logerr("  column: %d\n", column);
   logerr("  message: %s\n", diag_message(diag));
-  logerr("  legacy: ERR_%d\n", diag ? diag->code : 0);
+  logerr("  errno: ERR_%d\n", diag ? diag->code : 0);
   logerr("  source:\n");
   logerr("    ");
   print_source_line(stderr, source, source_len, line);

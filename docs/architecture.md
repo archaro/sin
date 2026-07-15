@@ -77,7 +77,8 @@ crossing.
 Key entry points:
 
 - `interpret()` in `src/runtime/interpret.h`.
-- `runtime_init()` / `runtime_destroy()` via `src/runtime/runtime_context.h`.
+- `runtime_context_init()`, `runtime_init()`, and `runtime_destroy()` via
+  `src/runtime/runtime_context.h`.
 
 ### Itemstore
 

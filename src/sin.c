@@ -103,8 +103,7 @@ void usage() {
   printf("     --strict-validation\n");
   printf("\t\t\t  Verify bytecode before runtime execution.\n");
   printf("     --strict-runtime-contracts\n");
-  printf("\t\t\t  Report runtime argument contract violations that legacy\n");
-  printf("\t\t\t  mode silently tolerates.\n");
+  printf("\t\t\t  Report runtime argument contract violations.\n");
 }
 
 static void usage_error(const char *message) {
