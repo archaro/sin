@@ -38,6 +38,11 @@ static int8_t compile_parse_input_to_bytecode_with_params(const ParseInput *inpu
   }
 
   ctx.sem_ctx = sem_create_ctx();
+  if (!ctx.sem_ctx) {
+    compdiag_set_once(&rc, errdetail, ERR_COMP_UNKNOWN, "compile",
+                      "semantic context allocation failed");
+    goto done;
+  }
   ParseInput parse_input = {ctx.source, ctx.source_len, default_source_name(input)};
   rc = parse_source(&parse_input, &ctx.ast_root, errdetail);
   if (rc != ERR_NOERROR) {
@@ -157,10 +162,16 @@ int8_t compile_parse_input_to_bytecode_diag(const ParseInput *input, OUTPUT_t **
     if (out_diag) compiler_diag_set(out_diag, rc, DIAG_PHASE_COMPILE, "compile: bytecode output allocation failed");
   } else {
     ctx.sem_ctx = sem_create_ctx();
-    ParseInput parse_input = {ctx.source, ctx.source_len, source_name};
-    rc = parse_source_diag(&parse_input, &ctx.ast_root, &errdetail, &parse_state);
-    if (rc != ERR_NOERROR) {
-      if (out_diag) compiler_diag_set(out_diag, rc, DIAG_PHASE_PARSE, errdetail ? errdetail : "");
+    if (!ctx.sem_ctx) {
+      rc = ERR_COMP_UNKNOWN;
+      if (out_diag) compiler_diag_set(out_diag, rc, DIAG_PHASE_COMPILE,
+                                      "compile: semantic context allocation failed");
+    } else {
+      ParseInput parse_input = {ctx.source, ctx.source_len, source_name};
+      rc = parse_source_diag(&parse_input, &ctx.ast_root, &errdetail, &parse_state);
+      if (rc != ERR_NOERROR) {
+        if (out_diag) compiler_diag_set(out_diag, rc, DIAG_PHASE_PARSE, errdetail ? errdetail : "");
+      }
     }
     if (rc == ERR_NOERROR) rc = sem_check_locals_diag(ctx.ast_root, &errdetail, out_diag, ctx.sem_ctx);
     if (rc == ERR_NOERROR && ctx.sem_ctx->count > UINT8_MAX) {

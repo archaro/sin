@@ -58,6 +58,36 @@ static bool sem_find_local_index_slot(SEM_CTX *ctx, const char *name,
   return true;
 }
 
+static void sem_set_oom_error(SEM_CTX *ctx, const char *what) {
+  if (!ctx) return;
+  compdiag_set_once(&ctx->errnum, &ctx->errdetail, ERR_COMP_UNKNOWN,
+                    "semant", what ? what : "out of memory");
+}
+
+static bool sem_grow_local_tables(SEM_CTX *ctx) {
+  if (ctx->count == ctx->capacity) {
+    size_t new_capacity = ctx->capacity == 0 ? 8u : (size_t)ctx->capacity * 2u;
+    if (new_capacity > UINT32_MAX ||
+        !alloc_grow_array((void **)&ctx->locals, new_capacity, sizeof *ctx->locals)) {
+      sem_set_oom_error(ctx, "out of memory growing local table");
+      return false;
+    }
+    ctx->capacity = (uint32_t)new_capacity;
+  }
+
+  if (ctx->count == ctx->index_capacity) {
+    size_t new_capacity = ctx->index_capacity == 0 ? 8u : (size_t)ctx->index_capacity * 2u;
+    if (new_capacity > UINT32_MAX ||
+        !alloc_grow_array((void **)&ctx->local_index, new_capacity, sizeof *ctx->local_index)) {
+      sem_set_oom_error(ctx, "out of memory growing local index");
+      return false;
+    }
+    ctx->index_capacity = (uint32_t)new_capacity;
+  }
+
+  return true;
+}
+
 static void sem_add_local(SEM_CTX *ctx, const char *name) {
   if (!ctx || !name || ctx->errnum != ERR_NOERROR) return;
 
@@ -70,19 +100,14 @@ static void sem_add_local(SEM_CTX *ctx, const char *name) {
     return;
   }
 
-  if (ctx->count == ctx->capacity) {
-    ctx->capacity = ctx->capacity == 0 ? 8 : ctx->capacity * 2;
-    ctx->locals = realloc(ctx->locals, sizeof *ctx->locals * ctx->capacity);
-  }
-
-  if (ctx->count == ctx->index_capacity) {
-    ctx->index_capacity = ctx->index_capacity == 0 ? 8 : ctx->index_capacity * 2;
-    ctx->local_index = realloc(ctx->local_index,
-                               sizeof *ctx->local_index * ctx->index_capacity);
-  }
+  if (!sem_grow_local_tables(ctx)) return;
 
   SEM_LOCAL *local = &ctx->locals[ctx->count];
   local->name = strdup(name);
+  if (!local->name) {
+    sem_set_oom_error(ctx, "out of memory copying local name");
+    return;
+  }
   local->index = (uint8_t)ctx->count;
   local->param = false;
 
@@ -130,6 +155,7 @@ static void sem_set_embedded_error(SEM_CTX *ctx, int8_t errnum,
 
 SEM_CTX *sem_create_ctx() {
   SEM_CTX *ctx = malloc(sizeof *ctx);
+  if (!ctx) return NULL;
   (*ctx).locals = NULL;
   (*ctx).local_index = NULL;
   (*ctx).count = 0;
@@ -143,6 +169,7 @@ SEM_CTX *sem_create_ctx() {
 }
 
 void sem_delete_ctx(SEM_CTX *ctx) {
+  if (!ctx) return;
   for (uint32_t i = 0; i < ctx->count; i++) {
     free(ctx->locals[i].name);
   }
@@ -166,6 +193,7 @@ static void sem_seed_code_params(SEM_CTX *ctx, AS_NODE *params) {
       AS_VALUE *value = (AS_VALUE *)param->lhs;
       if (value && value->valtype == V_LOCAL && value->value.s) {
         uint32_t index = sem_resolve_local_index(ctx, value->value.s);
+        if (ctx->errnum != ERR_NOERROR) return;
         ctx->locals[index].param = true;
       }
     }
@@ -226,6 +254,10 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
     }
     case N_CODE: {
       SEM_CTX *embedded = sem_create_ctx();
+      if (!embedded) {
+        sem_set_oom_error(ctx, "out of memory creating embedded semantic context");
+        return;
+      }
       sem_seed_code_params(embedded, (AS_NODE *)node->lhs);
       sem_walk(embedded, (AS_NODE *)node->rhs);
 
@@ -264,6 +296,17 @@ int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic
   //
   // When an output buffer is requested, the detail is copied exactly once and
   // owned by the caller.
+  if (!ctx) {
+    if (errdetail) {
+      *errdetail = compdiag_copy_detail("semant: out of memory creating semantic context");
+    }
+    if (diag) {
+      compiler_diag_set(diag, ERR_COMP_UNKNOWN, DIAG_PHASE_SEMANT,
+                        "semant: out of memory creating semantic context");
+    }
+    return ERR_COMP_UNKNOWN;
+  }
+
   compdiag_reset_detail(&ctx->errdetail);
   ctx->errnum = ERR_NOERROR;
 
@@ -307,6 +350,7 @@ void sem_seed_params(SEM_CTX *ctx, const char **params, size_t count) {
   for (size_t i = 0; i < count; i++) {
     if (!params[i]) continue;
     uint32_t index = sem_resolve_local_index(ctx, params[i]);
+    if (ctx->errnum != ERR_NOERROR) return;
     ctx->locals[index].param = true;
   }
 }
