@@ -12,6 +12,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - Per-test and per-suite elapsed-time reporting
     - Assertion-failure suite/test context via `tests/test_assert.h`
     - Core suite registration (`core_tests[]`)
+    - Suite registration validation rejects null/duplicate test entries before execution.
 - **Fixture contract integrity / regeneration policy**
   - `tests/shared/test_fixture_policy.c`
     - `test_fixture_policy_declared_goldens_exist`
@@ -115,13 +116,14 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_libcall_registry_init_failure_has_no_partial_state`
     - `test_libcall_registry_lifecycle_reinit_sequence`
     - `test_libcall_registry_repeated_teardown_is_safe`
-    - `test_libcall_name_duplicate_detection`
+    - `test_default_libcall_wrappers_lazy_init_after_reset`
     - `test_missing_libcall_is_null_and_interpret_deterministic`
     - `test_libcall_registry_self_check_invalid_entries`
     - `test_libcall_invalid_arg_branches_return_contracts`
     - `test_libcall_float_integer_only_arguments_rejected`
     - `test_str_libcalls_float_returns_invalidargs_nil`
     - `test_str_len_returns_string_byte_length`
+    - `test_str_valtostr_converts_values_to_strings`
     - `test_str_case_libcalls_mutate_strings_in_place`
     - `test_str_trim_libcalls_return_trimmed_strings`
     - `test_str_substr_returns_requested_byte_range`
@@ -132,6 +134,13 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_str_startswith_and_endswith_invalid_args_return_contracts`
     - `test_str_eqcasei_returns_expected_results`
     - `test_str_eqcasei_invalid_args_return_contracts`
+    - `test_str_replace_returns_expected_results`
+    - `test_str_replace_invalid_args_return_nil`
+    - `test_str_repeat_returns_expected_results`
+    - `test_str_repeat_invalid_args_return_nil`
+    - `test_str_growth_libcalls_enforce_string_limit`
+    - `test_str_padleft_and_padright_return_expected_results`
+    - `test_str_padleft_and_padright_invalid_args_return_nil`
     - `test_str_libcall_invalidargs_uses_context_itemroot`
     - `test_libcall_output_formats_values`
     - `test_net_write_ignores_non_writable_lines`

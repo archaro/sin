@@ -376,18 +376,6 @@ bool libcall_registry_lookup_token(LibcallRegistry *registry, const char *libnam
   return libcall_registry_lookup_token_ready(registry, libname, callname, token, args);
 }
 
-bool libcall_names_unique(const LIBCALL_t *calls) {
-  for (size_t i = 0; calls[i].libname != NULL; i++) {
-    for (size_t j = i + 1; calls[j].libname != NULL; j++) {
-      if (strcmp(calls[i].libname, calls[j].libname) == 0 &&
-          strcmp(calls[i].callname, calls[j].callname) == 0) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
 OP_t libcall_registry_func_token(LibcallRegistry *registry, uint8_t token) {
   if (!libcall_registry_init(registry)) return NULL;
   return registry->token_funcs[token];

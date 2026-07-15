@@ -432,16 +432,6 @@ void test_libcall_registry_repeated_teardown_is_safe(void) {
   ASSERT_TRUE(libcall_validate_registry());
 }
 
-void test_libcall_name_duplicate_detection(void) {
-  const LIBCALL_t dup_calls[] = {
-    {"sys", "log", 1, 1, 1, NULL},
-    {"sys", "log", 1, 9, 1, NULL},
-    {NULL, NULL, -1, -1, 0, NULL}
-  };
-
-  ASSERT_TRUE(!libcall_names_unique(dup_calls));
-}
-
 void test_missing_libcall_is_null_and_interpret_deterministic(void) {
   ASSERT_TRUE(libcall_func_token(255) == NULL);
 
@@ -482,6 +472,23 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
 
   destroy_vm(config.vm);
   destroy_item(config.itemroot);
+}
+
+void test_default_libcall_wrappers_lazy_init_after_reset(void) {
+  uint8_t token = 0;
+  uint8_t args = 0;
+
+  libcall_reset_registry_for_tests();
+  ASSERT_TRUE(libcall_lookup_token("str", "upper", &token, &args));
+  ASSERT_EQ_INT(1, args);
+  ASSERT_NOT_NULL(libcall_func_token(token));
+
+  libcall_free_registry();
+  args = 0;
+  ASSERT_TRUE(libcall_token_arg_count(token, &args));
+  ASSERT_EQ_INT(1, args);
+  ASSERT_NOT_NULL(libcall_func_token(token));
+  ASSERT_TRUE(!libcall_lookup_token("missing", "missing", &token, &args));
 }
 
 void test_libcall_registry_self_check_invalid_entries(void) {

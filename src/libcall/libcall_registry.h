@@ -64,5 +64,4 @@ void libcall_free_registry(void);
 void libcall_reset_registry_for_tests(void);
 bool libcall_validate_registry(void);
 bool libcall_registry_self_check(const LIBCALL_t *calls, bool fail_fast);
-bool libcall_names_unique(const LIBCALL_t *calls);
 OP_t libcall_func_token(uint8_t token);

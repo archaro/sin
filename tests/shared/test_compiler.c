@@ -25,6 +25,12 @@ typedef struct {
   double elapsed_ms;
 } test_suite_summary_t;
 
+typedef struct {
+  const char *name;
+  const test_case_t *cases;
+  size_t count;
+} test_suite_definition_t;
+
 static const char *current_suite_name = "<startup>";
 static const char *current_test_name = "<startup>";
 static jmp_buf test_failure_jmp;
@@ -119,7 +125,7 @@ void test_libcall_registry_roundtrip(void);
 void test_libcall_registry_init_failure_has_no_partial_state(void);
 void test_libcall_registry_lifecycle_reinit_sequence(void);
 void test_libcall_registry_repeated_teardown_is_safe(void);
-void test_libcall_name_duplicate_detection(void);
+void test_default_libcall_wrappers_lazy_init_after_reset(void);
 void test_missing_libcall_is_null_and_interpret_deterministic(void);
 void test_libcall_registry_self_check_invalid_entries(void);
 void test_libcall_invalid_arg_branches_return_contracts(void);
@@ -364,7 +370,7 @@ static const test_case_t runtime_tests[] = {
     {"test_libcall_registry_init_failure_has_no_partial_state", test_libcall_registry_init_failure_has_no_partial_state},
     {"test_libcall_registry_lifecycle_reinit_sequence", test_libcall_registry_lifecycle_reinit_sequence},
     {"test_libcall_registry_repeated_teardown_is_safe", test_libcall_registry_repeated_teardown_is_safe},
-    {"test_libcall_name_duplicate_detection", test_libcall_name_duplicate_detection},
+    {"test_default_libcall_wrappers_lazy_init_after_reset", test_default_libcall_wrappers_lazy_init_after_reset},
     {"test_missing_libcall_is_null_and_interpret_deterministic", test_missing_libcall_is_null_and_interpret_deterministic},
     {"test_libcall_registry_self_check_invalid_entries", test_libcall_registry_self_check_invalid_entries},
     {"test_libcall_invalid_arg_branches_return_contracts", test_libcall_invalid_arg_branches_return_contracts},
@@ -503,6 +509,45 @@ static int env_flag_enabled(const char *name) {
   return strcmp(value, "1") == 0 || strcmp(value, "true") == 0 || strcmp(value, "TRUE") == 0;
 }
 
+static void validate_suite_definitions(const test_suite_definition_t *suites,
+                                       size_t suite_count) {
+  for (size_t i = 0; i < suite_count; ++i) {
+    const test_suite_definition_t *suite = &suites[i];
+    if (!suite->name || !suite->cases || suite->count == 0) {
+      fprintf(stderr, "[test-harness][ERROR] invalid suite definition at index %zu\n", i);
+      exit(1);
+    }
+    for (size_t j = 0; j < suite->count; ++j) {
+      const test_case_t *test = &suite->cases[j];
+      if (!test->name || !test->fn) {
+        fprintf(stderr, "[test-harness][ERROR] invalid test registration in suite %s at index %zu\n",
+                suite->name, j);
+        exit(1);
+      }
+      for (size_t k = j + 1; k < suite->count; ++k) {
+        if (suite->cases[k].name && strcmp(test->name, suite->cases[k].name) == 0) {
+          fprintf(stderr, "[test-harness][ERROR] duplicate test %s in suite %s\n",
+                  test->name, suite->name);
+          exit(1);
+        }
+      }
+      for (size_t other_suite_index = i + 1; other_suite_index < suite_count;
+           ++other_suite_index) {
+        const test_suite_definition_t *other_suite = &suites[other_suite_index];
+        for (size_t other_test_index = 0; other_test_index < other_suite->count;
+             ++other_test_index) {
+          const char *other_name = other_suite->cases[other_test_index].name;
+          if (other_name && strcmp(test->name, other_name) == 0) {
+            fprintf(stderr, "[test-harness][ERROR] duplicate test %s in suites %s and %s\n",
+                    test->name, suite->name, other_suite->name);
+            exit(1);
+          }
+        }
+      }
+    }
+  }
+}
+
 static test_suite_summary_t run_suite(const char *suite_name, const test_case_t *cases, size_t count) {
   test_suite_summary_t summary = {suite_name, 0, 0.0};
   clock_t suite_start = clock();
@@ -551,28 +596,30 @@ static test_suite_summary_t run_suite(const char *suite_name, const test_case_t 
 }
 
 int main(void) {
-  test_suite_summary_t suites[] = {
-      {"core", sizeof(core_tests) / sizeof(core_tests[0]), 0.0},
-      {"compiler", sizeof(compiler_tests) / sizeof(compiler_tests[0]), 0.0},
-      {"runtime", sizeof(runtime_tests) / sizeof(runtime_tests[0]), 0.0},
+  const test_suite_definition_t suite_defs[] = {
+      {"core", core_tests, sizeof(core_tests) / sizeof(core_tests[0])},
+      {"compiler", compiler_tests, sizeof(compiler_tests) / sizeof(compiler_tests[0])},
+      {"runtime", runtime_tests, sizeof(runtime_tests) / sizeof(runtime_tests[0])},
   };
-  const size_t suite_count = sizeof(suites) / sizeof(suites[0]);
+  const size_t suite_count = sizeof(suite_defs) / sizeof(suite_defs[0]);
+  test_suite_summary_t suites[sizeof(suite_defs) / sizeof(suite_defs[0])];
   const int strict_bench = env_flag_enabled("SIN_STRICT_BENCH");
+
+  validate_suite_definitions(suite_defs, suite_count);
 
   size_t total_expected = 0;
   for (size_t i = 0; i < suite_count; ++i) {
-    total_expected += suites[i].count;
+    suites[i] = (test_suite_summary_t){suite_defs[i].name, 0, 0.0};
+    total_expected += suite_defs[i].count;
   }
 
   harness_printf("[test-harness] mode=%s strict_bench=%s suites=%zu expected_tests=%zu\n",
                  strict_bench ? "strict" : "standard",
                  strict_bench ? "enabled" : "disabled", suite_count, total_expected);
 
-  suites[0] = run_suite("core", core_tests, sizeof(core_tests) / sizeof(core_tests[0]));
-  suites[1] = run_suite("compiler", compiler_tests,
-                        sizeof(compiler_tests) / sizeof(compiler_tests[0]));
-  suites[2] = run_suite("runtime", runtime_tests,
-                        sizeof(runtime_tests) / sizeof(runtime_tests[0]));
+  for (size_t i = 0; i < suite_count; ++i) {
+    suites[i] = run_suite(suite_defs[i].name, suite_defs[i].cases, suite_defs[i].count);
+  }
 
   size_t total_ran = 0;
   for (size_t i = 0; i < suite_count; ++i) {
