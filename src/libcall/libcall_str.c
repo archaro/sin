@@ -510,3 +510,47 @@ uint8_t *lc_str_replace(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = out}});
   return nextop;
 }
+
+uint8_t *lc_str_repeat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume text and count from the stack and push text repeated count times.
+  // Stack order is text, count, with count on top. Invalid input is consumed
+  // and replaced with nil.
+  (void)item;
+
+  VALUE_t count = pop_stack(ctx->vm->stack);
+  VALUE_t text = pop_stack(ctx->vm->stack);
+
+  if (text.type != VALUE_str || count.type != VALUE_int || count.i < 0) {
+    VALUE_t args[] = {count, text};
+    lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "str.repeat text must be a string and count must be a non-negative integer");
+  }
+
+  size_t text_len = strlen(text.s);
+  size_t repeat_count = (size_t)count.i;
+  if (text_len > 0 && repeat_count > SIZE_MAX / text_len) {
+    FREE_STR(text);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+
+  size_t out_len = text_len * repeat_count;
+  char *out = malloc(out_len + 1);
+  if (!out) {
+    FREE_STR(text);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+
+  char *dst = out;
+  for (size_t i = 0; i < repeat_count; i++) {
+    memcpy(dst, text.s, text_len);
+    dst += text_len;
+  }
+  out[out_len] = '\0';
+
+  FREE_STR(text);
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = out}});
+  return nextop;
+}

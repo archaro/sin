@@ -35,6 +35,7 @@ uint8_t *lc_str_startswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_endswith(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_eqcasei(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_replace(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_str_repeat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 extern LINE_t *line;
 extern CONFIG_t config;
@@ -236,6 +237,17 @@ static void assert_str_replace_result(const char *text, const char *old_text,
   FREE_STR(ret);
 }
 
+static void assert_str_repeat_result(const char *text, int64_t count,
+                                     const char *expected) {
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(text)}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = count}});
+  (void)lc_str_repeat(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, ret.type);
+  ASSERT_TRUE(strcmp(ret.s, expected) == 0);
+  FREE_STR(ret);
+}
+
 static void assert_str_find_result(const char *haystack, const char *needle,
                                    int64_t expected) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(haystack)}});
@@ -330,6 +342,9 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_NOT_NULL(libcall_func_token(token));
   ASSERT_TRUE(libcall_lookup_token("str", "replace", &token, &args));
   ASSERT_EQ_INT(3, args);
+  ASSERT_NOT_NULL(libcall_func_token(token));
+  ASSERT_TRUE(libcall_lookup_token("str", "repeat", &token, &args));
+  ASSERT_EQ_INT(2, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
 
   alloc_test_fail_after(0);
@@ -815,6 +830,17 @@ void test_str_replace_returns_expected_results(void) {
   teardown_libcall_runtime();
 }
 
+void test_str_repeat_returns_expected_results(void) {
+  setup_libcall_runtime();
+
+  assert_str_repeat_result("ab", 3, "ababab");
+  assert_str_repeat_result("ab", 1, "ab");
+  assert_str_repeat_result("ab", 0, "");
+  assert_str_repeat_result("", 5, "");
+
+  teardown_libcall_runtime();
+}
+
 void test_str_find_and_contains_invalid_args_return_contracts(void) {
   setup_libcall_runtime();
 
@@ -913,6 +939,33 @@ void test_str_replace_invalid_args_return_nil(void) {
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.replace");
+
+  teardown_libcall_runtime();
+}
+
+void test_str_repeat_invalid_args_return_nil(void) {
+  setup_libcall_runtime();
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 2}});
+  (void)lc_str_repeat(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.repeat");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 2.0}});
+  (void)lc_str_repeat(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.repeat");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
+  (void)lc_str_repeat(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("str.repeat");
 
   teardown_libcall_runtime();
 }

@@ -30,4 +30,5 @@
   X("str",  "endswith",    4, 11, 2, lc_str_endswith) \
   X("str",  "eqcasei",     4, 12, 2, lc_str_eqcasei) \
   X("str",  "valtostr",    4, 13, 1, lc_str_valtostr) \
-  X("str",  "replace",     4, 14, 3, lc_str_replace)
+  X("str",  "replace",     4, 14, 3, lc_str_replace) \
+  X("str",  "repeat",      4, 15, 2, lc_str_repeat)
