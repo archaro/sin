@@ -149,7 +149,40 @@ typedef struct SinStartupOptions {
   bool bootonly;
 } SinStartupOptions;
 
-static void init_default_config(int argc, char **argv, SinStartupOptions *startup) {
+static char *make_input_alias(const char *input, const char *suffix) {
+  size_t name_len = 0;
+  size_t allocation_size = 0;
+  if (!input || !suffix ||
+      alloc_add_overflow(strlen(input), strlen(suffix), &name_len) ||
+      alloc_add_overflow(name_len, 1u, &allocation_size)) {
+    return NULL;
+  }
+  char *name = malloc(allocation_size);
+  if (!name) return NULL;
+  snprintf(name, allocation_size, "%s%s", input, suffix);
+  return name;
+}
+
+static bool set_config_input_name(const char *input_name) {
+  char *input = input_name ? strdup(input_name) : NULL;
+  char *inputline = make_input_alias(input, ".line");
+  char *inputtext = make_input_alias(input, ".text");
+  if (!input || !inputline || !inputtext) {
+    free(input);
+    free(inputline);
+    free(inputtext);
+    return false;
+  }
+  free(config.input);
+  free(config.inputline);
+  free(config.inputtext);
+  config.input = input;
+  config.inputline = inputline;
+  config.inputtext = inputtext;
+  return true;
+}
+
+static int init_default_config(int argc, char **argv, SinStartupOptions *startup) {
   startup->filesize = 0;
   startup->listener_port = LISTENER_PORT;
   startup->bytecode = NULL;
@@ -159,11 +192,13 @@ static void init_default_config(int argc, char **argv, SinStartupOptions *startu
   config.srcroot = NULL;
   config.itemstore = NULL;
   config.itemstore_durability = ITEMSTORE_DURABLE_FULL;
-  config.input = strdup("input");
-  config.inputline = malloc(strlen(config.input) + 6);
-  config.inputtext = malloc(strlen(config.input) + 6);
-  sprintf(config.inputline, "%s.line", config.input);
-  sprintf(config.inputtext, "%s.text", config.input);
+  config.input = NULL;
+  config.inputline = NULL;
+  config.inputtext = NULL;
+  if (!set_config_input_name("input")) {
+    logerr("Unable to allocate default input item names.\n");
+    return EXIT_FAILURE;
+  }
   config.safe_shutdown = true;
   /* Itemstores named with -i are loaded while options are processed. Detect
    * this global validation policy first so its effect is independent of
@@ -172,6 +207,7 @@ static void init_default_config(int argc, char **argv, SinStartupOptions *startu
   config.strict_runtime_contracts = flag_requested(argc, argv, "--strict-runtime-contracts");
   /* Runtime contract diagnostics are intentionally independent from bytecode
    * validation and remain disabled unless explicitly requested. */
+  return EXIT_SUCCESS;
 }
 
 static void init_signal_handler(void) {
@@ -250,8 +286,10 @@ static int parse_sin_options(int argc, char **argv, SinStartupOptions *startup) 
           logerr("Item `%s` does not exist, or is not a code item.\n", optarg);
           return EXIT_FAILURE;
         }
-        free(config.input);
-        config.input = strdup(optarg);
+        if (!set_config_input_name(optarg)) {
+          logerr("Unable to allocate input item names for `%s`.\n", optarg);
+          return EXIT_FAILURE;
+        }
         break;
       }
       case 'o': {
@@ -455,7 +493,7 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  init_default_config(argc, argv, &startup);
+  if (init_default_config(argc, argv, &startup) != EXIT_SUCCESS) return EXIT_FAILURE;
   init_signal_handler();
 
   if (parse_sin_options(argc, argv, &startup) != EXIT_SUCCESS) return EXIT_FAILURE;

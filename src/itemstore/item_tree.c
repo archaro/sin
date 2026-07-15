@@ -336,16 +336,26 @@ void set_item(ITEM_t *root, const char *item_name, VALUE_t value) {
   }
 }
 
+static bool append_itemname(ITEM_t *item, char *itemname, size_t itemname_size) {
+  if (!item || !itemname || itemname_size == 0) return false;
+  if (item->parent->parent) {
+    if (!append_itemname(item->parent, itemname, itemname_size)) return false;
+    size_t used = strlen(itemname);
+    if (used >= itemname_size) return false;
+    int written = snprintf(itemname + used, itemname_size - used, ".%s", item->name);
+    return written >= 0 && (size_t)written < itemname_size - used;
+  }
+
+  int written = snprintf(itemname, itemname_size, "%s", item->name);
+  return written >= 0 && (size_t)written < itemname_size;
+}
+
 void get_itemname(ITEM_t *item, char *itemname) {
   // Returns the full name of an item.  The itemname buffer must be
   // at least MAX_ITEM_NAME in length.
-  if (item->parent->parent) {
-    // We stop at the item before the root item.
-    get_itemname(item->parent, itemname);
-    strcat(itemname, ".");
-    strcat(itemname, item->name);
-  } else {
-    strcpy(itemname, item->name);
+  if (!append_itemname(item, itemname, MAX_ITEM_NAME)) {
+    if (itemname) itemname[0] = '\0';
+    logerr("Unable to assemble item name within MAX_ITEM_NAME.\n");
   }
 }
 
@@ -361,6 +371,7 @@ char *get_itemfilename_in_srcroot(ITEM_t *item, const char *srcroot) {
   get_itemname(item, itemname);
   l = strlen(itemname) + strlen(srcroot) + 13;
   filename = malloc((size_t)l);
+  if (!filename) return NULL;
   p = itemname;
   while (*p) {
     if(*p == '.') *p = '/';
