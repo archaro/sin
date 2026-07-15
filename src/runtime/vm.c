@@ -13,12 +13,18 @@
 VM_t *make_vm() {
   // Create a shiny new VM ready for use.
   VM_t *newvm = malloc(sizeof *newvm);
+  if (!newvm) return NULL;
   newvm->callstack = make_callstack();
   newvm->stack = make_stack();
+  if (!newvm->callstack || !newvm->stack) {
+    destroy_vm(newvm);
+    return NULL;
+  }
   return newvm;
 }
 
 void destroy_vm(VM_t *vm) {
+  if (!vm) return;
   destroy_stack(vm->stack);
   destroy_callstack(vm->callstack);
   free(vm);
@@ -27,6 +33,7 @@ void destroy_vm(VM_t *vm) {
 CALLSTACK_t *make_callstack() {
   // Allocate space for a new stack, and return it.
   CALLSTACK_t *stack = malloc(sizeof *stack);
+  if (!stack) return NULL;
   stack->max = CALLSTACK_SIZE - 1;
   stack->current = -1;
   return stack;
@@ -34,6 +41,7 @@ CALLSTACK_t *make_callstack() {
 
 void destroy_callstack(CALLSTACK_t *stack) {
   // Byebye stack
+  if (!stack) return;
   free(stack);
 }
 

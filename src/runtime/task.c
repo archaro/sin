@@ -29,6 +29,7 @@ void init_tasks() {
   top_of_id_stack = 0;
   capacity_of_id_stack = 256;
   id_stack = malloc(sizeof *id_stack * capacity_of_id_stack);
+  if (!id_stack) capacity_of_id_stack = 0;
 }
 
 void finalise_tasks() {
@@ -58,23 +59,53 @@ void retire_task_id(uint64_t id) {
     return;
   }
   if (top_of_id_stack == capacity_of_id_stack) {
-    capacity_of_id_stack *= 2;
-    id_stack = realloc(id_stack, sizeof *id_stack * capacity_of_id_stack);
+    size_t new_capacity = capacity_of_id_stack ? capacity_of_id_stack * 2u : 256u;
+    size_t bytes = 0;
+    if (new_capacity < capacity_of_id_stack ||
+        alloc_mul_overflow(new_capacity, sizeof *id_stack, &bytes)) {
+      logerr("Unable to retire task id: id stack size overflow.\n");
+      return;
+    }
+    uint64_t *new_stack = realloc(id_stack, bytes);
+    if (!new_stack) {
+      logerr("Unable to retire task id: id stack allocation failed.\n");
+      return;
+    }
+    id_stack = new_stack;
+    capacity_of_id_stack = new_capacity;
   }
   id_stack[top_of_id_stack++] = id;
 }
 
 TASK_t *make_task(char *itemname, uint64_t interval) {
   // Create a new task
+  if (!itemname || strlen(itemname) >= MAX_ITEM_NAME) return NULL;
   TASK_t *task = malloc(sizeof *task);
+  if (!task) return NULL;
+  memset(task, 0, sizeof *task);
   strcpy(task->itemname, itemname);
   task->vm = make_vm();
+  if (!task->vm) {
+    free(task);
+    return NULL;
+  }
   memset(&task->runtime_context, 0, sizeof(task->runtime_context));
   task->runtime_context.vm = task->vm;
-  task->id = new_task_id();
   task->interval = interval;
   task->timer = malloc(sizeof *task->timer);
+  if (!task->timer) {
+    destroy_vm(task->vm);
+    free(task);
+    return NULL;
+  }
   TASKNODE_t *tasknode = malloc(sizeof *tasknode);
+  if (!tasknode) {
+    free(task->timer);
+    destroy_vm(task->vm);
+    free(task);
+    return NULL;
+  }
+  task->id = new_task_id();
   tasknode->data = task;
   tasknode->next = task_list;
   task_list = tasknode;

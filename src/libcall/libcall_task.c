@@ -91,6 +91,14 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   uint64_t start_ms = (uint64_t)startin.i * 100u;
   uint64_t repeat_ms = (uint64_t)repeatin.i * 100u;
   TASK_t *newtask = make_task(itemname.s, repeat_ms);
+  if (!newtask) {
+    FREE_STR(itemname);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
+                           "Unable to allocate new game task.",
+                           ctx ? ctx->current_item : NULL);
+    return nextop;
+  }
   newtask->itemroot = ctx->itemroot;
   newtask->loop = ctx->loop;
   newtask->runtime_context = *ctx;

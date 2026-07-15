@@ -22,6 +22,7 @@ STACK_t *make_stack() {
 
 void destroy_stack(STACK_t *stack) {
   // Byebye stack
+  if (!stack) return;
   reset_stack(stack);
   free(stack);
 }

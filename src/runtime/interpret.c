@@ -26,6 +26,7 @@
 #include "runtime_item_ops.h"
 #include "runtime_opcode.h"
 #include "runtime_value.h"
+#include "strbuilder.h"
 
 #define VM ctx->vm
 
@@ -647,43 +648,10 @@ uint8_t *op_libcall_token(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 }
 
 
-typedef struct {
-  char *buf;
-  uint32_t cap;
-  uint32_t len;
-} STRBUILDER_t;
-
-static void sb_init(STRBUILDER_t *sb, uint32_t cap) {
-  sb->buf = malloc(cap);
-  sb->cap = cap;
-  sb->len = 0;
-  sb->buf[0] = '\0';
-}
-
-static void sb_ensure(STRBUILDER_t *sb, uint32_t add_len) {
-  uint32_t need = sb->len + add_len + 1;
-  if (need <= sb->cap) return;
-  uint32_t new_cap = sb->cap;
-  while (new_cap < need) new_cap *= 2;
-  sb->buf = realloc(sb->buf, new_cap);
-  sb->cap = new_cap;
-}
-
-static void sb_append_substr(STRBUILDER_t *sb, const char *src, uint32_t slen) {
-  sb_ensure(sb, slen);
-  memcpy(sb->buf + sb->len, src, slen);
-  sb->len += slen;
-  sb->buf[sb->len] = '\0';
-}
-
-static void sb_append_literal(STRBUILDER_t *sb, const char *literal) {
-  sb_append_substr(sb, literal, (uint32_t)strlen(literal));
-}
-
-static void sb_append_intstr(STRBUILDER_t *sb, int64_t val) {
+static bool sb_append_intstr(SIN_STRBUILDER_t *sb, int64_t val) {
   char str[22];
   snprintf(str, sizeof(str), "%" PRId64, val);
-  sb_append_literal(sb, str);
+  return sin_sb_append_cstr(sb, str);
 }
 
 uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -881,7 +849,7 @@ typedef struct {
   bool missing_layer_possibly_leading;
 } ItemAssemblyState;
 
-static bool append_layer_from_value(STRBUILDER_t *sb, const VALUE_t *value,
+static bool append_layer_from_value(SIN_STRBUILDER_t *sb, const VALUE_t *value,
                                     ItemAssemblyState *state,
                                     const char *item_deref_name) {
   switch (value->type) {
@@ -895,7 +863,7 @@ static bool append_layer_from_value(STRBUILDER_t *sb, const VALUE_t *value,
           return false;
         }
       } else if (is_valid_layer(value->s)) {
-        sb_append_literal(sb, value->s);
+        if (!sin_sb_append_cstr(sb, value->s)) return false;
         state->saw_non_missing_layer = true;
       } else {
         logerr("Invalid layer name '%s'.\n", value->s);
@@ -904,7 +872,7 @@ static bool append_layer_from_value(STRBUILDER_t *sb, const VALUE_t *value,
       return true;
     }
     case VALUE_int: {
-      sb_append_intstr(sb, value->i);
+      if (!sb_append_intstr(sb, value->i)) return false;
       state->saw_non_missing_layer = true;
       return true;
     }
@@ -946,8 +914,11 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
   bool invalid = false;
   ItemAssemblyState layer_state = {0};
   bool just_processed_layer = false;
-  STRBUILDER_t sb;
-  sb_init(&sb, 130);
+  SIN_STRBUILDER_t sb;
+  if (!sin_sb_init(&sb, 130u, MAX_ITEM_NAME - 1u)) {
+    push_stack(VM->stack, VALUE_NIL);
+    return NULL;
+  }
   if (relative) {
     if (!item) {
       logerr("Relative item assembly requires current item context.\n");
@@ -955,8 +926,7 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
     } else {
       char parent[MAX_ITEM_NAME];
       get_itemname(item, parent);
-      sb_append_literal(&sb, parent);
-      sb_append_literal(&sb, ".");
+      if (!sin_sb_append_cstr(&sb, parent) || !sin_sb_append_cstr(&sb, ".")) invalid = true;
     }
   }
 
@@ -971,7 +941,7 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
         REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM layer length");
         int s = *nextop++; // Length of layer name
         REQUIRE_BYTES(nextop, (size_t)s, "OP_ASSEMBLEITEM layer bytes");
-        sb_append_substr(&sb, (char *)nextop, (uint32_t)s);
+        if (!sin_sb_append_bytes(&sb, (char *)nextop, (size_t)s)) invalid = true;
         nextop += s;
         layer_state.saw_non_missing_layer = true;
         just_processed_layer = true;
@@ -1039,7 +1009,7 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
     if (*nextop != 'E') {
       // Another layer to process, so add a dot separator.
       if (just_processed_layer && layer_state.saw_non_missing_layer) {
-        sb_append_literal(&sb, ".");
+        if (!sin_sb_append_cstr(&sb, ".")) invalid = true;
       } else if (just_processed_layer && layer_state.saw_missing_layer && !layer_state.saw_non_missing_layer) {
         // Leading missing layer candidate: don't emit a separator yet.
       }
@@ -1058,14 +1028,14 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
 
   if (invalid) {
     // Not a valid item name, so push nil.
-    free(sb.buf);
+    sin_sb_dispose(&sb);
     push_stack(VM->stack, VALUE_NIL);
   } else {
     VALUE_t name;
     name.type = VALUE_str;
-    name.s = sb.buf; // Don't free - it's on the stack!
+    name.s = sin_sb_take(&sb); // Don't free - it's on the stack!
     push_stack(VM->stack, name);
-    logverbose("Item assembled: %s\n", sb.buf);
+    logverbose("Item assembled: %s\n", name.s);
   }
   REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM terminator");
   return nextop + 1;

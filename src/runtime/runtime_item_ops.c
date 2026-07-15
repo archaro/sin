@@ -11,7 +11,9 @@
 #include "compiler/compiler_pipeline.h"
 #include "error.h"
 #include "log.h"
+#include "memory.h"
 #include "runtime_decode.h"
+#include "strbuilder.h"
 #include "string_limits.h"
 
 #define REQUIRE_BYTES(nextop, n, opname) \
@@ -64,43 +66,6 @@ bool canonicalize_itemname(const char *assembled_name, ITEM_t *context_item, cha
   return true;
 }
 
-typedef struct {
-  char *buf;
-  uint32_t cap;
-  uint32_t len;
-} STRBUILDER_t;
-
-static void sb_init(STRBUILDER_t *sb, uint32_t cap) {
-  sb->buf = malloc(cap);
-  sb->cap = cap;
-  sb->len = 0;
-  sb->buf[0] = '\0';
-}
-
-static void sb_ensure(STRBUILDER_t *sb, uint32_t add_len) {
-  uint32_t need = sb->len + add_len + 1;
-  if (need <= sb->cap) {
-    return;
-  }
-  uint32_t new_cap = sb->cap;
-  while (new_cap < need) {
-    new_cap *= 2;
-  }
-  sb->buf = realloc(sb->buf, new_cap);
-  sb->cap = new_cap;
-}
-
-static void sb_append_substr(STRBUILDER_t *sb, const char *src, uint32_t slen) {
-  sb_ensure(sb, slen);
-  memcpy(sb->buf + sb->len, src, slen);
-  sb->len += slen;
-  sb->buf[sb->len] = '\0';
-}
-
-static void sb_append_literal(STRBUILDER_t *sb, const char *literal) {
-  sb_append_substr(sb, literal, (uint32_t)strlen(literal));
-}
-
 bool decode_assigncode_params(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_INPUT_t *in) {
   // Format assumption for params block: <u16 len><bytes> repeated, terminated by <u16 0>.
   const size_t MAX_ASSIGNCODE_PARAMS = 1024;
@@ -111,16 +76,18 @@ bool decode_assigncode_params(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_I
     *opcodep += 2;
     if (param_len == 0) break;
     if (in->param_count >= MAX_ASSIGNCODE_PARAMS) return false;
-    if ((in->total_param_len + param_len) > SIN_MAX_STRING_BYTES) return false;
+    if (param_len > SIN_MAX_STRING_BYTES - in->total_param_len) return false;
     REQUIRE_BYTES(*opcodep, param_len, "OP_ASSIGNCODEITEM param-bytes");
     char *param = malloc((size_t)param_len + 1);
+    if (!param) return false;
     memcpy(param, *opcodep, param_len);
     param[param_len] = '\0';
     *opcodep += param_len;
-    in->params = realloc((char **)in->params,
-                         sizeof *in->params * (in->param_count + 1));
-    in->param_lens = realloc(in->param_lens,
-                             sizeof *in->param_lens * (in->param_count + 1));
+    if (!alloc_grow_array((void **)&in->params, in->param_count + 1, sizeof *in->params) ||
+        !alloc_grow_array((void **)&in->param_lens, in->param_count + 1, sizeof *in->param_lens)) {
+      free(param);
+      return false;
+    }
     in->params[in->param_count] = param;
     in->param_lens[in->param_count] = param_len;
     in->param_count++;
@@ -135,6 +102,7 @@ bool decode_assigncode_source(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_I
   *opcodep += 2;
   REQUIRE_BYTES(*opcodep, in->source_len, "OP_ASSIGNCODEITEM source-bytes");
   in->source = malloc((size_t)in->source_len + 1);
+  if (!in->source) return false;
   memcpy(in->source, *opcodep, in->source_len);
   in->source[in->source_len] = '\0';
   *opcodep += in->source_len;
@@ -165,27 +133,37 @@ int8_t compile_and_insert_codeitem(ITEM_t *itemroot, const VALUE_t *itemname, co
 
 void persist_codeitem_source(ITEM_t *itemroot, const VALUE_t *itemname, const CODEITEM_INPUT_t *in, const char *srcroot) {
   ITEM_t *code_item = find_item(itemroot, itemname->s);
-  STRBUILDER_t sb;
+  SIN_STRBUILDER_t sb;
   size_t source_cap = in->source_len + in->total_param_len + 16u;
-  if (source_cap > SIN_MAX_STRING_BYTES || source_cap > UINT32_MAX) return;
-  sb_init(&sb, (uint32_t)source_cap);
+  if (source_cap > SIN_MAX_STRING_BYTES) source_cap = SIN_MAX_STRING_BYTES;
+  if (!sin_sb_init(&sb, source_cap, SIN_MAX_STRING_BYTES)) return;
+  bool assembled = true;
   if (in->param_count > 0) {
-    sb_append_literal(&sb, "code {");
-    for (size_t pc = 0; pc < in->param_count; pc++) {
-      sb_append_literal(&sb, in->params[pc]);
-      if (pc < (in->param_count - 1)) sb_append_literal(&sb, ", ");
+    assembled = sin_sb_append_cstr(&sb, "code {");
+    for (size_t pc = 0; assembled && pc < in->param_count; pc++) {
+      assembled = sin_sb_append_cstr(&sb, in->params[pc]);
+      if (assembled && pc < (in->param_count - 1)) {
+        assembled = sin_sb_append_cstr(&sb, ", ");
+      }
     }
-    sb_append_literal(&sb, "} (");
+    if (assembled) assembled = sin_sb_append_cstr(&sb, "} (");
   } else {
-    sb_append_literal(&sb, "code (");
+    assembled = sin_sb_append_cstr(&sb, "code (");
   }
-  sb_append_literal(&sb, in->source);
-  sb_append_literal(&sb, ");\n");
-  if (!save_itemsource_in_srcroot(code_item, sb.buf, srcroot)) {
+  if (assembled) assembled = sin_sb_append_cstr(&sb, in->source);
+  if (assembled) assembled = sin_sb_append_cstr(&sb, ");\n");
+  if (!assembled) {
+    sin_sb_dispose(&sb);
+    logerr("Source was not saved: assembled source exceeds maximum string size or allocation failed.\n");
+    return;
+  }
+  char *source_text = sin_sb_take(&sb);
+  if (!source_text) return;
+  if (!save_itemsource_in_srcroot(code_item, source_text, srcroot)) {
     char fullname[MAX_ITEM_NAME];
     get_itemname(code_item, fullname);
     logerr("Source was not saved.\nItem: %s\n", fullname);
-    logerr("Source:\n%s\n", sb.buf);
+    logerr("Source:\n%s\n", source_text);
   }
-  free(sb.buf);
+  free(source_text);
 }
