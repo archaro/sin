@@ -348,15 +348,15 @@ bool libcall_registry_validate(LibcallRegistry *registry) {
 }
 
 
-bool libcall_registry_lookup_token(LibcallRegistry *registry, const char *libname, const char *callname, uint8_t *token, uint8_t *args) {
-  if (!libcall_registry_init(registry)) return false;
+static bool libcall_registry_lookup_token_ready(const LibcallRegistry *registry, const char *libname,
+                                                const char *callname, uint8_t *token, uint8_t *args) {
   if (!libname || !callname) return false;
 
   size_t low = 0;
   size_t high = registry->name_count;
   while (low < high) {
     size_t mid = low + ((high - low) / 2);
-    LIBCALL_NAME_ENTRY_t *entry = &registry->names[mid];
+    const LIBCALL_NAME_ENTRY_t *entry = &registry->names[mid];
     int cmp = libcall_lookup_key_cmp(libname, callname, entry->lookup_key);
     if (cmp < 0) {
       high = mid;
@@ -369,6 +369,11 @@ bool libcall_registry_lookup_token(LibcallRegistry *registry, const char *libnam
     }
   }
   return false;
+}
+
+bool libcall_registry_lookup_token(LibcallRegistry *registry, const char *libname, const char *callname, uint8_t *token, uint8_t *args) {
+  if (!libcall_registry_init(registry)) return false;
+  return libcall_registry_lookup_token_ready(registry, libname, callname, token, args);
 }
 
 bool libcall_names_unique(const LIBCALL_t *calls) {
@@ -398,9 +403,25 @@ bool libcall_registry_token_arg_count(LibcallRegistry *registry, uint8_t token, 
 bool libcall_init_registry(void) { return libcall_registry_init(&default_libcall_registry); }
 bool libcall_validate_registry(void) { return libcall_registry_validate(&default_libcall_registry); }
 bool libcall_lookup_token(const char *libname, const char *callname, uint8_t *token, uint8_t *args) {
-  return libcall_registry_lookup_token(&default_libcall_registry, libname, callname, token, args);
+  if (!default_libcall_registry.ready &&
+      !libcall_registry_init(&default_libcall_registry)) {
+    return false;
+  }
+  return libcall_registry_lookup_token_ready(&default_libcall_registry, libname, callname, token, args);
 }
 bool libcall_token_arg_count(uint8_t token, uint8_t *args) {
-  return libcall_registry_token_arg_count(&default_libcall_registry, token, args);
+  if (!default_libcall_registry.ready &&
+      !libcall_registry_init(&default_libcall_registry)) {
+    return false;
+  }
+  if (!default_libcall_registry.token_funcs[token]) return false;
+  if (args) *args = default_libcall_registry.token_args[token];
+  return true;
 }
-OP_t libcall_func_token(uint8_t token) { return libcall_registry_func_token(&default_libcall_registry, token); }
+OP_t libcall_func_token(uint8_t token) {
+  if (!default_libcall_registry.ready &&
+      !libcall_registry_init(&default_libcall_registry)) {
+    return NULL;
+  }
+  return default_libcall_registry.token_funcs[token];
+}
