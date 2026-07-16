@@ -72,8 +72,8 @@ void destroy_item(ITEM_t *item);
 ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value);
 // insert_code_item creates or replaces a code item. On success, the itemstore
 // takes ownership of bytecode and frees any previous code bytecode/value payload.
-// If validation fails or installation does not reach the final item, the caller
-// retains ownership of bytecode.
+// If validation fails, the target item is in use, or installation does not reach
+// the final item, the caller retains ownership of bytecode.
 ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
                                                         uint8_t *bytecode);
 ITEM_t *find_item(ITEM_t *root, const char *item_name);

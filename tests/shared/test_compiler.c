@@ -108,6 +108,7 @@ void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
 void test_find_item_cached_distinguishes_roots(void);
 void test_item_hashtable_resize_preserves_entries_and_count(void);
 void test_itemstore_value_and_code_roundtrip(void);
+void test_insert_code_item_rejects_inuse_replacement(void);
 void test_itemstore_nested_depth_roundtrip(void);
 void test_itemstore_loads_generated_v1_wire_fixture(void);
 void test_load_itemstore_rejects_bad_headers(void);
@@ -274,6 +275,7 @@ static const test_case_t core_tests[] = {
     {"test_find_item_cached_distinguishes_roots", test_find_item_cached_distinguishes_roots},
     {"test_item_hashtable_resize_preserves_entries_and_count", test_item_hashtable_resize_preserves_entries_and_count},
     {"test_itemstore_value_and_code_roundtrip", test_itemstore_value_and_code_roundtrip},
+    {"test_insert_code_item_rejects_inuse_replacement", test_insert_code_item_rejects_inuse_replacement},
     {"test_itemstore_nested_depth_roundtrip", test_itemstore_nested_depth_roundtrip},
     {"test_itemstore_loads_generated_v1_wire_fixture", test_itemstore_loads_generated_v1_wire_fixture},
     {"test_load_itemstore_rejects_bad_headers", test_load_itemstore_rejects_bad_headers},

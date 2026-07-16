@@ -211,6 +211,46 @@ void test_itemstore_value_and_code_roundtrip(void) {
   ASSERT_EQ_INT(0, unlink(path));
 }
 
+void test_insert_code_item_rejects_inuse_replacement(void) {
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+
+  uint8_t *initial = malloc(1);
+  ASSERT_NOT_NULL(initial);
+  initial[0] = 'h';
+  ITEM_t *code = insert_code_item(root, "code", 1, initial);
+  ASSERT_NOT_NULL(code);
+  code->inuse = true;
+
+  uint8_t *replacement = malloc(2);
+  ASSERT_NOT_NULL(replacement);
+  replacement[0] = 0;
+  replacement[1] = 'h';
+  ASSERT_TRUE(insert_code_item(root, "code", 2, replacement) == NULL);
+  ASSERT_EQ_INT(ITEM_code, code->type);
+  ASSERT_EQ_INT(1, code->bytecode_len);
+  ASSERT_TRUE(code->bytecode == initial);
+  free(replacement);
+
+  code->inuse = false;
+  ASSERT_NOT_NULL(insert_item(root, "value",
+                              (VALUE_t){.type = VALUE_nil, .i = 0}));
+  ITEM_t *value_item = find_item(root, "value");
+  ASSERT_NOT_NULL(value_item);
+  value_item->inuse = true;
+
+  uint8_t *new_code = malloc(1);
+  ASSERT_NOT_NULL(new_code);
+  new_code[0] = 'h';
+  ASSERT_TRUE(insert_code_item(root, "value", 1, new_code) == NULL);
+  ASSERT_EQ_INT(ITEM_value, value_item->type);
+  ASSERT_EQ_INT(VALUE_nil, value_item->value.type);
+  free(new_code);
+
+  value_item->inuse = false;
+  destroy_item(root);
+}
+
 void test_itemstore_nested_depth_roundtrip(void) {
   char path[] = "/tmp/sin-itemstore-depth-XXXXXX";
   FILE *file = new_fixture(path);

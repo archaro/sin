@@ -279,6 +279,12 @@ ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
     if (next_dot == NULL) {
       // If there's no next dot, we've reached the last layer
       // It's code item, remember!
+      if (current_item->inuse) {
+        char name[MAX_ITEM_NAME];
+        get_itemname(current_item, name);
+        logerr("Cannot replace code item %s: currently in use.\n", name);
+        return NULL;
+      }
       if (current_item->type == ITEM_value) {
         value_free(&current_item->value);
       }
