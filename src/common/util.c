@@ -11,34 +11,6 @@
 #include "util.h"
 #include "log.h"
 
-char* itoa(int value, char* buffer, int base) {
-    // Handle negative numbers
-    if (value < 0 && base == 10) {
-        *buffer++ = '-';  // Add minus sign
-        value = -value;   // Make the value positive for conversion
-    }
-
-    // Efficiently convert digits using a lookup table
-    static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
-    char* p = buffer;
-    int temp = value;
-    do {
-        int digit = temp % base;
-        *p++ = digits[digit];
-        temp /= base;
-    } while (temp);
-
-    // Reverse the string in-place
-    *p-- = '\0';
-    while (buffer < p) {
-        char c = *buffer;
-        *buffer++ = *p;
-        *p-- = c;
-    }
-
-    return buffer;
-}
-
 bool make_path(char *path) {
   // Create the intermediate directories first
   for (char *p = strchr(path + 1, '/'); p; p = strchr(p + 1, '/')) {
@@ -60,4 +32,3 @@ bool make_path(char *path) {
   }
   return true;
 }
-

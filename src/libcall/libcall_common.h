@@ -38,9 +38,3 @@ static inline void lc_cleanup_values(VALUE_t *values, size_t count) {
     value_free(&values[i]);
   }
 }
-
-static inline void lc_cleanup_cstr(char *s) {
-  if (s) {
-    free(s);
-  }
-}
