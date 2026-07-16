@@ -28,6 +28,8 @@
 #define ERR_RUNTIME_INVLIB        24
 #define ERR_RUNTIME_BYTECODE      25
 
+#define ERR_NETWORK_ERROR         30
+
 extern const char *errmsg[];
 
 void init_errmsg();

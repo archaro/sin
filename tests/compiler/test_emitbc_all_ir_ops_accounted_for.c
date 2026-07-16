@@ -34,6 +34,7 @@ void test_emitbc_all_ir_ops_accounted_for(void) {
       {IR_OP_NOT, 'x', 1},
       {IR_OP_AND, 'y', 1},
       {IR_OP_OR, 'z', 1},
+      {IR_OP_DISCARD, 'w', 1},
       {IR_OP_LOAD_LOCAL, 'e', 1},
       {IR_OP_STORE_LOCAL, 'c', 1},
       {IR_OP_INC_LOCAL, 'f', 1},

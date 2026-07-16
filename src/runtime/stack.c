@@ -80,8 +80,10 @@ void throwaway_stack(STACK_t *stack) {
   if (stack->current >= 0) {
     value_free(&stack->stack[stack->current]);
     stack->current--;
+    logverbose("Stack value discarded.\n");
+    return;
   }
-  logerr("Stack cleared.\n");
+  logerr("Stack underflow while discarding value.\n");
 }
 
 VALUE_t *peek_stack(STACK_t *stack) {

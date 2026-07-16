@@ -304,6 +304,8 @@ void test_bytecode_verify_compiler_emitted_bytecode(void) {
       "42;",
       "@x = 7; @x;",
       "if 1 < 2 then 9; else 7; endif;",
+      "if 1 < 2 then 9; elsif 0 < 1 then 8; 7; else 6; endif; 5;",
+      "@x = 0; while @x < 2 do 9; @x++; endwhile; @x;",
       "foo.12;",
       "add = code {@a, @b} ( @a + @b; );",
   };

@@ -20,6 +20,7 @@
 uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -624,6 +625,67 @@ void test_net_write_ignores_non_writable_lines(void) {
     VALUE_t ret = pop_stack(config.vm->stack);
     ASSERT_EQ_INT(VALUE_nil, ret.type);
   }
+
+  teardown_libcall_runtime();
+}
+
+void test_net_ditch_disconnects_active_lines(void) {
+  setup_libcall_runtime();
+
+  config.maxconns = 2;
+  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+  line[1].status = LINE_idle;
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(1, ret.i);
+  ASSERT_EQ_INT(LINE_disconnecting, line[1].status);
+
+  teardown_libcall_runtime();
+}
+
+void test_net_ditch_reports_inactive_lines(void) {
+  setup_libcall_runtime();
+
+  config.maxconns = 2;
+  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+  line[0].status = LINE_empty;
+  line[1].status = LINE_disconnecting;
+
+  for (size_t i = 0; i < config.maxconns; i++) {
+    push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = (int64_t)i}});
+    (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
+    VALUE_t ret = pop_stack(config.vm->stack);
+    ASSERT_EQ_INT(VALUE_bool, ret.type);
+    ASSERT_EQ_INT(0, ret.i);
+    ITEM_t *err = find_item(config.itemroot, "error");
+    ASSERT_NOT_NULL(err);
+    ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+  }
+
+  teardown_libcall_runtime();
+}
+
+void test_net_ditch_invalid_line_returns_nil(void) {
+  setup_libcall_runtime();
+
+  config.maxconns = 1;
+  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
+  (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
+  (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
 
   teardown_libcall_runtime();
 }

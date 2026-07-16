@@ -82,7 +82,8 @@ bool resize_ordered_array(ITEM_t *item) {
   if (item->ordered_size < item->ordered_capacity) return true;
 
   size_t required = item->ordered_size + 1;
-  size_t new_capacity = item->ordered_capacity > 0 ? item->ordered_capacity : ITEM_ARRAY_INIT_CAPACITY;
+  size_t new_capacity = item->ordered_capacity;
+  if (required < ITEM_ARRAY_INIT_CAPACITY) required = ITEM_ARRAY_INIT_CAPACITY;
   if (!alloc_grow_array_capacity((void **)&item->ordered_array, &new_capacity,
                                  required, sizeof *item->ordered_array)) {
     logerr("Cannot grow ordered item array beyond %zu entries.\n",

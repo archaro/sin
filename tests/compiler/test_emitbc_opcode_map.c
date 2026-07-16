@@ -105,6 +105,7 @@ void test_emitbc_opcode_map(void) {
       {"not", IR_OP_NOT, 'x', 0},
       {"and", IR_OP_AND, 'y', 0},
       {"or", IR_OP_OR, 'z', 0},
+      {"discard", IR_OP_DISCARD, 'w', 0},
       {"load_local", IR_OP_LOAD_LOCAL, 'e', 0},
       {"store_local", IR_OP_STORE_LOCAL, 'c', 0},
       {"inc_local", IR_OP_INC_LOCAL, 'f', 0},

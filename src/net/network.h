@@ -48,6 +48,7 @@ typedef struct {
 bool validate_network_deps(const NetworkRuntimeDeps *deps);
 void init_networking_with_deps(NetworkRuntimeDeps *deps);
 void init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port);
+void client_on_close(uv_handle_t *handle);
 void destroy_line(LINE_t *line);
 void input_processor(uv_idle_t* handle);
 char *get_input(LINE_t *line);

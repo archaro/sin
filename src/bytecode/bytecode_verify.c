@@ -130,6 +130,7 @@ static const char *bc_disassembly_mnemonic(IR_Op op) {
     case IR_OP_NOT: return "LOGICAL NOT";
     case IR_OP_AND: return "LOGICAL AND";
     case IR_OP_OR: return "LOGICAL OR";
+    case IR_OP_DISCARD: return "DISCARD";
     case IR_OP_LOAD_LOCAL: return "RETRIEVE LOCAL";
     case IR_OP_STORE_LOCAL: return "SAVE LOCAL";
     case IR_OP_INC_LOCAL: return "INCREMENT LOCAL";
@@ -189,6 +190,7 @@ static BC_StackEffect bc_base_stack_effect(IR_Op op) {
     case IR_OP_NEG: case IR_OP_NOT:
     case IR_OP_ITEM_DEREF:
       return (BC_StackEffect){1, 1, false};
+    case IR_OP_DISCARD:
     case IR_OP_STORE_LOCAL: case IR_OP_JUMP_IF_FALSE:
     case IR_OP_ITEM_SAVE_CODE:
       return (BC_StackEffect){1, 0, false};
@@ -568,6 +570,7 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
     case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV: case IR_OP_NEG:
     case IR_OP_EQ: case IR_OP_NEQ: case IR_OP_LT: case IR_OP_GT: case IR_OP_LE: case IR_OP_GE:
     case IR_OP_NOT: case IR_OP_AND: case IR_OP_OR:
+    case IR_OP_DISCARD:
     case IR_OP_ITEM_DEREF: case IR_OP_ITEM_SAVE: case IR_OP_ITEM_END:
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
       return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);

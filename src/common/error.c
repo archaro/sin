@@ -25,4 +25,5 @@ void init_errmsg() {
   errmsg[ERR_RUNTIME_TRUNCATED] = "Truncated bytecode.";
   errmsg[ERR_RUNTIME_INVLIB] = "Invalid libcall.";
   errmsg[ERR_RUNTIME_BYTECODE] = "Invalid bytecode.";
+  errmsg[ERR_NETWORK_ERROR] = "Network error.";
 }

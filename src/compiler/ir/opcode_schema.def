@@ -21,6 +21,7 @@ OP(GE,             'v', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDAT
 OP(NOT,            'x', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_logicalnot)
 OP(AND,            'y', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_logicaland)
 OP(OR,             'z', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_logicalor)
+OP(DISCARD,        'w', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_discard)
 OP(LOAD_LOCAL,     'e', true,  OPERAND_A_U8,       SIZE_FIXED_2,         VALIDATE_A_U8, op_getlocal)
 OP(STORE_LOCAL,    'c', true,  OPERAND_A_U8,       SIZE_FIXED_2,         VALIDATE_A_U8, op_savelocal)
 OP(INC_LOCAL,      'f', true,  OPERAND_A_U8,       SIZE_FIXED_2,         VALIDATE_A_U8, op_inclocal)

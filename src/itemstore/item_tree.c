@@ -217,6 +217,11 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
       // If the child does not exist, create it with a default value of 0
       VALUE_t nil = {VALUE_nil, {0}};
       child_item = make_item(layer, current_item, ITEM_value, nil, NULL, 0);
+      if (child_item == NULL) {
+        logerr("Unable to create item '%s': failed to create layer '%s'.\n",
+               item_name, layer);
+        return NULL;
+      }
     }
     // Move to the child item
     current_item = child_item;
@@ -273,6 +278,11 @@ ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
       // If the child does not exist, create it with a default value of 0
       VALUE_t nil = {VALUE_nil, {0}};
       child_item = make_item(layer, current_item, ITEM_value, nil, NULL, 0);
+      if (child_item == NULL) {
+        logerr("Unable to create code item '%s': failed to create layer '%s'.\n",
+               item_name, layer);
+        return NULL;
+      }
     }
     // Move to the child item
     current_item = child_item;
@@ -369,12 +379,18 @@ void set_item(ITEM_t *root, const char *item_name, VALUE_t value) {
     value_replace(&item->value, value);
   } else {
     // Item doesn't exist, so create it.
-    insert_item(root, item_name, value);
+    if (!insert_item(root, item_name, value)) {
+      value_free(&value);
+    }
   }
 }
 
 static bool append_itemname(ITEM_t *item, char *itemname, size_t itemname_size) {
   if (!item || !itemname || itemname_size == 0) return false;
+  if (!item->parent) {
+    int written = snprintf(itemname, itemname_size, "%s", item->name);
+    return written >= 0 && (size_t)written < itemname_size;
+  }
   if (item->parent->parent) {
     if (!append_itemname(item->parent, itemname, itemname_size)) return false;
     size_t used = strlen(itemname);

@@ -842,6 +842,12 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *op_discard(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  throwaway_stack(ctx->vm->stack);
+  return nextop;
+}
+
 typedef struct {
   bool saw_missing_layer;
   bool saw_non_missing_layer;

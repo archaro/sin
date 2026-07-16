@@ -107,6 +107,8 @@ void test_find_item_cached_hit_and_negative_cache(void);
 void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
 void test_find_item_cached_distinguishes_roots(void);
 void test_item_hashtable_resize_preserves_entries_and_count(void);
+void test_get_itemname_root_item(void);
+void test_loaded_zero_child_item_can_gain_runtime_child(void);
 void test_itemstore_value_and_code_roundtrip(void);
 void test_insert_code_item_rejects_inuse_replacement(void);
 void test_itemstore_nested_depth_roundtrip(void);
@@ -133,6 +135,9 @@ void test_libcall_invalid_arg_branches_return_contracts(void);
 void test_newgametask_rejects_invalid_intervals_before_timer_start(void);
 void test_newgametask_rejects_missing_event_loop_before_returning_task_id(void);
 void test_net_write_ignores_non_writable_lines(void);
+void test_net_ditch_disconnects_active_lines(void);
+void test_net_ditch_reports_inactive_lines(void);
+void test_net_ditch_invalid_line_returns_nil(void);
 void test_sys_item_libcalls(void);
 void test_libcall_float_integer_only_arguments_rejected(void);
 void test_libcall_output_formats_values(void);
@@ -275,6 +280,8 @@ static const test_case_t core_tests[] = {
     {"test_find_item_cached_invalidation_on_delete_and_reinsert", test_find_item_cached_invalidation_on_delete_and_reinsert},
     {"test_find_item_cached_distinguishes_roots", test_find_item_cached_distinguishes_roots},
     {"test_item_hashtable_resize_preserves_entries_and_count", test_item_hashtable_resize_preserves_entries_and_count},
+    {"test_get_itemname_root_item", test_get_itemname_root_item},
+    {"test_loaded_zero_child_item_can_gain_runtime_child", test_loaded_zero_child_item_can_gain_runtime_child},
     {"test_itemstore_value_and_code_roundtrip", test_itemstore_value_and_code_roundtrip},
     {"test_insert_code_item_rejects_inuse_replacement", test_insert_code_item_rejects_inuse_replacement},
     {"test_itemstore_nested_depth_roundtrip", test_itemstore_nested_depth_roundtrip},
@@ -382,6 +389,9 @@ static const test_case_t runtime_tests[] = {
     {"test_newgametask_rejects_invalid_intervals_before_timer_start", test_newgametask_rejects_invalid_intervals_before_timer_start},
     {"test_newgametask_rejects_missing_event_loop_before_returning_task_id", test_newgametask_rejects_missing_event_loop_before_returning_task_id},
     {"test_net_write_ignores_non_writable_lines", test_net_write_ignores_non_writable_lines},
+    {"test_net_ditch_disconnects_active_lines", test_net_ditch_disconnects_active_lines},
+    {"test_net_ditch_reports_inactive_lines", test_net_ditch_reports_inactive_lines},
+    {"test_net_ditch_invalid_line_returns_nil", test_net_ditch_invalid_line_returns_nil},
     {"test_sys_item_libcalls", test_sys_item_libcalls},
     {"test_libcall_float_integer_only_arguments_rejected", test_libcall_float_integer_only_arguments_rejected},
     {"test_str_libcalls_float_returns_invalidargs_nil", test_str_libcalls_float_returns_invalidargs_nil},

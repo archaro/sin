@@ -28,6 +28,48 @@ enum {
 #define WIRE_MAX_CHILDREN 250u
 #define WIRE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
 
+void test_get_itemname_root_item(void) {
+  ITEM_t *root = make_root_item("root");
+  char itemname[MAX_ITEM_NAME] = {0};
+
+  ASSERT_NOT_NULL(root);
+  get_itemname(root, itemname);
+  ASSERT_TRUE(strcmp(itemname, "root") == 0);
+
+  destroy_item(root);
+}
+
+void test_loaded_zero_child_item_can_gain_runtime_child(void) {
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+
+  uint8_t *bytecode = malloc(3);
+  ASSERT_NOT_NULL(bytecode);
+  bytecode[0] = 0;
+  bytecode[1] = 0;
+  bytecode[2] = 'h';
+
+  ITEM_t *input = make_loaded_item("input", root, ITEM_code,
+                                   (VALUE_t){.type = VALUE_nil, .i = 0},
+                                   bytecode, 3, 0);
+  ASSERT_NOT_NULL(input);
+  ASSERT_EQ_INT(0, input->ordered_size);
+  ASSERT_EQ_INT(0, input->ordered_capacity);
+  ASSERT_TRUE(input->ordered_array == NULL);
+
+  ITEM_t *line = insert_item(root, "input.line",
+                             (VALUE_t){.type = VALUE_int, .i = 7});
+  ASSERT_NOT_NULL(line);
+  ASSERT_EQ_INT(VALUE_int, line->value.type);
+  ASSERT_EQ_INT(7, line->value.i);
+  ASSERT_EQ_INT(1, input->ordered_size);
+  ASSERT_TRUE(input->ordered_capacity >= input->ordered_size);
+  ASSERT_NOT_NULL(input->ordered_array);
+  ASSERT_TRUE(input->ordered_array[0] == line);
+
+  destroy_item(root);
+}
+
 static void put_bytes(FILE *file, const void *bytes, size_t length) {
   ASSERT_EQ_INT((long long)length,
                 (long long)fwrite(bytes, 1, length, file));

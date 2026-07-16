@@ -37,6 +37,7 @@ typedef enum {
   IR_OP_NOT,
   IR_OP_AND,
   IR_OP_OR,
+  IR_OP_DISCARD,
 
   IR_OP_LOAD_LOCAL,
   IR_OP_STORE_LOCAL,

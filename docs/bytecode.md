@@ -90,6 +90,7 @@ arguments as described below.
 | `t` | `IR_OP_GT` | none | Pop two values, compare greater-than, and push a boolean. |
 | `u` | `IR_OP_LE` | none | Pop two values, compare less-than-or-equal, and push a boolean. |
 | `v` | `IR_OP_GE` | none | Pop two values, compare greater-than-or-equal, and push a boolean. |
+| `w` | `IR_OP_DISCARD` | none | Pop and free the top stack value. The compiler emits this after expression statements whose value is not the code item's result. |
 | `x` | `IR_OP_NOT` | none | Pop the top value, apply logical not, and push the boolean result. |
 | `y` | `IR_OP_AND` | none | Pop the top two values, apply logical and, and push the boolean result. |
 | `z` | `IR_OP_OR` | none | Pop the top two values, apply logical or, and push the boolean result. |
