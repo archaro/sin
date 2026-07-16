@@ -38,8 +38,4 @@ OP(ITEM_DEREF,     'F', true,  OPERAND_NONE,       SIZE_FIXED_3,         VALIDAT
 OP(ITEM_SAVE,      'C', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_assignitem)
 OP(CALL,           'F', false, OPERAND_A_U16,      SIZE_FIXED_3,         VALIDATE_A_U16, 0)
 OP(LIBCALL_TOKEN,  'M', true,  OPERAND_A_U8,       SIZE_FIXED_2,         VALIDATE_A_U8, op_libcall_token)
-OP(EXISTS,         'X', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_exists)
-OP(DELETE,         'W', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_delete)
-OP(NTHNAME,        'Y', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_nthname)
-OP(ROOTNAME,       'Z', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_rootname)
 OP(ITEM_SAVE_CODE, 'B', true,  OPERAND_EMBEDDED_ID,SIZE_ITEM_SAVE_CODE,  VALIDATE_EMBEDDED_INDEX, op_assigncodeitem)

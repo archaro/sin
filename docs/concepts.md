@@ -128,10 +128,14 @@ Strings may be concatenated with `+` but do not respond to other attempts to ari
 
 The usual operator precedence applies, and (parentheses) can be used to change this.
 
-There are some unary operators which look like items, but are not:  `exists{<expr>}` evaluates the expression and checks whether it names an item that exists. Returns a boolean value.
-`delete{<expr>}` evaluates the expression and, if it names an item, deletes it. No value is returned.
-`nthname{<expr>, <expr>}` evaluates the first expression as an item and, if it exists, evaluates the second item as zero-based index, and returns the name of the child at that index.  If the item does not exist or the index is out of range, `nil` is returned.  This makes it possible to loop over all the children of a given item.  **Note:** item order is not guaranteed.  Just because `foo` is the sixth child of `wibble` this time, do not presume that it will be the sixth child the next time you start the runtime engine.  
-`rootname{<expr>}` is exactly the same as `nthname` with the exception that it operates at the root of the item tree, and takes only an index.
+The `sys.exists{name}`, `sys.delete{name}`, `sys.nthname{name, index}`, and
+`sys.rootname{index}` libcalls provide item-management helpers. Item names are
+strings; relative names beginning with `.` are resolved against the current code
+item where supported. `sys.exists` returns a boolean, `sys.delete` returns
+`nil`, and the name lookups return a child name string or `nil`.  **Note:** item
+order is not guaranteed.  Just because `foo` is the sixth child of `wibble` this
+time, do not presume that it will be the sixth child the next time you start the
+runtime engine.
 
 ## Tasks ##
 
@@ -146,6 +150,10 @@ The `sys` library does the sort of system-wide things that you might expect:
 `sys.log{<expression>}` writes something to the system log: it takes an expression and will try to evaluate the expression and write something sensible in the log.  Do not abuse it.  
 `sys.shutdown` will perform an orderly shutdown of the engine, saving the itemstore.  It takes no arguments.  
 `sys.abort` will abort the engine without saving the itemstore.  It takes no arguments.
+`sys.compile{<source>}` compiles and runs a string of Sinistra source code.
+`sys.exists{<name>}` reports whether a string-named item exists.
+`sys.delete{<name>}` deletes a string-named item when it exists.
+`sys.nthname{<name>, <index>}` and `sys.rootname{<index>}` return child or root item names by index.  Item order is not guaranteed.
 
 The `net` library handles network activity:  
 `net.input` checks to see if there is any interesting network activity.  It takes no arguments but returns a value and *may* set an item, depending on what activity it is reporting.  A new connection returns `1`, a disconnection returns `2`, and data returns `3`.  If there is no activity, `0` is returned.  If there is data, subitems of the `input` item will be set: `input.line` will be set to the line number that sent the data, and `input.text` will be set to the data that has been received.  Data is only signalled after receiving a `\n` character from a connection, so the developer can be assured that if a line signals that data has been received, they will be processing a whole line of input.  

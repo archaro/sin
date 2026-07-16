@@ -22,6 +22,10 @@ uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_nthname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_rootname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_capitalise(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_upper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_lower(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -620,6 +624,59 @@ void test_net_write_ignores_non_writable_lines(void) {
     VALUE_t ret = pop_stack(config.vm->stack);
     ASSERT_EQ_INT(VALUE_nil, ret.type);
   }
+
+  teardown_libcall_runtime();
+}
+
+void test_sys_item_libcalls(void) {
+  setup_libcall_runtime();
+
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "parent.first",
+                              (VALUE_t){VALUE_int, {.i = 1}}));
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "parent.second",
+                              (VALUE_t){VALUE_int, {.i = 2}}));
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "victim",
+                              (VALUE_t){VALUE_bool, {.i = 1}}));
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("victim")}});
+  (void)lc_sys_exists(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(1, ret.i);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("missing")}});
+  (void)lc_sys_exists(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("victim")}});
+  (void)lc_sys_delete(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  ASSERT_TRUE(find_item(config.itemroot, "victim") == NULL);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("parent")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_sys_nthname(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, ret.type);
+  ASSERT_TRUE(strcmp(ret.s, "second") == 0);
+  FREE_STR(ret);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  (void)lc_sys_rootname(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, ret.type);
+  ASSERT_TRUE(strcmp(ret.s, "parent") == 0);
+  FREE_STR(ret);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_sys_exists(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  assert_invalid_args_detail_contains("sys.exists");
 
   teardown_libcall_runtime();
 }

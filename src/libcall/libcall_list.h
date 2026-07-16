@@ -12,6 +12,10 @@
   X("sys",  "shutdown",    1,  2, 0, lc_sys_shutdown) \
   X("sys",  "abort",       1,  3, 0, lc_sys_abort) \
   X("sys",  "compile",     1,  4, 1, lc_sys_compile) \
+  X("sys",  "exists",      1,  5, 1, lc_sys_exists) \
+  X("sys",  "delete",      1,  6, 1, lc_sys_delete) \
+  X("sys",  "nthname",     1,  7, 2, lc_sys_nthname) \
+  X("sys",  "rootname",    1,  8, 1, lc_sys_rootname) \
   X("task", "newgametask", 2,  0, 3, lc_task_newgametask) \
   X("task", "killtask",    2,  1, 1, lc_task_killtask) \
   X("net",  "input",       3,  0, 0, lc_net_input) \

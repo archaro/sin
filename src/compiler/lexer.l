@@ -133,19 +133,15 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
 <INITIAL>{
   "and"         { return TAND; }
   "code"        { BEGIN(CODE); return TCODE; }
-  "delete"      { return TDELETE; }
   "do"          { return TDO; }
   "else"        { return TELSE; }
   "elsif"       { return TELSIF; }
   "endif"       { return TENDIF; }
   "endwhile"    { return TENDWHILE; }
-  "exists"      { return TEXISTS; }
   "if"          { return TIF; }
   "net"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
-  "nthname"     { return TNTHNAME; }
   "or"          { return TOR; }
   "return"      { return TRETURN; }
-  "rootname"    { return TROOTNAME; }
   "str"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "sys"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "task"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }

@@ -12,6 +12,7 @@
 #include "libcall_common.h"
 #include "libcall_handlers.h"
 #include "log.h"
+#include "runtime_item_ops.h"
 #include "stack.h"
 
 static uint8_t *lc_sys_return(RuntimeContext *ctx, uint8_t *nextop,
@@ -183,7 +184,8 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Preserve the caller frame below the pre-call depth; discard only values
   // produced by the nested interpret() run.
   int32_t stack_top_before_interpret = ctx->vm->stack->current;
-  (void)interpret(ctx, tmpitem);
+  VALUE_t run_result = interpret(ctx, tmpitem);
+  value_free(&run_result);
   while (ctx->vm->stack->current > stack_top_before_interpret) {
     VALUE_t dropped = pop_stack(ctx->vm->stack);
     value_free(&dropped);
@@ -197,4 +199,87 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   compiler_diag_reset(&diag);
 
   return lc_sys_return(ctx, nextop, VALUE_TRUE);
+}
+
+uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  VALUE_t itemname = pop_stack(ctx->vm->stack);
+  if (!lc_value_is_type(itemname, VALUE_str)) {
+    value_free(&itemname);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_FALSE,
+        "sys.exists item name must be a string");
+  }
+
+  char fullname[MAX_ITEM_NAME];
+  bool exists = canonicalize_itemname(itemname.s, item, fullname) &&
+      find_item(ctx->itemroot, fullname) != NULL;
+  value_free(&itemname);
+  return lc_sys_return(ctx, nextop, exists ? VALUE_TRUE : VALUE_FALSE);
+}
+
+uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  VALUE_t itemname = pop_stack(ctx->vm->stack);
+  if (!lc_value_is_type(itemname, VALUE_str)) {
+    value_free(&itemname);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "sys.delete item name must be a string");
+  }
+
+  char fullname[MAX_ITEM_NAME];
+  if (canonicalize_itemname(itemname.s, item, fullname)) {
+    delete_item(ctx->itemroot, fullname);
+  }
+  value_free(&itemname);
+  return lc_sys_return_nil(ctx, nextop);
+}
+
+uint8_t *lc_sys_nthname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  VALUE_t index = pop_stack(ctx->vm->stack);
+  VALUE_t itemname = pop_stack(ctx->vm->stack);
+  if (!lc_value_is_type(itemname, VALUE_str) ||
+      !lc_value_is_type(index, VALUE_int) || index.i < 0) {
+    value_free(&index);
+    value_free(&itemname);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "sys.nthname requires a string item name and non-negative integer index");
+  }
+
+  VALUE_t result = VALUE_NIL;
+  char fullname[MAX_ITEM_NAME];
+  if (canonicalize_itemname(itemname.s, item, fullname)) {
+    ITEM_t *parent = find_item(ctx->itemroot, fullname);
+    if (parent) {
+      ITEM_t *child = find_item_by_index(parent, (size_t)index.i);
+      if (child) {
+        result.type = VALUE_str;
+        result.s = strdup(child->name);
+        if (!result.s) result = VALUE_NIL;
+      }
+    }
+  }
+
+  value_free(&index);
+  value_free(&itemname);
+  return lc_sys_return(ctx, nextop, result);
+}
+
+uint8_t *lc_sys_rootname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+
+  VALUE_t index = pop_stack(ctx->vm->stack);
+  if (!lc_value_is_type(index, VALUE_int) || index.i < 0) {
+    value_free(&index);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "sys.rootname index must be a non-negative integer");
+  }
+
+  VALUE_t result = VALUE_NIL;
+  ITEM_t *child = find_item_by_index(ctx->itemroot, (size_t)index.i);
+  if (child) {
+    result.type = VALUE_str;
+    result.s = strdup(child->name);
+    if (!result.s) result = VALUE_NIL;
+  }
+
+  value_free(&index);
+  return lc_sys_return(ctx, nextop, result);
 }

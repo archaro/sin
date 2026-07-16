@@ -80,6 +80,7 @@ void test_sys_compile_libcall_runtime(void) {
   assert_compile_success_bool("@l = false; if @l == false then sys.log{\"False\"}; endif;");
   assert_compile_success_bool("if 1 then sys.log{\"int truthy\"}; endif;");
   assert_compile_success_bool("if \"\" then sys.log{\"empty string truthy\"}; endif;");
+  assert_compile_success_bool("sys.exists{\"foo\"}; sys.delete{\"foo\"}; sys.nthname{\"foo\", 0}; sys.rootname{0};");
 
   push_stack(config.vm->stack, vstr("sys.log{;"));
   (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);

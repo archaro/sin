@@ -193,7 +193,7 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 %nonassoc TSEMI TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF TRETURN
 
 %type <AS_NODE*> deref_content dereference first_layer subsequent_layers layer
-%type <AS_NODE*> param_local param_list params funcop item expr stmt stmtlist
+%type <AS_NODE*> param_local param_list params item expr stmt stmtlist
 %type <AS_NODE*> stmtsemi arg_list args item_assignment libcall
 %type <AS_IF*> elsif_else_opt
 
@@ -210,7 +210,6 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 %left TLAYERSEP
 %right TDEREFSTART TCODE
 %left TDEREFEND
-%nonassoc TEXISTS TDELETE TNTHNAME TROOTNAME
 %right UMINUS TNOT
 %nonassoc TLPAREN TRPAREN TLBRACE TRBRACE TCOMMA
 
@@ -272,7 +271,6 @@ expr:     TLOCAL { $$ = as_new_valnode(V_LOCAL, $1); }
         | TLPAREN expr TRPAREN { $$ = $2; }
         | TNOT expr { $$ = as_new_node(N_NOT, $2, NULL); }
         | TMINUS expr %prec UMINUS { $$ = as_new_unary_minus_node($2); }
-        | funcop { $$ = $1; }
         | libcall { $$ = $1; }
         | TUNKNOWNCHAR { $$ = NULL;
                          state->errnum = ERR_COMP_UNKNOWNCHAR;
@@ -284,12 +282,6 @@ expr:     TLOCAL { $$ = as_new_valnode(V_LOCAL, $1); }
                          state->offending_token = strdup($1 ? $1 : "");
                          YYERROR;
                        }
-        ;
-
-funcop:   TEXISTS TLBRACE item TRBRACE { $$ = as_new_node(N_EXISTS, $3, NULL); }
-        | TDELETE TLBRACE item TRBRACE { $$ = as_new_node(N_DELETE, $3, NULL); }
-        | TNTHNAME TLBRACE item TCOMMA expr TRBRACE { $$ = as_new_node(N_NTHNAME, $3, $5); }
-        | TROOTNAME TLBRACE expr TRBRACE { $$ = as_new_node(N_ROOTNAME, $3, NULL); }
         ;
 
 libcall:  TLIBNAME TLAYERSEP TLAYER args { $$ = as_new_node(N_LIBCALL, as_new_node(N_ITEM, as_new_valnode(V_LAYER, $1), as_new_node(N_ITEM, as_new_valnode(V_LAYER, $3), NULL)), $4); };

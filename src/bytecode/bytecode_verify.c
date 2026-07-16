@@ -151,10 +151,6 @@ static const char *bc_disassembly_mnemonic(IR_Op op) {
     case IR_OP_ITEM_DEREF: return "ITEM DEREF";
     case IR_OP_ITEM_SAVE: return "SAVE ITEM";
     case IR_OP_ITEM_SAVE_CODE: return "EMBEDDED CODE";
-    case IR_OP_EXISTS: return "ITEM EXISTS";
-    case IR_OP_DELETE: return "DELETE ITEM";
-    case IR_OP_NTHNAME: return "NTHNAME";
-    case IR_OP_ROOTNAME: return "ROOTNAME";
     case IR_OP_LABEL: return "LABEL";
   }
   return "UNKNOWN";
@@ -189,12 +185,11 @@ static BC_StackEffect bc_base_stack_effect(IR_Op op) {
     case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV:
     case IR_OP_EQ: case IR_OP_NEQ: case IR_OP_LT: case IR_OP_GT:
     case IR_OP_LE: case IR_OP_GE: case IR_OP_AND: case IR_OP_OR:
-    case IR_OP_NTHNAME:
       return (BC_StackEffect){2, 1, false};
-    case IR_OP_NEG: case IR_OP_NOT: case IR_OP_EXISTS: case IR_OP_ROOTNAME:
+    case IR_OP_NEG: case IR_OP_NOT:
     case IR_OP_ITEM_DEREF:
       return (BC_StackEffect){1, 1, false};
-    case IR_OP_STORE_LOCAL: case IR_OP_JUMP_IF_FALSE: case IR_OP_DELETE:
+    case IR_OP_STORE_LOCAL: case IR_OP_JUMP_IF_FALSE:
     case IR_OP_ITEM_SAVE_CODE:
       return (BC_StackEffect){1, 0, false};
     case IR_OP_ITEM_SAVE:
@@ -573,8 +568,7 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
     case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV: case IR_OP_NEG:
     case IR_OP_EQ: case IR_OP_NEQ: case IR_OP_LT: case IR_OP_GT: case IR_OP_LE: case IR_OP_GE:
     case IR_OP_NOT: case IR_OP_AND: case IR_OP_OR:
-    case IR_OP_ITEM_DEREF: case IR_OP_ITEM_SAVE: case IR_OP_EXISTS: case IR_OP_DELETE:
-    case IR_OP_NTHNAME: case IR_OP_ROOTNAME: case IR_OP_ITEM_END:
+    case IR_OP_ITEM_DEREF: case IR_OP_ITEM_SAVE: case IR_OP_ITEM_END:
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u16);
       return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     case IR_OP_PUSH_BOOL:

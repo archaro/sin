@@ -347,32 +347,6 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
       return;
     }
 
-    case N_EXISTS:
-      lower_item(ctx, (AS_NODE *)node->lhs);
-      if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_EXISTS});
-      return;
-
-    case N_DELETE:
-      lower_item(ctx, (AS_NODE *)node->lhs);
-      if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_DELETE});
-      return;
-
-    case N_NTHNAME:
-      lower_item(ctx, (AS_NODE *)node->lhs);
-      if (ctx->errnum != ERR_NOERROR) return;
-      lower_expr(ctx, (AS_NODE *)node->rhs);
-      if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_NTHNAME});
-      return;
-
-    case N_ROOTNAME:
-      lower_expr(ctx, (AS_NODE *)node->lhs);
-      if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ROOTNAME});
-      return;
-
     case N_CODE: {
       int32_t payload_index = -1;
       if (!lower_build_embedded_payload(ctx, node, &payload_index)) return;

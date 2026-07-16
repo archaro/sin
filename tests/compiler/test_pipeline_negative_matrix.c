@@ -59,7 +59,6 @@ void test_pipeline_negative_matrix(void) {
       {"parser_unterminated_string", CASE_SOURCE, "\"unterminated;", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "Unterminated string literal.", 1},
       {"parser_bad_if_endif_pairing", CASE_SOURCE, "endif;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
       {"parser_return_keyword_edge", CASE_SOURCE, "return @l == false;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
-
       {"semantic_use_before_def", CASE_SOURCE, "@x;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @x", 1},
       {"semantic_invalid_increment_target", CASE_SOURCE, "@x = 1; @y++;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @y", 1},
 

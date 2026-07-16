@@ -103,10 +103,6 @@ arguments as described below.
 | `M` | `IR_OP_LIBCALL_TOKEN` | `u8 token` | Dispatch a prevalidated library-call registry token. |
 | `R` | `IR_OP_ITEM_BEGIN_REL` | item layers until `E` | Begin relative item-name assembly using the current item as context. |
 | `V` | `IR_OP_ITEM_PUSH_DEREF_LOCAL` | `u8 local_index` | Inside a `D` dereference payload, turn the addressed local value into a layer name. |
-| `W` | `IR_OP_DELETE` | none | Pop an item name. Delete the item when it exists; push nothing. |
-| `X` | `IR_OP_EXISTS` | none | Pop an item name and push true if it resolves to an item, otherwise false. |
-| `Y` | `IR_OP_NTHNAME` | none | Pop an index and item name. Push the name of the indexed child, or `nil` if no such child exists. |
-| `Z` | `IR_OP_ROOTNAME` | none | Pop an index. Push the name of the indexed root child item, or `nil` if no such child exists. |
 
 
 ## Numeric edge cases
