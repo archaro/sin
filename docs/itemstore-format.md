@@ -4,6 +4,8 @@ This document is the canonical reference for the on-disk itemstore format.
 The current format version is `1`. Compatibility is guaranteed only for
 versioned itemstores beginning with v1.
 
+Itemstore v1 was stabilised at Sinistra release 0.5.
+
 ## Encoding conventions
 
 - Every integer field has a fixed width and is encoded little-endian.
