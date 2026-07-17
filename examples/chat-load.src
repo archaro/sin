@@ -18,19 +18,25 @@ if @a == 1 then
     @l++;
   endwhile;
 elsif @a == 3 then
-  /* Tell every other line what was said. */
-  @l = 0;
-  /* Hardcoded to 8 lines, because I'm lazy */
-  while @l < 8 do
-    if @l != input.line then
-      net.write{@l, "Line "};
-      net.write{@l, input.line};
-      net.write{@l, ": "};
-      net.write{@l, input.text};
-      net.write{@l, "\n"};
-    endif;
-    @l++;
-  endwhile;
+  if str.startswith{input.text, "\\"} then
+    /* Process a command */
+    @cmd = str.substr{input.text, 1, str.len{input.text}};
+    docommand{input.line, @cmd};
+  else
+    /* Tell every other line what was said. */
+    @l = 0;
+    /* Hardcoded to 8 lines, because I'm lazy */
+    while @l < 8 do
+      if @l != input.line then
+        net.write{@l, "Line "};
+        net.write{@l, input.line};
+        net.write{@l, ": "};
+        net.write{@l, input.text};
+        net.write{@l, "\n"};
+      endif;
+      @l++;
+    endwhile;
+  endif;
 elsif @a == 2 then
   /* Tell every other line that there has been a disconnection. */
   @l = 0;
@@ -45,4 +51,16 @@ elsif @a == 2 then
   endwhile;
 endif;
 /* That's it.  No loops, because the run-loop sorts that out. */
+);
+
+/* A simple command processor */
+docommand = code {@l, @cmd} (
+  /* This is really naive. */
+  if str.eqcasei{@cmd, "quit"} then
+    net.write{@l, "You have been disconnected.\n"};
+    net.flush{@l};
+    net.ditch{@l};
+  else
+    net.write{@l, "Unrecognised command.\n"};
+  endif;
 );

@@ -38,4 +38,5 @@
   X("str",  "replace",     4, 14, 3, lc_str_replace) \
   X("str",  "repeat",      4, 15, 2, lc_str_repeat) \
   X("str",  "padleft",     4, 16, 2, lc_str_padleft) \
-  X("str",  "padright",    4, 17, 2, lc_str_padright)
+  X("str",  "padright",    4, 17, 2, lc_str_padright) \
+  X("net",  "flush",       3,  3, 1, lc_net_flush)

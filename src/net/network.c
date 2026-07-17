@@ -40,7 +40,11 @@ static NetworkRuntimeDeps *deps_from_server(uv_stream_t *server) {
   return (server && server->data) ? (NetworkRuntimeDeps *)server->data : NULL;
 }
 
-void flush_output(LINE_t *linep);
+static void close_line_handle(LINE_t *linep) {
+  if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
+    uv_close((uv_handle_t *)linep->line_handle, client_on_close);
+  }
+}
 
 bool validate_network_deps(const NetworkRuntimeDeps *deps) {
   size_t maxconns = deps ? deps->maxconns : 0;
@@ -133,6 +137,7 @@ LINE_t *add_line(uv_tcp_t *line_handle) {
   line[l].output_write_in_flight = false;
   line[l].output_in_flight_length = 0;
   line[l].output_backpressure_ticks = 0;
+  line[l].close_after_output = false;
   line[l].input_line_length = 0;
   return &line[l];
 }
@@ -160,6 +165,7 @@ void destroy_line(LINE_t *linep) {
   linep->output_write_in_flight = false;
   linep->output_in_flight_length = 0;
   linep->output_backpressure_ticks = 0;
+  linep->close_after_output = false;
   linep->input_line_length = 0;
   linep->status = LINE_empty;
 }
@@ -196,9 +202,7 @@ static void disconnect_line_for_output_limit(LINE_t *linep, const char *reason) 
     linep->outbuf->buf.base[0] = '\0';
   }
   linep->status = LINE_disconnecting;
-  if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
-    uv_close((uv_handle_t *)linep->line_handle, client_on_close);
-  }
+  close_line_handle(linep);
 }
 
 bool line_can_accept_output(LINE_t *linep, size_t len) {
@@ -278,9 +282,7 @@ static void disconnect_line_for_input_limit(LINE_t *linep, const char *reason) {
   }
   linep->input_line_length = 0;
   linep->status = LINE_disconnecting;
-  if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
-    uv_close((uv_handle_t *)linep->line_handle, client_on_close);
-  }
+  close_line_handle(linep);
 }
 
 static bool input_line_would_exceed_limit(LINE_t *linep, const char *msg,
@@ -376,9 +378,7 @@ char *get_input(LINE_t *linep) {
     logerr("Line %zu (%s) has no input buffer. Disconnecting.\n",
            linep->linenum, linep->address[0] ? linep->address : "unknown");
     linep->status = LINE_disconnecting;
-    if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
-      uv_close((uv_handle_t *)linep->line_handle, client_on_close);
-    }
+    close_line_handle(linep);
     return NULL;
   }
 
@@ -397,9 +397,7 @@ char *get_input(LINE_t *linep) {
   if (!data) {
     logerr("Failed to allocate input line for line %zu.\n", linep->linenum);
     linep->status = LINE_disconnecting;
-    if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
-      uv_close((uv_handle_t *)linep->line_handle, client_on_close);
-    }
+    close_line_handle(linep);
     return NULL;
   }
   // Ok, we have the line of data, now take it out of the input buffer.
@@ -415,9 +413,7 @@ char *get_input(LINE_t *linep) {
            linep->linenum);
     free(data);
     linep->status = LINE_disconnecting;
-    if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
-      uv_close((uv_handle_t *)linep->line_handle, client_on_close);
-    }
+    close_line_handle(linep);
     return NULL;
   }
   memcpy(newbuffer, eol + 1, remaining_len);
@@ -483,9 +479,17 @@ static void output_write_cb(uv_write_t *req, int status) {
 
   if (status < 0) {
     linep->status = LINE_disconnecting;
-    if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
-      uv_close((uv_handle_t *)linep->line_handle, client_on_close);
+    close_line_handle(linep);
+    return;
+  }
+
+  if (linep->close_after_output) {
+    if (linep->outbuf && linep->outbuf->buf.len > 0) {
+      flush_output(linep);
+      return;
     }
+    linep->status = LINE_disconnecting;
+    close_line_handle(linep);
     return;
   }
 
@@ -495,8 +499,11 @@ static void output_write_cb(uv_write_t *req, int status) {
 void flush_output(LINE_t *linep) {
   // Send the output to the line without reusing or mutating the write buffer
   // until libuv reports completion through output_write_cb.
+  bool draining_disconnect =
+      linep && linep->status == LINE_disconnecting && linep->close_after_output;
   if (!linep || !linep->outbuf || !linep->outbuf->buf.base ||
-      linep->status == LINE_empty || linep->status == LINE_disconnecting) {
+      linep->status == LINE_empty ||
+      (linep->status == LINE_disconnecting && !draining_disconnect)) {
     return;
   }
 
@@ -544,6 +551,21 @@ void flush_output(LINE_t *linep) {
                      &write_req->buf, 1, output_write_cb);
   if (err < 0) {
     output_write_cb(&write_req->req, err);
+  }
+}
+
+void request_line_disconnect(LINE_t *linep) {
+  if (!linep || linep->status == LINE_empty ||
+      linep->status == LINE_disconnecting) {
+    return;
+  }
+
+  linep->close_after_output = true;
+  flush_output(linep);
+  linep->status = LINE_disconnecting;
+  if (!linep->output_write_in_flight &&
+      (!linep->outbuf || linep->outbuf->buf.len == 0)) {
+    close_line_handle(linep);
   }
 }
 

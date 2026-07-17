@@ -158,6 +158,43 @@ uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  LibcallNetworkDeps deps = lc_net_deps(ctx);
+  (void)item;
+
+  VALUE_t linenum = pop_stack(ctx->vm->stack);
+  if (!lc_value_is_type(linenum, VALUE_int) || linenum.i < 0) {
+    value_free(&linenum);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+
+  if ((size_t)linenum.i >= *deps.maxconns) {
+    value_free(&linenum);
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_NETWORK_ERROR,
+        "net.flush line is outside the configured connection range",
+        ctx ? ctx->current_item : NULL);
+    push_stack(ctx->vm->stack, VALUE_FALSE);
+    return nextop;
+  }
+
+  size_t line_index = (size_t)linenum.i;
+  LINE_t *linep = &deps.lines[line_index];
+  value_free(&linenum);
+
+  if (linep->status == LINE_empty || linep->status == LINE_disconnecting) {
+    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_NETWORK_ERROR,
+        "net.flush line is not connected",
+        ctx ? ctx->current_item : NULL);
+    push_stack(ctx->vm->stack, VALUE_FALSE);
+    return nextop;
+  }
+
+  flush_output(linep);
+  push_stack(ctx->vm->stack, VALUE_TRUE);
+  return nextop;
+}
+
 uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Consume line.  If line is not an integer >= 0, return nil.
   // If line is currently in any state other than LINE_empty or
@@ -196,10 +233,7 @@ uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     return nextop;
   }
 
-  linep->status = LINE_disconnecting;
-  if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
-    uv_close((uv_handle_t *)linep->line_handle, client_on_close);
-  }
+  request_line_disconnect(linep);
   push_stack(ctx->vm->stack, VALUE_TRUE);
   return nextop;
 }

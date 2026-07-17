@@ -20,6 +20,7 @@
 uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -373,6 +374,9 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_TRUE(libcall_lookup_token("str", "padright", &token, &args));
   ASSERT_EQ_INT(2, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
+  ASSERT_TRUE(libcall_lookup_token("net", "flush", &token, &args));
+  ASSERT_EQ_INT(1, args);
+  ASSERT_NOT_NULL(libcall_func_token(token));
 
   alloc_test_fail_after(0);
   token = 0;
@@ -643,6 +647,38 @@ void test_net_ditch_disconnects_active_lines(void) {
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(1, ret.i);
   ASSERT_EQ_INT(LINE_disconnecting, line[1].status);
+
+  teardown_libcall_runtime();
+}
+
+void test_net_flush_reports_line_status(void) {
+  setup_libcall_runtime();
+
+  config.maxconns = 2;
+  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+  line[0].status = LINE_idle;
+  line[1].status = LINE_empty;
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  (void)lc_net_flush(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(1, ret.i);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_net_flush(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
+  (void)lc_net_flush(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
 
   teardown_libcall_runtime();
 }

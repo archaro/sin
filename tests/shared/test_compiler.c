@@ -136,6 +136,7 @@ void test_newgametask_rejects_invalid_intervals_before_timer_start(void);
 void test_newgametask_rejects_missing_event_loop_before_returning_task_id(void);
 void test_net_write_ignores_non_writable_lines(void);
 void test_net_ditch_disconnects_active_lines(void);
+void test_net_flush_reports_line_status(void);
 void test_net_ditch_reports_inactive_lines(void);
 void test_net_ditch_invalid_line_returns_nil(void);
 void test_sys_item_libcalls(void);
@@ -390,6 +391,7 @@ static const test_case_t runtime_tests[] = {
     {"test_newgametask_rejects_missing_event_loop_before_returning_task_id", test_newgametask_rejects_missing_event_loop_before_returning_task_id},
     {"test_net_write_ignores_non_writable_lines", test_net_write_ignores_non_writable_lines},
     {"test_net_ditch_disconnects_active_lines", test_net_ditch_disconnects_active_lines},
+    {"test_net_flush_reports_line_status", test_net_flush_reports_line_status},
     {"test_net_ditch_reports_inactive_lines", test_net_ditch_reports_inactive_lines},
     {"test_net_ditch_invalid_line_returns_nil", test_net_ditch_invalid_line_returns_nil},
     {"test_sys_item_libcalls", test_sys_item_libcalls},

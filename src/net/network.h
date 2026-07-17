@@ -33,6 +33,7 @@ typedef struct {
   bool output_write_in_flight;
   size_t output_in_flight_length;
   uint32_t output_backpressure_ticks;
+  bool close_after_output;
   size_t input_line_length; // Bytes buffered since the last newline
 } LINE_t;
 
@@ -52,6 +53,8 @@ void client_on_close(uv_handle_t *handle);
 void destroy_line(LINE_t *line);
 void input_processor(uv_idle_t* handle);
 char *get_input(LINE_t *line);
+void flush_output(LINE_t *line);
+void request_line_disconnect(LINE_t *line);
 void shutdown_listener_with_deps(NetworkRuntimeDeps *deps);
 void shutdown_networking();
 bool line_can_accept_output(LINE_t *linep, size_t len);
