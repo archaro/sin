@@ -1,18 +1,22 @@
 # Sinistra
-boot.src
-items.dat
-lexer.c
-parser.c
-parser.h
-scomp
-sin
-sdiss
+/boot.src
+/items.dat
+/src/lexer.c
+/src/parser.c
+/src/parser.h
+/scomp
+/sin
+/sdiss
 tests/test-compiler
 tests/network/test-network
+tests/network/test-chat-smoke
+tests/fuzz/fuzz_scomp
+tests/fuzz/fuzz_sdiss
+tests/fuzz/fuzz_sin_object
 .vscode/
 .*.swp
 sin.code-workspace
-srcroot
+/srcroot
 
 # Prerequisites
 *.d
@@ -51,6 +55,7 @@ srcroot
 *.i*86
 *.x86_64
 *.hex
+!tests/fixtures/**/*.hex
 
 # Debug files
 *.dSYM/

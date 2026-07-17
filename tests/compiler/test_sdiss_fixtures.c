@@ -51,6 +51,7 @@ void test_sdiss_fixture_basic(void) {
     line = strtok(NULL, "\n");
   }
   free(expected);
+  remove(tmp_path);
 }
 
 static void run_sdiss_fixture(const char *path, char *output, size_t output_size, int *exit_code) {
@@ -81,6 +82,7 @@ void test_sdiss_malformed_fixture_reports_verifier_diagnostic(void) {
   ASSERT_EQ_INT(1, exit_code);
   ASSERT_TRUE(strstr(output, "truncated") != NULL);
   ASSERT_TRUE(strstr(output, "Disassembly aborted due to malformed bytecode") != NULL);
+  remove(tmp_path);
 }
 
 void test_sdiss_reads_compiler_operand_widths(void) {
@@ -114,4 +116,5 @@ void test_sdiss_reads_compiler_operand_widths(void) {
   int exit_code = 0;
   run_sdiss_fixture("tests/fixtures/sdiss/operand-widths.bin", output2, sizeof(output2), &exit_code);
   ASSERT_EQ_INT(0, exit_code);
+  remove(tmp_path);
 }

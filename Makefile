@@ -69,7 +69,10 @@ TEST_DIR := tests
 TEST_BIN := $(TEST_DIR)/test-compiler
 NETWORK_TEST_BIN := $(TEST_DIR)/network/test-network
 CHAT_SMOKE_BIN := $(TEST_DIR)/network/test-chat-smoke
-NETWORK_TEST_DEPS := $(NETWORK_TEST_BIN).d
+TEST_BINS := $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN)
+TEST_DEPS := $(TEST_BINS:%=%.d)
+TEST_TMP_ARTIFACTS := $(TEST_DIR)/fixtures/sdiss/*.bin
+TEST_CFLAGS = $(filter-out -MMD -MP,$(CFLAGS))
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -82,6 +85,7 @@ FUZZ_SDISS_CORPUS_DIR := $(FUZZ_DIR)/corpus/sdiss
 FUZZ_SIN_OBJECT_BIN := $(FUZZ_DIR)/fuzz_sin_object
 FUZZ_SIN_OBJECT_CORPUS_DIR := $(FUZZ_DIR)/corpus/sin-object
 FUZZ_BINS := $(FUZZ_BIN) $(FUZZ_SDISS_BIN) $(FUZZ_SIN_OBJECT_BIN)
+GENERATED_FUZZ_CORPUS := $(FUZZ_SDISS_CORPUS_DIR)/*.obj $(FUZZ_SIN_OBJECT_CORPUS_DIR)/*.obj
 FUZZ_SANITIZE_FLAGS := -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
 FUZZ_LINK_FLAGS := -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
 FUZZ_CFLAGS ?= $(CFLAGS) $(FUZZ_SANITIZE_FLAGS)
@@ -248,7 +252,6 @@ $(OBJ_DIR)/lexer.o: $(LEXER_C) $(PARSER_H)
 
 # Include dependency files
 -include $(DEPS)
--include $(NETWORK_TEST_DEPS)
 
 test: $(TEST_BIN) test-network test-chat-smoke
 	./$(TEST_BIN)
@@ -272,14 +275,14 @@ test-lsan: clean
 	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=1" $(MAKE) BUILD=sanitize STRICT_WARNINGS=1 test
 
 $(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
-	$(CC) $(CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
+	$(CC) $(TEST_CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
 $(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/net/network.c $(SRC_DIR)/net/network.h
-	$(CC) $(CFLAGS) -I$(TEST_DIR) -MF $(NETWORK_TEST_DEPS) \
+	$(CC) $(TEST_CFLAGS) -I$(TEST_DIR) \
 		-o $@ $(TEST_DIR)/network/test_network.c $(LDFLAGS) $(LIBS)
 
 $(CHAT_SMOKE_BIN): $(TEST_DIR)/network/test_chat_smoke.c scomp sin
-	$(CC) $(CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_DIR)/network/test_chat_smoke.c
+	$(CC) $(TEST_CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_DIR)/network/test_chat_smoke.c
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)
@@ -348,6 +351,6 @@ fuzz-sin-object: clean
 	@printf 'Built %s. Run with: %s %s\n' "$(FUZZ_SIN_OBJECT_BIN)" "$(FUZZ_SIN_OBJECT_BIN)" "$(FUZZ_SIN_OBJECT_CORPUS_DIR)"
 
 clean:
-	rm -rf $(OBJ_DIR) $(LIB_DIR) $(PROGRAMS) $(TEST_BIN) $(FUZZ_BINS) \
-		$(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) $(NETWORK_TEST_DEPS) \
+	rm -rf $(OBJ_DIR) $(LIB_DIR) $(PROGRAMS) $(TEST_BINS) $(TEST_DEPS) \
+		$(TEST_TMP_ARTIFACTS) $(FUZZ_BINS) $(GENERATED_FUZZ_CORPUS) \
 		$(SRC_DIR)/parser.c $(SRC_DIR)/parser.h $(SRC_DIR)/lexer.c
