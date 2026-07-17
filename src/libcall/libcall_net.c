@@ -171,7 +171,7 @@ uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   if ((size_t)linenum.i >= *deps.maxconns) {
     value_free(&linenum);
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_NETWORK_ERROR,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_NETWORK_ERROR,
         "net.flush line is outside the configured connection range",
         ctx ? ctx->current_item : NULL);
     push_stack(ctx->vm->stack, VALUE_FALSE);
@@ -183,7 +183,7 @@ uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   value_free(&linenum);
 
   if (linep->status == LINE_empty || linep->status == LINE_disconnecting) {
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_NETWORK_ERROR,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_NETWORK_ERROR,
         "net.flush line is not connected",
         ctx ? ctx->current_item : NULL);
     push_stack(ctx->vm->stack, VALUE_FALSE);
@@ -214,7 +214,7 @@ uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   if ((size_t)linenum.i >= *deps.maxconns) {
     value_free(&linenum);
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_NETWORK_ERROR,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_NETWORK_ERROR,
         "net.ditch line is outside the configured connection range",
         ctx ? ctx->current_item : NULL);
     push_stack(ctx->vm->stack, VALUE_FALSE);
@@ -226,7 +226,7 @@ uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   value_free(&linenum);
 
   if (linep->status == LINE_empty || linep->status == LINE_disconnecting) {
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_NETWORK_ERROR,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_NETWORK_ERROR,
         "net.ditch line is not connected",
         ctx ? ctx->current_item : NULL);
     push_stack(ctx->vm->stack, VALUE_FALSE);

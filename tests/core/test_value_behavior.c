@@ -141,7 +141,7 @@ void test_error_item_preserves_compiler_diagnostic_fields(void) {
   compiler_diag_set_location(&diag, 7, 3, 1);
   compiler_diag_set_excerpt(&diag, "bad ^ token");
 
-  set_compiler_error_item(&diag);
+  set_compiler_error_item(config.itemroot, &diag);
 
   ITEM_t *err = find_item(config.itemroot, "error");
   ASSERT_NOT_NULL(err);

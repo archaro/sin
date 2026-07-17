@@ -14,15 +14,11 @@
 #include <unistd.h>
 #endif
 
-#include "config.h"
 #include "error.h"
 #include "util.h"
 #include "memory.h"
 #include "log.h"
 #include "item_internal.h"
-
-// The configuration object, defined in src/sin.c
-extern CONFIG_t config;
 
 static const char *safe_error_message(const int errnum) {
   if (errnum >= 0 && errnum < MAXERRORS && errmsg[errnum]) {
@@ -31,8 +27,8 @@ static const char *safe_error_message(const int errnum) {
   return "Unknown error";
 }
 
-static void set_string_error_field_on_root(ITEM_t *root, const char *name,
-                                           const char *value) {
+static void set_string_error_field(ITEM_t *root, const char *name,
+                                   const char *value) {
   VALUE_t v;
   v.type = VALUE_str;
   v.s = strdup(value ? value : "");
@@ -40,8 +36,8 @@ static void set_string_error_field_on_root(ITEM_t *root, const char *name,
 }
 
 
-static void set_int_error_field_on_root(ITEM_t *root, const char *name,
-                                        int64_t value) {
+static void set_int_error_field(ITEM_t *root, const char *name,
+                                int64_t value) {
   VALUE_t v;
   v.type = VALUE_int;
   v.i = value;
@@ -49,7 +45,7 @@ static void set_int_error_field_on_root(ITEM_t *root, const char *name,
 }
 
 
-void clear_error_item_on_root(ITEM_t *root) {
+void clear_error_item(ITEM_t *root) {
   if (!root) return;
   set_item(root, "error", VALUE_NIL);
   set_item(root, "error.msg", VALUE_NIL);
@@ -62,16 +58,8 @@ void clear_error_item_on_root(ITEM_t *root) {
   set_item(root, "error.excerpt", VALUE_NIL);
 }
 
-void clear_error_item(void) {
-  clear_error_item_on_root(config.itemroot);
-}
-
-void set_error_item(const int errnum, const char *errdetail) {
-  set_error_item_on_root(config.itemroot, errnum, errdetail, NULL);
-}
-
-void set_error_item_on_root(ITEM_t *root, const int errnum,
-                            const char *errdetail, ITEM_t *current_item) {
+void set_error_item(ITEM_t *root, const int errnum,
+                    const char *errdetail, ITEM_t *current_item) {
   if (!root) return;
   // Helper function to set the error item.
   VALUE_t e, emsg;
@@ -94,7 +82,7 @@ void set_error_item_on_root(ITEM_t *root, const int errnum,
   if (current_item) {
     char itemname[MAX_ITEM_NAME] = {0};
     get_itemname(current_item, itemname);
-    set_string_error_field_on_root(root, "error.item", itemname);
+    set_string_error_field(root, "error.item", itemname);
   } else {
     set_item(root, "error.item", VALUE_NIL);
   }
@@ -106,10 +94,10 @@ void set_error_item_on_root(ITEM_t *root, const int errnum,
   set_item(root, "error.excerpt", VALUE_NIL);
 }
 
-void set_compiler_error_item_on_root(ITEM_t *root, const CompilerDiagnostic *diag) {
+void set_compiler_error_item(ITEM_t *root, const CompilerDiagnostic *diag) {
   if (!root) return;
   if (!diag) {
-    set_error_item_on_root(root, ERR_COMP_UNKNOWN, NULL, NULL);
+    set_error_item(root, ERR_COMP_UNKNOWN, NULL, NULL);
     return;
   }
 
@@ -132,7 +120,7 @@ void set_compiler_error_item_on_root(ITEM_t *root, const CompilerDiagnostic *dia
       "%s stage=%s file=%s line=%d column=%d message=%s excerpt=%s",
       stable_code, stage, file, line, column, message, excerpt);
   if (needed < 0) {
-    set_error_item_on_root(root, diag->code, message, NULL);
+    set_error_item(root, diag->code, message, NULL);
     return;
   }
 
@@ -146,14 +134,10 @@ void set_compiler_error_item_on_root(ITEM_t *root, const CompilerDiagnostic *dia
   set_item(root, "error.item", VALUE_NIL);
 
 
-  set_string_error_field_on_root(root, "error.code", stable_code);
-  set_string_error_field_on_root(root, "error.stage", stage);
-  set_string_error_field_on_root(root, "error.file", file);
-  set_int_error_field_on_root(root, "error.line", line);
-  set_int_error_field_on_root(root, "error.column", column);
-  set_string_error_field_on_root(root, "error.excerpt", excerpt);
-}
-
-void set_compiler_error_item(const CompilerDiagnostic *diag) {
-  set_compiler_error_item_on_root(config.itemroot, diag);
+  set_string_error_field(root, "error.code", stable_code);
+  set_string_error_field(root, "error.stage", stage);
+  set_string_error_field(root, "error.file", file);
+  set_int_error_field(root, "error.line", line);
+  set_int_error_field(root, "error.column", column);
+  set_string_error_field(root, "error.excerpt", excerpt);
 }

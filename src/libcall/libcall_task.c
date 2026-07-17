@@ -54,7 +54,7 @@ static uint8_t *lc_task_timer_setup_failed(RuntimeContext *ctx, uint8_t *nextop,
   if (task) destroy_task(task);
   if (itemname) FREE_STR(*itemname);
   push_stack(ctx->vm->stack, VALUE_NIL);
-  set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
+  set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
                          detail, ctx ? ctx->current_item : NULL);
   return nextop;
 }
@@ -94,7 +94,7 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
     // Ownership: free itemname once on this error path before returning.
     FREE_STR(itemname);
     push_stack(ctx->vm->stack, VALUE_NIL);
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_NOSUCHITEM,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_NOSUCHITEM,
                            NULL, ctx ? ctx->current_item : NULL);
     return nextop;
   }
@@ -105,7 +105,7 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   if (!newtask) {
     FREE_STR(itemname);
     push_stack(ctx->vm->stack, VALUE_NIL);
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
                            "Unable to allocate new game task.",
                            ctx ? ctx->current_item : NULL);
     return nextop;

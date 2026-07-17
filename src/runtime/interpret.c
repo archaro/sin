@@ -136,7 +136,7 @@ static void set_runtime_bytecode_error(RuntimeContext *ctx, const char *label,
       safe_label, offset, safe_message);
   if (needed < 0) {
     logerr("Runtime bytecode validation failed.\n");
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
                        "Runtime bytecode validation failed.",
                        ctx ? ctx->current_item : NULL);
     return;
@@ -146,7 +146,7 @@ static void set_runtime_bytecode_error(RuntimeContext *ctx, const char *label,
   char *detail = alloc_malloc(detail_len);
   if (!detail) {
     logerr("Runtime bytecode validation failed: out of memory while formatting diagnostic.\n");
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
                        "Runtime bytecode validation failed: out of memory while formatting diagnostic.",
                        ctx ? ctx->current_item : NULL);
     return;
@@ -156,7 +156,7 @@ static void set_runtime_bytecode_error(RuntimeContext *ctx, const char *label,
       "Runtime bytecode validation failed for item '%s' at offset %u: %s",
       safe_label, offset, safe_message);
   logerr("%s.\n", detail);
-  set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
+  set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
                          detail, ctx ? ctx->current_item : NULL);
   free(detail);
 }
@@ -165,7 +165,7 @@ static void set_runtime_bytecode_error(RuntimeContext *ctx, const char *label,
 static void report_strict_runtime_contract(RuntimeContext *ctx, const char *detail) {
   if (!ctx || !ctx->strict_runtime_contracts) return;
   logerr("Runtime contract violation: %s.\n", detail ? detail : "<no detail>");
-  set_error_item_on_root(ctx->itemroot, ERR_RUNTIME_INVALIDARGS, detail,
+  set_error_item(ctx->itemroot, ERR_RUNTIME_INVALIDARGS, detail,
                          ctx->current_item);
 }
 
@@ -192,7 +192,7 @@ static bool report_decode_status(RuntimeContext *ctx, RuntimeDecodeStatus status
   if (runtime_decode_status_ok(status)) return true;
   if (status.code == RUNTIME_DECODE_TRUNCATED) {
     logerr("%s.\n", status.detail);
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_TRUNCATED,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_TRUNCATED,
                            status.detail, ctx ? ctx->current_item : NULL);
   }
   return false;
@@ -638,7 +638,7 @@ uint8_t *op_libcall_token(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     char detail[64];
     snprintf(detail, sizeof(detail), "Unknown libcall token %u", token);
     logerr("%s.\n", detail);
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVLIB,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVLIB,
                            detail, ctx ? ctx->current_item : NULL);
     push_stack(VM->stack, VALUE_NIL);
   } else {
@@ -666,7 +666,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (*nextop == 'P') {
     nextop++;
     if (!decode_assigncode_params(ctx, &nextop, &in)) {
-      set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN,
+      set_error_item(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN,
                              "Invalid parameter block in code assignment bytecode.",
                              ctx ? ctx->current_item : NULL);
       goto cleanup;
@@ -675,7 +675,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   itemname = pop_stack(VM->stack);
   if (!decode_assigncode_source(ctx, &nextop, &in)) {
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN,
                            "Invalid source block in code assignment bytecode.",
                            ctx ? ctx->current_item : NULL);
     goto cleanup;
@@ -684,7 +684,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   logverbose("Source to compile: %s\n", in.source);
   if (itemname.type != VALUE_str) {
     logerr("Unable to assign code item: invalid name type %d.\n", itemname.type);
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN,
                            "Invalid item name type for code assignment.",
                            ctx ? ctx->current_item : NULL);
     goto cleanup;
@@ -693,7 +693,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (itemname.type == VALUE_str) {
     char fullname[MAX_ITEM_NAME];
     if (!canonicalize_itemname(itemname.s, item, fullname)) {
-      set_error_item_on_root(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN,
+      set_error_item(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN,
                              "Invalid item name for code assignment.",
                              ctx ? ctx->current_item : NULL);
       goto cleanup;
@@ -710,7 +710,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     set_item(ctx->itemroot, "error.item", VALUE_NIL);
   } else {
     logerr("Compilation failed.\n");
-    set_error_item_on_root(ctx ? ctx->itemroot : NULL, result, errdetail,
+    set_error_item(ctx ? ctx->itemroot : NULL, result, errdetail,
                            ctx ? ctx->current_item : NULL);
   }
 
