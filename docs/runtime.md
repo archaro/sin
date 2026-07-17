@@ -104,12 +104,10 @@ policy: the handler consumes and frees its arguments, sets `error` to
 available, and pushes the documented failure value for that libcall. Handlers
 should use the helpers in `src/libcall/libcall_common.h`, such as
 `lc_invalid_args_return` or `lc_invalid_args_detail_return`, so the error item
-and stack result are updated consistently. `net.flush` and `net.ditch` are
-exceptions: they return `nil` without changing `error` for invalid argument type
-or negative line number. Domain failures that are not invalid arguments, such as
-missing items, unknown task ids, inactive network lines, or compiler diagnostics
-from valid `sys.compile` source strings, continue to use their own documented
-errors or non-error return values.
+and stack result are updated consistently. Domain failures that are not invalid
+arguments, such as missing items, unknown task ids, inactive network lines, or
+compiler diagnostics from valid `sys.compile` source strings, continue to use
+their own documented errors or non-error return values.
 
 Runtime errors also set `error.item` to the full name of the code item executing
 when the error was reported. Compiler diagnostics clear `error.item` to `nil`

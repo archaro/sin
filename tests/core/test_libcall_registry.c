@@ -679,6 +679,7 @@ void test_net_flush_reports_line_status(void) {
   (void)lc_net_flush(test_ctx(), NULL, config.itemroot);
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("net.flush");
 
   teardown_libcall_runtime();
 }
@@ -717,11 +718,13 @@ void test_net_ditch_invalid_line_returns_nil(void) {
   (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("net.ditch");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
   (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("net.ditch");
 
   teardown_libcall_runtime();
 }
@@ -812,6 +815,18 @@ void test_libcall_float_integer_only_arguments_rejected(void) {
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_float_detail_contains("net.write");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
+  (void)lc_net_flush(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_float_detail_contains("net.flush");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
+  (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_float_detail_contains("net.ditch");
 
   VALUE_t float_source = {VALUE_float, {.f = 3.25}};
   push_stack(config.vm->stack, float_source);

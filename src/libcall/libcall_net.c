@@ -165,8 +165,8 @@ uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t linenum = pop_stack(ctx->vm->stack);
   if (!lc_value_is_type(linenum, VALUE_int) || linenum.i < 0) {
     value_free(&linenum);
-    push_stack(ctx->vm->stack, VALUE_NIL);
-    return nextop;
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "net.flush line must be a non-negative integer connection index; floats are invalid");
   }
 
   if ((size_t)linenum.i >= *deps.maxconns) {
@@ -208,8 +208,8 @@ uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t linenum = pop_stack(ctx->vm->stack);
   if (!lc_value_is_type(linenum, VALUE_int) || linenum.i < 0) {
     value_free(&linenum);
-    push_stack(ctx->vm->stack, VALUE_NIL);
-    return nextop;
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "net.ditch line must be a non-negative integer connection index; floats are invalid");
   }
 
   if ((size_t)linenum.i >= *deps.maxconns) {
