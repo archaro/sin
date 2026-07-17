@@ -177,3 +177,9 @@ invoked explicitly by the test, and allocation/telnet failures are injected by t
 harness. The adversarial long-stream case exercises the input buffering limits in
 process rather than through the kernel socket stack, so it verifies bounded server
 buffering and disconnect state without requiring network access.
+
+The `make test-chat-smoke` target builds `tests/network/test_chat_smoke.c` and
+runs the real `examples/chat-boot.src` / `examples/chat-load.src` flow through
+`scomp`, `sin`, a temporary itemstore, and localhost sockets. It checks that the
+server accepts a connection, runs the input item for connect/input/`\quit`,
+flushes the quit message before disconnecting, and exits through `sys.shutdown`.

@@ -47,6 +47,7 @@ static void runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
   ctx->maxconns = &config.maxconns;
   ctx->lastconn = &config.lastconn;
   ctx->safe_shutdown = &config.safe_shutdown;
+  ctx->shutdown_requested = &config.shutdown_requested;
   ctx->network.lines = line;
   ctx->network.maxconns = &config.maxconns;
   ctx->network.lastconn = &config.lastconn;
@@ -199,6 +200,7 @@ static int init_default_config(int argc, char **argv, SinStartupOptions *startup
     return EXIT_FAILURE;
   }
   config.safe_shutdown = true;
+  config.shutdown_requested = false;
   /* Itemstores named with -i are loaded while options are processed. Detect
    * this global validation policy first so its effect is independent of
    * command-line option order. */
@@ -450,6 +452,7 @@ static int run_network_loop(int listener_port) {
   }
   init_listener_with_deps(&network_deps, (uint32_t)listener_port);
   int runloop_retval = uv_run(config.loop, UV_RUN_DEFAULT);
+  if (config.shutdown_requested) runloop_retval = 0;
 
   shutdown_listener_with_deps(&network_deps);
   uv_idle_stop(&input_task);

@@ -32,8 +32,8 @@ typedef uint8_t *(*OP_t)(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 struct RuntimeContext {
   // Borrowed runtime dependencies supplied by process startup. Runtime
   // execution mutates the VM stack/callstack, the item tree contents, the
-  // event loop handles, *maxconns, *lastconn, and *safe_shutdown, but does not
-  // own or free these pointers or strings.
+  // event loop handles, *maxconns, *lastconn, *safe_shutdown, and
+  // *shutdown_requested, but does not own or free these pointers or strings.
   VM_t *vm;
   ITEM_t *itemroot;
   uv_loop_t *loop;
@@ -47,6 +47,7 @@ struct RuntimeContext {
   size_t *lastconn;
   LibcallNetworkDeps network;
   bool *safe_shutdown;
+  bool *shutdown_requested;
   bool strict_validation;
   bool strict_runtime_contracts;
 

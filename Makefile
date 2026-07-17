@@ -68,6 +68,7 @@ LEX = flex
 TEST_DIR := tests
 TEST_BIN := $(TEST_DIR)/test-compiler
 NETWORK_TEST_BIN := $(TEST_DIR)/network/test-network
+CHAT_SMOKE_BIN := $(TEST_DIR)/network/test-chat-smoke
 NETWORK_TEST_DEPS := $(NETWORK_TEST_BIN).d
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
@@ -161,7 +162,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) -c $(CFLAGS) $< -o $@
 
 .PHONY: all lib clean help debug release sanitize
-.PHONY: test test-network test-strict test-warnings test-asan test-lsan
+.PHONY: test test-network test-chat-smoke test-strict test-warnings test-asan test-lsan
 .PHONY: fuzz-build fuzz-corpora fuzz-smoke fuzz-smoke-run
 .PHONY: fuzz-scomp fuzz-sdiss fuzz-sin-object
 .PHONY: seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
@@ -195,6 +196,7 @@ help:
 		'Test targets:' \
 		'  test             Build debug artifacts and run network + standard suite' \
 		'  test-network     Build and run network tests only' \
+		'  test-chat-smoke  Run the real chat example through localhost' \
 		'  test-strict      Run standard suite with benchmark budgets enabled' \
 		'  test-warnings    Clean, rebuild, and test with STRICT_WARNINGS=1' \
 		'  test-asan        Clean, rebuild, and test with BUILD=sanitize, leak checks off' \
@@ -248,11 +250,14 @@ $(OBJ_DIR)/lexer.o: $(LEXER_C) $(PARSER_H)
 -include $(DEPS)
 -include $(NETWORK_TEST_DEPS)
 
-test: $(TEST_BIN) test-network
+test: $(TEST_BIN) test-network test-chat-smoke
 	./$(TEST_BIN)
 
 test-network: $(NETWORK_TEST_BIN)
 	./$(NETWORK_TEST_BIN)
+
+test-chat-smoke: $(CHAT_SMOKE_BIN) scomp sin
+	./$(CHAT_SMOKE_BIN)
 
 test-strict: $(TEST_BIN)
 	SIN_STRICT_BENCH=1 ./$(TEST_BIN)
@@ -272,6 +277,9 @@ $(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
 $(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/net/network.c $(SRC_DIR)/net/network.h
 	$(CC) $(CFLAGS) -I$(TEST_DIR) -MF $(NETWORK_TEST_DEPS) \
 		-o $@ $(TEST_DIR)/network/test_network.c $(LDFLAGS) $(LIBS)
+
+$(CHAT_SMOKE_BIN): $(TEST_DIR)/network/test_chat_smoke.c scomp sin
+	$(CC) $(CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_DIR)/network/test_chat_smoke.c
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)
@@ -341,5 +349,5 @@ fuzz-sin-object: clean
 
 clean:
 	rm -rf $(OBJ_DIR) $(LIB_DIR) $(PROGRAMS) $(TEST_BIN) $(FUZZ_BINS) \
-		$(NETWORK_TEST_BIN) $(NETWORK_TEST_DEPS) \
+		$(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) $(NETWORK_TEST_DEPS) \
 		$(SRC_DIR)/parser.c $(SRC_DIR)/parser.h $(SRC_DIR)/lexer.c

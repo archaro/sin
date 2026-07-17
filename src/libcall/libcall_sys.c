@@ -106,6 +106,7 @@ uint8_t *lc_sys_shutdown(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   logmsg("Sys.shutdown called.  Shutting down.\n");
   (*ctx->safe_shutdown) = true;
+  if (ctx->shutdown_requested) (*ctx->shutdown_requested) = true;
   uv_stop(ctx->loop);
   return lc_sys_return_nil(ctx, nextop);
 }
@@ -116,6 +117,7 @@ uint8_t *lc_sys_abort(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   logmsg("Sys.abort called.  Immediate (and messy) shutdown.\n");
   (*ctx->safe_shutdown) = false;
+  if (ctx->shutdown_requested) (*ctx->shutdown_requested) = true;
   uv_stop(ctx->loop);
   return lc_sys_return_nil(ctx, nextop);
 }

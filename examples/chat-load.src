@@ -60,6 +60,8 @@ docommand = code {@l, @cmd} (
     net.write{@l, "You have been disconnected.\n"};
     net.flush{@l};
     net.ditch{@l};
+  elsif str.eqcasei{@cmd, "shutdown"} then
+    sys.shutdown;
   else
     net.write{@l, "Unrecognised command.\n"};
   endif;
