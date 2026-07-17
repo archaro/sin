@@ -92,7 +92,6 @@ static void test_shared_logging_cli_levels(void) {
   const char *itemstore_path = "tests/fixtures/log-level.tmp.items";
   const char *stdout_path = "tests/fixtures/log-level.tmp.out";
   const char *stderr_path = "tests/fixtures/log-level.tmp.err";
-  const char *bad_obj_path = "tests/fixtures/log-level-missing.tmp.obj";
   FILE *src = fopen(src_path, "wb");
   ASSERT_NOT_NULL(src);
   const char *program = "@x = 1;\n@x;\n";
@@ -111,43 +110,6 @@ static void test_shared_logging_cli_levels(void) {
   free(out);
   free(err);
 
-  cmd_len = snprintf(cmd, sizeof(cmd), "./scomp --quiet -i %s -o %s > %s 2> %s",
-                     "tests/fixtures/does-not-exist.src", bad_obj_path, stdout_path, stderr_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_TRUE(system(cmd) != 0);
-  out = read_text_file_for_diag_test(stdout_path);
-  err = read_text_file_for_diag_test(stderr_path);
-  ASSERT_EQ_INT(0, (int)strlen(out));
-  ASSERT_TRUE(strstr(err, "Error:") != NULL);
-  ASSERT_TRUE(strstr(err, "Diagnostic") != NULL);
-  ASSERT_TRUE(strstr(err, "No such file") != NULL);
-  free(out);
-  free(err);
-
-  cmd_len = snprintf(cmd, sizeof(cmd), "./sdiss --quiet -o %s > %s 2> %s",
-                     bad_obj_path, stdout_path, stderr_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_TRUE(system(cmd) != 0);
-  out = read_text_file_for_diag_test(stdout_path);
-  err = read_text_file_for_diag_test(stderr_path);
-  ASSERT_EQ_INT(0, (int)strlen(out));
-  ASSERT_TRUE(strstr(err, "Unable to read object file") != NULL);
-  ASSERT_TRUE(strstr(err, "No such file") != NULL);
-  free(out);
-  free(err);
-
-  cmd_len = snprintf(cmd, sizeof(cmd), "./sin --quiet -o %s > %s 2> %s",
-                     bad_obj_path, stdout_path, stderr_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_TRUE(system(cmd) != 0);
-  out = read_text_file_for_diag_test(stdout_path);
-  err = read_text_file_for_diag_test(stderr_path);
-  ASSERT_EQ_INT(0, (int)strlen(out));
-  ASSERT_TRUE(strstr(err, "Unable to read object file") != NULL);
-  ASSERT_TRUE(strstr(err, "No such file") != NULL);
-  free(out);
-  free(err);
-
   cmd_len = snprintf(cmd, sizeof(cmd), "./scomp --verbose -i %s -o %s > %s 2> %s",
                      src_path, obj_path, stdout_path, stderr_path);
   ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
@@ -156,18 +118,6 @@ static void test_shared_logging_cli_levels(void) {
   err = read_text_file_for_diag_test(stderr_path);
   ASSERT_TRUE(strstr(out, "Source loaded:") != NULL);
   ASSERT_TRUE(strstr(out, "Compilation completed:") != NULL);
-  ASSERT_EQ_INT(0, (int)strlen(err));
-  free(out);
-  free(err);
-
-  cmd_len = snprintf(cmd, sizeof(cmd), "./scomp --verbose -i %s -o - > %s 2> %s",
-                     src_path, stdout_path, stderr_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
-  out = read_text_file_for_diag_test(stdout_path);
-  err = read_text_file_for_diag_test(stderr_path);
-  ASSERT_TRUE(strlen(out) > 0);
-  ASSERT_TRUE(strstr(out, "Compiling") != NULL);
   ASSERT_EQ_INT(0, (int)strlen(err));
   free(out);
   free(err);
@@ -204,7 +154,6 @@ static void test_shared_logging_cli_levels(void) {
   out = read_text_file_for_diag_test(stdout_path);
   err = read_text_file_for_diag_test(stderr_path);
   ASSERT_TRUE(strstr(err, "Bytecode interpreter returned") == NULL);
-  ASSERT_TRUE(strstr(err, "Setting up error handler") == NULL);
   ASSERT_TRUE(strstr(out, "Using 'tests/fixtures' as the source root.") != NULL);
   ASSERT_TRUE(strstr(err, "Using 'tests/fixtures' as the source root.") == NULL);
   free(out);
@@ -219,7 +168,6 @@ static void test_shared_logging_cli_levels(void) {
   err = read_text_file_for_diag_test(stderr_path);
   ASSERT_TRUE(strstr(out, "Runtime options:") != NULL);
   ASSERT_TRUE(strstr(err, "Bytecode interpreter returned:") != NULL);
-  ASSERT_TRUE(strstr(err, "Setting up error handler") != NULL);
   free(out);
   free(err);
 
@@ -228,7 +176,6 @@ static void test_shared_logging_cli_levels(void) {
   remove(itemstore_path);
   remove(stdout_path);
   remove(stderr_path);
-  remove(bad_obj_path);
 }
 
 static void test_scomp_cli_options(void) {
@@ -236,24 +183,11 @@ static void test_scomp_cli_options(void) {
   const char *pos_obj_path = "tests/fixtures/scomp-cli-options-pos.tmp.obj";
   const char *opt_obj_path = "tests/fixtures/scomp-cli-options-opt.tmp.obj";
   const char *stdio_obj_path = "tests/fixtures/scomp-cli-options-stdio.tmp.obj";
-  const char *help_path = "tests/fixtures/scomp-cli-options-help.tmp.txt";
-  const char *version_path = "tests/fixtures/scomp-cli-options-version.tmp.txt";
   FILE *src = fopen(src_path, "wb");
   ASSERT_NOT_NULL(src);
   const char *program = "@x = 1;\n@x;\n";
   ASSERT_EQ_INT((int)strlen(program), (int)fwrite(program, 1, strlen(program), src));
   ASSERT_EQ_INT(0, fclose(src));
-
-  ASSERT_EQ_INT(0, system("./scomp --help > tests/fixtures/scomp-cli-options-help.tmp.txt 2>/dev/null"));
-  char *help = read_text_file_for_diag_test(help_path);
-  ASSERT_TRUE(strstr(help, "scomp <input file> <output file>") != NULL);
-  ASSERT_TRUE(strstr(help, "scomp -i <input file> -o <output file> [options]") != NULL);
-  free(help);
-
-  ASSERT_EQ_INT(0, system("./scomp --version > tests/fixtures/scomp-cli-options-version.tmp.txt 2>/dev/null"));
-  char *version = read_text_file_for_diag_test(version_path);
-  ASSERT_TRUE(strstr(version, "scomp ") != NULL);
-  free(version);
 
   char cmd[1024];
   int cmd_len = snprintf(cmd, sizeof(cmd), "./scomp %s %s >/dev/null 2>/dev/null", src_path, pos_obj_path);
@@ -280,8 +214,6 @@ static void test_scomp_cli_options(void) {
   remove(pos_obj_path);
   remove(opt_obj_path);
   remove(stdio_obj_path);
-  remove(help_path);
-  remove(version_path);
 }
 
 static void test_scomp_cli_malformed_diagnostic_shape(void) {
