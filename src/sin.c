@@ -457,7 +457,9 @@ static int run_network_loop(int listener_port) {
   shutdown_listener_with_deps(&network_deps);
   uv_idle_stop(&input_task);
   uv_walk(config.loop, close_all_tasks, NULL);
-  uv_run(config.loop, UV_RUN_ONCE);
+  while (uv_run(config.loop, UV_RUN_DEFAULT) != 0) {
+    // Drain close callbacks before freeing task and network state.
+  }
   finalise_tasks();
   shutdown_networking();
   runtime_destroy(&input_ctx);

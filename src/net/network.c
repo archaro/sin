@@ -737,6 +737,14 @@ void shutdown_listener_with_deps(NetworkRuntimeDeps *deps) {
 
 void shutdown_networking() {
   // Having been set-up, now shut it down.  Shut it down forever.
-  // All the lines will have been disconnected by this point.
+  size_t maxconns = network_maxconns ? network_maxconns : config.maxconns;
+  for (size_t l = 0; line && l < maxconns; l++) {
+    if (line[l].status != LINE_empty || line[l].line_handle ||
+        line[l].telnet || line[l].outbuf || line[l].inbuf) {
+      destroy_line(&line[l]);
+    }
+  }
   free(line);
+  line = NULL;
+  network_maxconns = 0;
 }
