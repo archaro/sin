@@ -240,6 +240,7 @@ void test_sys_compile_libcall_runtime(void);
 
 /* Runtime component tests. */
 void test_interpret_semantics_golden(void);
+void test_interpret_result_semantics(void);
 void test_interpret_rejects_malformed_bytecode_before_execution(void);
 void test_interpret_stress(void);
 void test_runtime_benchmark_optin(void);
@@ -377,6 +378,7 @@ static const test_case_t compiler_tests[] = {
 
 static const test_case_t runtime_tests[] = {
     {"test_interpret_semantics_golden", test_interpret_semantics_golden},
+    {"test_interpret_result_semantics", test_interpret_result_semantics},
     {"test_interpret_rejects_malformed_bytecode_before_execution", test_interpret_rejects_malformed_bytecode_before_execution},
     {"test_interpret_stress", test_interpret_stress},
     {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},

@@ -63,6 +63,20 @@ static bool runtime_registry_track(LibcallRegistry *registry) {
   return true;
 }
 
+static VALUE_t pop_frame_result(STACK_t *stack) {
+  int32_t frame_value_floor = stack->base + stack->locals - 1;
+  if (stack->current > frame_value_floor) {
+    return pop_stack(stack);
+  }
+  return VALUE_NIL;
+}
+
+static void discard_stack_to(STACK_t *stack, int32_t top) {
+  while (stack->current > top) {
+    throwaway_stack(stack);
+  }
+}
+
 static void runtime_registry_untrack(LibcallRegistry *registry) {
   RuntimeRegistryNode **link = &runtime_registry_nodes;
   while (*link) {
@@ -1082,6 +1096,10 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   ITEM_t *saved_current_item = ctx->current_item;
   ITEM_t *saved_pending_call_item = ctx->pending_call_item;
   int entry_callstack_depth = size_callstack(VM->callstack);
+  int32_t entry_stack_current = VM->stack->current;
+  int32_t entry_stack_base = VM->stack->base;
+  uint8_t entry_stack_locals = VM->stack->locals;
+  uint8_t entry_stack_params = VM->stack->params;
   if (!ctx->initialized) {
     init_interpreter(ctx);
   }
@@ -1112,16 +1130,22 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
 
   while (true) {
     if (*op == 'h') {
-      VALUE_t return_value = (size_stack(VM->stack) > 0) ? pop_stack(VM->stack) : VALUE_NIL;
+      VALUE_t return_value = pop_frame_result(VM->stack);
       ctx->current_item->inuse = false;
 
       if (size_callstack(VM->callstack) == entry_callstack_depth) {
+        discard_stack_to(VM->stack, entry_stack_current);
+        VM->stack->base = entry_stack_base;
+        VM->stack->locals = entry_stack_locals;
+        VM->stack->params = entry_stack_params;
         ctx->decoder = saved_decoder;
         ctx->current_item = saved_current_item;
         ctx->pending_call_item = saved_pending_call_item;
         return return_value;
       }
 
+      int32_t caller_stack_top = VM->callstack->entry[VM->callstack->current].current_stack;
+      discard_stack_to(VM->stack, caller_stack_top);
       FRAME_t *prev_frame = pop_callstack(VM);
       // Invariant at return:
       // - pop_callstack restored caller stack/base/locals/params.

@@ -34,6 +34,33 @@ interpreter saves and restores decoder/current-item state around each call. The
 VM stack and call stack are still shared, so nested callers must account for the
 stack effects of both the nested code and its returned `VALUE_t`.
 
+## Code item result semantics
+
+A code item's result is the value left on top of the VM stack when that code
+item halts, above that frame's locals and parameters. `interpret()` pops that
+value and returns it to the caller, then discards the frame's locals and
+parameters before returning or resuming the caller. If the code item halts with
+no result value above its frame, the result is `nil`.
+
+At the language level, the compiler preserves only the final top-level
+expression statement as the code item result. Expression statements before the
+final top-level statement are compiled with `DISCARD`, so their values are
+evaluated and then removed from the stack.
+
+Statement forms such as assignment, `if`, and `while` do not themselves produce
+a result value, and local variables do not leak out as implicit results.
+Expression statements inside `if` branches or `while` bodies are also
+discarded; they do not become the enclosing code item's result merely because
+the branch or loop is the last top-level statement. To return a value after a
+branch or loop, place the desired expression in the following final top-level
+expression statement.
+
+Libcalls and item calls follow the same expression-statement rule as other
+expressions. If a libcall such as `sys.exists{"name"}` or `sys.compile{source}`
+is the final top-level expression statement, its return value is the code item
+result. If it appears earlier, its return value is discarded after any side
+effects have occurred.
+
 ## Itemstore ownership
 
 The item tree owns all `ITEM_t` nodes reachable from the root. Parent and child

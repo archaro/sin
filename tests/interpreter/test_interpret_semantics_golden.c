@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <signal.h>
 #include <sys/types.h>
@@ -7,6 +8,7 @@
 #include <unistd.h>
 
 #include "config.h"
+#include "compiler/compiler_pipeline.h"
 #include "error.h"
 #include "interpret.h"
 #include "item.h"
@@ -212,6 +214,117 @@ void test_interpret_semantics_golden(void) {
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
     run_case(&cases[i]);
   }
+}
+
+static void setup_result_semantics_runtime(void) {
+  memset(&config, 0, sizeof(config));
+  init_errmsg();
+  config.itemroot = make_root_item("root");
+  ASSERT_NOT_NULL(config.itemroot);
+  config.vm = make_vm();
+  ASSERT_NOT_NULL(config.vm);
+}
+
+static void teardown_result_semantics_runtime(void) {
+  destroy_vm(config.vm);
+  destroy_item(config.itemroot);
+  memset(&config, 0, sizeof(config));
+}
+
+static ITEM_t *compile_result_semantics_item(const char *label, const char *source) {
+  OUTPUT_t *out = NULL;
+  char *errdetail = NULL;
+  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+  if (rc != ERR_NOERROR) {
+    fprintf(stderr, "[%s] compile failed: %s\n", label, errdetail ? errdetail : "<no detail>");
+  }
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_NOT_NULL(out);
+  ASSERT_NOT_NULL(out->bytecode);
+
+  size_t bytecode_len = (size_t)(out->nextbyte - out->bytecode);
+  ASSERT_TRUE(bytecode_len <= UINT32_MAX);
+  uint8_t *bytecode = out->bytecode;
+  out->bytecode = NULL;
+  static unsigned next_item_id = 0;
+  char item_name[32];
+  int n = snprintf(item_name, sizeof(item_name), "result.t%u", next_item_id++);
+  ASSERT_TRUE(n > 0 && (size_t)n < sizeof(item_name));
+  ITEM_t *item = insert_code_item(config.itemroot, item_name, (uint32_t)bytecode_len, bytecode);
+  ASSERT_NOT_NULL(item);
+
+  free(out);
+  free(errdetail);
+  return item;
+}
+
+static VALUE_t run_result_semantics_source(const char *label, const char *source) {
+  ITEM_t *item = compile_result_semantics_item(label, source);
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = config.itemroot;
+  ctx.strict_validation = config.strict_validation;
+  ctx.strict_runtime_contracts = config.strict_runtime_contracts;
+  return interpret(&ctx, item);
+}
+
+static void assert_result_int(const char *name, const char *source, int64_t expected) {
+  VALUE_t result = run_result_semantics_source(name, source);
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT((int)expected, (int)result.i);
+  value_free(&result);
+}
+
+static void assert_result_bool(const char *name, const char *source, bool expected) {
+  VALUE_t result = run_result_semantics_source(name, source);
+  ASSERT_EQ_INT(VALUE_bool, result.type);
+  ASSERT_EQ_INT(expected ? 1 : 0, result.i ? 1 : 0);
+  value_free(&result);
+}
+
+static void assert_result_nil(const char *name, const char *source) {
+  VALUE_t result = run_result_semantics_source(name, source);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  value_free(&result);
+}
+
+void test_interpret_result_semantics(void) {
+  setup_result_semantics_runtime();
+
+  assert_result_int("result.final_expression", "42;", 42);
+  assert_result_int("result.expression_statement_discard", "1; 2;", 2);
+  assert_result_int("result.middle_expression_discard", "@x = 7; @x; 8;", 8);
+  assert_result_nil("result.assignment_has_no_result", "@x = 7;");
+
+  assert_result_nil("result.if_statement_discards_branch_value",
+                    "if true then 7; else 8; endif;");
+  assert_result_int("result.if_statement_before_final_expression",
+                    "if false then 7; else 8; endif; 9;", 9);
+
+  assert_result_nil("result.while_statement_discards_body_value",
+                    "@i = 0; while @i < 1 do @i++; 44; endwhile;");
+  assert_result_int("result.while_statement_before_final_expression",
+                    "@i = 0; while @i < 3 do @i++; @i; endwhile; @i;", 3);
+
+  assert_result_bool("result.final_libcall", "sys.exists{\"result.missing\"};", false);
+  assert_result_int("result.nonfinal_libcall_discard",
+                    "sys.exists{\"result.missing\"}; 5;", 5);
+
+  assert_result_bool("result.final_sys_compile",
+                     "sys.compile{\"result.compiled.value = 17;\"};", true);
+  ITEM_t *compiled_value = find_item(config.itemroot, "result.compiled.value");
+  ASSERT_NOT_NULL(compiled_value);
+  ASSERT_EQ_INT(VALUE_int, compiled_value->value.type);
+  ASSERT_EQ_INT(17, (int)compiled_value->value.i);
+
+  assert_result_int("result.nonfinal_sys_compile_discard",
+                    "sys.compile{\"result.compiled.discard = 23;\"}; 99;", 99);
+  ITEM_t *compiled_discard = find_item(config.itemroot, "result.compiled.discard");
+  ASSERT_NOT_NULL(compiled_discard);
+  ASSERT_EQ_INT(VALUE_int, compiled_discard->value.type);
+  ASSERT_EQ_INT(23, (int)compiled_discard->value.i);
+
+  teardown_result_semantics_runtime();
 }
 
 
