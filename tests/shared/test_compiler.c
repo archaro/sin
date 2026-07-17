@@ -110,6 +110,7 @@ void test_item_hashtable_resize_preserves_entries_and_count(void);
 void test_get_itemname_root_item(void);
 void test_loaded_zero_child_item_can_gain_runtime_child(void);
 void test_itemstore_value_and_code_roundtrip(void);
+void test_loaded_itemstore_mutation_roundtrip(void);
 void test_insert_code_item_rejects_inuse_replacement(void);
 void test_itemstore_nested_depth_roundtrip(void);
 void test_itemstore_loads_generated_v1_wire_fixture(void);
@@ -285,6 +286,7 @@ static const test_case_t core_tests[] = {
     {"test_get_itemname_root_item", test_get_itemname_root_item},
     {"test_loaded_zero_child_item_can_gain_runtime_child", test_loaded_zero_child_item_can_gain_runtime_child},
     {"test_itemstore_value_and_code_roundtrip", test_itemstore_value_and_code_roundtrip},
+    {"test_loaded_itemstore_mutation_roundtrip", test_loaded_itemstore_mutation_roundtrip},
     {"test_insert_code_item_rejects_inuse_replacement", test_insert_code_item_rejects_inuse_replacement},
     {"test_itemstore_nested_depth_roundtrip", test_itemstore_nested_depth_roundtrip},
     {"test_itemstore_loads_generated_v1_wire_fixture", test_itemstore_loads_generated_v1_wire_fixture},

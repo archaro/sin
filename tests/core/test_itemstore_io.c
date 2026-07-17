@@ -165,6 +165,40 @@ static bool reject_sync(FILE *file, const char *path) {
   return false;
 }
 
+static uint8_t *copy_bytecode(const uint8_t *bytecode, size_t bytecode_len) {
+  uint8_t *copy = malloc(bytecode_len);
+  ASSERT_NOT_NULL(copy);
+  memcpy(copy, bytecode, bytecode_len);
+  return copy;
+}
+
+static void assert_child_order(ITEM_t *parent, const char *const *names,
+                               size_t count) {
+  ASSERT_EQ_INT(count, parent->ordered_size);
+  for (size_t i = 0; i < count; i++) {
+    ITEM_t *child = find_item_by_index(parent, i);
+    ASSERT_NOT_NULL(child);
+    ASSERT_TRUE(strcmp(names[i], child->name) == 0);
+  }
+}
+
+static void assert_int_item(ITEM_t *root, const char *name, int64_t expected) {
+  ITEM_t *item = find_item(root, name);
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(ITEM_value, item->type);
+  ASSERT_EQ_INT(VALUE_int, item->value.type);
+  ASSERT_EQ_INT(expected, item->value.i);
+}
+
+static void assert_code_item(ITEM_t *root, const char *name,
+                             const uint8_t *expected, size_t expected_len) {
+  ITEM_t *item = find_item(root, name);
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(ITEM_code, item->type);
+  ASSERT_EQ_INT(expected_len, item->bytecode_len);
+  ASSERT_TRUE(memcmp(expected, item->bytecode, expected_len) == 0);
+}
+
 void test_itemstore_value_and_code_roundtrip(void) {
   char path[] = "/tmp/sin-itemstore-roundtrip-XXXXXX";
   FILE *file = new_fixture(path);
@@ -250,6 +284,136 @@ void test_itemstore_value_and_code_roundtrip(void) {
 
   destroy_item(loaded);
   destroy_item(root);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_loaded_itemstore_mutation_roundtrip(void) {
+  char path[] = "/tmp/sin-itemstore-mutation-XXXXXX";
+  FILE *file = new_fixture(path);
+  ASSERT_EQ_INT(0, fclose(file));
+
+  static const uint8_t program_v1[] = {0, 0, 'h'};
+  static const uint8_t program_v2[] = {
+    0, 0, 'p', 9, 0, 0, 0, 0, 0, 0, 0, 'h'
+  };
+  static const uint8_t branch_code[] = {0, 0, 'b', 1, 'h'};
+  static const uint8_t inserted_code[] = {
+    0, 0, 'l', 1, 0, 'x', 'h'
+  };
+
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  ASSERT_NOT_NULL(insert_item(root, "alpha",
+                              (VALUE_t){.type = VALUE_int, .i = 1}));
+  ASSERT_NOT_NULL(insert_item(root, "branch.leaf",
+                              (VALUE_t){.type = VALUE_int, .i = 2}));
+  ASSERT_NOT_NULL(insert_item(root, "empty_parent",
+                              (VALUE_t){.type = VALUE_nil, .i = 0}));
+  ASSERT_NOT_NULL(insert_code_item(root, "program", sizeof(program_v1),
+                                   copy_bytecode(program_v1,
+                                                 sizeof(program_v1))));
+  ASSERT_NOT_NULL(insert_code_item(root, "branch.code",
+                                   sizeof(branch_code),
+                                   copy_bytecode(branch_code,
+                                                 sizeof(branch_code))));
+  ASSERT_TRUE(save_itemstore(path, root));
+  destroy_item(root);
+
+  ITEM_t *loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  static const char *loaded_root_order[] = {
+    "alpha", "branch", "empty_parent", "program"
+  };
+  assert_child_order(loaded, loaded_root_order,
+                     sizeof(loaded_root_order) / sizeof(loaded_root_order[0]));
+  static const char *loaded_branch_order[] = {"leaf", "code"};
+  ITEM_t *branch = find_item(loaded, "branch");
+  ASSERT_NOT_NULL(branch);
+  assert_child_order(branch, loaded_branch_order,
+                     sizeof(loaded_branch_order) /
+                         sizeof(loaded_branch_order[0]));
+  ITEM_t *empty_parent = find_item(loaded, "empty_parent");
+  ASSERT_NOT_NULL(empty_parent);
+  ASSERT_EQ_INT(0, empty_parent->ordered_size);
+  ASSERT_EQ_INT(0, empty_parent->ordered_capacity);
+  assert_int_item(loaded, "alpha", 1);
+  assert_int_item(loaded, "branch.leaf", 2);
+  assert_code_item(loaded, "program", program_v1, sizeof(program_v1));
+  assert_code_item(loaded, "branch.code", branch_code, sizeof(branch_code));
+
+  ASSERT_NOT_NULL(insert_item(loaded, "new_root",
+                              (VALUE_t){.type = VALUE_int, .i = 10}));
+  ASSERT_NOT_NULL(insert_item(loaded, "empty_parent.child",
+                              (VALUE_t){.type = VALUE_int, .i = 11}));
+  ASSERT_NOT_NULL(insert_code_item(loaded, "new_code", sizeof(inserted_code),
+                                   copy_bytecode(inserted_code,
+                                                 sizeof(inserted_code))));
+  ASSERT_NOT_NULL(insert_code_item(loaded, "program", sizeof(program_v2),
+                                   copy_bytecode(program_v2,
+                                                 sizeof(program_v2))));
+  delete_item(loaded, "alpha");
+  delete_item(loaded, "branch.leaf");
+  ASSERT_TRUE(find_item(loaded, "alpha") == NULL);
+  ASSERT_TRUE(find_item(loaded, "branch.leaf") == NULL);
+  ASSERT_NOT_NULL(insert_item(loaded, "alpha",
+                              (VALUE_t){.type = VALUE_int, .i = 20}));
+  ASSERT_NOT_NULL(insert_code_item(loaded, "branch.leaf",
+                                   sizeof(inserted_code),
+                                   copy_bytecode(inserted_code,
+                                                 sizeof(inserted_code))));
+
+  static const char *mutated_root_order[] = {
+    "branch", "empty_parent", "program", "new_root", "new_code", "alpha"
+  };
+  assert_child_order(loaded, mutated_root_order,
+                     sizeof(mutated_root_order) /
+                         sizeof(mutated_root_order[0]));
+  static const char *mutated_branch_order[] = {"code", "leaf"};
+  assert_child_order(branch, mutated_branch_order,
+                     sizeof(mutated_branch_order) /
+                         sizeof(mutated_branch_order[0]));
+  static const char *empty_parent_order[] = {"child"};
+  assert_child_order(empty_parent, empty_parent_order,
+                     sizeof(empty_parent_order) /
+                         sizeof(empty_parent_order[0]));
+  assert_int_item(loaded, "alpha", 20);
+  assert_int_item(loaded, "new_root", 10);
+  assert_int_item(loaded, "empty_parent.child", 11);
+  assert_code_item(loaded, "program", program_v2, sizeof(program_v2));
+  assert_code_item(loaded, "branch.leaf", inserted_code,
+                   sizeof(inserted_code));
+  assert_code_item(loaded, "new_code", inserted_code, sizeof(inserted_code));
+
+  ASSERT_TRUE(save_itemstore(path, loaded));
+  destroy_item(loaded);
+
+  ITEM_t *reloaded = load_itemstore(path);
+  ASSERT_NOT_NULL(reloaded);
+  assert_child_order(reloaded, mutated_root_order,
+                     sizeof(mutated_root_order) /
+                         sizeof(mutated_root_order[0]));
+  ITEM_t *reloaded_branch = find_item(reloaded, "branch");
+  ASSERT_NOT_NULL(reloaded_branch);
+  assert_child_order(reloaded_branch, mutated_branch_order,
+                     sizeof(mutated_branch_order) /
+                         sizeof(mutated_branch_order[0]));
+  ITEM_t *reloaded_empty_parent = find_item(reloaded, "empty_parent");
+  ASSERT_NOT_NULL(reloaded_empty_parent);
+  assert_child_order(reloaded_empty_parent, empty_parent_order,
+                     sizeof(empty_parent_order) /
+                         sizeof(empty_parent_order[0]));
+  assert_int_item(reloaded, "alpha", 20);
+  assert_int_item(reloaded, "new_root", 10);
+  assert_int_item(reloaded, "empty_parent.child", 11);
+  assert_code_item(reloaded, "program", program_v2, sizeof(program_v2));
+  assert_code_item(reloaded, "branch.code", branch_code,
+                   sizeof(branch_code));
+  assert_code_item(reloaded, "branch.leaf", inserted_code,
+                   sizeof(inserted_code));
+  assert_code_item(reloaded, "new_code", inserted_code,
+                   sizeof(inserted_code));
+
+  destroy_item(reloaded);
   ASSERT_EQ_INT(0, unlink(path));
 }
 

@@ -41,6 +41,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
   - `tests/core/test_item_cache.c`
   - `tests/core/test_itemstore_io.c`
     - `test_itemstore_value_and_code_roundtrip`
+    - `test_loaded_itemstore_mutation_roundtrip`
     - `test_itemstore_nested_depth_roundtrip`
     - `test_itemstore_loads_generated_v1_wire_fixture`
     - `test_load_itemstore_rejects_bad_headers`
@@ -50,6 +51,9 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_save_itemstore_preserves_existing_file_on_failure`
     - `test_itemstore_durability_modes`
     - `test_itemstore_large_load_presizes_child_storage`
+    - Loaded itemstore mutation after persistence: root-level children, nested
+      children, code items, deletion, reinsertion, and ordered name
+      enumeration before and after a second save/load cycle.
 - **Core value/float semantics**
   - `tests/core/test_value_behavior.c`
     - `test_value_push_float_interprets_binary64_payloads`
