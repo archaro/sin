@@ -182,7 +182,7 @@ uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   LINE_t *linep = &deps.lines[line_index];
   value_free(&linenum);
 
-  if (linep->status == LINE_empty || linep->status == LINE_disconnecting) {
+  if (!line_is_active(linep)) {
     set_error_item(ctx ? ctx->itemroot : NULL, ERR_NETWORK_ERROR,
         "net.flush line is not connected",
         ctx ? ctx->current_item : NULL);
@@ -225,7 +225,7 @@ uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   LINE_t *linep = &deps.lines[line_index];
   value_free(&linenum);
 
-  if (linep->status == LINE_empty || linep->status == LINE_disconnecting) {
+  if (!line_is_active(linep)) {
     set_error_item(ctx ? ctx->itemroot : NULL, ERR_NETWORK_ERROR,
         "net.ditch line is not connected",
         ctx ? ctx->current_item : NULL);

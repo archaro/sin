@@ -176,7 +176,10 @@ libuv accept/read/write/close calls are captured by stubs, write callbacks are
 invoked explicitly by the test, and allocation/telnet failures are injected by the
 harness. The adversarial long-stream case exercises the input buffering limits in
 process rather than through the kernel socket stack, so it verifies bounded server
-buffering and disconnect state without requiring network access.
+buffering and disconnect state without requiring network access. The lifecycle
+cases define active, disconnecting, disconnected, and reusable line states, and
+cover local ditch, remote EOF, repeated disconnect, writes after ditch, and line
+slot reuse.
 
 The `make test-chat-smoke` target builds `tests/network/test_chat_smoke.c` and
 runs the real `examples/chat-boot.src` / `examples/chat-load.src` flow through

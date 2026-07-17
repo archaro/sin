@@ -46,6 +46,33 @@ static void close_line_handle(LINE_t *linep) {
   }
 }
 
+bool line_is_active(const LINE_t *linep) {
+  return linep && (linep->status == LINE_connecting ||
+                   linep->status == LINE_idle ||
+                   linep->status == LINE_data);
+}
+
+bool line_is_disconnect_pending(const LINE_t *linep) {
+  return linep && linep->status == LINE_disconnecting;
+}
+
+bool line_is_disconnected(const LINE_t *linep) {
+  return linep && linep->status == LINE_empty;
+}
+
+bool line_is_reusable(const LINE_t *linep) {
+  return line_is_disconnected(linep) &&
+         linep->line_handle == NULL &&
+         linep->telnet == NULL &&
+         linep->outbuf == NULL &&
+         linep->inbuf == NULL &&
+         !linep->output_write_in_flight &&
+         linep->output_in_flight_length == 0 &&
+         linep->output_backpressure_ticks == 0 &&
+         !linep->close_after_output &&
+         linep->input_line_length == 0;
+}
+
 bool validate_network_deps(const NetworkRuntimeDeps *deps) {
   size_t maxconns = deps ? deps->maxconns : 0;
   if (maxconns == 0) {
@@ -82,7 +109,7 @@ void init_networking_with_deps(NetworkRuntimeDeps *deps) {
 
 LINE_t *add_line(uv_tcp_t *line_handle) {
   size_t l = 0;
-  while (line[l].status != LINE_empty) {
+  while (!line_is_reusable(&line[l])) {
     l++;
     if (l >= (network_maxconns ? network_maxconns : config.maxconns)) {
       return NULL;
@@ -229,7 +256,7 @@ void append_output(LINE_t *linep, const char *msg, size_t len) {
   // Append output to the buffer for this line, ready for sending later.
   if (len == 0) return;
   size_t msg_len = len;
-  if (linep->status != LINE_empty && linep->status != LINE_disconnecting) {
+  if (line_is_active(linep)) {
     // No point in doing this if there is no connection.
     if (!linep->outbuf || !linep->outbuf->buf.base) {
       disconnect_line_for_output_limit(linep, "missing output buffer");
@@ -315,7 +342,7 @@ void append_input(LINE_t *linep, const char *msg, size_t len) {
   // This is where telnet processing will happen.
   if (len == 0) return;
   size_t msg_len = len;
-  if (linep->status != LINE_empty && linep->status != LINE_disconnecting) {
+  if (line_is_active(linep)) {
     if (!linep->inbuf || !linep->inbuf->buf.base) {
       disconnect_line_for_input_limit(linep, "missing input buffer");
       return;
@@ -448,7 +475,8 @@ void telnet_event_handler(telnet_t *telnet, telnet_event_t *ev,
 	case TELNET_EV_ERROR:
     // If there is a telnet error, it is essentially impossible to recover.
     logerr("Telnet negotiation error.\n");
-    uv_close((uv_handle_t *)linep->line_handle, client_on_close);
+    linep->status = LINE_disconnecting;
+    close_line_handle(linep);
 		break;
 	default:
 		// I don't know you
@@ -502,8 +530,8 @@ void flush_output(LINE_t *linep) {
   bool draining_disconnect =
       linep && linep->status == LINE_disconnecting && linep->close_after_output;
   if (!linep || !linep->outbuf || !linep->outbuf->buf.base ||
-      linep->status == LINE_empty ||
-      (linep->status == LINE_disconnecting && !draining_disconnect)) {
+      line_is_disconnected(linep) ||
+      (line_is_disconnect_pending(linep) && !draining_disconnect)) {
     return;
   }
 
@@ -555,8 +583,7 @@ void flush_output(LINE_t *linep) {
 }
 
 void request_line_disconnect(LINE_t *linep) {
-  if (!linep || linep->status == LINE_empty ||
-      linep->status == LINE_disconnecting) {
+  if (!line_is_active(linep)) {
     return;
   }
 
@@ -589,7 +616,7 @@ void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
       return;
     }
     LINE_t *linep = find_line((uv_tcp_t *)client);
-    if (linep) {
+    if (line_is_active(linep)) {
       telnet_recv(linep->telnet, buf->base, (size_t)nread);
     }
     free(buf->base);
@@ -598,7 +625,13 @@ void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
   if (nread < 0) {
     if (nread != UV_EOF)
       logerr("Read error %s\n", uv_err_name((int)nread));
-    uv_close((uv_handle_t *) client, client_on_close);
+    LINE_t *linep = find_line((uv_tcp_t *)client);
+    if (linep) {
+      linep->status = LINE_disconnecting;
+      close_line_handle(linep);
+    } else if (!uv_is_closing((uv_handle_t *)client)) {
+      uv_close((uv_handle_t *)client, client_on_close);
+    }
   }
   free(buf->base);
 }

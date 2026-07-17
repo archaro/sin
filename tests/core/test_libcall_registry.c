@@ -640,6 +640,8 @@ void test_net_ditch_disconnects_active_lines(void) {
   line = calloc((size_t)config.maxconns, sizeof(LINE_t));
   ASSERT_NOT_NULL(line);
   line[1].status = LINE_idle;
+  line[1].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
+  ASSERT_NOT_NULL(line[1].telnet);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
   (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
@@ -647,6 +649,21 @@ void test_net_ditch_disconnects_active_lines(void) {
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(1, ret.i);
   ASSERT_EQ_INT(LINE_disconnecting, line[1].status);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+
+  reset_telnet_capture();
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("after ditch")}});
+  (void)lc_net_write(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  ASSERT_TRUE(strcmp(telnet_capture, "") == 0);
 
   teardown_libcall_runtime();
 }

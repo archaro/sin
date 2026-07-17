@@ -139,3 +139,18 @@ their own documented errors or non-error return values.
 Runtime errors also set `error.item` to the full name of the code item executing
 when the error was reported. Compiler diagnostics clear `error.item` to `nil`
 because they describe source text rather than the currently executing item.
+
+## Network line lifecycle
+
+Network slots move through a small logical lifecycle:
+
+- Active: `LINE_connecting`, `LINE_idle`, and `LINE_data` own a live connection
+  slot. `net.write` only writes to the writable active states, `LINE_idle` and
+  `LINE_data`, after Telnet setup has completed.
+- Disconnecting: `LINE_disconnecting` means the connection has been asked to
+  close or libuv has reported remote closure. Repeated disconnect requests are
+  no-ops, writes are ignored by `net.write`, and pending output may drain before
+  the handle is closed when the disconnect was requested locally.
+- Disconnected/reusable: `LINE_empty` with no handle, Telnet object, buffers, or
+  pending output state is reusable. `net.input` reports the disconnect event,
+  destroys the line, and returns the slot to this reusable state.

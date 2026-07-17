@@ -21,10 +21,17 @@ typedef struct {
     size_t length; // Allocated size of buffer
 } write_req_t;
 
+typedef enum {
+  LINE_empty,
+  LINE_connecting,
+  LINE_disconnecting,
+  LINE_data,
+  LINE_idle
+} LINE_STATUS_t;
+
 typedef struct {
   uv_tcp_t *line_handle;
-  enum { LINE_empty, LINE_connecting,
-         LINE_disconnecting, LINE_data, LINE_idle } status;
+  LINE_STATUS_t status;
   size_t linenum;
   char address[40];
   telnet_t *telnet;
@@ -47,6 +54,10 @@ typedef struct {
 } NetworkRuntimeDeps;
 
 bool validate_network_deps(const NetworkRuntimeDeps *deps);
+bool line_is_active(const LINE_t *linep);
+bool line_is_disconnect_pending(const LINE_t *linep);
+bool line_is_disconnected(const LINE_t *linep);
+bool line_is_reusable(const LINE_t *linep);
 void init_networking_with_deps(NetworkRuntimeDeps *deps);
 void init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port);
 void client_on_close(uv_handle_t *handle);
