@@ -73,7 +73,7 @@ void handle_sigusr1(int sig) {
   longjmp(recovery, ERR_RUNTIME_SIGUSR1);
 }
 
-void usage() {
+static void usage(void) {
   printf("Syntax: sin <options>\n");
   printf("Options:\n");
   printf("     --loadonly\t\tLoad and execute the given object file.\n");

@@ -155,7 +155,7 @@ static void sem_set_embedded_error(SEM_CTX *ctx, int8_t errnum,
                      embedded_detail ? embedded_detail : "<null>");
 }
 
-SEM_CTX *sem_create_ctx() {
+SEM_CTX *sem_create_ctx(void) {
   SEM_CTX *ctx = malloc(sizeof *ctx);
   if (!ctx) return NULL;
   (*ctx).locals = NULL;

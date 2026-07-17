@@ -32,4 +32,4 @@
 
 extern const char *errmsg[];
 
-void init_errmsg();
+void init_errmsg(void);

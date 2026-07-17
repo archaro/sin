@@ -22,7 +22,7 @@ typedef struct TaskNode {
 
 TASKNODE_t *task_list;
 
-void init_tasks() {
+void init_tasks(void) {
   // Do that which must be done before it is possible to create tasks.
   task_list = NULL;
   next_taskid = 1;
@@ -32,7 +32,7 @@ void init_tasks() {
   if (!id_stack) capacity_of_id_stack = 0;
 }
 
-void finalise_tasks() {
+void finalise_tasks(void) {
   // Called before shutdown to clean up memory.
   free(id_stack);
   TASKNODE_t *temp;
@@ -44,7 +44,7 @@ void finalise_tasks() {
   }
 }
 
-uint64_t new_task_id() {
+uint64_t new_task_id(void) {
   if (top_of_id_stack == 0) {
     // No retired task ids - grab a new one
     return next_taskid++;

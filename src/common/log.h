@@ -21,7 +21,7 @@ void log_set_level(LogLevel level);
 LogLevel log_get_level(void);
 bool log_is_verbose(void);
 bool log_to_file(const char *logfile);
-void close_log();
+void close_log(void);
 void logmsg(const char *msg, ...);
 void logstatus(const char *msg, ...);
 void logverbose(const char *msg, ...);

@@ -10,7 +10,7 @@
 #include "log.h"
 #include "vm.h"
 
-VM_t *make_vm() {
+VM_t *make_vm(void) {
   // Create a shiny new VM ready for use.
   VM_t *newvm = malloc(sizeof *newvm);
   if (!newvm) return NULL;
@@ -30,7 +30,7 @@ void destroy_vm(VM_t *vm) {
   free(vm);
 }
 
-CALLSTACK_t *make_callstack() {
+CALLSTACK_t *make_callstack(void) {
   // Allocate space for a new stack, and return it.
   CALLSTACK_t *stack = malloc(sizeof *stack);
   if (!stack) return NULL;

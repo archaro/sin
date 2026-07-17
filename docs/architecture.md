@@ -82,10 +82,11 @@ Key entry points:
 
 ### Itemstore
 
-Files: `src/itemstore/item.*`, `src/itemstore/item_internal.h`,
+Files: `src/itemstore/item.h`, `src/itemstore/item_internal.h`,
 `src/itemstore/item_hash.c`, `src/itemstore/item_tree.c`,
-`src/itemstore/item_registry.c`, `src/itemstore/item_persist.c`,
-`src/itemstore/item_error.c`.
+`src/itemstore/item_registry.c`, `src/itemstore/item_persist.c`, and
+`src/itemstore/item_error.c`. There is no `item.c`; the public API lives in
+`item.h`, while the implementation is intentionally split by concern.
 
 Ownership: item tree data model, persistence, lookup/cache behavior, and
 structured error items. Itemstore code may depend on common support, bytecode

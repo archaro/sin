@@ -37,7 +37,7 @@ typedef struct {
   char *errdetail;
 } SEM_CTX;
 
-SEM_CTX *sem_create_ctx();
+SEM_CTX *sem_create_ctx(void);
 void sem_delete_ctx(SEM_CTX *ctx);
 
 // Reusable per context:

@@ -58,7 +58,7 @@ int yylex_init(yyscan_t* scanner);
 void yyset_in(FILE *_in_str, yyscan_t yyscanner);
 void yyset_extra(SCANNER_STATE_t *user_defined, yyscan_t yyscanner);
 int yylex_destroy(yyscan_t yyscanner);
-int yyparse();
+int yyparse(void *scanner, SCANNER_STATE_t *state);
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
 YY_BUFFER_STATE yy_scan_bytes(const char *bytes, int len, yyscan_t yyscanner);
 void yy_delete_buffer(YY_BUFFER_STATE b, yyscan_t yyscanner);

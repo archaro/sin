@@ -6,7 +6,7 @@
 
 const char *errmsg[MAXERRORS];
 
-void init_errmsg() {
+void init_errmsg(void) {
   errmsg[ERR_NOERROR] = "No error.";
   errmsg[ERR_COMP_SYNTAX] = "Syntax error.";
   errmsg[ERR_COMP_MAXDEPTH] = "Maximum nesting depth reached.";

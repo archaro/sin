@@ -735,7 +735,7 @@ void shutdown_listener_with_deps(NetworkRuntimeDeps *deps) {
   if (deps && deps->listener) uv_close((uv_handle_t *)deps->listener, NULL);
 }
 
-void shutdown_networking() {
+void shutdown_networking(void) {
   // Having been set-up, now shut it down.  Shut it down forever.
   size_t maxconns = network_maxconns ? network_maxconns : config.maxconns;
   for (size_t l = 0; line && l < maxconns; l++) {

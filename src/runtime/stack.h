@@ -20,7 +20,7 @@ typedef struct {
   VALUE_t stack[STACK_SIZE];
 } STACK_t;
 
-STACK_t *make_stack();
+STACK_t *make_stack(void);
 void destroy_stack(STACK_t *stack);
 void reset_stack(STACK_t *stack);
 void reset_stack_to(STACK_t *stack, int32_t top);

@@ -19,7 +19,7 @@ CONFIG_t config;
 static uint8_t *bytecode;
 static int opt_raw = 0, opt_no_header = 0;
 
-void usage() {
+static void usage(void) {
   printf("Syntax: sdiss <options>\n");
   printf("Options:\n");
   printf(" -h, --help\t\tThis message.\n");

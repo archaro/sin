@@ -56,5 +56,5 @@ char *get_input(LINE_t *line);
 void flush_output(LINE_t *line);
 void request_line_disconnect(LINE_t *line);
 void shutdown_listener_with_deps(NetworkRuntimeDeps *deps);
-void shutdown_networking();
+void shutdown_networking(void);
 bool line_can_accept_output(LINE_t *linep, size_t len);

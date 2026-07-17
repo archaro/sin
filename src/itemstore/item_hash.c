@@ -268,17 +268,17 @@ char *substr(const char *str, size_t begin, size_t len) {
   }
 }
 
-ENTRY_t *allocate_entry() {
+ENTRY_t *allocate_entry(void) {
   // Allocator API: Gimme a new ENTRY_t
   return malloc(sizeof(ENTRY_t));
 }
 
-HASHTABLE_t *allocate_hashtable() {
+HASHTABLE_t *allocate_hashtable(void) {
   // Allocator API: Gimme a new HASHTABLE_t
   return malloc(sizeof(HASHTABLE_t));
 }
 
-ITEM_t *allocate_item() {
+ITEM_t *allocate_item(void) {
   // Allocator API: Gimme a new Item
   return malloc(sizeof(ITEM_t));
 }

@@ -10,7 +10,7 @@
 #include "stack.h"
 #include "log.h"
 
-STACK_t *make_stack() {
+STACK_t *make_stack(void) {
   // Allocate space for a new stack, and return it.
   STACK_t *stack = calloc(1, sizeof *stack);
   if (!stack) return NULL;

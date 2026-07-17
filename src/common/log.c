@@ -38,7 +38,7 @@ bool log_to_file(const char *logfile) {
   return result;
 }
 
-void close_log() {
+void close_log(void) {
   if (!freopen("/dev/tty","a",stderr)) {
     fprintf(stderr, "Unable to restore stderr to /dev/tty\n");
   }
