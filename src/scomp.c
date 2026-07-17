@@ -175,7 +175,7 @@ int main(int argc, char **argv) {
   if (strcmp(opts.output_path, "-") == 0 && log_get_level() == LOG_LEVEL_NORMAL) {
     log_set_level(LOG_LEVEL_QUIET);
   }
-  logverbose("Sinistra compiler version %s\n", SINVERSION);
+  logmsg("Sinistra compiler version %s\n", SINVERSION);
 
   CliIoStatus read_status = cli_io_read_source_text(opts.input_path, &source,
                                                      &source_len);
@@ -187,9 +187,9 @@ int main(int argc, char **argv) {
     compiler_diag_set_location(&diag, 1, 1, 1);
     goto compile_error;
   }
-  logverbose("Source loaded: %zu bytes from %s.\n", source_len, opts.input_path);
+  logmsg("Source loaded: %zu bytes from %s.\n", source_len, opts.input_path);
 
-  logstatus("Compiling...\n");
+  logmsg("Compiling...\n");
   ParseInput input = {source, source_len,
                       strcmp(opts.input_path, "-") == 0 ? "<stdin>"
                                                         : opts.input_path};
@@ -199,8 +199,8 @@ int main(int argc, char **argv) {
   }
 
   size_t bytecode_len = (size_t)(out->nextbyte - out->bytecode);
-  logstatus("Compilation completed: %zu bytes.\n", bytecode_len);
-  logverbose("Writing bytecode to %s.\n", opts.output_path);
+  logmsg("Compilation completed: %zu bytes.\n", bytecode_len);
+  logmsg("Writing bytecode to %s.\n", opts.output_path);
   CliIoStatus write_status = cli_io_write_bytes(opts.output_path, out->bytecode,
                                                 bytecode_len);
   if (write_status.code != CLI_IO_OK) {

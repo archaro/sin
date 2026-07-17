@@ -80,6 +80,7 @@ void test_cli_metadata_stdout_stderr_and_status(void) {
   }
 
   assert_cli_metadata_case("sin", "--help", 0, "--loadonly", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("sin", "--help", 0, "--verbose", NULL, NULL, 0, 1);
   assert_cli_metadata_case("sin", "--bootonly", 1, NULL, NULL, "invalid option", 1, 0);
   assert_cli_metadata_case("sin", "-b", 1, NULL, NULL, "invalid option", 1, 0);
 }
@@ -88,6 +89,7 @@ void test_cli_metadata_stdout_stderr_and_status(void) {
 static void test_shared_logging_cli_levels(void) {
   const char *src_path = "tests/fixtures/log-level.tmp.src";
   const char *obj_path = "tests/fixtures/log-level.tmp.obj";
+  const char *itemstore_path = "tests/fixtures/log-level.tmp.items";
   const char *stdout_path = "tests/fixtures/log-level.tmp.out";
   const char *stderr_path = "tests/fixtures/log-level.tmp.err";
   const char *bad_obj_path = "tests/fixtures/log-level-missing.tmp.obj";
@@ -152,9 +154,9 @@ static void test_shared_logging_cli_levels(void) {
   ASSERT_EQ_INT(0, system(cmd));
   out = read_text_file_for_diag_test(stdout_path);
   err = read_text_file_for_diag_test(stderr_path);
-  ASSERT_EQ_INT(0, (int)strlen(out));
-  ASSERT_TRUE(strstr(err, "Source loaded:") != NULL);
-  ASSERT_TRUE(strstr(err, "Compilation completed:") != NULL);
+  ASSERT_TRUE(strstr(out, "Source loaded:") != NULL);
+  ASSERT_TRUE(strstr(out, "Compilation completed:") != NULL);
+  ASSERT_EQ_INT(0, (int)strlen(err));
   free(out);
   free(err);
 
@@ -165,8 +167,8 @@ static void test_shared_logging_cli_levels(void) {
   out = read_text_file_for_diag_test(stdout_path);
   err = read_text_file_for_diag_test(stderr_path);
   ASSERT_TRUE(strlen(out) > 0);
-  ASSERT_TRUE(strstr(out, "Compiling") == NULL);
-  ASSERT_TRUE(strstr(err, "Compiling") != NULL);
+  ASSERT_TRUE(strstr(out, "Compiling") != NULL);
+  ASSERT_EQ_INT(0, (int)strlen(err));
   free(out);
   free(err);
 
@@ -182,10 +184,11 @@ static void test_shared_logging_cli_levels(void) {
   free(out);
   free(err);
 
-  cmd_len = snprintf(cmd, sizeof(cmd), "./sin --quiet -o %s > %s 2> %s",
-                     obj_path, stdout_path, stderr_path);
+  cmd_len = snprintf(cmd, sizeof(cmd),
+                     "./sin --quiet --loadonly -i %s -s tests/fixtures -o %s > %s 2> %s",
+                     itemstore_path, obj_path, stdout_path, stderr_path);
   ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_TRUE(system(cmd) != 0);
+  ASSERT_EQ_INT(0, system(cmd));
   out = read_text_file_for_diag_test(stdout_path);
   err = read_text_file_for_diag_test(stderr_path);
   ASSERT_TRUE(strstr(out, "Using 'srcroot'") == NULL);
@@ -193,19 +196,36 @@ static void test_shared_logging_cli_levels(void) {
   free(out);
   free(err);
 
-  cmd_len = snprintf(cmd, sizeof(cmd), "./sin --verbose -o %s > %s 2> %s",
-                     obj_path, stdout_path, stderr_path);
+  cmd_len = snprintf(cmd, sizeof(cmd),
+                     "./sin --loadonly -i %s -s tests/fixtures -o %s > %s 2> %s",
+                     itemstore_path, obj_path, stdout_path, stderr_path);
   ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_TRUE(system(cmd) != 0);
+  ASSERT_EQ_INT(0, system(cmd));
   out = read_text_file_for_diag_test(stdout_path);
   err = read_text_file_for_diag_test(stderr_path);
-  ASSERT_TRUE(strstr(err, "Runtime options:") != NULL);
-  ASSERT_TRUE(strstr(out, "Runtime options:") == NULL);
+  ASSERT_TRUE(strstr(err, "Bytecode interpreter returned") == NULL);
+  ASSERT_TRUE(strstr(err, "Setting up error handler") == NULL);
+  ASSERT_TRUE(strstr(out, "Using 'tests/fixtures' as the source root.") != NULL);
+  ASSERT_TRUE(strstr(err, "Using 'tests/fixtures' as the source root.") == NULL);
+  free(out);
+  free(err);
+
+  cmd_len = snprintf(cmd, sizeof(cmd),
+                     "./sin --verbose --loadonly -i %s -s tests/fixtures -o %s > %s 2> %s",
+                     itemstore_path, obj_path, stdout_path, stderr_path);
+  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
+  ASSERT_EQ_INT(0, system(cmd));
+  out = read_text_file_for_diag_test(stdout_path);
+  err = read_text_file_for_diag_test(stderr_path);
+  ASSERT_TRUE(strstr(out, "Runtime options:") != NULL);
+  ASSERT_TRUE(strstr(err, "Bytecode interpreter returned:") != NULL);
+  ASSERT_TRUE(strstr(err, "Setting up error handler") != NULL);
   free(out);
   free(err);
 
   remove(src_path);
   remove(obj_path);
+  remove(itemstore_path);
   remove(stdout_path);
   remove(stderr_path);
   remove(bad_obj_path);

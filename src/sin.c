@@ -105,6 +105,8 @@ static void usage(void) {
   printf("\t\t\t  Verify bytecode before runtime execution.\n");
   printf("     --strict-runtime-contracts\n");
   printf("\t\t\t  Report runtime argument contract violations.\n");
+  printf(" -q, --quiet\t\tSuppress progress/status messages.\n");
+  printf(" -v, --verbose\t\tPrint verbose diagnostic traces.\n");
 }
 
 static void usage_error(const char *message) {
@@ -116,7 +118,7 @@ static ITEM_t *load_or_create_itemstore_with_options(const char *filename,
                                                  bool strict_validation) {
   struct stat buffer;
   if (stat(filename, &buffer) == 0) {
-    logstatus("Loading itemstore from %s.\n", filename);
+    logmsg("Loading itemstore from %s.\n", filename);
     ITEM_t *root = load_itemstore_with_options(filename, strict_validation);
     if (!root) {
       logerr("Existing itemstore '%s' could not be loaded; refusing to "
@@ -131,7 +133,7 @@ static ITEM_t *load_or_create_itemstore_with_options(const char *filename,
     return NULL;
   }
 
-  logstatus("Creating a new itemstore, which will be saved as %s.\n", filename);
+  logmsg("Creating a new itemstore, which will be saved as %s.\n", filename);
   return make_root_item("root");
 }
 
@@ -310,7 +312,7 @@ static int parse_sin_options(int argc, char **argv, SinStartupOptions *startup) 
         free(startup->bytecode);
         startup->bytecode = new_bytecode;
         startup->filesize = new_filesize;
-        logverbose("Bytecode loaded: %zu bytes from %s.\n", startup->filesize, optarg);
+        logmsg("Bytecode loaded: %zu bytes from %s.\n", startup->filesize, optarg);
         break;
       }
       case 'p': startup->listener_port = atoi(optarg); break;
@@ -336,7 +338,7 @@ static int ensure_source_root(void) {
     int err = stat(config.srcroot, &s);
     if (err == -1) {
       mkdir(config.srcroot, 0777);
-      logstatus("Creating new source root in current directory.\n");
+      logmsg("Creating new source root in current directory.\n");
     } else if(!S_ISDIR(s.st_mode)) {
       logerr("./%s exists but it is not a directory.\n", config.srcroot);
       return EXIT_FAILURE;
@@ -355,7 +357,7 @@ static int ensure_source_root(void) {
       return EXIT_FAILURE;
     }
   }
-  logstatus("Using '%s' as the source root.\n", config.srcroot);
+  logmsg("Using '%s' as the source root.\n", config.srcroot);
   return EXIT_SUCCESS;
 }
 
@@ -371,21 +373,21 @@ static int ensure_itemstore(void) {
 
 static void log_interpreter_return(VALUE_t ret) {
   if (ret.type == VALUE_int) {
-    logstatus("Bytecode interpreter returned: %ld\n", ret.i);
+    logverbose("Bytecode interpreter returned: %ld\n", ret.i);
   } else if (ret.type == VALUE_str) {
-    logstatus("Bytecode interpreter returned: %s\n", ret.s);
+    logverbose("Bytecode interpreter returned: %s\n", ret.s);
     free(ret.s);
   } else if (ret.type == VALUE_float) {
     char fbuffer[64];
     if (sin_format_binary64_buf(ret.f, fbuffer, sizeof(fbuffer))) {
-      logstatus("Bytecode interpreter returned: %s\n", fbuffer);
+      logverbose("Bytecode interpreter returned: %s\n", fbuffer);
     } else {
-      logstatus("Bytecode interpreter returned: <float-format-error>\n");
+      logverbose("Bytecode interpreter returned: <float-format-error>\n");
     }
   } else if (ret.type == VALUE_bool) {
-    logstatus("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
+    logverbose("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
   } else if (ret.type == VALUE_nil) {
-    logstatus("Bytecode interpreter returned nil.\n");
+    logverbose("Bytecode interpreter returned nil.\n");
   } else {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }
@@ -407,7 +409,7 @@ static int run_boot_item(const SinStartupOptions *startup) {
   if (!boot_ctx.initialized) return EXIT_FAILURE;
 
   if (setjmp(recovery) == 0) {
-    logstatus("Setting up error handler.\n");
+    logverbose("Setting up error handler.\n");
   } else {
     logerr("SIGUSR1 received.  Restarting boot item.\n");
     logerr("Destroying and recreating all stacks.\n");
@@ -427,7 +429,7 @@ static int run_network_loop(int listener_port) {
   uv_idle_t input_task;
   RuntimeContext input_ctx = {0};
 
-  logstatus("Using `%s` as the input item.\n", config.input);
+  logmsg("Using `%s` as the input item.\n", config.input);
   config.input_vm = make_vm();
   config.maxconns = MAXCONNS;
   config.lastconn = config.maxconns;
@@ -443,7 +445,7 @@ static int run_network_loop(int listener_port) {
   input_task.data = &input_ctx;
   uv_idle_start(&input_task, input_processor);
 
-  logstatus("Running...\n");
+  logmsg("Running...\n");
   if (!validate_network_deps(&network_deps)) return EXIT_FAILURE;
   init_networking_with_deps(&network_deps);
   if (listener_port < 0) {
@@ -503,7 +505,7 @@ int main(int argc, char **argv) {
   if (parse_sin_options(argc, argv, &startup) != EXIT_SUCCESS) return EXIT_FAILURE;
   if (ensure_source_root() != EXIT_SUCCESS) return EXIT_FAILURE;
 
-  logverbose("Runtime options: loadonly=%d strict_validation=%d strict_runtime_contracts=%d.\n",
+  logmsg("Runtime options: loadonly=%d strict_validation=%d strict_runtime_contracts=%d.\n",
              startup.loadonly, config.strict_validation, config.strict_runtime_contracts);
 
   if (!startup.bytecode) {

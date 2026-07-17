@@ -64,15 +64,6 @@ void logmsg(const char *msg, ...) {
   va_end(args);
 }
 
-void logstatus(const char *msg, ...) {
-  if (current_log_level < LOG_LEVEL_NORMAL) return;
-  va_list args;
-  va_start(args, msg);
-  vfprintf(stderr, msg, args);
-  fflush(stderr);
-  va_end(args);
-}
-
 void logverbose(const char *msg, ...) {
   if (current_log_level < LOG_LEVEL_VERBOSE) return;
   va_list args;

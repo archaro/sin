@@ -45,6 +45,7 @@ static void *test_malloc(size_t n){if(fail_malloc_after>=0&&malloc_calls++>=fail
 
 void logerr(const char *msg, ...){(void)msg;}
 void logmsg(const char *msg, ...){(void)msg;}
+void logverbose(const char *msg, ...){(void)msg;}
 void runtime_context_init(RuntimeContext *ctx, VM_t *vm){(void)ctx;(void)vm;}
 VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item){(void)ctx;(void)item; VALUE_t v={VALUE_nil,{0}}; return v;}
 ITEM_t *find_item(ITEM_t *root, const char *name){(void)root;(void)name; return (ITEM_t *)1;}

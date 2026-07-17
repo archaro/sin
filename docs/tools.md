@@ -23,9 +23,9 @@ Options:
 | `-h`, `--help` | Print help and exit successfully. |
 | `--version` | Print the compiler version and exit successfully. |
 | `-i <file>`, `--input <file>` | Read source from `<file>`. Use `-` to read from standard input. |
-| `-o <file>`, `--output <file>` | Write bytecode to `<file>`. Use `-` to write to standard output. When writing to standard output at normal log level, progress messages are suppressed so the bytecode stream is not mixed with status text. |
+| `-o <file>`, `--output <file>` | Write bytecode to `<file>`. Use `-` to write to standard output. At normal log level, progress messages are suppressed when writing to standard output so the bytecode stream is not mixed with status text. |
 | `-q`, `--quiet` | Suppress progress/status messages. |
-| `-v`, `--verbose` | Print verbose progress messages. |
+| `-v`, `--verbose` | Print verbose progress and diagnostic trace messages. |
 
 On compilation failure, `scomp` exits non-zero and prints a structured compiler
 diagnostic including stage, file, line, column, stable diagnostic code, error number, and a source excerpt when available.
@@ -52,10 +52,11 @@ Options:
 | `--raw` | Include raw bytes for each disassembled instruction. |
 | `--no-header` | Skip the locals/parameters header output. |
 | `-q`, `--quiet` | Suppress progress/status messages. |
-| `-v`, `--verbose` | Print verbose progress messages. |
+| `-v`, `--verbose` | Print verbose progress and diagnostic trace messages. |
 
 `sdiss` does not accept positional object-file arguments; use `-o` or
-`--object`.
+`--object`. Disassembler progress messages are normal output and are suppressed
+by `--quiet`.
 
 ## `sin`
 
@@ -86,10 +87,14 @@ Options:
 | `--strict-validation` | Verify bytecode before runtime execution and while loading itemstores. |
 | `--strict-runtime-contracts` | Report runtime argument contract mismatches that normal live-update operation intentionally tolerates, such as discarded item-call arguments while callers and callees are being updated. Stack effects and return values stay the same, but the extra checks add runtime overhead. |
 | `-q`, `--quiet` | Suppress progress/status messages. |
-| `-v`, `--verbose` | Print verbose progress messages. |
+| `-v`, `--verbose` | Print verbose progress and diagnostic trace messages. |
 
 `sin` requires an object file even when an itemstore already exists: the object
 is executed as the bootstrap code before the optional network loop starts.
+At the default log level, `sin` reports lifecycle events such as itemstore
+loading, source-root selection, listener startup, connection changes, and
+shutdown. VM execution traces, boot return values, task return values, and
+runtime repair/coercion details are shown only with `--verbose`.
 
 When `sin` shuts down safely, it saves the itemstore using the selected
 durability mode. `sys.abort` marks shutdown as unsafe, causing the runtime to

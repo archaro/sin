@@ -231,33 +231,33 @@ const char *nodename[] = { "N_VALUE", "N_ADD", "N_SUB", "N_MUL", "N_DIV", "N_INC
 void as_pretty_print(int tree_depth) {
   // Indent to make everything look all neat and professional
   for (int s = tree_depth * 2; s > 0; s--)
-    logmsg(" ");
+    logverbose(" ");
 }
 
 void as_reconstruct_value(AS_NODE *node) {
   // Given a N_VALUE node, output the type and the contents
   AS_VALUE *val = (AS_VALUE*)node->lhs;
-  logmsg("%s: ", valname[val->valtype]);
+  logverbose("%s: ", valname[val->valtype]);
   if (val->valtype == V_INT || val->valtype == V_BOOLTRUE || val->valtype == V_BOOLFALSE) {
-    logmsg("%lld", val->value.i);
+    logverbose("%lld", val->value.i);
   } else if (val->valtype == V_FLOAT) {
     double f = 0.0;
     memcpy(&f, &val->value.f_bits, sizeof(f));
     char fbuffer[64];
     if (sin_format_binary64_buf(f, fbuffer, sizeof(fbuffer))) {
-      logmsg("%s (bits=0x%016llx)", fbuffer, (unsigned long long)val->value.f_bits);
+      logverbose("%s (bits=0x%016llx)", fbuffer, (unsigned long long)val->value.f_bits);
     } else {
-      logmsg("0x%016llx", (unsigned long long)val->value.f_bits);
+      logverbose("0x%016llx", (unsigned long long)val->value.f_bits);
     }
   } else {
-    logmsg("%s", val->value.s);
+    logverbose("%s", val->value.s);
   }
 }
 
 void as_reconstruct_item(AS_NODE *root) {
   // Given an N_ITEM node, follow it to its end
   if (root && root->nodetype == N_RELITEM) {
-    logmsg(".");
+    logverbose(".");
     root = (AS_NODE*)root->lhs;
   }
 
@@ -266,22 +266,22 @@ void as_reconstruct_item(AS_NODE *root) {
   if (node->nodetype == N_VALUE) {
     AS_VALUE *val = (AS_VALUE*)node->lhs;
     if (val->valtype == V_INT || val->valtype == V_BOOLTRUE || val->valtype == V_BOOLFALSE) {
-      logmsg("%lld", val->value.i);
+      logverbose("%lld", val->value.i);
     } else if (val->valtype == V_FLOAT) {
       double f = 0.0;
       memcpy(&f, &val->value.f_bits, sizeof(f));
       char fbuffer[64];
       if (sin_format_binary64_buf(f, fbuffer, sizeof(fbuffer))) {
-        logmsg("%s (bits=0x%016llx)", fbuffer, (unsigned long long)val->value.f_bits);
+        logverbose("%s (bits=0x%016llx)", fbuffer, (unsigned long long)val->value.f_bits);
       } else {
-        logmsg("0x%016llx", (unsigned long long)val->value.f_bits);
+        logverbose("0x%016llx", (unsigned long long)val->value.f_bits);
       }
     } else {
-      logmsg("%s", val->value.s);
+      logverbose("%s", val->value.s);
     }
   } else {
     // Must be N_DEREF
-    logmsg("[");
+    logverbose("[");
     AS_NODE *inner = (AS_NODE*)node->lhs;
     // If it's a deref, the lhs node must be either an N_ITEM or a N_VALUE
     // If the latter, it must be a value of type V_LOCAL
@@ -289,12 +289,12 @@ void as_reconstruct_item(AS_NODE *root) {
       as_reconstruct_item(inner);
     } else {
       AS_VALUE *val = inner->lhs;
-      logmsg("%s", val->value.s);
+      logverbose("%s", val->value.s);
     }
-    logmsg("]");
+    logverbose("]");
   }
   if (root->rhs) {
-    logmsg(".");
+    logverbose(".");
     as_reconstruct_item(root->rhs);
   }
 }
@@ -304,17 +304,17 @@ static void as_walk_internal(AS_NODE *root, int tree_depth);
 void as_parse_if(AS_IF *ifstmt, int tree_depth) {
   as_pretty_print(tree_depth);
   if (ifstmt->condition) {
-    logmsg("Condition:\n");
+    logverbose("Condition:\n");
     as_walk_internal(ifstmt->condition, tree_depth + 1);
     as_pretty_print(tree_depth);
-    logmsg("Then:\n");
+    logverbose("Then:\n");
   } else {
-    logmsg("Else:\n");
+    logverbose("Else:\n");
   }
   as_walk_internal(ifstmt->then, tree_depth + 1);
   if (ifstmt->elsif) {
     as_pretty_print(tree_depth);
-    logmsg("Tail:\n");
+    logverbose("Tail:\n");
     as_parse_if(ifstmt->elsif, tree_depth + 1);
   }
 }
@@ -343,40 +343,40 @@ static void as_walk_internal(AS_NODE *root, int tree_depth) {
     case N_LTEQ:
     case N_GT:
     case N_GTEQ: {
-      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      logverbose("Node type: %s\n", nodename[root->nodetype]);
       as_pretty_print(tree_depth);
-      logmsg("LHS:\n");
+      logverbose("LHS:\n");
       as_walk_internal((AS_NODE*)root->lhs, tree_depth + 1);
       as_pretty_print(tree_depth);
-      logmsg("RHS:\n");
+      logverbose("RHS:\n");
       as_walk_internal((AS_NODE*)root->rhs, tree_depth + 1);
       return;
     }
     case N_CODE: {
       if (root->lhs) {
-        logmsg("Parameters:\n");
+        logverbose("Parameters:\n");
         as_pretty_print(tree_depth);
         as_walk_internal((AS_NODE*)root->lhs, tree_depth + 1);
       }
-      logmsg("Code block:\n");
+      logverbose("Code block:\n");
       as_pretty_print(tree_depth);
       as_reconstruct_value((AS_NODE*)root->rhs);
-      logmsg("\n");
+      logverbose("\n");
       return;
     }
     case N_VALUE: {
-      logmsg("Value type ");
+      logverbose("Value type ");
       as_reconstruct_value(root);
-      logmsg("\n");
+      logverbose("\n");
       return;
     }
     case N_WHILESTMT: {
-      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      logverbose("Node type: %s\n", nodename[root->nodetype]);
       as_pretty_print(tree_depth + 1);
-      logmsg("Condition:\n");
+      logverbose("Condition:\n");
       as_walk_internal((AS_NODE*)root->lhs, tree_depth + 2);
       as_pretty_print(tree_depth + 1);
-      logmsg("Execute while true:\n");
+      logverbose("Execute while true:\n");
       as_walk_internal((AS_NODE*)root->rhs, tree_depth + 2);
       return;
     }
@@ -385,35 +385,35 @@ static void as_walk_internal(AS_NODE *root, int tree_depth) {
     case N_CALL:
     case N_LIBCALL:
     case N_EXPRSTMT: {
-      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      logverbose("Node type: %s\n", nodename[root->nodetype]);
       break;
     }
     case N_STMTLIST: {
       AS_STMTLIST *stmtlist = (AS_STMTLIST*)root->lhs;
-      logmsg("Node type: %s (%u statements)\n",
+      logverbose("Node type: %s (%u statements)\n",
              nodename[root->nodetype], stmtlist->count);
       for (uint32_t i = 0; i < stmtlist->count; i++) {
         as_pretty_print(tree_depth);
-        logmsg("Statement %u:\n", i + 1);
+        logverbose("Statement %u:\n", i + 1);
         as_walk_internal(stmtlist->stmts[i], tree_depth + 1);
       }
       return;
     }
     case N_STMT: {
-      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      logverbose("Node type: %s\n", nodename[root->nodetype]);
       break;
     }
     case N_ITEM:
     case N_RELITEM: {
-      logmsg("Item node: ");
+      logverbose("Item node: ");
       as_reconstruct_item(root);
-      logmsg("\n");
+      logverbose("\n");
       return;
     }
     case N_ARGLIST: {
-      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      logverbose("Node type: %s\n", nodename[root->nodetype]);
       as_pretty_print(tree_depth);
-      logmsg("Parameter: \n");
+      logverbose("Parameter: \n");
       as_walk_internal((AS_NODE*)root->lhs, tree_depth + 1);
       if (root->rhs) {
         as_walk_internal((AS_NODE*)root->rhs, tree_depth + 1);
@@ -421,29 +421,29 @@ static void as_walk_internal(AS_NODE *root, int tree_depth) {
       return;
     }
     case N_ASSITEM: {
-      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      logverbose("Node type: %s\n", nodename[root->nodetype]);
       as_pretty_print(tree_depth);
-      logmsg("Item: ");
+      logverbose("Item: ");
       as_reconstruct_item((AS_NODE*)root->lhs);
-      logmsg("\n");
+      logverbose("\n");
       as_pretty_print(tree_depth);
-      logmsg("Assigned:\n");
+      logverbose("Assigned:\n");
       as_walk_internal((AS_NODE*)root->rhs, tree_depth + 1);
       return;
     }
     case N_ASSLOCAL: {
-      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      logverbose("Node type: %s\n", nodename[root->nodetype]);
       as_pretty_print(tree_depth);
-      logmsg("Local: ");
+      logverbose("Local: ");
       as_reconstruct_value((AS_NODE*)root->lhs);
-      logmsg("\n");
+      logverbose("\n");
       as_pretty_print(tree_depth);
-      logmsg("Assigned:\n");
+      logverbose("Assigned:\n");
       as_walk_internal((AS_NODE*)root->rhs, tree_depth + 1);
       return;
     }
     case N_IFSTMT: {
-      logmsg("Node type: %s\n", nodename[root->nodetype]);
+      logverbose("Node type: %s\n", nodename[root->nodetype]);
       as_parse_if((AS_IF *)root->lhs, tree_depth + 1);
       return;
     }

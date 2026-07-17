@@ -162,8 +162,8 @@ void persist_codeitem_source(ITEM_t *itemroot, const VALUE_t *itemname, const CO
   if (!save_itemsource_in_srcroot(code_item, source_text, srcroot)) {
     char fullname[MAX_ITEM_NAME];
     get_itemname(code_item, fullname);
-    logerr("Source was not saved.\nItem: %s\n", fullname);
-    logerr("Source:\n%s\n", source_text);
+    logerr("Source was not saved for item %s.\n", fullname);
+    logverbose("Unsaved source:\n%s\n", source_text);
   }
   free(source_text);
 }

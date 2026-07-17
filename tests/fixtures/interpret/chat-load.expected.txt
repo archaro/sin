@@ -1,6 +1,6 @@
 ===stdout===
-
-===stderr===
 Using 'srcroot' as the source root.
+===stderr===
+
 ===exit===
 -1

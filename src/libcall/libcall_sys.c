@@ -130,7 +130,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t val = pop_stack(ctx->vm->stack);
 
   if (!lc_value_is_type(val, VALUE_str)) {
-    logmsg("Sys.compile called with non-string value.\n");
+    logverbose("Sys.compile called with non-string value.\n");
     FREE_STR(val);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_FALSE,
         "sys.compile source must be a string; non-string values, including floats, are invalid");

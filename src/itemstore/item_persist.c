@@ -754,12 +754,12 @@ void dump_item(ITEM_t *item, char *item_name, bool isroot) {
   // Only print if this is not the root item
   if (!isroot) {
     if (item->value.type == VALUE_int) {
-      logmsg("Item: %s, Value: %llu\n", currentpath,
-                                     (unsigned long long)item->value.i);
+      logverbose("Item: %s, Value: %llu\n", currentpath,
+                 (unsigned long long)item->value.i);
     } else if (item->value.type == VALUE_str) {
-      logmsg("Item: %s, Value: '%s'\n", currentpath, item->value.s);
+      logverbose("Item: %s, Value: '%s'\n", currentpath, item->value.s);
     } else {
-      logmsg("Item: %s, Value: (unknown)\n", currentpath);
+      logverbose("Item: %s, Value: (unknown)\n", currentpath);
     }
   }
   for (size_t i = 0; i < item->ordered_size; i++) {

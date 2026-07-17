@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
         free(bytecode);
         bytecode = new_bytecode;
         filesize = new_filesize;
-        logverbose("Bytecode loaded: %zu bytes from %s.\n", filesize, optarg);
+        logmsg("Bytecode loaded: %zu bytes from %s.\n", filesize, optarg);
         break;
       }
       case 1000:
@@ -115,8 +115,8 @@ int main(int argc, char **argv) {
     usage_error("missing object file");
     exit(EXIT_FAILURE);
   }
-  logstatus("Beginning disassembly...\n");
-  logverbose("Disassembly options: raw=%d no_header=%d.\n", opt_raw, opt_no_header);
+  logmsg("Beginning disassembly...\n");
+  logmsg("Disassembly options: raw=%d no_header=%d.\n", opt_raw, opt_no_header);
 
   SDissOptions dis_options = {.raw = opt_raw, .no_header = opt_no_header};
   SDissResult result = sdiss_disassemble_bytes(bytecode, (uint32_t)filesize,
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
     logerr("%s\n", result.diagnostic.message);
   }
 
-  logstatus("Shutting down.\n");
+  logmsg("Finishing up.\n");
   free(bytecode);
   return result.status == BC_VERIFY_ERROR ? EXIT_FAILURE : EXIT_SUCCESS;
 }

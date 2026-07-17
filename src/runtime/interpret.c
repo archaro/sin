@@ -222,9 +222,9 @@ static uint8_t *decode_next(RuntimeContext *ctx, RuntimeDecodeStatus status) {
 static void log_invalid_binary_operands(const char *opcode_name,
                                         const VALUE_t *left,
                                         const VALUE_t *right) {
-  logerr("%s invalid operand types: left '%s', right '%s'.\n",
-         opcode_name, value_type_name(left ? left->type : VALUE_nil),
-         value_type_name(right ? right->type : VALUE_nil));
+  logverbose("%s invalid operand types: left '%s', right '%s'.\n",
+             opcode_name, value_type_name(left ? left->type : VALUE_nil),
+             value_type_name(right ? right->type : VALUE_nil));
 }
 
 typedef enum {
@@ -341,7 +341,7 @@ uint8_t *op_inclocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (VM->stack->stack[index].type == VALUE_int) {
     VM->stack->stack[index].i++;
   } else {
-    logerr("Trying to increment non integer local variable.\n");
+    logverbose("Trying to increment non integer local variable.\n");
   }
   logverbose("OP_INCLOCAL: index %d\n", index);
   return nextop;
@@ -359,7 +359,7 @@ uint8_t *op_declocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (VM->stack->stack[index].type == VALUE_int) {
     VM->stack->stack[index].i--;
   } else {
-    logerr("Trying to decrement non integer local variable.\n");
+    logverbose("Trying to decrement non integer local variable.\n");
   }
   logverbose("OP_DECLOCAL: index %d\n", index);
   return nextop;
@@ -483,8 +483,8 @@ uint8_t *op_add(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     VALUE_e right_type = v1.type;
     value_free_runtime(&v1);
     value_free_runtime(&v2);
-    logerr("OP_ADD invalid operand types: left '%s', right '%s'. Result is NIL.\n",
-          value_type_name(left_type), value_type_name(right_type));
+    logverbose("OP_ADD invalid operand types: left '%s', right '%s'. Result is NIL.\n",
+               value_type_name(left_type), value_type_name(right_type));
     push_stack(VM->stack, VALUE_NIL);
   }
   logverbose("OP_ADD: types %d and %d\n", v1.type, v2.type);
@@ -524,7 +524,7 @@ uint8_t *op_divide(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t result;
   if (value_div(&v2, &v1, &result)) {
     if (v1.type == VALUE_int && v1.i == 0) {
-      logerr("Attempt to divide by zero.  Substitute zero as result.\n");
+      logverbose("Attempt to divide by zero.  Substitute zero as result.\n");
     }
     logverbose("OP_DIV: operand types %d and %d\n", v2.type, v1.type);
   } else {
@@ -562,8 +562,8 @@ uint8_t *op_negate(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   //  Complain bitterly if not.
   (void)item;
   if (!value_neg(&VM->stack->stack[VM->stack->current])) {
-    logerr("Attempt to negate a value of type '%d'.\n",
-                                 VM->stack->stack[VM->stack->current].type);
+    logverbose("Attempt to negate a value of type '%d'.\n",
+               VM->stack->stack[VM->stack->current].type);
   }
   logverbose("OP_NEGATE: type %d\n", VM->stack->stack[VM->stack->current].type);
   return nextop;
@@ -752,7 +752,7 @@ uint8_t *op_assignitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       free(itemname.s);
       itemname.s = strdup(fullname);
     } else {
-      logerr("Unable to create item '%s': failed to resolve canonical name.\n", itemname.s);
+      logverbose("Unable to create item '%s': failed to resolve canonical name.\n", itemname.s);
     }
   }
   assignitem(ctx->itemroot, &itemname, val);
@@ -778,7 +778,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (itemname.type == VALUE_str) {
     char fullname[MAX_ITEM_NAME];
     if (!canonicalize_itemname(itemname.s, item, fullname)) {
-      logerr("Unable to fetch item '%s': failed to resolve canonical name.\n", itemname.s);
+      logverbose("Unable to fetch item '%s': failed to resolve canonical name.\n", itemname.s);
       while (arg_count > 0) {
         logverbose("Discarding argument for invalid canonical fetch name.\n");
         report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded argument for invalid canonical fetch name");
@@ -844,7 +844,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     }
     FREE_STR(itemname);
   } else {
-    logerr("Unable to fetch item: invalid item type for name: %d.\n", itemname.type);
+    logverbose("Unable to fetch item: invalid item type for name: %d.\n", itemname.type);
     while (arg_count > 0) {
       logverbose("Discarding argument for invalid item fetch name type.\n");
       report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded argument for invalid item fetch name type");
@@ -879,14 +879,14 @@ static bool append_layer_from_value(SIN_STRBUILDER_t *sb, const VALUE_t *value,
           state->saw_missing_layer = true;
           state->missing_layer_possibly_leading = true;
         } else {
-          logerr("Missing layer name in non-leading position.\n");
+          logverbose("Missing layer name in non-leading position.\n");
           return false;
         }
       } else if (is_valid_layer(value->s)) {
         if (!sin_sb_append_cstr(sb, value->s)) return false;
         state->saw_non_missing_layer = true;
       } else {
-        logerr("Invalid layer name '%s'.\n", value->s);
+        logverbose("Invalid layer name '%s'.\n", value->s);
         return false;
       }
       return true;
@@ -898,10 +898,10 @@ static bool append_layer_from_value(SIN_STRBUILDER_t *sb, const VALUE_t *value,
     }
     case VALUE_float: {
       if (item_deref_name) {
-        logerr("Item dereference failed for '%s': float value cannot be used as an item layer name.\n",
-               item_deref_name);
+        logverbose("Item dereference failed for '%s': float value cannot be used as an item layer name.\n",
+                   item_deref_name);
       } else {
-        logerr("Float value cannot be used as an item layer name.\n");
+        logverbose("Float value cannot be used as an item layer name.\n");
       }
       return false;
     }
@@ -910,16 +910,16 @@ static bool append_layer_from_value(SIN_STRBUILDER_t *sb, const VALUE_t *value,
         state->saw_missing_layer = true;
         state->missing_layer_possibly_leading = true;
       } else {
-        logerr("Missing layer name in non-leading position.\n");
+        logverbose("Missing layer name in non-leading position.\n");
         return false;
       }
       return true;
     }
     default: {
       if (item_deref_name) {
-        logerr("Item dereference failed for '%s': invalid type.\n", item_deref_name);
+        logverbose("Item dereference failed for '%s': invalid type.\n", item_deref_name);
       } else {
-        logerr("Layer type (%d) not int or string.\n", value->type);
+        logverbose("Layer type (%d) not int or string.\n", value->type);
       }
       return false;
     }
@@ -941,7 +941,7 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
   }
   if (relative) {
     if (!item) {
-      logerr("Relative item assembly requires current item context.\n");
+      logverbose("Relative item assembly requires current item context.\n");
       invalid = true;
     } else {
       char parent[MAX_ITEM_NAME];
@@ -997,12 +997,12 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
                 invalid = !append_layer_from_value(&sb, &i->value, &layer_state, layername.s);
                 just_processed_layer = !invalid;
               } else {
-                logerr("Item dereference failed for '%s'.\n", layername.s);
+                logverbose("Item dereference failed for '%s'.\n", layername.s);
                 invalid = true;
               }
               FREE_STR(layername);
             } else {
-              logerr("Invalid item layer type %d.\n", layername.type);
+              logverbose("Invalid item layer type %d.\n", layername.type);
               invalid = true;
             }
             break;

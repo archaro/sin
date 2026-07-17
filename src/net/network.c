@@ -411,8 +411,8 @@ char *get_input(LINE_t *linep) {
 
   char *eol = memchr(linep->inbuf->buf.base, '\n', linep->inbuf->buf.len);
   if (!eol) {
-    logerr("Line %zu (%s) marked as data without a newline. Returning to idle.\n",
-           linep->linenum, linep->address[0] ? linep->address : "unknown");
+    logverbose("Line %zu (%s) marked as data without a newline. Returning to idle.\n",
+               linep->linenum, linep->address[0] ? linep->address : "unknown");
     linep->status = LINE_idle;
     linep->input_line_length = unterminated_input_line_length(
         linep->inbuf->buf.base, linep->inbuf->buf.len);

@@ -23,6 +23,5 @@ bool log_is_verbose(void);
 bool log_to_file(const char *logfile);
 void close_log(void);
 void logmsg(const char *msg, ...);
-void logstatus(const char *msg, ...);
 void logverbose(const char *msg, ...);
 void logerr(const char *msg, ...);

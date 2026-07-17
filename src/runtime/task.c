@@ -107,7 +107,7 @@ TASK_t *make_task(char *itemname, uint64_t interval) {
 
 void destroy_task(TASK_t *task) {
   // Assumes task definitely exists in the task list!
-  logmsg("Destroying task %d (%s)\n", task->id, task->itemname);
+  logverbose("Destroying task %d (%s)\n", task->id, task->itemname);
   runtime_destroy(&task->runtime_context);
   destroy_vm(task->vm);
   free(task->timer);
@@ -135,7 +135,7 @@ void destroy_task_by_id(uint64_t id) {
   if (task) {
     destroy_task(task);
   } else {
-    logmsg("Task id %d not found, and cannot be deleted.\n", id);
+    logverbose("Task id %d not found, and cannot be deleted.\n", id);
   }
 }
 

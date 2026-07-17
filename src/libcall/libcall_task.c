@@ -25,21 +25,21 @@ void execute_task_cb(uv_timer_t *req) {
     VALUE_t ret = interpret(task_ctx, item);
     reset_stack(task->vm->stack);
     if (ret.type == VALUE_int) {
-      logmsg("Bytecode interpreter returned: %ld\n", ret.i);
+      logverbose("Bytecode interpreter returned: %ld\n", ret.i);
     } else if (ret.type == VALUE_str) {
-      logmsg("Bytecode interpreter returned: %s\n", ret.s);
+      logverbose("Bytecode interpreter returned: %s\n", ret.s);
       value_free(&ret);
     } else if (ret.type == VALUE_float) {
       char fbuffer[64];
       if (sin_format_binary64_buf(ret.f, fbuffer, sizeof(fbuffer))) {
-        logmsg("Bytecode interpreter returned: %s\n", fbuffer);
+        logverbose("Bytecode interpreter returned: %s\n", fbuffer);
       } else {
-        logmsg("Bytecode interpreter returned: <float-format-error>\n");
+        logverbose("Bytecode interpreter returned: <float-format-error>\n");
       }
     } else if (ret.type == VALUE_bool) {
-      logmsg("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
+      logverbose("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
     } else if (ret.type == VALUE_nil) {
-      logmsg("Bytecode interpreter returned nil.\n");
+      logverbose("Bytecode interpreter returned nil.\n");
     } else {
       logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
     }
