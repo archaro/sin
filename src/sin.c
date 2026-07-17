@@ -75,7 +75,7 @@ void handle_sigusr1(int sig) {
 void usage() {
   printf("Syntax: sin <options>\n");
   printf("Options:\n");
-  printf(" -b, --bootonly\t\tOnly execute the bootstrap code.\n");
+  printf("     --loadonly\t\tLoad and execute the given object file.\n");
   printf("\t\t\t  This option is used to compile items without running\n");
   printf("\t\t\t  the game.  Useful for initialisation.\n");
   printf(" -h, --help\t\tThis message.\n");
@@ -145,7 +145,7 @@ typedef struct SinStartupOptions {
   size_t filesize;
   int listener_port;
   uint8_t *bytecode;
-  bool bootonly;
+  bool loadonly;
 } SinStartupOptions;
 
 static char *make_input_alias(const char *input, const char *suffix) {
@@ -185,7 +185,7 @@ static int init_default_config(int argc, char **argv, SinStartupOptions *startup
   startup->filesize = 0;
   startup->listener_port = LISTENER_PORT;
   startup->bytecode = NULL;
-  startup->bootonly = false;
+  startup->loadonly = false;
 
   config.itemroot = NULL;
   config.srcroot = NULL;
@@ -224,10 +224,10 @@ static void init_signal_handler(void) {
 static int parse_sin_options(int argc, char **argv, SinStartupOptions *startup) {
   int opt;
   enum { OPT_STRICT_VALIDATION = 1000, OPT_STRICT_RUNTIME_CONTRACTS = 1001,
-         OPT_VERSION = 1002 };
+         OPT_VERSION = 1002, OPT_LOADONLY = 1003 };
   const struct option options[] =
   {
-    {"bootonly", no_argument, 0, 'b'},
+    {"loadonly", no_argument, 0, OPT_LOADONLY},
     {"itemstore-durability", required_argument, 0, 'd'},
     {"help", no_argument, 0, 'h'},
     {"version", no_argument, 0, OPT_VERSION},
@@ -245,11 +245,11 @@ static int parse_sin_options(int argc, char **argv, SinStartupOptions *startup) 
   };
   opterr = 0;
   optind = 1;
-  while ((opt = getopt_long(argc, argv, "bd:hi:l::n:o:p:s:qv", options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "d:hi:l::n:o:p:s:qv", options, NULL)) != -1) {
     switch(opt) {
       case 'q': log_set_level(LOG_LEVEL_QUIET); break;
       case 'v': log_set_level(LOG_LEVEL_VERBOSE); break;
-      case 'b': startup->bootonly = true; break;
+      case OPT_LOADONLY: startup->loadonly = true; break;
       case 'd':
         if (strcmp(optarg, "full") == 0) {
           config.itemstore_durability = ITEMSTORE_DURABLE_FULL;
@@ -462,9 +462,9 @@ static int run_network_loop(int listener_port) {
   return runloop_retval;
 }
 
-static int shutdown_runtime(bool bootonly, int runloop_retval) {
+static int shutdown_runtime(bool loadonly, int runloop_retval) {
   logmsg("Shutting down.\n");
-  (void)bootonly;
+  (void)loadonly;
   uv_loop_close(config.loop);
   if (config.safe_shutdown) {
     if (!save_itemstore_with_options(config.itemstore, config.itemroot,
@@ -498,8 +498,8 @@ int main(int argc, char **argv) {
   if (parse_sin_options(argc, argv, &startup) != EXIT_SUCCESS) return EXIT_FAILURE;
   if (ensure_source_root() != EXIT_SUCCESS) return EXIT_FAILURE;
 
-  logverbose("Runtime options: bootonly=%d strict_validation=%d strict_runtime_contracts=%d.\n",
-             startup.bootonly, config.strict_validation, config.strict_runtime_contracts);
+  logverbose("Runtime options: loadonly=%d strict_validation=%d strict_runtime_contracts=%d.\n",
+             startup.loadonly, config.strict_validation, config.strict_runtime_contracts);
 
   if (!startup.bytecode) {
     usage_error("missing object file");
@@ -509,7 +509,7 @@ int main(int argc, char **argv) {
   if (run_boot_item(&startup) != EXIT_SUCCESS) return EXIT_FAILURE;
 
   int runloop_retval = 0;
-  if (!startup.bootonly) runloop_retval = run_network_loop(startup.listener_port);
+  if (!startup.loadonly) runloop_retval = run_network_loop(startup.listener_port);
 
-  return shutdown_runtime(startup.bootonly, runloop_retval);
+  return shutdown_runtime(startup.loadonly, runloop_retval);
 }

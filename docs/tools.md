@@ -60,8 +60,8 @@ Options:
 ## `sin`
 
 `sin` is the runtime/game executable. It loads an itemstore, executes a compiled
-bootstrap object, and, unless `--bootonly` is used, starts the libuv network
-loop and runs the configured input handler.
+object, and, unless `--loadonly` is used, starts the libuv network loop and
+runs the configured input handler.
 
 Usage:
 
@@ -73,7 +73,7 @@ Options:
 
 | Option | Description |
 | --- | --- |
-| `-b`, `--bootonly` | Execute only the bootstrap object and then shut down. This is useful for initializing or updating items without running the network game loop. |
+| `--loadonly` | Load and execute the object file, then shut down. This is useful for initializing or updating items without running the network game loop. |
 | `-h`, `--help` | Print help and exit successfully. |
 | `--version` | Print the runtime version and exit successfully. |
 | `-i <file>`, `--itemstore <file>` | Load the itemstore from `<file>`. If the file does not exist, a new itemstore is created and saved under that name. If omitted, `items.dat` is used. Existing itemstores that fail to load are not replaced. |

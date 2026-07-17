@@ -78,6 +78,10 @@ void test_cli_metadata_stdout_stderr_and_status(void) {
     assert_cli_metadata_case(tools[i], "--definitely-invalid-option", 1, NULL, NULL,
                              "--help", 1, 0);
   }
+
+  assert_cli_metadata_case("sin", "--help", 0, "--loadonly", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("sin", "--bootonly", 1, NULL, NULL, "invalid option", 1, 0);
+  assert_cli_metadata_case("sin", "-b", 1, NULL, NULL, "invalid option", 1, 0);
 }
 
 

@@ -38,13 +38,13 @@ From the repository root, compile each source file to bytecode object code:
 writes compiled bytecode to `<object>`. The `.obj` files are inputs for the
 runtime engine; they are not the saved game state.
 
-Initialize the itemstore once by running the load object in boot-only mode:
+Initialize the itemstore once by running the load object in load-only mode:
 
 ```bash
-./sin -b -o examples/chat-load.obj
+./sin --loadonly -o examples/chat-load.obj
 ```
 
-Use `./sin -b -o ...` when you want to execute an object file and then exit
+Use `./sin --loadonly -o ...` when you want to execute an object file and then exit
 without opening the network listener. This is useful for one-time setup, such as
 creating or updating persistent items in the itemstore. The command above creates
 or updates the default itemstore in the current directory.
@@ -55,9 +55,10 @@ Then start the server with the boot object:
 ./sin -o examples/chat-boot.obj
 ```
 
-Use `./sin -o ...` without `-b` when you want the engine to execute the object
-file and then continue into the normal run loop. In this mode the engine starts
-the input task, opens the network listener, and accepts client connections.
+Use `./sin -o ...` without `--loadonly` when you want the engine to execute the
+object file and then continue into the normal run loop. In this mode the engine
+starts the input task, opens the network listener, and accepts client
+connections.
 
 ## Files created by the walkthrough
 
@@ -115,13 +116,13 @@ shutdowns because it skips the normal itemstore save.
 
 ## Restart from saved state
 
-After the one-time boot-only load has created `items.dat`, restart the server
+After the one-time load-only run has created `items.dat`, restart the server
 from saved state with only the boot object:
 
 ```bash
 ./sin -o examples/chat-boot.obj
 ```
 
-Do not rerun the `./sin -b -o examples/chat-load.obj` initialization step unless
-you intentionally want to reload or replace the persistent `input` item from
-`examples/chat-load.src`.
+Do not rerun the `./sin --loadonly -o examples/chat-load.obj` initialization
+step unless you intentionally want to reload or replace the persistent `input`
+item from `examples/chat-load.src`.
