@@ -6,8 +6,8 @@
 
 #include "value.h"
 
-void strbuf_forget(char *ptr);
-void strbuf_track(char *ptr, size_t cap);
 void free_runtime_string(char *s);
-void value_free_runtime(VALUE_t *value);
 VALUE_t concat_two_strings(VALUE_t left, VALUE_t right);
+
+/* Test-only visibility into the bounded lifetime of tracked buffers. */
+size_t strbuf_tracked_count_for_tests(void);

@@ -28,4 +28,26 @@ void assert_bytes_equal_with_diag(const uint8_t *expected, size_t expected_len,
 void assert_file_bytes_equal(const char *expected_path, const char *actual_path,
                              const char *context);
 void compile_source_and_assert_hex(const char *source, const char *fixture_path);
-int run_command_and_capture(const char *cmd, char **captured_output);
+
+typedef struct {
+  /* Text fields remain NUL-terminated; lengths also support binary output. */
+  char *stdout_text;
+  char *stderr_text;
+  int exit_code;
+  int timed_out;
+  size_t stdout_length;
+  size_t stderr_length;
+} TestProcessResult;
+
+char *test_read_text_file(const char *path);
+char *test_normalize_text(char *text);
+char *test_extract_fixture_block(const char *fixture, const char *header);
+int test_contains_all_lines(const char *expected_lines, const char *actual,
+                            int *missing_line);
+int test_make_temp_path(const char *prefix, char *path, size_t path_size);
+int test_run_argv_capture(char *const argv[], unsigned timeout_ms,
+                          TestProcessResult *result);
+int test_run_argv_capture_with_stdin(char *const argv[], const void *stdin_data,
+                                     size_t stdin_length, unsigned timeout_ms,
+                                     TestProcessResult *result);
+void test_process_result_free(TestProcessResult *result);

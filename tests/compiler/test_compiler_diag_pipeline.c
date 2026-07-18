@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -7,22 +8,32 @@
 #include "compiler/lower.h"
 #include "compiler/ir.h"
 #include "error.h"
+#include "memory.h"
+#include "test_helpers.h"
 #include "version.h"
 #include "test_assert.h"
 
-static char *read_text_file_for_diag_test(const char *path) {
-  FILE *f = fopen(path, "rb");
-  ASSERT_NOT_NULL(f);
-  ASSERT_EQ_INT(0, fseek(f, 0, SEEK_END));
-  long n = ftell(f);
-  ASSERT_TRUE(n >= 0);
-  ASSERT_EQ_INT(0, fseek(f, 0, SEEK_SET));
-  char *buf = malloc((size_t)n + 1);
-  ASSERT_NOT_NULL(buf);
-  ASSERT_EQ_INT((int)n, (int)fread(buf, 1, (size_t)n, f));
-  buf[n] = '\0';
-  ASSERT_EQ_INT(0, fclose(f));
-  return buf;
+static void assert_capture_stdout_matches_file(const TestProcessResult *result,
+                                               const char *expected_path,
+                                               const char *context) {
+  FILE *expected_file = fopen(expected_path, "rb");
+  ASSERT_NOT_NULL(expected_file);
+  ASSERT_EQ_INT(0, fseek(expected_file, 0, SEEK_END));
+  long expected_size = ftell(expected_file);
+  ASSERT_TRUE(expected_size >= 0);
+  ASSERT_EQ_INT(0, fseek(expected_file, 0, SEEK_SET));
+
+  size_t expected_length = (size_t)expected_size;
+  uint8_t *expected = malloc(expected_length ? expected_length : 1);
+  ASSERT_NOT_NULL(expected);
+  size_t read_length = fread(expected, 1, expected_length, expected_file);
+  ASSERT_EQ_INT(0, fclose(expected_file));
+  ASSERT_EQ_INT((int)expected_length, (int)read_length);
+  ASSERT_EQ_INT((int)expected_length, (int)result->stdout_length);
+  assert_bytes_equal_with_diag(expected, expected_length,
+                               (const uint8_t *)result->stdout_text,
+                               result->stdout_length, context);
+  free(expected);
 }
 
 static void assert_cli_metadata_case(const char *tool, const char *flag,
@@ -32,40 +43,41 @@ static void assert_cli_metadata_case(const char *tool, const char *flag,
                                      const char *stderr_contains,
                                      int expect_empty_stdout,
                                      int expect_empty_stderr) {
-  char out_path[256];
-  char err_path[256];
-  char cmd[1024];
-  int cmd_len = 0;
-  snprintf(out_path, sizeof(out_path), "tests/fixtures/%s-%s.out.tmp.txt",
-           tool, flag[0] == '-' && flag[1] == '-' ? flag + 2 : flag + 1);
-  snprintf(err_path, sizeof(err_path), "tests/fixtures/%s-%s.err.tmp.txt",
-           tool, flag[0] == '-' && flag[1] == '-' ? flag + 2 : flag + 1);
+  char *argv[] = {"./scomp", (char *)flag, NULL};
+  if (strcmp(tool, "sin") == 0) argv[0] = "./sin";
+  else if (strcmp(tool, "sdiss") == 0) argv[0] = "./sdiss";
 
-  cmd_len = snprintf(cmd, sizeof(cmd),
-                     "./%s %s > %s 2> %s; test $? -eq %d",
-                     tool, flag, out_path, err_path, expected_status);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
+  TestProcessResult result = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(argv, 0, &result));
+  ASSERT_EQ_INT(expected_status, result.exit_code);
+  if (expect_empty_stdout) ASSERT_EQ_INT(0, (int)strlen(result.stdout_text));
+  if (expect_empty_stderr) ASSERT_EQ_INT(0, (int)strlen(result.stderr_text));
+  if (stdout_contains) {
+    ASSERT_TRUE(strstr(result.stdout_text, stdout_contains) != NULL);
+  }
+  if (stdout_exact) ASSERT_TRUE(strcmp(result.stdout_text, stdout_exact) == 0);
+  if (stderr_contains) {
+    ASSERT_TRUE(strstr(result.stderr_text, stderr_contains) != NULL);
+  }
+  test_process_result_free(&result);
+}
 
-  char *out = read_text_file_for_diag_test(out_path);
-  char *err = read_text_file_for_diag_test(err_path);
-  if (expect_empty_stdout) ASSERT_EQ_INT(0, (int)strlen(out));
-  if (expect_empty_stderr) ASSERT_EQ_INT(0, (int)strlen(err));
-  if (stdout_contains) ASSERT_TRUE(strstr(out, stdout_contains) != NULL);
-  if (stdout_exact) ASSERT_TRUE(strcmp(out, stdout_exact) == 0);
-  if (stderr_contains) ASSERT_TRUE(strstr(err, stderr_contains) != NULL);
-
-  free(out);
-  free(err);
-  remove(out_path);
-  remove(err_path);
+static void test_shared_argv_capture_stdin_eof(void) {
+  char *const argv[] = {"/bin/cat", NULL};
+  TestProcessResult result = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(argv, 1000, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  ASSERT_EQ_INT(0, result.timed_out);
+  ASSERT_EQ_INT(0, (int)result.stdout_length);
+  ASSERT_EQ_INT(0, (int)result.stderr_length);
+  test_process_result_free(&result);
 }
 
 void test_cli_metadata_stdout_stderr_and_status(void) {
   const char *tools[] = {"sin", "scomp", "sdiss"};
   const char *usage[] = {"Syntax: sin <options>",
                          "scomp <input file> <output file>",
-                         "Syntax: sdiss <options>"};
+                         "Usage: sdiss -o <object file>"};
   char expected_version[64];
 
   for (size_t i = 0; i < sizeof(tools) / sizeof(tools[0]); i++) {
@@ -85,169 +97,180 @@ void test_cli_metadata_stdout_stderr_and_status(void) {
   assert_cli_metadata_case("sin", "-b", 1, NULL, NULL, "invalid option", 1, 0);
 }
 
+static void test_compiler_cli_help_inventory_and_missing_arguments(void) {
+  assert_cli_metadata_case("scomp", "--help", 0, "--input", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("scomp", "--help", 0, "--output", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("scomp", "--help", 0, "--quiet", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("scomp", "--help", 0, "--verbose", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("sdiss", "--help", 0, "--object", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("sdiss", "--help", 0, "--raw", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("sdiss", "--help", 0, "--no-header", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("sdiss", "--help", 0, "--quiet", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("sdiss", "--help", 0, "--verbose", NULL, NULL, 0, 1);
+
+  assert_cli_metadata_case("scomp", "--input", 1, NULL, NULL,
+                           "invalid option", 1, 0);
+  assert_cli_metadata_case("scomp", "--output", 1, NULL, NULL,
+                           "invalid option", 1, 0);
+  assert_cli_metadata_case("sdiss", "--object", 1, NULL, NULL,
+                           "invalid option", 1, 0);
+}
+
 
 static void test_shared_logging_cli_levels(void) {
   const char *src_path = "tests/fixtures/log-level.tmp.src";
   const char *obj_path = "tests/fixtures/log-level.tmp.obj";
   const char *itemstore_path = "tests/fixtures/log-level.tmp.items";
-  const char *stdout_path = "tests/fixtures/log-level.tmp.out";
-  const char *stderr_path = "tests/fixtures/log-level.tmp.err";
   FILE *src = fopen(src_path, "wb");
   ASSERT_NOT_NULL(src);
   const char *program = "@x = 1;\n@x;\n";
   ASSERT_EQ_INT((int)strlen(program), (int)fwrite(program, 1, strlen(program), src));
   ASSERT_EQ_INT(0, fclose(src));
 
-  char cmd[1024];
-  int cmd_len = snprintf(cmd, sizeof(cmd), "./scomp --quiet -i %s -o %s > %s 2> %s",
-                         src_path, obj_path, stdout_path, stderr_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
-  char *out = read_text_file_for_diag_test(stdout_path);
-  char *err = read_text_file_for_diag_test(stderr_path);
-  ASSERT_EQ_INT(0, (int)strlen(out));
-  ASSERT_EQ_INT(0, (int)strlen(err));
-  free(out);
-  free(err);
+  char *const quiet_compile_argv[] = {
+      "./scomp", "--quiet", "-i", (char *)src_path, "-o", (char *)obj_path,
+      NULL};
+  TestProcessResult result = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(quiet_compile_argv, 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  ASSERT_EQ_INT(0, (int)strlen(result.stdout_text));
+  ASSERT_EQ_INT(0, (int)strlen(result.stderr_text));
+  test_process_result_free(&result);
 
-  cmd_len = snprintf(cmd, sizeof(cmd), "./scomp --verbose -i %s -o %s > %s 2> %s",
-                     src_path, obj_path, stdout_path, stderr_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
-  out = read_text_file_for_diag_test(stdout_path);
-  err = read_text_file_for_diag_test(stderr_path);
-  ASSERT_TRUE(strstr(out, "Source loaded:") != NULL);
-  ASSERT_TRUE(strstr(out, "Compilation completed:") != NULL);
-  ASSERT_EQ_INT(0, (int)strlen(err));
-  free(out);
-  free(err);
+  char *const verbose_compile_argv[] = {
+      "./scomp", "--verbose", "-i", (char *)src_path, "-o", (char *)obj_path,
+      NULL};
+  ASSERT_EQ_INT(0, test_run_argv_capture(verbose_compile_argv, 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  ASSERT_TRUE(strstr(result.stdout_text, "Source loaded:") != NULL);
+  ASSERT_TRUE(strstr(result.stdout_text, "Compilation completed:") != NULL);
+  ASSERT_EQ_INT(0, (int)strlen(result.stderr_text));
+  test_process_result_free(&result);
 
-  cmd_len = snprintf(cmd, sizeof(cmd), "./sdiss --quiet --no-header -o %s > %s 2> %s",
-                     obj_path, stdout_path, stderr_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
-  out = read_text_file_for_diag_test(stdout_path);
-  err = read_text_file_for_diag_test(stderr_path);
-  ASSERT_TRUE(strlen(out) > 0);
-  ASSERT_TRUE(strstr(out, "Beginning disassembly") == NULL);
-  ASSERT_EQ_INT(0, (int)strlen(err));
-  free(out);
-  free(err);
+  char *const quiet_disassemble_argv[] = {
+      "./sdiss", "--quiet", "--no-header", "-o", (char *)obj_path, NULL};
+  ASSERT_EQ_INT(0, test_run_argv_capture(quiet_disassemble_argv, 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  ASSERT_TRUE(strlen(result.stdout_text) > 0);
+  ASSERT_TRUE(strstr(result.stdout_text, "Beginning disassembly") == NULL);
+  ASSERT_EQ_INT(0, (int)strlen(result.stderr_text));
+  test_process_result_free(&result);
 
-  cmd_len = snprintf(cmd, sizeof(cmd),
-                     "./sin --quiet --loadonly -i %s -s tests/fixtures -o %s > %s 2> %s",
-                     itemstore_path, obj_path, stdout_path, stderr_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
-  out = read_text_file_for_diag_test(stdout_path);
-  err = read_text_file_for_diag_test(stderr_path);
-  ASSERT_TRUE(strstr(out, "Using 'srcroot'") == NULL);
-  ASSERT_TRUE(strstr(err, "Using 'srcroot'") == NULL);
-  free(out);
-  free(err);
+  char *const verbose_disassemble_argv[] = {
+      "./sdiss", "--verbose", "--no-header", "-o", (char *)obj_path, NULL};
+  ASSERT_EQ_INT(0, test_run_argv_capture(verbose_disassemble_argv, 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  ASSERT_TRUE(strstr(result.stdout_text, "Beginning disassembly") != NULL);
+  ASSERT_TRUE(strstr(result.stdout_text, "Finishing up.") != NULL);
+  ASSERT_EQ_INT(0, (int)strlen(result.stderr_text));
+  test_process_result_free(&result);
 
-  cmd_len = snprintf(cmd, sizeof(cmd),
-                     "./sin --loadonly -i %s -s tests/fixtures -o %s > %s 2> %s",
-                     itemstore_path, obj_path, stdout_path, stderr_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
-  out = read_text_file_for_diag_test(stdout_path);
-  err = read_text_file_for_diag_test(stderr_path);
-  ASSERT_TRUE(strstr(err, "Bytecode interpreter returned") == NULL);
-  ASSERT_TRUE(strstr(out, "Using 'tests/fixtures' as the source root.") != NULL);
-  ASSERT_TRUE(strstr(err, "Using 'tests/fixtures' as the source root.") == NULL);
-  free(out);
-  free(err);
+  char *const quiet_sin_argv[] = {
+      "./sin", "--quiet", "--loadonly", "-i", (char *)itemstore_path,
+      "-s", "tests/fixtures", "-o", (char *)obj_path, NULL};
+  ASSERT_EQ_INT(0, test_run_argv_capture(quiet_sin_argv, 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  ASSERT_TRUE(strstr(result.stdout_text, "Using 'srcroot'") == NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "Using 'srcroot'") == NULL);
+  test_process_result_free(&result);
 
-  cmd_len = snprintf(cmd, sizeof(cmd),
-                     "./sin --verbose --loadonly -i %s -s tests/fixtures -o %s > %s 2> %s",
-                     itemstore_path, obj_path, stdout_path, stderr_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
-  out = read_text_file_for_diag_test(stdout_path);
-  err = read_text_file_for_diag_test(stderr_path);
-  ASSERT_TRUE(strstr(out, "Runtime options:") != NULL);
-  ASSERT_TRUE(strstr(err, "Bytecode interpreter returned:") != NULL);
-  free(out);
-  free(err);
+  char *const default_sin_argv[] = {
+      "./sin", "--loadonly", "-i", (char *)itemstore_path, "-s",
+      "tests/fixtures", "-o", (char *)obj_path, NULL};
+  ASSERT_EQ_INT(0, test_run_argv_capture(default_sin_argv, 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  ASSERT_TRUE(strstr(result.stderr_text, "Bytecode interpreter returned") == NULL);
+  ASSERT_TRUE(strstr(result.stdout_text,
+                     "Using 'tests/fixtures' as the source root.") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text,
+                     "Using 'tests/fixtures' as the source root.") == NULL);
+  test_process_result_free(&result);
+
+  char *const verbose_sin_argv[] = {
+      "./sin", "--verbose", "--loadonly", "-i", (char *)itemstore_path,
+      "-s", "tests/fixtures", "-o", (char *)obj_path, NULL};
+  ASSERT_EQ_INT(0, test_run_argv_capture(verbose_sin_argv, 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  ASSERT_TRUE(strstr(result.stdout_text, "Runtime options:") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "Bytecode interpreter returned:") != NULL);
+  test_process_result_free(&result);
 
   remove(src_path);
   remove(obj_path);
   remove(itemstore_path);
-  remove(stdout_path);
-  remove(stderr_path);
 }
 
 static void test_scomp_cli_options(void) {
   const char *src_path = "tests/fixtures/scomp-cli-options.tmp.src";
   const char *pos_obj_path = "tests/fixtures/scomp-cli-options-pos.tmp.obj";
   const char *opt_obj_path = "tests/fixtures/scomp-cli-options-opt.tmp.obj";
-  const char *stdio_obj_path = "tests/fixtures/scomp-cli-options-stdio.tmp.obj";
   FILE *src = fopen(src_path, "wb");
   ASSERT_NOT_NULL(src);
   const char *program = "@x = 1;\n@x;\n";
   ASSERT_EQ_INT((int)strlen(program), (int)fwrite(program, 1, strlen(program), src));
   ASSERT_EQ_INT(0, fclose(src));
 
-  char cmd[1024];
-  int cmd_len = snprintf(cmd, sizeof(cmd), "./scomp %s %s >/dev/null 2>/dev/null", src_path, pos_obj_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
+  char *const positional_argv[] = {
+      "./scomp", (char *)src_path, (char *)pos_obj_path, NULL};
+  TestProcessResult result = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(positional_argv, 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  test_process_result_free(&result);
 
-  cmd_len = snprintf(cmd, sizeof(cmd), "./scomp -q -i %s -o %s >/dev/null 2>/dev/null", src_path, opt_obj_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
+  char *const option_argv[] = {"./scomp", "-q", "-i", (char *)src_path,
+                               "-o", (char *)opt_obj_path, NULL};
+  ASSERT_EQ_INT(0, test_run_argv_capture(option_argv, 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  test_process_result_free(&result);
+  assert_file_bytes_equal(pos_obj_path, opt_obj_path,
+                          "scomp positional and option output");
 
-  cmd_len = snprintf(cmd, sizeof(cmd), "cmp %s %s >/dev/null", pos_obj_path, opt_obj_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
-
-  cmd_len = snprintf(cmd, sizeof(cmd), "./scomp -q -i - -o - < %s > %s 2>/dev/null", src_path, stdio_obj_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
-
-  cmd_len = snprintf(cmd, sizeof(cmd), "cmp %s %s >/dev/null", pos_obj_path, stdio_obj_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_EQ_INT(0, system(cmd));
+  char *const stdio_argv[] = {"./scomp", "-q", "-i", "-", "-o", "-", NULL};
+  ASSERT_EQ_INT(0, test_run_argv_capture_with_stdin(
+                      stdio_argv, program, strlen(program), 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  ASSERT_EQ_INT(0, (int)result.stderr_length);
+  ASSERT_TRUE(result.stdout_length > 0);
+  ASSERT_TRUE(memchr(result.stdout_text, '\0', result.stdout_length) != NULL);
+  assert_capture_stdout_matches_file(&result, pos_obj_path,
+                                     "scomp positional and stdio output");
+  test_process_result_free(&result);
 
   remove(src_path);
   remove(pos_obj_path);
   remove(opt_obj_path);
-  remove(stdio_obj_path);
 }
 
 static void test_scomp_cli_malformed_diagnostic_shape(void) {
   const char *src_path = "tests/fixtures/scomp-cli-malformed.tmp.src";
   const char *obj_path = "tests/fixtures/scomp-cli-malformed.tmp.obj";
-  const char *err_path = "tests/fixtures/scomp-cli-malformed.tmp.err";
   FILE *src = fopen(src_path, "wb");
   ASSERT_NOT_NULL(src);
   const char *malformed = "@x = 1;\n@yy = 2;\n^;";
   ASSERT_EQ_INT((int)strlen(malformed), (int)fwrite(malformed, 1, strlen(malformed), src));
   ASSERT_EQ_INT(0, fclose(src));
 
-  char cmd[512];
-  int cmd_len = snprintf(cmd, sizeof(cmd), "./scomp %s %s > /dev/null 2> %s", src_path, obj_path, err_path);
-  ASSERT_TRUE(cmd_len > 0 && (size_t)cmd_len < sizeof(cmd));
-  ASSERT_TRUE(system(cmd) != 0);
+  char *const argv[] = {"./scomp", (char *)src_path, (char *)obj_path, NULL};
+  TestProcessResult result = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(argv, 0, &result));
+  ASSERT_TRUE(result.exit_code != 0);
 
-  char *err = read_text_file_for_diag_test(err_path);
-  ASSERT_TRUE(strstr(err, "Diagnostic SIN-PARSE-") != NULL);
-  ASSERT_TRUE(strstr(err, "stage: PARSE") != NULL);
-  ASSERT_TRUE(strstr(err, "file: tests/fixtures/scomp-cli-malformed.tmp.src") != NULL);
-  ASSERT_TRUE(strstr(err, "line: 3") != NULL);
-  ASSERT_TRUE(strstr(err, "column: 1") != NULL);
-  ASSERT_TRUE(strstr(err, "message:") != NULL);
-  ASSERT_TRUE(strstr(err, "errno: ERR_") != NULL);
-  ASSERT_TRUE(strstr(err, "source:") != NULL);
-  ASSERT_TRUE(strstr(err, "    ^;") != NULL);
-  ASSERT_TRUE(strstr(err, "    ^") != NULL);
-  ASSERT_TRUE(strstr(err, "Diag: code=") == NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "Diagnostic SIN-PARSE-") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "stage: PARSE") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text,
+                     "file: tests/fixtures/scomp-cli-malformed.tmp.src") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "line: 3") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "column: 1") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "message:") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "errno: ERR_") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "source:") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "    ^;") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "    ^") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "Diag: code=") == NULL);
 
-  free(err);
+  test_process_result_free(&result);
   remove(src_path);
   remove(obj_path);
-  remove(err_path);
 }
 
 static void test_compiler_diag_repeated_set_reset_cycles(void) {
@@ -304,11 +327,208 @@ static void test_compiler_diag_rejects_256_locals(void) {
   compiler_diag_reset(&d);
 }
 
+static void free_pipeline_output(OUTPUT_t *out) {
+  if (!out) return;
+  free(out->bytecode);
+  free(out);
+}
+
+static size_t pipeline_output_size(const OUTPUT_t *out) {
+  if (!out || !out->bytecode || !out->nextbyte) return 0;
+  return (size_t)(out->nextbyte - out->bytecode);
+}
+
+static void test_compiler_pipeline_legacy_diag_success_parity(void) {
+  static const char *sources[] = {
+      "1;",
+      "@x = 7; @x;",
+      "if 1 then 2; endif;",
+      "sys.log{\"hello\"};",
+  };
+
+  for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
+    OUTPUT_t *legacy_out = NULL;
+    OUTPUT_t *diag_out = NULL;
+    char *errdetail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+
+    int8_t legacy_rc = compile_source_to_bytecode(
+        sources[i], strlen(sources[i]), &legacy_out, &errdetail);
+    int8_t diag_rc = compile_source_to_bytecode_diag(
+        sources[i], strlen(sources[i]), &diag_out, &diag);
+
+    ASSERT_EQ_INT(ERR_NOERROR, legacy_rc);
+    ASSERT_EQ_INT(legacy_rc, diag_rc);
+    ASSERT_NOT_NULL(legacy_out);
+    ASSERT_NOT_NULL(diag_out);
+    ASSERT_TRUE(errdetail == NULL);
+    ASSERT_EQ_INT((int)pipeline_output_size(legacy_out),
+                  (int)pipeline_output_size(diag_out));
+    ASSERT_TRUE(memcmp(legacy_out->bytecode, diag_out->bytecode,
+                       pipeline_output_size(legacy_out)) == 0);
+
+    free_pipeline_output(legacy_out);
+    free_pipeline_output(diag_out);
+    compiler_diag_reset(&diag);
+  }
+}
+
+static void test_compiler_pipeline_legacy_diag_error_parity(void) {
+  static const char *sources[] = {
+      "^;",
+      "@x;",
+      "@x = ;",
+  };
+
+  for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
+    OUTPUT_t *legacy_out = (OUTPUT_t *)(uintptr_t)1;
+    OUTPUT_t *diag_out = (OUTPUT_t *)(uintptr_t)1;
+    char *errdetail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+
+    int8_t legacy_rc = compile_source_to_bytecode(
+        sources[i], strlen(sources[i]), &legacy_out, &errdetail);
+    int8_t diag_rc = compile_source_to_bytecode_diag(
+        sources[i], strlen(sources[i]), &diag_out, &diag);
+
+    ASSERT_TRUE(legacy_rc != ERR_NOERROR);
+    ASSERT_EQ_INT(legacy_rc, diag_rc);
+    ASSERT_TRUE(legacy_out == NULL);
+    ASSERT_TRUE(diag_out == NULL);
+    ASSERT_NOT_NULL(errdetail);
+    ASSERT_NOT_NULL(diag.message);
+    ASSERT_TRUE(strcmp(errdetail, diag.message) == 0);
+    ASSERT_EQ_INT(legacy_rc, diag.code);
+
+    compdiag_reset_detail(&errdetail);
+    compiler_diag_reset(&diag);
+  }
+}
+
+static void test_compiler_pipeline_parameter_seeding(void) {
+  const char *params[] = {"@who"};
+  OUTPUT_t *out = (OUTPUT_t *)(uintptr_t)1;
+  char *errdetail = NULL;
+
+  int8_t rc = compile_source_to_bytecode_with_params(
+      "@who;", strlen("@who;"), params, 1, &out, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_NOT_NULL(out);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(pipeline_output_size(out) >= 2);
+  ASSERT_EQ_INT(1, out->bytecode[0]);
+  ASSERT_EQ_INT(1, out->bytecode[1]);
+  free_pipeline_output(out);
+
+  out = (OUTPUT_t *)(uintptr_t)1;
+  rc = compile_source_to_bytecode("@who;", strlen("@who;"), &out,
+                                  &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
+  ASSERT_TRUE(out == NULL);
+  ASSERT_NOT_NULL(errdetail);
+  compdiag_reset_detail(&errdetail);
+}
+
+static void test_compiler_pipeline_invalid_inputs_clear_output(void) {
+  ParseInput invalid_input = {NULL, 0, "invalid.sin"};
+  OUTPUT_t *out = (OUTPUT_t *)(uintptr_t)1;
+  char *errdetail = strdup("stale detail");
+  ASSERT_NOT_NULL(errdetail);
+
+  int8_t rc = compile_source_to_bytecode(NULL, 0, &out, &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_TRUE(out == NULL);
+  ASSERT_TRUE(errdetail == NULL);
+
+  out = (OUTPUT_t *)(uintptr_t)1;
+  rc = compile_parse_input_to_bytecode(&invalid_input, &out, &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_TRUE(out == NULL);
+  ASSERT_TRUE(errdetail == NULL);
+
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  out = (OUTPUT_t *)(uintptr_t)1;
+  rc = compile_source_to_bytecode_diag(NULL, 0, &out, &diag);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_TRUE(out == NULL);
+  ASSERT_EQ_INT(DIAG_PHASE_COMPILE, diag.phase);
+  compiler_diag_reset(&diag);
+
+  out = (OUTPUT_t *)(uintptr_t)1;
+  rc = compile_parse_input_to_bytecode_diag(&invalid_input, &out, &diag);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_TRUE(out == NULL);
+  ASSERT_EQ_INT(DIAG_PHASE_COMPILE, diag.phase);
+  ASSERT_NOT_NULL(diag.source_name);
+  ASSERT_TRUE(strcmp("invalid.sin", diag.source_name) == 0);
+  compiler_diag_reset(&diag);
+}
+
+static void test_compiler_pipeline_failure_cleanup(void) {
+  const char *source = "if 1 then 2; elsif 0 then 3; else 4; endif;";
+  bool legacy_saw_failure = false;
+  bool legacy_saw_success = false;
+  bool diag_saw_failure = false;
+  bool diag_saw_success = false;
+
+  for (long fail_at = 0; fail_at < 128; fail_at++) {
+    OUTPUT_t *out = (OUTPUT_t *)(uintptr_t)1;
+    char *errdetail = NULL;
+    alloc_test_fail_after(fail_at);
+    int8_t rc = compile_source_to_bytecode(source, strlen(source), &out,
+                                            &errdetail);
+    alloc_test_fail_after(-1);
+
+    if (rc == ERR_NOERROR) {
+      legacy_saw_success = true;
+      free_pipeline_output(out);
+    } else {
+      legacy_saw_failure = true;
+      ASSERT_TRUE(out == NULL);
+    }
+    compdiag_reset_detail(&errdetail);
+  }
+
+  for (long fail_at = 0; fail_at < 128; fail_at++) {
+    OUTPUT_t *out = (OUTPUT_t *)(uintptr_t)1;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    alloc_test_fail_after(fail_at);
+    int8_t rc = compile_source_to_bytecode_diag(source, strlen(source), &out,
+                                                &diag);
+    alloc_test_fail_after(-1);
+
+    if (rc == ERR_NOERROR) {
+      diag_saw_success = true;
+      free_pipeline_output(out);
+    } else {
+      diag_saw_failure = true;
+      ASSERT_TRUE(out == NULL);
+    }
+    compiler_diag_reset(&diag);
+  }
+
+  ASSERT_TRUE(legacy_saw_failure);
+  ASSERT_TRUE(legacy_saw_success);
+  ASSERT_TRUE(diag_saw_failure);
+  ASSERT_TRUE(diag_saw_success);
+}
+
 void test_compiler_diag_pipeline(void){
+  test_shared_argv_capture_stdin_eof();
+  test_compiler_pipeline_legacy_diag_success_parity();
+  test_compiler_pipeline_legacy_diag_error_parity();
+  test_compiler_pipeline_parameter_seeding();
+  test_compiler_pipeline_invalid_inputs_clear_output();
+  test_compiler_pipeline_failure_cleanup();
   test_compiler_diag_repeated_set_reset_cycles();
   test_compiler_diag_rejects_256_locals();
   test_scomp_cli_malformed_diagnostic_shape();
   test_scomp_cli_options();
+  test_compiler_cli_help_inventory_and_missing_arguments();
   test_shared_logging_cli_levels();
   OUTPUT_t *out=NULL; CompilerDiagnostic d; compiler_diag_init(&d);
   int8_t rc = compile_source_to_bytecode_diag("^;",2,&out,&d);

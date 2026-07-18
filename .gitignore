@@ -13,6 +13,12 @@ tests/network/test-chat-smoke
 tests/fuzz/fuzz_scomp
 tests/fuzz/fuzz_sdiss
 tests/fuzz/fuzz_sin_object
+/obj/
+/tests/fixtures/**/*.tmp
+/tests/fixtures/**/*.tmp.*
+/tests/fixtures/**/*.generated.obj
+/tests/fixtures/**/*.reference.obj
+/tests/fuzz/corpus/**/*.obj
 .vscode/
 .*.swp
 sin.code-workspace

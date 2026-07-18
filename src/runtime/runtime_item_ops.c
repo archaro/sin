@@ -52,14 +52,17 @@ bool canonicalize_itemname(const char *assembled_name, ITEM_t *context_item, cha
     }
     char parent[MAX_ITEM_NAME];
     get_itemname(context_item, parent);
-    if (snprintf(out_name, MAX_ITEM_NAME, "%s%s", parent, assembled_name) >= MAX_ITEM_NAME) {
+    int written = snprintf(out_name, MAX_ITEM_NAME, "%s%s", parent,
+                           assembled_name);
+    if (written < 0 || (size_t)written >= MAX_ITEM_NAME) {
       logerr("Resolved item name exceeds MAX_ITEM_NAME: %s%s\n", parent, assembled_name);
       return false;
     }
     return true;
   }
 
-  if (snprintf(out_name, MAX_ITEM_NAME, "%s", assembled_name) >= MAX_ITEM_NAME) {
+  int written = snprintf(out_name, MAX_ITEM_NAME, "%s", assembled_name);
+  if (written < 0 || (size_t)written >= MAX_ITEM_NAME) {
     logerr("Item name exceeds MAX_ITEM_NAME: %s\n", assembled_name);
     return false;
   }

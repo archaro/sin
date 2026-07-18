@@ -27,6 +27,12 @@ typedef struct {
   const char *output_path;
 } ScompOptions;
 
+typedef enum {
+  SCOMP_PARSE_ERROR = -1,
+  SCOMP_PARSE_OK = 0,
+  SCOMP_PARSE_EXIT_SUCCESS = 1
+} ScompParseResult;
+
 static void print_usage(FILE *stream) {
   fprintf(stream,
           "Usage:\n"
@@ -46,14 +52,21 @@ static const char *diag_message(const CompilerDiagnostic *diag) {
   return diag && diag->message ? diag->message : "";
 }
 
+static void usage_error(const char *message) {
+  logerr("scomp: %s\n", message);
+  logerr("Try 'scomp --help' for more information.\n");
+}
+
 static void print_source_line(FILE *stream, const char *source, size_t source_len,
                               int line) {
   const char *line_start = source;
   const char *line_end = source;
   int current_line = 1;
 
-  if (!stream || !source || source_len == 0 || line < 1) {
-    fprintf(stream, "\n");
+  /* A missing stream means that the caller requested no diagnostic output. */
+  if (!stream) return;
+  if (!source || source_len == 0 || line < 1) {
+    fputc('\n', stream);
     return;
   }
 
@@ -68,7 +81,8 @@ static void print_source_line(FILE *stream, const char *source, size_t source_le
     line_end++;
   }
 
-  fprintf(stream, "%.*s\n", (int)(line_end - line_start), line_start);
+  fwrite(line_start, 1, (size_t)(line_end - line_start), stream);
+  fputc('\n', stream);
 }
 
 static void print_caret_marker(FILE *stream, int column, int span) {
@@ -109,7 +123,7 @@ static void print_compiler_diagnostic(const CompilerDiagnostic *diag,
   print_caret_marker(stderr, column, span);
 }
 
-static int parse_options(int argc, char **argv, ScompOptions *opts) {
+static ScompParseResult parse_options(int argc, char **argv, ScompOptions *opts) {
   enum { OPT_VERSION = 1000 };
   static const struct option long_options[] = {
       {"help", no_argument, NULL, 'h'},
@@ -127,16 +141,15 @@ static int parse_options(int argc, char **argv, ScompOptions *opts) {
   optind = 1;
   while ((opt = getopt_long(argc, argv, "hi:o:qv", long_options, NULL)) != -1) {
     switch (opt) {
-      case 'h': print_usage(stdout); return 1;
-      case OPT_VERSION: printf("scomp %s\n", SINVERSION); return 1;
+      case 'h': print_usage(stdout); return SCOMP_PARSE_EXIT_SUCCESS;
+      case OPT_VERSION: printf("scomp %s\n", SINVERSION); return SCOMP_PARSE_EXIT_SUCCESS;
       case 'i': opts->input_path = optarg; break;
       case 'o': opts->output_path = optarg; break;
       case 'q': log_set_level(LOG_LEVEL_QUIET); break;
       case 'v': log_set_level(LOG_LEVEL_VERBOSE); break;
       default:
-        fprintf(stderr, "scomp: invalid option\n");
-        fprintf(stderr, "Try 'scomp --help' for more information.\n");
-        return -1;
+        usage_error("invalid option");
+        return SCOMP_PARSE_ERROR;
     }
   }
 
@@ -145,17 +158,15 @@ static int parse_options(int argc, char **argv, ScompOptions *opts) {
     opts->input_path = argv[optind];
     opts->output_path = argv[optind + 1];
   } else if (positional_count != 0) {
-    fprintf(stderr, "scomp: unexpected positional arguments\n");
-    fprintf(stderr, "Try 'scomp --help' for more information.\n");
-    return -1;
+    usage_error("unexpected positional arguments");
+    return SCOMP_PARSE_ERROR;
   }
 
   if (!opts->input_path || !opts->output_path) {
-    fprintf(stderr, "scomp: missing input or output file\n");
-    fprintf(stderr, "Try 'scomp --help' for more information.\n");
-    return -1;
+    usage_error("missing input or output file");
+    return SCOMP_PARSE_ERROR;
   }
-  return 0;
+  return SCOMP_PARSE_OK;
 }
 
 int main(int argc, char **argv) {
@@ -168,9 +179,9 @@ int main(int argc, char **argv) {
   ScompOptions opts;
   init_errmsg();
 
-  int parse_rc = parse_options(argc, argv, &opts);
-  if (parse_rc > 0) return 0;
-  if (parse_rc < 0) return EXIT_FAILURE;
+  ScompParseResult parse_result = parse_options(argc, argv, &opts);
+  if (parse_result == SCOMP_PARSE_EXIT_SUCCESS) return EXIT_SUCCESS;
+  if (parse_result == SCOMP_PARSE_ERROR) return EXIT_FAILURE;
 
   if (strcmp(opts.output_path, "-") == 0 && log_get_level() == LOG_LEVEL_NORMAL) {
     log_set_level(LOG_LEVEL_QUIET);

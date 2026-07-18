@@ -4,6 +4,7 @@
 
 #include <math.h>
 #include <stddef.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -11,6 +12,7 @@
 #define VALUE_INTERNAL
 #include "value.h"
 #include "floatconv.h"
+#include "runtime_value.h"
 #include "string_limits.h"
 
 const VALUE_t VALUE_NIL = {.type = VALUE_nil, .i = 0};
@@ -41,6 +43,66 @@ const char *value_type_name(VALUE_e type) {
   return "unknown";
 }
 
+static VALUE_text_result_e value_plain_text_copy(const char *source,
+                                                 char *buffer,
+                                                 size_t buffer_size,
+                                                 const char **text,
+                                                 size_t *text_length) {
+  size_t length = strlen(source);
+  if (length == SIZE_MAX || buffer == NULL || buffer_size <= length) {
+    return VALUE_TEXT_BUFFER_TOO_SMALL;
+  }
+  memcpy(buffer, source, length + 1);
+  *text = buffer;
+  *text_length = length;
+  return VALUE_TEXT_OK;
+}
+
+VALUE_text_result_e value_plain_text(const VALUE_t *value,
+                                     VALUE_text_nil_policy_e nil_policy,
+                                     char *buffer, size_t buffer_size,
+                                     const char **text, size_t *text_length) {
+  char formatted[VALUE_PLAIN_TEXT_BUFFER_SIZE];
+  int written;
+
+  if (!text || !text_length) return VALUE_TEXT_FORMAT_ERROR;
+  *text = NULL;
+  *text_length = 0;
+  if (!value) return VALUE_TEXT_FORMAT_ERROR;
+
+  switch (value->type) {
+    case VALUE_str:
+      *text = value->s ? value->s : "";
+      *text_length = strlen(*text);
+      return VALUE_TEXT_OK;
+    case VALUE_nil:
+      if (nil_policy == VALUE_TEXT_NIL_OMIT) return VALUE_TEXT_NIL;
+      if (nil_policy != VALUE_TEXT_NIL_LITERAL) return VALUE_TEXT_FORMAT_ERROR;
+      return value_plain_text_copy("nil", buffer, buffer_size, text,
+                                   text_length);
+    case VALUE_int:
+      written = snprintf(formatted, sizeof(formatted), "%" PRId64, value->i);
+      break;
+    case VALUE_float:
+      if (!sin_format_binary64_buf(value->f, formatted, sizeof(formatted))) {
+        return VALUE_TEXT_FORMAT_ERROR;
+      }
+      written = (int)strlen(formatted);
+      break;
+    case VALUE_bool:
+      written = snprintf(formatted, sizeof(formatted), "%s",
+                         value->i ? "true" : "false");
+      break;
+    default:
+      return VALUE_TEXT_UNKNOWN_TYPE;
+  }
+
+  if (written < 0) return VALUE_TEXT_FORMAT_ERROR;
+  if ((size_t)written >= sizeof(formatted)) return VALUE_TEXT_FORMAT_ERROR;
+  return value_plain_text_copy(formatted, buffer, buffer_size, text,
+                               text_length);
+}
+
 bool value_is_type(const VALUE_t *value, VALUE_e type) {
   return value != NULL && value->type == type;
 }
@@ -48,7 +110,7 @@ bool value_is_type(const VALUE_t *value, VALUE_e type) {
 void value_free(VALUE_t *value) {
   if (!value) return;
   if (value->type == VALUE_str && value->s) {
-    free(value->s);
+    free_runtime_string(value->s);
   }
   value->type = VALUE_nil;
   value->i = 0;

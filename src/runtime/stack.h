@@ -23,6 +23,7 @@ typedef struct {
 STACK_t *make_stack(void);
 void destroy_stack(STACK_t *stack);
 void reset_stack(STACK_t *stack);
+// Free owned values above top and make top the new current stack index.
 void reset_stack_to(STACK_t *stack, int32_t top);
 void push_stack(STACK_t *stack, VALUE_t obj);
 VALUE_t pop_stack(STACK_t *stack);

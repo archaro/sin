@@ -13,6 +13,7 @@
 #include "task.h"
 #include "vm.h"
 #include "memory.h"
+#include "runtime_value.h"
 #include "string_limits.h"
 
 #include "network.h"
@@ -20,6 +21,8 @@
 uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+LINE_t *add_line(uv_tcp_t *line_handle);
 uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -387,6 +390,32 @@ void test_libcall_registry_roundtrip(void) {
   alloc_test_fail_after(-1);
 }
 
+void test_runtime_init_validates_libcalls_once(void) {
+  long successful_budget = -1;
+  for (long fail_at = 0; fail_at < 4096; fail_at++) {
+    LibcallRegistry registry = {0};
+    alloc_test_fail_after(fail_at);
+    bool initialized = libcall_registry_init(&registry);
+    alloc_test_fail_after(-1);
+    libcall_registry_destroy(&registry);
+    if (initialized) {
+      successful_budget = fail_at;
+      break;
+    }
+  }
+  ASSERT_TRUE(successful_budget >= 0);
+
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, NULL);
+
+  alloc_test_fail_after(successful_budget);
+  bool initialized = runtime_init(&ctx, NULL);
+  alloc_test_fail_after(-1);
+  runtime_destroy(&ctx);
+  ASSERT_TRUE(initialized);
+  ASSERT_TRUE(ctx.initialized == false);
+}
+
 void test_libcall_registry_init_failure_has_no_partial_state(void) {
   bool reached_success = false;
 
@@ -630,6 +659,67 @@ void test_net_write_ignores_non_writable_lines(void) {
     ASSERT_EQ_INT(VALUE_nil, ret.type);
   }
 
+  teardown_libcall_runtime();
+}
+
+void test_net_input_fair_queue_progresses_connect_data_disconnect(void) {
+  setup_libcall_runtime();
+
+  config.maxconns = 3;
+  config.lastconn = 2;
+  config.inputline = strdup("input.line");
+  config.inputtext = strdup("input.text");
+  ASSERT_NOT_NULL(config.inputline);
+  ASSERT_NOT_NULL(config.inputtext);
+  line = calloc(config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+
+  for (size_t i = 0; i < config.maxconns; i++) {
+    uv_tcp_t *line_handle = calloc(1, sizeof(*line_handle));
+    ASSERT_NOT_NULL(line_handle);
+    ASSERT_NOT_NULL(add_line(line_handle));
+    line[i].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
+    ASSERT_NOT_NULL(line[i].telnet);
+  }
+
+  line[1].status = LINE_data;
+  free(line[1].inbuf->buf.base);
+  line[1].inbuf->buf.base = strdup("hello\n");
+  ASSERT_NOT_NULL(line[1].inbuf->buf.base);
+  line[1].inbuf->buf.len = strlen(line[1].inbuf->buf.base);
+  line[1].inbuf->length = line[1].inbuf->buf.len + 1;
+  line[2].status = LINE_disconnecting;
+
+  RuntimeContext *ctx = test_ctx();
+  (void)lc_net_input(ctx, NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(1, ret.i);
+  ITEM_t *input_line_item = find_item(config.itemroot, "input.line");
+  ASSERT_NOT_NULL(input_line_item);
+  ASSERT_EQ_INT(0, input_line_item->value.i);
+
+  (void)lc_net_input(ctx, NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(3, ret.i);
+  ASSERT_EQ_INT(1, input_line_item->value.i);
+  ITEM_t *input_text_item = find_item(config.itemroot, "input.text");
+  ASSERT_NOT_NULL(input_text_item);
+  ASSERT_TRUE(strcmp(input_text_item->value.s, "hello") == 0);
+
+  (void)lc_net_input(ctx, NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(2, ret.i);
+  ASSERT_EQ_INT(LINE_empty, line[2].status);
+
+  destroy_line(&line[0]);
+  destroy_line(&line[1]);
+  free(config.inputline);
+  free(config.inputtext);
+  config.inputline = NULL;
+  config.inputtext = NULL;
   teardown_libcall_runtime();
 }
 
@@ -1329,11 +1419,28 @@ void test_str_libcall_invalidargs_uses_context_itemroot(void) {
 }
 
 void test_libcall_output_formats_values(void) {
+  typedef struct {
+    VALUE_t value;
+    const char *expected;
+  } output_case_t;
+
   setup_libcall_runtime();
 
-  assert_sys_log_output((VALUE_t){VALUE_float, {.f = 3.5}}, "3.5");
-  assert_sys_log_output((VALUE_t){VALUE_str, {.s = strdup("%s literal")}},
-                        "%s literal");
+  const output_case_t sys_cases[] = {
+    {(VALUE_t){VALUE_str, {.s = strdup("%s literal")}}, "%s literal"},
+    {(VALUE_t){VALUE_str, {.s = NULL}}, ""},
+    {(VALUE_t){VALUE_int, {.i = INT64_MIN}}, "-9223372036854775808"},
+    {(VALUE_t){VALUE_float, {.f = value_float_from_bits(UINT64_C(0x8000000000000000))}}, "-0.0"},
+    {(VALUE_t){VALUE_float, {.f = value_float_from_bits(UINT64_C(0x7ff0000000000000))}}, "inf"},
+    {(VALUE_t){VALUE_float, {.f = value_float_from_bits(UINT64_C(0xfff0000000000000))}}, "-inf"},
+    {(VALUE_t){VALUE_float, {.f = value_float_from_bits(UINT64_C(0x7ff8000000000042))}}, "nan"},
+    {(VALUE_t){VALUE_bool, {.i = 1}}, "true"},
+    {(VALUE_t){VALUE_bool, {.i = 0}}, "false"},
+    {VALUE_NIL, ""},
+  };
+  for (size_t i = 0; i < sizeof(sys_cases) / sizeof(sys_cases[0]); i++) {
+    assert_sys_log_output(sys_cases[i].value, sys_cases[i].expected);
+  }
 
   config.maxconns = 1;
   line = calloc((size_t)config.maxconns, sizeof(LINE_t));
@@ -1342,13 +1449,21 @@ void test_libcall_output_formats_values(void) {
   line[0].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
   ASSERT_NOT_NULL(line[0].telnet);
 
-  assert_net_write_output((VALUE_t){VALUE_str, {.s = strdup("hello")}},
-                          "hello");
-  assert_net_write_output((VALUE_t){VALUE_int, {.i = -42}}, "-42");
-  assert_net_write_output((VALUE_t){VALUE_float, {.f = 3.5}}, "3.5");
-  assert_net_write_output((VALUE_t){VALUE_bool, {.i = 1}}, "true");
-  assert_net_write_output((VALUE_t){VALUE_bool, {.i = 0}}, "false");
-  assert_net_write_output(VALUE_NIL, "");
+  const output_case_t net_cases[] = {
+    {(VALUE_t){VALUE_str, {.s = strdup("hello")}}, "hello"},
+    {(VALUE_t){VALUE_str, {.s = NULL}}, ""},
+    {(VALUE_t){VALUE_int, {.i = INT64_MIN}}, "-9223372036854775808"},
+    {(VALUE_t){VALUE_float, {.f = value_float_from_bits(UINT64_C(0x8000000000000000))}}, "-0.0"},
+    {(VALUE_t){VALUE_float, {.f = value_float_from_bits(UINT64_C(0x7ff0000000000000))}}, "inf"},
+    {(VALUE_t){VALUE_float, {.f = value_float_from_bits(UINT64_C(0xfff0000000000000))}}, "-inf"},
+    {(VALUE_t){VALUE_float, {.f = value_float_from_bits(UINT64_C(0x7ff8000000000042))}}, "nan"},
+    {(VALUE_t){VALUE_bool, {.i = 1}}, "true"},
+    {(VALUE_t){VALUE_bool, {.i = 0}}, "false"},
+    {VALUE_NIL, ""},
+  };
+  for (size_t i = 0; i < sizeof(net_cases) / sizeof(net_cases[0]); i++) {
+    assert_net_write_output(net_cases[i].value, net_cases[i].expected);
+  }
 
   teardown_libcall_runtime();
 }

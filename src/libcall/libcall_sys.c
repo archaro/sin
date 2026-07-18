@@ -6,7 +6,6 @@
 
 #include "compiler/compiler_pipeline.h"
 #include "error.h"
-#include "floatconv.h"
 #include "interpret.h"
 #include "item.h"
 #include "libcall_common.h"
@@ -72,31 +71,27 @@ uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
 
   VALUE_t val = pop_stack(ctx->vm->stack);
-  switch (val.type) {
-    case VALUE_str:
-      logmsg("%s", val.s);
-      FREE_STR(val);
+  char buffer[VALUE_PLAIN_TEXT_BUFFER_SIZE];
+  const char *text = NULL;
+  size_t text_length = 0;
+  VALUE_text_result_e result = value_plain_text(
+      &val, VALUE_TEXT_NIL_OMIT, buffer, sizeof(buffer), &text, &text_length);
+  (void)text_length;
+  switch (result) {
+    case VALUE_TEXT_OK:
+      logmsg("%s", text);
       break;
-    case VALUE_int:
-      logmsg("%ld", val.i);
+    case VALUE_TEXT_NIL:
       break;
-    case VALUE_float: {
-      char fbuffer[64];
-      if (sin_format_binary64_buf(val.f, fbuffer, sizeof(fbuffer))) {
-        logmsg("%s", fbuffer);
-      } else {
-        logmsg("<float-format-error>");
-      }
-      break;
-    }
-    case VALUE_nil:
-      break;
-    case VALUE_bool:
-      logmsg("%s", val.i?"true":"false");
-      break;
-    default:
+    case VALUE_TEXT_UNKNOWN_TYPE:
       logmsg("Sys.log called with unknown value type.\n");
+      break;
+    case VALUE_TEXT_BUFFER_TOO_SMALL:
+    case VALUE_TEXT_FORMAT_ERROR:
+      logmsg("<float-format-error>");
+      break;
   }
+  FREE_STR(val);
   return lc_sys_return_nil(ctx, nextop);
 }
 

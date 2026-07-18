@@ -80,7 +80,7 @@ FRAME_t *pop_callstack(VM_t *vm) {
   // at the top of the callstack, so the interpreter can restore
   // its item and nextop.
   if (vm->callstack->current >= 0) {
-    // First, reset the value stack to its previous state.
+    // Restore the caller's stack boundary and discard the callee's values.
     reset_stack_to(vm->stack,
                vm->callstack->entry[vm->callstack->current].current_stack);
     vm->stack->locals =

@@ -18,6 +18,36 @@ static void lower_set_error(LOWER_CTX *ctx, int8_t errnum, const char *detail) {
   compdiag_set_once(&ctx->errnum, &ctx->errdetail, errnum, "lower", detail);
 }
 
+static bool lower_emit(LOWER_CTX *ctx, IR_Inst inst) {
+  if (ctx->errnum != ERR_NOERROR) return false;
+  if (ir_emit(ctx->ir, inst) == SIZE_MAX) {
+    lower_set_error(ctx, ERR_COMP_UNKNOWN, "failed to emit IR instruction");
+    return false;
+  }
+  return true;
+}
+
+static bool lower_new_label(LOWER_CTX *ctx, int32_t *label_id) {
+  int32_t id;
+  if (ctx->errnum != ERR_NOERROR) return false;
+  id = ir_new_label(ctx->ir);
+  if (id < 0) {
+    lower_set_error(ctx, ERR_COMP_UNKNOWN, "failed to allocate IR label");
+    return false;
+  }
+  if (label_id) *label_id = id;
+  return true;
+}
+
+static bool lower_bind_label(LOWER_CTX *ctx, int32_t label_id) {
+  if (ctx->errnum != ERR_NOERROR) return false;
+  if (!ir_bind_label(ctx->ir, label_id)) {
+    lower_set_error(ctx, ERR_COMP_UNKNOWN, "failed to bind IR label");
+    return false;
+  }
+  return true;
+}
+
 static void lower_set_unsupported(LOWER_CTX *ctx, const AS_NODE *node, const char *reason) {
   char buffer[128];
   int nodetype = node ? (int)node->nodetype : -1;
@@ -89,8 +119,8 @@ static void lower_layer_part(LOWER_CTX *ctx, AS_NODE *part) {
   switch (value->valtype) {
     case V_LAYER:
     case V_STR:
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_PUSH_LAYER,
-                                 .imm = (int64_t)(intptr_t)value->value.s});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_ITEM_PUSH_LAYER,
+                                .imm = (int64_t)(intptr_t)value->value.s});
       return;
     case V_INT:
       {
@@ -108,8 +138,8 @@ static void lower_layer_part(LOWER_CTX *ctx, AS_NODE *part) {
         }
         value->valtype = V_STR;
         value->value.s = layer;
-        ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_PUSH_LAYER,
-                                   .imm = (int64_t)(intptr_t)layer});
+        lower_emit(ctx, (IR_Inst){.op = IR_OP_ITEM_PUSH_LAYER,
+                                  .imm = (int64_t)(intptr_t)layer});
       }
       return;
     case V_FLOAT:
@@ -152,8 +182,8 @@ static void lower_item_deref_payload(LOWER_CTX *ctx, AS_NODE *payload) {
     uint8_t index = 0;
     if (value && value->valtype == V_LOCAL &&
         lower_resolve_local_index(ctx, payload, &index)) {
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_PUSH_DEREF_LOCAL,
-                                 .a = index});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_ITEM_PUSH_DEREF_LOCAL,
+                                .a = index});
       return;
     }
   }
@@ -179,7 +209,9 @@ static void lower_item(LOWER_CTX *ctx, AS_NODE *item) {
     }
   }
 
-  ir_emit(ctx->ir, (IR_Inst){.op = relative ? IR_OP_ITEM_BEGIN_REL : IR_OP_ITEM_BEGIN});
+  if (!lower_emit(ctx, (IR_Inst){.op = relative ? IR_OP_ITEM_BEGIN_REL : IR_OP_ITEM_BEGIN})) {
+    return;
+  }
   cursor = item;
   while (cursor && ctx->errnum == ERR_NOERROR) {
     AS_NODE *part = (AS_NODE *)cursor->lhs;
@@ -189,7 +221,7 @@ static void lower_item(LOWER_CTX *ctx, AS_NODE *item) {
     }
 
     if (part->nodetype == N_DEREF) {
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_PUSH_DEREF});
+      if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_ITEM_PUSH_DEREF})) return;
       lower_item_deref_payload(ctx, (AS_NODE *)part->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
     } else {
@@ -201,7 +233,7 @@ static void lower_item(LOWER_CTX *ctx, AS_NODE *item) {
   }
 
   if (ctx->errnum == ERR_NOERROR) {
-    ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_END});
+    lower_emit(ctx, (IR_Inst){.op = IR_OP_ITEM_END});
   }
 }
 
@@ -221,24 +253,24 @@ static void lower_value_expr(LOWER_CTX *ctx, AS_NODE *node) {
 
   switch (value->valtype) {
     case V_INT:
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = value->value.i});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = value->value.i});
       return;
     case V_FLOAT:
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_PUSH_FLOAT, .imm = (int64_t)value->value.f_bits});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_FLOAT, .imm = (int64_t)value->value.f_bits});
       return;
     case V_BOOLTRUE:
     case V_BOOLFALSE:
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_PUSH_BOOL, .a = value->value.i ? 1 : 0});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_BOOL, .a = value->value.i ? 1 : 0});
       return;
     case V_STR:
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_PUSH_STRING, .imm = (int64_t)(intptr_t)value->value.s});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_STRING, .imm = (int64_t)(intptr_t)value->value.s});
       return;
     case V_LOCAL: {
       uint8_t index = 0;
       if (!lower_resolve_local_index(ctx, node, &index)) {
         return;
       }
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = index});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = index});
       return;
     }
     default:
@@ -252,7 +284,7 @@ static void lower_binary_expr(LOWER_CTX *ctx, AS_NODE *node, IR_Op op) {
   if (ctx->errnum != ERR_NOERROR) return;
   lower_expr(ctx, (AS_NODE *)node->rhs);
   if (ctx->errnum != ERR_NOERROR) return;
-  ir_emit(ctx->ir, (IR_Inst){.op = op});
+  lower_emit(ctx, (IR_Inst){.op = op});
 }
 
 static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
@@ -279,7 +311,7 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
     case N_NOT:
       lower_expr(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_NOT});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_NOT});
       return;
 
     case N_ITEM:
@@ -290,7 +322,7 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
     case N_DEREF:
       lower_deref_payload(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_DEREF});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_ITEM_DEREF});
       return;
 
     case N_CALL: {
@@ -301,7 +333,7 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
       // below it. Emit argument expressions first, then the item expression.
       lower_expr(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_CALL, .a = argc});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_CALL, .a = argc});
       return;
     }
 
@@ -343,14 +375,14 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
         lower_set_unsupported(ctx, node, "invalid libcall argument count");
         return;
       }
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LIBCALL_TOKEN, .a = token});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LIBCALL_TOKEN, .a = token});
       return;
     }
 
     case N_CODE: {
       int32_t payload_index = -1;
       if (!lower_build_embedded_payload(ctx, node, &payload_index)) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = payload_index});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = payload_index});
       return;
     }
 
@@ -407,13 +439,13 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result) {
     case N_EXPRSTMT:
       lower_expr(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
-      if (!preserve_result) ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_DISCARD});
+      if (!preserve_result && !lower_emit(ctx, (IR_Inst){.op = IR_OP_DISCARD})) return;
       return;
 
     case N_RETURN:
       lower_expr(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_HALT});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_HALT});
       return;
 
     case N_ASSLOCAL: {
@@ -425,7 +457,7 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result) {
 
       lower_expr(ctx, (AS_NODE *)node->rhs);
       if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = index});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = index});
       return;
     }
 
@@ -437,8 +469,8 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result) {
         return;
       }
 
-      ir_emit(ctx->ir, (IR_Inst){.op = node->nodetype == N_INC ? IR_OP_INC_LOCAL : IR_OP_DEC_LOCAL,
-                                 .a = index});
+      lower_emit(ctx, (IR_Inst){.op = node->nodetype == N_INC ? IR_OP_INC_LOCAL : IR_OP_DEC_LOCAL,
+                                .a = index});
       return;
     }
 
@@ -448,58 +480,62 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result) {
       if (((AS_NODE *)node->rhs)->nodetype == N_CODE) {
         int32_t payload_index = -1;
         if (!lower_build_embedded_payload(ctx, (AS_NODE *)node->rhs, &payload_index)) return;
-        ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = payload_index});
+        if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = payload_index})) return;
       } else {
         lower_expr(ctx, (AS_NODE *)node->rhs);
         if (ctx->errnum != ERR_NOERROR) return;
-        ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_ITEM_SAVE});
+        lower_emit(ctx, (IR_Inst){.op = IR_OP_ITEM_SAVE});
       }
       return;
 
     case N_IFSTMT: {
       AS_IF *branch = (AS_IF *)node->lhs;
-      int32_t end_label = ir_new_label(ctx->ir);
+      int32_t end_label = -1;
+      if (!lower_new_label(ctx, &end_label)) return;
 
       while (branch != NULL && ctx->errnum == ERR_NOERROR) {
-        int32_t else_label = ir_new_label(ctx->ir);
+        int32_t else_label = -1;
+        if (!lower_new_label(ctx, &else_label)) return;
 
         if (branch->condition != NULL) {
           lower_expr(ctx, branch->condition);
           if (ctx->errnum != ERR_NOERROR) return;
-          ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = else_label});
+          if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = else_label})) return;
         }
 
         lower_stmtlist(ctx, branch->then, false);
         if (ctx->errnum != ERR_NOERROR) return;
 
-        ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_JUMP, .a = end_label});
-        ir_bind_label(ctx->ir, else_label);
-        ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LABEL, .a = else_label});
+        if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP, .a = end_label})) return;
+        if (!lower_bind_label(ctx, else_label)) return;
+        if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = else_label})) return;
         branch = branch->elsif;
       }
 
-      ir_bind_label(ctx->ir, end_label);
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LABEL, .a = end_label});
+      if (!lower_bind_label(ctx, end_label)) return;
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = end_label});
       return;
     }
 
     case N_WHILESTMT: {
-      int32_t start_label = ir_new_label(ctx->ir);
-      int32_t end_label = ir_new_label(ctx->ir);
+      int32_t start_label = -1;
+      int32_t end_label = -1;
+      if (!lower_new_label(ctx, &start_label)) return;
+      if (!lower_new_label(ctx, &end_label)) return;
 
-      ir_bind_label(ctx->ir, start_label);
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LABEL, .a = start_label});
+      if (!lower_bind_label(ctx, start_label)) return;
+      if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = start_label})) return;
 
       lower_expr(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = end_label});
+      if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = end_label})) return;
 
       lower_stmtlist(ctx, (AS_NODE *)node->rhs, false);
       if (ctx->errnum != ERR_NOERROR) return;
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_JUMP, .a = start_label});
+      if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP, .a = start_label})) return;
 
-      ir_bind_label(ctx->ir, end_label);
-      ir_emit(ctx->ir, (IR_Inst){.op = IR_OP_LABEL, .a = end_label});
+      if (!lower_bind_label(ctx, end_label)) return;
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = end_label});
       return;
     }
 
@@ -530,14 +566,14 @@ static bool lower_build_embedded_payload(LOWER_CTX *ctx, AS_NODE *node, int32_t 
   }
   payload.source = val->value.s;
   if (!ir_embedded_locals_from_params((AS_NODE *)node->lhs, &payload)) {
-    lower_set_error(ctx, ERR_COMP_INUSE, "failed to build embedded code parameter metadata");
+    lower_set_error(ctx, ERR_COMP_UNKNOWN, "failed to build embedded code parameter metadata");
     return false;
   }
   *payload_index = ir_add_embedded_code_payload(ctx->ir, payload);
   if (*payload_index < 0) {
     free(payload.params);
     free(payload.locals);
-    lower_set_error(ctx, ERR_COMP_INUSE, "failed to store embedded code payload");
+    lower_set_error(ctx, ERR_COMP_UNKNOWN, "failed to store embedded code payload");
     return false;
   }
   return true;
@@ -565,21 +601,23 @@ int8_t lower_ast_to_ir_diag(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char 
   ctx.errnum = ERR_NOERROR;
 
   if (!libcall_init_registry()) {
-    compdiag_set_once_diag(&startup_errnum, errdetail, diag, ERR_COMP_INUSE, DIAG_PHASE_LOWER, "lower",
+    ir_destroy_unit(ctx.ir);
+    compdiag_set_once_diag(&startup_errnum, errdetail, diag, ERR_COMP_UNKNOWN, DIAG_PHASE_LOWER, "lower",
                           "failed to initialize libcall registry");
     return startup_errnum;
   }
 
   if (!ctx.ir) {
-    compdiag_set_once_diag(&startup_errnum, errdetail, diag, ERR_COMP_INUSE, DIAG_PHASE_LOWER, "lower", "failed to allocate IR unit");
+    compdiag_set_once_diag(&startup_errnum, errdetail, diag, ERR_COMP_UNKNOWN, DIAG_PHASE_LOWER, "lower", "failed to allocate IR unit");
     return startup_errnum;
   }
 
   lower_node(&ctx, root);
   if (ctx.errnum == ERR_NOERROR) {
-    ir_emit(ctx.ir, (IR_Inst){.op = IR_OP_HALT});
-    *out_ir = ctx.ir;
-    return ERR_NOERROR;
+    if (lower_emit(&ctx, (IR_Inst){.op = IR_OP_HALT})) {
+      *out_ir = ctx.ir;
+      return ERR_NOERROR;
+    }
   }
 
   ir_destroy_unit(ctx.ir);

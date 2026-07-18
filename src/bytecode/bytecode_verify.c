@@ -335,6 +335,7 @@ static int bc_validate_local_index(BC_Decoder *d, const uint8_t *p,
 
 static int bc_record_jump(BC_Decoder *d, const uint8_t *operand_start,
                           uint8_t opcode) {
+  if (!d->options.validate_control_flow) return 1;
   if (d->jump_count == d->jump_capacity) {
     size_t new_capacity = d->jump_capacity;
     if (!alloc_grow_array_capacity((void **)&d->jumps, &new_capacity,
@@ -539,6 +540,14 @@ static int bc_decode_deref(BC_Decoder *d, const uint8_t **cursor) {
     return ok;
   }
   return bc_fail(d, start, type, "unknown dereference type");
+}
+
+static void bc_release_analysis_storage(BC_Decoder *d) {
+  if (d->options.validate_control_flow || d->options.validate_stack_effects) {
+    free(d->top_level_instruction_starts);
+  }
+  if (d->options.validate_stack_effects) free(d->instructions);
+  if (d->options.validate_control_flow) free(d->jumps);
 }
 
 static void bc_record_instruction_meta(BC_Decoder *d, const uint8_t *start,
@@ -765,41 +774,45 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
     return d.result;
   }
 
-  d.top_level_instruction_starts = calloc((size_t)bytecode_len + 1, sizeof(bool));
-  d.instructions = calloc((size_t)bytecode_len + 1, sizeof(*d.instructions));
-  d.top_level_instruction_start_capacity = bytecode_len + 1;
-  if (!d.top_level_instruction_starts || !d.instructions) {
+  bool needs_instruction_starts = d.options.validate_control_flow ||
+                                  d.options.validate_stack_effects;
+  if (needs_instruction_starts) {
+    d.top_level_instruction_starts = alloc_calloc(
+        (size_t)bytecode_len + 1, sizeof(bool));
+    d.top_level_instruction_start_capacity = bytecode_len + 1;
+  }
+  if (d.options.validate_stack_effects) {
+    d.instructions = alloc_calloc((size_t)bytecode_len + 1,
+                                  sizeof(*d.instructions));
+  }
+  if ((needs_instruction_starts && !d.top_level_instruction_starts) ||
+      (d.options.validate_stack_effects && !d.instructions)) {
     bc_fail(&d, d.base, 0, "out of memory recording instruction starts");
-    free(d.top_level_instruction_starts);
-    free(d.instructions);
+    bc_release_analysis_storage(&d);
     return d.result;
   }
 
   const uint8_t *cursor = bytecode + 2;
   while (cursor < d.end) {
     const uint8_t *start = cursor;
-    d.top_level_instruction_starts[bc_offset(&d, start)] = true;
+    if (needs_instruction_starts) {
+      d.top_level_instruction_starts[bc_offset(&d, start)] = true;
+    }
     if (!bc_decode_one(&d, &cursor, BC_CTX_STMT)) {
-      free(d.top_level_instruction_starts);
-      free(d.instructions);
-      free(d.jumps);
+      bc_release_analysis_storage(&d);
       return d.result;
     }
     if (*start == 'h') {
       d.result.halt_offset = bc_offset(&d, start);
       if (d.options.validate_control_flow) {
         if (!bc_validate_recorded_jumps(&d)) {
-          free(d.top_level_instruction_starts);
-          free(d.instructions);
-          free(d.jumps);
+          bc_release_analysis_storage(&d);
           return d.result;
         }
       }
       if (d.options.validate_stack_effects) {
         if (!bc_verify_stack_flow(&d, params)) {
-          free(d.top_level_instruction_starts);
-          free(d.instructions);
-          free(d.jumps);
+          bc_release_analysis_storage(&d);
           return d.result;
         }
       }
@@ -810,17 +823,13 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
           bc_warn(&d, cursor, *cursor, "trailing bytes after HALT");
         }
       }
-      free(d.top_level_instruction_starts);
-      free(d.instructions);
-      free(d.jumps);
+      bc_release_analysis_storage(&d);
       return d.result;
     }
   }
 
   bc_fail(&d, d.end, 0, "missing terminating HALT opcode");
-  free(d.top_level_instruction_starts);
-  free(d.instructions);
-  free(d.jumps);
+  bc_release_analysis_storage(&d);
   return d.result;
 }
 

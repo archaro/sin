@@ -108,7 +108,9 @@ TEST_CORE_SOURCES := \
 	$(TEST_DIR)/core/test_itemstore_io.c \
 	$(TEST_DIR)/core/test_itemstore_verifier.c \
 	$(TEST_DIR)/core/test_libcall_registry.c \
+	$(TEST_DIR)/core/test_task_lifecycle.c \
 	$(TEST_DIR)/core/test_relative_item_leading_dot.c \
+	$(TEST_DIR)/core/test_stack_frames.c \
 	$(TEST_DIR)/core/test_value_behavior.c
 TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_emitbc_header.c \
@@ -354,3 +356,5 @@ clean:
 	rm -rf $(OBJ_DIR) $(LIB_DIR) $(PROGRAMS) $(TEST_BINS) $(TEST_DEPS) \
 		$(TEST_TMP_ARTIFACTS) $(FUZZ_BINS) $(GENERATED_FUZZ_CORPUS) \
 		$(SRC_DIR)/parser.c $(SRC_DIR)/parser.h $(SRC_DIR)/lexer.c
+	find $(TEST_DIR)/fixtures -type f \( -name '*.tmp' -o -name '*.tmp.*' \
+		-o -name '*.generated.obj' -o -name '*.reference.obj' \) -delete

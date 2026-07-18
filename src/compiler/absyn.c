@@ -9,6 +9,13 @@
 #include "compiler/absyn.h"
 #include "floatconv.h"
 
+static void as_delete_value_payload(AS_VALUE *value) {
+  if (!value) return;
+  if (value->valtype != V_INT && value->valtype != V_FLOAT && value->valtype != V_BOOLTRUE && value->valtype != V_BOOLFALSE) {
+    free(value->value.s);
+  }
+}
+
 AS_VALUE *as_new_value(ENUM_VALUE valtype, uint64_t ival, char *sval) {
   // Create a new AS value
   //    valtype: type of value
@@ -16,7 +23,8 @@ AS_VALUE *as_new_value(ENUM_VALUE valtype, uint64_t ival, char *sval) {
   //    sval:    null-terminated string value (V_STR, V_LOCAL, V_ITEM, V_LAYER)
   // Integers, strings, locals and layers are easy.
   // Items are encoded as the name of the item.
-  AS_VALUE *newval = malloc(sizeof *newval);
+  AS_VALUE *newval = alloc_malloc(sizeof *newval);
+  if (!newval) return NULL;
   newval->valtype = valtype;
   if (valtype == V_INT || valtype == V_BOOLTRUE || valtype == V_BOOLFALSE) {
     newval->value.i = (int64_t)ival;
@@ -29,13 +37,21 @@ AS_VALUE *as_new_value(ENUM_VALUE valtype, uint64_t ival, char *sval) {
 }
 
 AS_NODE *as_new_intnode(int64_t value) {
-  return as_new_node(N_VALUE, as_new_value(V_INT, (uint64_t)value, NULL), NULL);
+  AS_VALUE *newval = as_new_value(V_INT, (uint64_t)value, NULL);
+  if (!newval) return NULL;
+  AS_NODE *node = as_new_node(N_VALUE, newval, NULL);
+  if (!node) {
+    as_delete_value_payload(newval);
+    free(newval);
+  }
+  return node;
 }
 
 AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval) {
   // Create a new node of type N_VALUE
   // Like as_new_value(), but puts the value into a node and returns that.
   AS_VALUE *newval;
+  if (valtype != V_BOOLTRUE && valtype != V_BOOLFALSE && !sval) return NULL;
   if (valtype == V_INT) {
     newval = as_new_value(V_INT, (uint64_t)atoll(sval), NULL);
     free(sval);
@@ -52,13 +68,25 @@ AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval) {
     newval = as_new_value(V_FLOAT, bits, NULL);
     free(sval);
   } else if (valtype == V_BOOLTRUE) {
+    free(sval);
     newval = as_new_value(V_BOOLTRUE, 1, NULL);
   } else if (valtype == V_BOOLFALSE) {
+    free(sval);
     newval = as_new_value(V_BOOLFALSE, 0, NULL);
   } else {
     newval = as_new_value(valtype, 0, sval);
+    if (!newval) {
+      free(sval);
+      return NULL;
+    }
   }
-  return as_new_node(N_VALUE, newval, NULL);
+  if (!newval) return NULL;
+  AS_NODE *node = as_new_node(N_VALUE, newval, NULL);
+  if (!node) {
+    as_delete_value_payload(newval);
+    free(newval);
+  }
+  return node;
 }
 
 AS_NODE *as_new_node(ENUM_NODE nodetype, void *lhs, void *rhs) {
@@ -66,7 +94,8 @@ AS_NODE *as_new_node(ENUM_NODE nodetype, void *lhs, void *rhs) {
   //    nodetype: type of node
   //    lhs: node payload (lhs if a binary operation node)
   //    rhs: rhs if a binary operation node
-  AS_NODE *newnode = malloc(sizeof *newnode);
+  AS_NODE *newnode = alloc_malloc(sizeof *newnode);
+  if (!newnode) return NULL;
   newnode->nodetype = nodetype;
   // Add nodetypes to the switch below.
   switch (nodetype) {
@@ -88,7 +117,8 @@ AS_NODE *as_new_node(ENUM_NODE nodetype, void *lhs, void *rhs) {
 }
 
 AS_STMTLIST *as_new_stmtlist(void) {
-  AS_STMTLIST *newlist = malloc(sizeof *newlist);
+  AS_STMTLIST *newlist = alloc_malloc(sizeof *newlist);
+  if (!newlist) return NULL;
   newlist->stmts = NULL;
   newlist->count = 0;
   newlist->capacity = 0;
@@ -96,19 +126,27 @@ AS_STMTLIST *as_new_stmtlist(void) {
 }
 
 AS_NODE *as_new_stmtlist_node(void) {
-  return as_new_node(N_STMTLIST, as_new_stmtlist(), NULL);
+  AS_STMTLIST *stmtlist = as_new_stmtlist();
+  if (!stmtlist) return NULL;
+  AS_NODE *node = as_new_node(N_STMTLIST, stmtlist, NULL);
+  if (!node) free(stmtlist);
+  return node;
 }
 
 bool as_stmtlist_append_checked(AS_NODE *stmtlist_node, AS_NODE *stmt) {
   if (!stmtlist_node || stmtlist_node->nodetype != N_STMTLIST || !stmt) {
-    return true;
+    return false;
   }
   AS_STMTLIST *stmtlist = (AS_STMTLIST *)stmtlist_node->lhs;
+  if (!stmtlist || stmtlist->count == UINT32_MAX) return false;
   if (stmtlist->count == stmtlist->capacity) {
     size_t oldcap = stmtlist->capacity;
     size_t newcap = 0;
     if (!alloc_grow_capacity(oldcap, oldcap + 1, &newcap)) return false;
-    if (!alloc_grow_array((void **)&stmtlist->stmts, newcap, sizeof(AS_NODE*))) return false;
+    if (newcap > UINT32_MAX ||
+        !alloc_grow_array((void **)&stmtlist->stmts, newcap, sizeof(AS_NODE*))) {
+      return false;
+    }
     stmtlist->capacity = (uint32_t)newcap;
   }
   stmtlist->stmts[stmtlist->count++] = stmt;
@@ -116,7 +154,7 @@ bool as_stmtlist_append_checked(AS_NODE *stmtlist_node, AS_NODE *stmt) {
 }
 
 AS_NODE *as_stmtlist_append(AS_NODE *stmtlist_node, AS_NODE *stmt) {
-  (void)as_stmtlist_append_checked(stmtlist_node, stmt);
+  if (!as_stmtlist_append_checked(stmtlist_node, stmt)) as_delete(stmt);
   return stmtlist_node;
 }
 
@@ -126,7 +164,8 @@ AS_IF *as_new_if(AS_NODE *condition, AS_NODE *then, AS_IF *elsif) {
   //            if this AS_IF just contains the ELSE branch
   // then:      the statements to execute if condition is true
   // elsif:     further tests, or the else branch, or null
-  AS_IF *newif = malloc(sizeof *newif);
+  AS_IF *newif = alloc_malloc(sizeof *newif);
+  if (!newif) return NULL;
   newif->condition = condition;
   newif->then = then;
   newif->elsif = elsif;
@@ -160,7 +199,7 @@ void as_delete(AS_NODE *root) {
   switch (root->nodetype) {
     case N_VALUE: {
       AS_VALUE *val = (AS_VALUE*)root->lhs;
-      if (val->valtype != V_INT && val->valtype != V_FLOAT && val->valtype != V_BOOLTRUE && val->valtype != V_BOOLFALSE) free(val->value.s);
+      as_delete_value_payload(val);
       free(root->lhs);
       // rhs is always null for this nodetype
       break;

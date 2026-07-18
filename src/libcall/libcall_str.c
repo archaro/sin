@@ -1,9 +1,7 @@
 #include <ctype.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "floatconv.h"
 #include "item.h"
 #include "libcall_common.h"
 #include "libcall_handlers.h"
@@ -458,31 +456,25 @@ uint8_t *lc_str_valtostr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (top->type == VALUE_str) return nextop;
 
   VALUE_t val = pop_stack(ctx->vm->stack);
-  char *out = NULL;
-  switch (val.type) {
-    case VALUE_int: {
-      char buffer[22];
-      int len = snprintf(buffer, sizeof(buffer), "%ld", val.i);
-      if (len > 0) out = strdup(buffer);
-      break;
-    }
-    case VALUE_float:
-      out = sin_format_binary64(val.f);
-      break;
-    case VALUE_bool:
-      out = strdup(val.i ? "true" : "false");
-      break;
-    case VALUE_nil:
-      out = strdup("nil");
-      break;
-    case VALUE_str:
-      break;
-  }
-
-  if (!out) {
+  char buffer[VALUE_PLAIN_TEXT_BUFFER_SIZE];
+  const char *text = NULL;
+  size_t text_length = 0;
+  VALUE_text_result_e result = value_plain_text(
+      &val, VALUE_TEXT_NIL_LITERAL, buffer, sizeof(buffer), &text,
+      &text_length);
+  if (result != VALUE_TEXT_OK) {
+    value_free(&val);
     push_stack(ctx->vm->stack, VALUE_NIL);
     return nextop;
   }
+  char *out = malloc(text_length + 1);
+  if (!out) {
+    value_free(&val);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+  memcpy(out, text, text_length + 1);
+  value_free(&val);
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = out}});
   return nextop;
 }

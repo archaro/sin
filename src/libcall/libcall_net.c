@@ -1,7 +1,5 @@
-#include <stdio.h>
 #include <string.h>
 
-#include "floatconv.h"
 #include "item.h"
 #include "libcall_common.h"
 #include "libcall_handlers.h"
@@ -119,36 +117,15 @@ uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   bool sent = true;
-  switch(out.type) {
-    case VALUE_str: {
-      size_t len = strlen(out.s);
-      sent = lc_net_send_text(linep, line_index, out.s, len);
-      FREE_STR(out);
-      break;
-    }
-    case VALUE_int: {
-      char buffer[22];
-      int len = snprintf(buffer, sizeof(buffer), "%ld", out.i);
-      if (len > 0) {
-        sent = lc_net_send_text(linep, line_index, buffer, (size_t)len);
-      }
-      break;
-    }
-    case VALUE_float: {
-      char buffer[64];
-      if (sin_format_binary64_buf(out.f, buffer, sizeof(buffer))) {
-        sent = lc_net_send_text(linep, line_index, buffer, strlen(buffer));
-      }
-      break;
-    }
-    case VALUE_bool: {
-      const char *text = out.i ? "true" : "false";
-      sent = lc_net_send_text(linep, line_index, text, strlen(text));
-      break;
-    }
-    case VALUE_nil:
-      break;
+  char buffer[VALUE_PLAIN_TEXT_BUFFER_SIZE];
+  const char *text = NULL;
+  size_t text_length = 0;
+  VALUE_text_result_e result = value_plain_text(
+      &out, VALUE_TEXT_NIL_OMIT, buffer, sizeof(buffer), &text, &text_length);
+  if (result == VALUE_TEXT_OK) {
+    sent = lc_net_send_text(linep, line_index, text, text_length);
   }
+  FREE_STR(out);
 
   if (!sent || linep->status == LINE_disconnecting) {
     push_stack(ctx->vm->stack, VALUE_FALSE);

@@ -12,24 +12,27 @@ This directory and related `examples/` artifacts define golden fixtures used by 
 2. **Bytecode hex fixtures** (`*.hex`)
    - Purpose: expected bytecode snapshots for compile pipeline tests.
    - Source of truth: compiler output from the associated source/program builder case.
-   - Regeneration: `make regen-fixtures`.
+   - Ownership: cases are declared in `tests/shared/test_pipeline_cases.c` and checked by `tests/compiler/test_pipeline_golden.c` and `tests/compiler/test_pipeline_source_golden.c`.
+   - Regeneration: there is no generic Make target; update the paired case/source and expected bytes deliberately, then run `make test`.
 
 3. **Generated object artifacts** (`*.generated.obj` / `*.reference.obj`)
-   - Purpose: temporary outputs used by tests to compare compiler/runtime behavior.
+   - Purpose: test-owned temporary outputs used by compiler golden comparisons.
    - Source of truth: `./scomp` output from the paired `.src` source at test time.
-   - Regeneration examples:
+   - Ownership: `tests/compiler/test_parser_examples_obj_golden.c` creates both files and removes them after each case; `make clean` also removes them.
+   - Manual reproduction examples:
      - `./scomp examples/chat-boot.src tests/fixtures/chat-boot.reference.obj`
-     - `./scomp examples/echo-boot.src tests/fixtures/interpret/echo-boot.generated.obj`
+     - `./scomp examples/echo-boot.src tests/fixtures/echo-boot.generated.obj`
 
 4. **Interpreter output fixtures** (`*.expected.txt`)
    - Purpose: expected stdout/stderr/exit contracts for runtime behavior.
    - Source of truth: `./sin` output for a freshly-compiled object, normalized to test format.
-   - Regeneration example:
-     - `./scomp examples/echo-boot.src tests/fixtures/interpret/echo-boot.generated.obj && ./sin -o tests/fixtures/interpret/echo-boot.generated.obj > tests/fixtures/interpret/echo-boot.expected.txt`
+   - Ownership: `tests/interpreter/test_interpret_semantics_golden.c` and `tests/interpreter/test_interpret_stress.c` compile temporary objects, run them, and compare the checked-in contracts.
+   - Update workflow: run `./scomp examples/echo-boot.src tests/fixtures/interpret/echo-boot.generated.obj && ./sin -o tests/fixtures/interpret/echo-boot.generated.obj`, then manually update the fixture's `===stdout===`, `===stderr===`, and `===exit===` sections and run `make test`.
+   - The sdiss expectation is checked by `tests/compiler/test_sdiss_fixtures.c`; `make test` creates the temporary input from `basic.hex`, runs `./sdiss --no-header -o tests/fixtures/sdiss/basic.bin`, and removes it. Update `basic.expected.txt` deliberately when that output contract changes; `make clean` removes any leftover temporary `.bin` files.
 
 ## Naming conventions
 
-- Use lowercase kebab-case fixture stems (for example: `echo-load`, `chat-boot`, `int_literal`).
+- Use lowercase fixture stems (for example: `echo-load`, `chat-boot`, `int_literal`).
 - Keep fixture names aligned across classes when they represent the same program.
 - Use suffixes by class:
   - source: `.src`
@@ -39,7 +42,7 @@ This directory and related `examples/` artifacts define golden fixtures used by 
 
 ## Required comments for case tables
 
-When adding a fixture entry to any golden case table in `tests/*.c`, include a short inline comment that documents:
+When adding a declared fixture to the policy table in `tests/shared/test_fixture_policy.c`, include metadata that documents:
 
 - `SOT:` source-of-truth artifact (file or builder function)
 - `regen:` exact regeneration command (or `manual` for hand-authored source fixtures)
@@ -47,7 +50,7 @@ When adding a fixture entry to any golden case table in `tests/*.c`, include a s
 Example:
 
 ```c
-{"echo_load", "examples/echo-load.src", "examples/echo-load.obj"}, /* SOT: examples/echo-load.src | regen: ./scomp -i examples/echo-load.src -o examples/echo-load.obj */
+{"echo_load_expected", "tests/fixtures/interpret/echo-load.expected.txt", "SOT: runtime output contract for echo-load | regen: ./scomp examples/echo-load.src tests/fixtures/interpret/echo-load.generated.obj && ./sin -o tests/fixtures/interpret/echo-load.generated.obj > tests/fixtures/interpret/echo-load.expected.txt"},
 ```
 
-The enforcement test (`tests/test_fixture_policy.c`) validates fixture-file existence and validates comment metadata format for the fixture policy table.
+The enforcement test (`tests/shared/test_fixture_policy.c`) is compiled into `tests/test-compiler` by the Makefile and validates declared fixture existence, metadata format, duplicate declarations, and pipeline golden paths. Run `make test` for the standard fixture checks; use `make fuzz-corpora` to seed fuzz inputs from checked-in `.hex` fixtures and `examples/*.src` files.

@@ -11,6 +11,7 @@
 %parse-param {void *scanner}{SCANNER_STATE_t *state}
 
 %code requires {
+  #include <setjmp.h>
   #include <stdbool.h>
   #include <stdint.h>
 
@@ -33,6 +34,11 @@
     int column;
     int span;
     char *offending_token;
+    struct scanner_alloc_s *scanner_allocs;
+    jmp_buf scanner_fatal_jmp;
+    bool scanner_fatal_jmp_active;
+    bool scanner_failed;
+    void *scanner_handle;
   } SCANNER_STATE_t;
 
   int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail);
@@ -54,9 +60,8 @@
 
 typedef void *yyscan_t;
 int yylex (YYSTYPE *yylval_param, YYLTYPE *yylloc_param, yyscan_t yyscanner);
-int yylex_init(yyscan_t* scanner);
+int yylex_init_extra(SCANNER_STATE_t *user_defined, yyscan_t* scanner);
 void yyset_in(FILE *_in_str, yyscan_t yyscanner);
-void yyset_extra(SCANNER_STATE_t *user_defined, yyscan_t yyscanner);
 int yylex_destroy(yyscan_t yyscanner);
 int yyparse(void *scanner, SCANNER_STATE_t *state);
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
@@ -64,7 +69,90 @@ YY_BUFFER_STATE yy_scan_bytes(const char *bytes, int len, yyscan_t yyscanner);
 void yy_delete_buffer(YY_BUFFER_STATE b, yyscan_t yyscanner);
 
 
-static AS_NODE *as_new_unary_minus_node(AS_NODE *operand) {
+static char *parser_strdup(const char *s) {
+  const char *source = s ? s : "";
+  size_t len = strlen(source);
+  size_t size = 0;
+  if (alloc_add_overflow(len, 1, &size)) return NULL;
+  char *copy = alloc_malloc(size);
+  if (!copy) return NULL;
+  memcpy(copy, source, size);
+  return copy;
+}
+
+static void parser_set_failure(SCANNER_STATE_t *state, const char *detail) {
+  if (!state || state->errnum != ERR_NOERROR) return;
+  state->errnum = ERR_COMP_SYNTAX;
+  const char *message = detail ? detail : "parser: out of memory building syntax tree";
+  size_t len = strlen(message);
+  size_t size = 0;
+  if (!alloc_add_overflow(len, 1, &size)) {
+    state->errdetail = malloc(size);
+    if (state->errdetail) memcpy(state->errdetail, message, size);
+  }
+}
+
+static AS_NODE *parser_new_value(SCANNER_STATE_t *state, ENUM_VALUE type, char *text) {
+  AS_NODE *node = as_new_valnode(type, text);
+  if (!node) parser_set_failure(state, NULL);
+  return node;
+}
+
+static AS_NODE *parser_new_node(SCANNER_STATE_t *state, ENUM_NODE type,
+                                AS_NODE *lhs, AS_NODE *rhs,
+                                bool lhs_required, bool rhs_required) {
+  if ((lhs_required && !lhs) || (rhs_required && !rhs)) {
+    as_delete(lhs);
+    as_delete(rhs);
+    parser_set_failure(state, NULL);
+    return NULL;
+  }
+  AS_NODE *node = as_new_node(type, lhs, rhs);
+  if (!node) {
+    as_delete(lhs);
+    as_delete(rhs);
+    parser_set_failure(state, NULL);
+  }
+  return node;
+}
+
+static AS_IF *parser_new_if(SCANNER_STATE_t *state, AS_NODE *condition,
+                            AS_NODE *then, AS_IF *elsif) {
+  if (!then) {
+    as_delete(condition);
+    as_delete_if(elsif);
+    parser_set_failure(state, NULL);
+    return NULL;
+  }
+  AS_IF *newif = as_new_if(condition, then, elsif);
+  if (!newif) {
+    as_delete(condition);
+    as_delete(then);
+    as_delete_if(elsif);
+    parser_set_failure(state, NULL);
+  }
+  return newif;
+}
+
+static AS_NODE *parser_new_if_node(SCANNER_STATE_t *state, AS_NODE *condition,
+                                   AS_NODE *then, AS_IF *elsif) {
+  if (!condition) {
+    as_delete(then);
+    as_delete_if(elsif);
+    parser_set_failure(state, NULL);
+    return NULL;
+  }
+  AS_IF *if_data = parser_new_if(state, condition, then, elsif);
+  if (!if_data) return NULL;
+  AS_NODE *node = as_new_node(N_IFSTMT, if_data, NULL);
+  if (!node) {
+    as_delete_if(if_data);
+    parser_set_failure(state, NULL);
+  }
+  return node;
+}
+
+static AS_NODE *parser_new_unary_minus(AS_NODE *operand, SCANNER_STATE_t *state) {
   if (operand && operand->nodetype == N_VALUE) {
     AS_VALUE *value = (AS_VALUE *)operand->lhs;
     if (value) {
@@ -79,7 +167,58 @@ static AS_NODE *as_new_unary_minus_node(AS_NODE *operand) {
     }
   }
 
-  return as_new_node(N_SUB, as_new_intnode(0), operand);
+  AS_NODE *zero = as_new_intnode(0);
+  if (!zero) {
+    as_delete(operand);
+    parser_set_failure(state, NULL);
+    return NULL;
+  }
+  return parser_new_node(state, N_SUB, zero, operand, true, true);
+}
+
+static AS_NODE *parser_new_libcall(SCANNER_STATE_t *state, char *library,
+                                   char *name, AS_NODE *args) {
+  AS_NODE *library_node = parser_new_value(state, V_LAYER, library);
+  if (!library_node) {
+    free(name);
+    as_delete(args);
+    return NULL;
+  }
+  AS_NODE *name_node = parser_new_value(state, V_LAYER, name);
+  if (!name_node) {
+    as_delete(library_node);
+    as_delete(args);
+    return NULL;
+  }
+  AS_NODE *tail = parser_new_node(state, N_ITEM, name_node, NULL, true, false);
+  if (!tail) {
+    as_delete(library_node);
+    as_delete(args);
+    return NULL;
+  }
+  AS_NODE *item = parser_new_node(state, N_ITEM, library_node, tail, true, true);
+  if (!item) {
+    as_delete(args);
+    return NULL;
+  }
+  return parser_new_node(state, N_LIBCALL, item, args, true, false);
+}
+
+static AS_NODE *parser_new_code(SCANNER_STATE_t *state, AS_NODE *params,
+                                char *body) {
+  AS_NODE *body_node = parser_new_value(state, V_STR, body);
+  if (!body_node) {
+    as_delete(params);
+    return NULL;
+  }
+  return parser_new_node(state, N_CODE, params, body_node, false, true);
+}
+
+static AS_NODE *parser_new_relative_item(SCANNER_STATE_t *state,
+                                         AS_NODE *first, AS_NODE *rest) {
+  AS_NODE *item = parser_new_node(state, N_ITEM, first, rest, true, false);
+  if (!item) return NULL;
+  return parser_new_node(state, N_RELITEM, item, NULL, true, false);
 }
 
 void yyerror(YYLTYPE *locp, yyscan_t scanner, SCANNER_STATE_t *state, char const *s) {
@@ -103,7 +242,7 @@ void yyerror(YYLTYPE *locp, yyscan_t scanner, SCANNER_STATE_t *state, char const
         snprintf(state->errdetail, n, "%s: %s", state->source_name, s);
       }
     } else {
-      state->errdetail = strdup(s);
+      state->errdetail = parser_strdup(s);
     }
   }
 }
@@ -115,46 +254,83 @@ int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdet
   // sourcelen holds the length of the input
   // Wrap all these bits of state up into a nice package
   // for ease of transport
-  SCANNER_STATE_t scanner_state = {
-    .errnum = ERR_NOERROR,
-    .line = 1,
-    .column = 1,
-    .span = 1,
-    .source_name = input ? input->source_name : NULL,
-  };
+  if (absyn) *absyn = NULL;
+  if (errdetail) *errdetail = NULL;
+  if (out_state) {
+    memset(out_state, 0, sizeof *out_state);
+    out_state->line = 1;
+    out_state->column = 1;
+    out_state->span = 1;
+  }
   if (!input || !input->data || !absyn || !errdetail) {
-    if (out_state) *out_state = scanner_state;
+    if (out_state) {
+      out_state->errnum = ERR_COMP_SYNTAX;
+      out_state->line = 1;
+      out_state->column = 1;
+      out_state->span = 1;
+    }
     return ERR_COMP_SYNTAX;
   }
-  yyscan_t sc;
-  yylex_init(&sc);
-  yyset_extra(&scanner_state, sc);
-  YY_BUFFER_STATE in = yy_scan_bytes(input->data, (int)input->len, sc);
-
-  bool failed = yyparse(sc, &scanner_state);
-
-  // Clean up
-  yy_delete_buffer(in, sc);
-  yylex_destroy(sc);
-
-  if (failed) {
-    if (scanner_state.absyn != NULL) {
-      as_delete(scanner_state.absyn);
-      scanner_state.absyn = NULL;
-    }
-    *errdetail = scanner_state.errdetail;
-    scanner_state.errdetail = NULL;
-    if (out_state) *out_state = scanner_state;
-    else free(scanner_state.offending_token);
-    return scanner_state.errnum;
-  } else {
-    // scanner_state.absyn now points to the root of the abstract syntax tree
-    *absyn = scanner_state.absyn;
-    *errdetail = NULL;
-    if (out_state) *out_state = scanner_state;
-    else free(scanner_state.offending_token);
-    return 0;
+  if (input->len > (size_t)INT_MAX) {
+    if (out_state) out_state->errnum = ERR_COMP_SYNTAX;
+    return ERR_COMP_SYNTAX;
   }
+
+  SCANNER_STATE_t *scanner_state = alloc_calloc(1, sizeof *scanner_state);
+  if (!scanner_state) return ERR_COMP_SYNTAX;
+  scanner_state->line = 1;
+  scanner_state->column = 1;
+  scanner_state->span = 1;
+  scanner_state->source_name = input->source_name;
+
+  volatile int parse_result = 1;
+  int setup_failed = setjmp(scanner_state->scanner_fatal_jmp);
+  if (setup_failed != 0) {
+    parser_set_failure(scanner_state, "parser: scanner allocation failed");
+  } else {
+    scanner_state->scanner_fatal_jmp_active = true;
+    int init_result = yylex_init_extra(scanner_state,
+                                       (yyscan_t *)&scanner_state->scanner_handle);
+    if (init_result != 0 || !scanner_state->scanner_handle) {
+      parser_set_failure(scanner_state, "parser: scanner initialization failed");
+    } else {
+      YY_BUFFER_STATE in = yy_scan_bytes(input->data, (int)input->len,
+                                         (yyscan_t)scanner_state->scanner_handle);
+      if (!in) {
+        parser_set_failure(scanner_state, "parser: scanner buffer creation failed");
+      } else {
+        parse_result = yyparse((yyscan_t)scanner_state->scanner_handle,
+                               scanner_state);
+        yy_delete_buffer(in, (yyscan_t)scanner_state->scanner_handle);
+      }
+    }
+    scanner_state->scanner_fatal_jmp_active = false;
+  }
+
+  scanner_state->scanner_fatal_jmp_active = false;
+  if (scanner_state->scanner_handle) {
+    yylex_destroy((yyscan_t)scanner_state->scanner_handle);
+    scanner_state->scanner_handle = NULL;
+  }
+
+  if (parse_result == 0 && scanner_state->errnum == ERR_NOERROR) {
+    *absyn = scanner_state->absyn;
+    scanner_state->absyn = NULL;
+  } else {
+    as_delete(scanner_state->absyn);
+    scanner_state->absyn = NULL;
+    if (scanner_state->errnum == ERR_NOERROR) {
+      parser_set_failure(scanner_state, "parser: parsing failed");
+    }
+  }
+  *errdetail = scanner_state->errdetail;
+  scanner_state->errdetail = NULL;
+
+  int8_t result = scanner_state->errnum;
+  if (out_state) *out_state = *scanner_state;
+  else free(scanner_state->offending_token);
+  free(scanner_state);
+  return result;
 }
 
 int8_t parse_source_compiler_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, CompilerDiagnostic *diag, SCANNER_STATE_t *out_state) {
@@ -224,53 +400,90 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 input:  stmtlist { state->absyn = $1; }
         ;
 
-stmtlist: /* Nothing */ { $$ = as_new_stmtlist_node(); }
+stmtlist: /* Nothing */ {
+            $$ = as_new_stmtlist_node();
+            if (!$$) { parser_set_failure(state, NULL); YYERROR; }
+          }
         | stmtlist stmtsemi {
             if (!as_stmtlist_append_checked($1, $2)) {
               $$ = NULL;
-              state->errnum = ERR_COMP_SYNTAX;
-              state->errdetail = strdup("parser: out of memory growing statement list");
+              as_delete($1);
+              as_delete($2);
+              parser_set_failure(state, "parser: out of memory growing statement list");
               YYERROR;
             }
             $$ = $1;
           }
         ;
 
-stmtsemi: stmt TSEMI { $$ = $1; }
+stmtsemi: stmt TSEMI {
+            $$ = $1;
+            if (!$$) { parser_set_failure(state, NULL); YYERROR; }
+          }
 ;
 
-stmt:   TWHILE expr TDO stmtlist TENDWHILE { $$ = as_new_node(N_WHILESTMT, $2, $4); }
-        | TIF expr TTHEN stmtlist elsif_else_opt TENDIF { $$ = as_new_node(N_IFSTMT, as_new_if($2, $4, $5), NULL); }
-        | TRETURN { $$ = as_new_node(N_RETURN, NULL, NULL); }
-        | TLOCAL TASSIGN expr { $$ = as_new_node(N_ASSLOCAL, as_new_valnode(V_LOCAL, $1), $3); }
-        | item TASSIGN item_assignment { $$ = as_new_node(N_ASSITEM, $1, $3); }
-        | TLOCAL TINC { $$ = as_new_node(N_INC, as_new_valnode(V_LOCAL, $1), NULL); }
-        | TLOCAL TDEC { $$ = as_new_node(N_DEC, as_new_valnode(V_LOCAL, $1), NULL); }
-        | expr { $$ = as_new_node(N_EXPRSTMT, $1, NULL); }
+stmt:   TWHILE expr TDO stmtlist TENDWHILE {
+          $$ = parser_new_node(state, N_WHILESTMT, $2, $4, true, true);
+          if (!$$) YYERROR;
+        }
+        | TIF expr TTHEN stmtlist elsif_else_opt TENDIF {
+          $$ = parser_new_if_node(state, $2, $4, $5);
+          if (!$$) YYERROR;
+        }
+        | TRETURN {
+          $$ = parser_new_node(state, N_RETURN, NULL, NULL, false, false);
+          if (!$$) YYERROR;
+        }
+        | TLOCAL TASSIGN expr {
+          $$ = parser_new_node(state, N_ASSLOCAL,
+                               parser_new_value(state, V_LOCAL, $1), $3, true, true);
+          if (!$$) YYERROR;
+        }
+        | item TASSIGN item_assignment {
+          $$ = parser_new_node(state, N_ASSITEM, $1, $3, true, true);
+          if (!$$) YYERROR;
+        }
+        | TLOCAL TINC {
+          $$ = parser_new_node(state, N_INC,
+                               parser_new_value(state, V_LOCAL, $1), NULL, true, false);
+          if (!$$) YYERROR;
+        }
+        | TLOCAL TDEC {
+          $$ = parser_new_node(state, N_DEC,
+                               parser_new_value(state, V_LOCAL, $1), NULL, true, false);
+          if (!$$) YYERROR;
+        }
+        | expr {
+          $$ = parser_new_node(state, N_EXPRSTMT, $1, NULL, true, false);
+          if (!$$) YYERROR;
+        }
         ;
 
-expr:     TLOCAL { $$ = as_new_valnode(V_LOCAL, $1); }
-        |	TINTEGER { $$ = as_new_valnode(V_INT, $1); }
-        | TFLOAT { $$ = as_new_valnode(V_FLOAT, $1); }
-        |	TSTRINGLIT { $$ = as_new_valnode(V_STR, $1); }
-        | TTRUE { $$ = as_new_valnode(V_BOOLTRUE, NULL); }
-        | TFALSE { $$ = as_new_valnode(V_BOOLFALSE, NULL); }
-        |	item args { $$ = as_new_node(N_CALL, $1, $2); }
-        | expr TEQUAL expr { $$ = as_new_node(N_EQUAL, $1, $3); }
-        | expr TNOTEQUAL expr { $$ = as_new_node(N_NOTEQ, $1, $3); }
-        | expr TOR expr { $$ = as_new_node(N_OR, $1, $3); }
-        | expr TAND expr { $$ = as_new_node(N_AND, $1, $3); }
-        | expr TLT expr { $$ = as_new_node(N_LT, $1, $3); }
-        | expr TLTEQ expr { $$ = as_new_node(N_LTEQ, $1, $3); }
-        | expr TGT expr { $$ = as_new_node(N_GT, $1, $3); }
-        | expr TGTEQ expr { $$ = as_new_node(N_GTEQ, $1, $3); }
-        | expr TPLUS expr { $$ = as_new_node(N_ADD, $1, $3); }
-	      |	expr TMINUS expr { $$ = as_new_node(N_SUB, $1, $3); }
-	      |	expr TMULT expr { $$ = as_new_node(N_MUL, $1, $3); }
-	      |	expr TDIV expr { $$ = as_new_node(N_DIV, $1, $3); }
-        | TLPAREN expr TRPAREN { $$ = $2; }
-        | TNOT expr { $$ = as_new_node(N_NOT, $2, NULL); }
-        | TMINUS expr %prec UMINUS { $$ = as_new_unary_minus_node($2); }
+expr:     TLOCAL { $$ = parser_new_value(state, V_LOCAL, $1); if (!$$) YYERROR; }
+        | TINTEGER { $$ = parser_new_value(state, V_INT, $1); if (!$$) YYERROR; }
+        | TFLOAT { $$ = parser_new_value(state, V_FLOAT, $1); if (!$$) YYERROR; }
+        | TSTRINGLIT { $$ = parser_new_value(state, V_STR, $1); if (!$$) YYERROR; }
+        | TTRUE { $$ = parser_new_value(state, V_BOOLTRUE, NULL); if (!$$) YYERROR; }
+        | TFALSE { $$ = parser_new_value(state, V_BOOLFALSE, NULL); if (!$$) YYERROR; }
+        | item args { $$ = parser_new_node(state, N_CALL, $1, $2, true, false); if (!$$) YYERROR; }
+        | expr TEQUAL expr { $$ = parser_new_node(state, N_EQUAL, $1, $3, true, true); if (!$$) YYERROR; }
+        | expr TNOTEQUAL expr { $$ = parser_new_node(state, N_NOTEQ, $1, $3, true, true); if (!$$) YYERROR; }
+        | expr TOR expr { $$ = parser_new_node(state, N_OR, $1, $3, true, true); if (!$$) YYERROR; }
+        | expr TAND expr { $$ = parser_new_node(state, N_AND, $1, $3, true, true); if (!$$) YYERROR; }
+        | expr TLT expr { $$ = parser_new_node(state, N_LT, $1, $3, true, true); if (!$$) YYERROR; }
+        | expr TLTEQ expr { $$ = parser_new_node(state, N_LTEQ, $1, $3, true, true); if (!$$) YYERROR; }
+        | expr TGT expr { $$ = parser_new_node(state, N_GT, $1, $3, true, true); if (!$$) YYERROR; }
+        | expr TGTEQ expr { $$ = parser_new_node(state, N_GTEQ, $1, $3, true, true); if (!$$) YYERROR; }
+        | expr TPLUS expr { $$ = parser_new_node(state, N_ADD, $1, $3, true, true); if (!$$) YYERROR; }
+        | expr TMINUS expr { $$ = parser_new_node(state, N_SUB, $1, $3, true, true); if (!$$) YYERROR; }
+        | expr TMULT expr { $$ = parser_new_node(state, N_MUL, $1, $3, true, true); if (!$$) YYERROR; }
+        | expr TDIV expr { $$ = parser_new_node(state, N_DIV, $1, $3, true, true); if (!$$) YYERROR; }
+        | TLPAREN expr TRPAREN {
+          $$ = $2;
+          if (!$$) { parser_set_failure(state, NULL); YYERROR; }
+        }
+        | TNOT expr { $$ = parser_new_node(state, N_NOT, $2, NULL, true, false); if (!$$) YYERROR; }
+        | TMINUS expr %prec UMINUS { $$ = parser_new_unary_minus($2, state); if (!$$) YYERROR; }
         | libcall { $$ = $1; }
         | TUNKNOWNCHAR { $$ = NULL;
                          state->errnum = ERR_COMP_UNKNOWNCHAR;
@@ -279,63 +492,106 @@ expr:     TLOCAL { $$ = as_new_valnode(V_LOCAL, $1); }
                          state->column = @1.first_column;
                          state->span = @1.last_column >= @1.first_column ? @1.last_column - @1.first_column + 1 : 1;
                          free(state->offending_token);
-                         state->offending_token = strdup($1 ? $1 : "");
+                         state->offending_token = parser_strdup($1 ? $1 : "");
                          YYERROR;
                        }
         ;
 
-libcall:  TLIBNAME TLAYERSEP TLAYER args { $$ = as_new_node(N_LIBCALL, as_new_node(N_ITEM, as_new_valnode(V_LAYER, $1), as_new_node(N_ITEM, as_new_valnode(V_LAYER, $3), NULL)), $4); };
+libcall:  TLIBNAME TLAYERSEP TLAYER args {
+          $$ = parser_new_libcall(state, $1, $3, $4);
+          if (!$$) YYERROR;
+        }
         ;
 
 elsif_else_opt: /* empty */ { $$ = NULL; }
-        | TELSIF expr TTHEN stmtlist elsif_else_opt { $$ = as_new_if($2, $4, $5); }
-        | TELSE stmtlist { $$ = as_new_if(NULL, $2, NULL); }
+        | TELSIF expr TTHEN stmtlist elsif_else_opt {
+          if (!$2) {
+            as_delete($4);
+            as_delete_if($5);
+            parser_set_failure(state, NULL);
+            $$ = NULL;
+            YYERROR;
+          }
+          $$ = parser_new_if(state, $2, $4, $5);
+          if (!$$) YYERROR;
+        }
+        | TELSE stmtlist {
+          $$ = parser_new_if(state, NULL, $2, NULL);
+          if (!$$) YYERROR;
+        }
         ;
 
 params:   /* Nothing */ { $$ = NULL; }
         | TLBRACE param_list TRBRACE { $$ = $2; }
         ;
 
-param_list: param_local { $$ = as_new_node(N_ARGLIST, $1, NULL); }
-        | param_local TCOMMA param_list { $$ = as_new_node(N_ARGLIST, $1, $3); }
+param_list: param_local {
+            $$ = parser_new_node(state, N_ARGLIST, $1, NULL, true, false);
+            if (!$$) YYERROR;
+          }
+        | param_local TCOMMA param_list {
+            $$ = parser_new_node(state, N_ARGLIST, $1, $3, true, true);
+            if (!$$) YYERROR;
+          }
         ;
 
-param_local: TLOCAL { $$ = as_new_valnode(V_LOCAL, $1); }
+param_local: TLOCAL { $$ = parser_new_value(state, V_LOCAL, $1); if (!$$) YYERROR; }
         ;
 
 args:     /* Nothing */ { $$ = NULL; }
         | TLBRACE arg_list TRBRACE { $$ = $2; }
         ;
 
-arg_list: expr TCOMMA arg_list { $$ = as_new_node(N_ARGLIST, $1, $3); }
-        | expr { $$ = as_new_node(N_ARGLIST, $1, NULL); }
+arg_list: expr TCOMMA arg_list {
+          $$ = parser_new_node(state, N_ARGLIST, $1, $3, true, true);
+          if (!$$) YYERROR;
+        }
+        | expr {
+          $$ = parser_new_node(state, N_ARGLIST, $1, NULL, true, false);
+          if (!$$) YYERROR;
+        }
         ;
 
 item_assignment: expr { $$ = $1; }
-        | TCODE params TCODEBODY { $$ = as_new_node(N_CODE, $2, as_new_valnode(V_STR, $3)); }
+        | TCODE params TCODEBODY {
+          $$ = parser_new_code(state, $2, $3);
+          if (!$$) YYERROR;
+        }
         ;
 
-item:     first_layer subsequent_layers { $$ = as_new_node(N_ITEM, $1, $2); }
-        | TLAYERSEP first_layer subsequent_layers { $$ = as_new_node(N_RELITEM, as_new_node(N_ITEM, $2, $3), NULL); }
+item:     first_layer subsequent_layers {
+          $$ = parser_new_node(state, N_ITEM, $1, $2, true, false);
+          if (!$$) YYERROR;
+        }
+        | TLAYERSEP first_layer subsequent_layers {
+          $$ = parser_new_relative_item(state, $2, $3);
+          if (!$$) YYERROR;
+        }
         ;
 
-first_layer: TLAYER { $$ = as_new_valnode(V_LAYER, $1); }
+first_layer: TLAYER { $$ = parser_new_value(state, V_LAYER, $1); if (!$$) YYERROR; }
         | dereference { $$ = $1; }
         ;
 
 subsequent_layers: /* Nothing */ { $$ = NULL; }
-        | TLAYERSEP layer subsequent_layers { $$ = as_new_node(N_ITEM, $2, $3); }
+        | TLAYERSEP layer subsequent_layers {
+          $$ = parser_new_node(state, N_ITEM, $2, $3, true, false);
+          if (!$$) YYERROR;
+        }
         ;
 
-layer:    TLAYER { $$ = as_new_valnode(V_LAYER, $1); }
-        | TINTEGER { $$ = as_new_valnode(V_INT, $1); }
+layer:    TLAYER { $$ = parser_new_value(state, V_LAYER, $1); if (!$$) YYERROR; }
+        | TINTEGER { $$ = parser_new_value(state, V_INT, $1); if (!$$) YYERROR; }
         | dereference { $$ = $1; }
-        ;
+;
 
-dereference: TDEREFSTART deref_content TDEREFEND { $$ = as_new_node(N_DEREF, $2, NULL); }
+dereference: TDEREFSTART deref_content TDEREFEND {
+             $$ = parser_new_node(state, N_DEREF, $2, NULL, true, false);
+             if (!$$) YYERROR;
+           }
         ;
 
 deref_content: item { $$ = $1; }
-        | TLOCAL { $$ = as_new_valnode(V_LOCAL, $1); }
+        | TLOCAL { $$ = parser_new_value(state, V_LOCAL, $1); if (!$$) YYERROR; }
         ;
 %%

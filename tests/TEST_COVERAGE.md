@@ -39,10 +39,16 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_lower_float_value_emits_push_float` (float compiler/lowering coverage)
   - `tests/core/test_opcode_schema.c`
   - `tests/core/test_item_cache.c`
+    - `test_find_item_cached_rejects_invalid_names_without_counters`
+    - `test_find_item_cached_relative_invalid_name_preserves_counters`
   - `tests/core/test_itemstore_io.c`
     - `test_itemstore_value_and_code_roundtrip`
     - `test_loaded_itemstore_mutation_roundtrip`
     - `test_itemstore_nested_depth_roundtrip`
+    - `test_itemstore_item_name_contract_boundaries_roundtrip`
+    - `test_itemstore_item_name_rejection_is_atomic`
+    - `test_itemstore_item_name_relative_depth_contract`
+    - `test_save_itemstore_rejects_manually_invalid_item_names`
     - `test_itemstore_loads_generated_v1_wire_fixture`
     - `test_load_itemstore_rejects_bad_headers`
     - `test_load_itemstore_rejects_invalid_wire_tags`
@@ -148,6 +154,12 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_str_libcall_invalidargs_uses_context_itemroot`
     - `test_libcall_output_formats_values`
     - `test_net_write_ignores_non_writable_lines`
+  - `tests/core/test_task_lifecycle.c`
+    - `test_task_one_shot_auto_retires`
+    - `test_task_repeating_execution_and_explicit_kill`
+    - `test_task_setup_failures_unwind`
+    - `test_task_id_reuse_is_exactly_once`
+    - `test_task_finalise_handles_active_and_closing`
 - **Compiler/runtime integration for system libcall execution**
   - `tests/compiler/test_sys_compile_libcall.c`
     - `test_sys_compile_libcall_runtime`

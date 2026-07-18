@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "bytecode_verify.h"
+#include "memory.h"
 #include "string_limits.h"
 #include "compiler/compiler_pipeline.h"
 #include "error.h"
@@ -55,6 +56,38 @@ void test_bytecode_verify_policy_profiles(void) {
   result = bc_verify_bytecode(underflow, sizeof(underflow),
                               "disassembly stack", &disassembly);
   ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+}
+
+void test_bytecode_verify_analysis_storage_is_profile_scoped(void) {
+  enum { PUSH_COUNT = 4096 };
+  const size_t bytecode_len = 2 + (size_t)PUSH_COUNT * 2 + 1;
+  uint8_t *bytecode = malloc(bytecode_len);
+  ASSERT_NOT_NULL(bytecode);
+  size_t pos = 0;
+  bytecode[pos++] = 0;
+  bytecode[pos++] = 0;
+  for (size_t i = 0; i < PUSH_COUNT; i++) {
+    bytecode[pos++] = 'b';
+    bytecode[pos++] = 1;
+  }
+  bytecode[pos++] = 'h';
+  ASSERT_EQ_INT(bytecode_len, pos);
+
+  BC_VerifyOptions disassembly = bc_verify_disassembly_options();
+  alloc_test_fail_after(0);
+  BC_VerifyResult result = bc_verify_bytecode(
+      bytecode, (uint32_t)bytecode_len, "allocation-free disassembly", &disassembly);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+
+  BC_VerifyOptions strict = bc_verify_strict_options();
+  result = bc_verify_bytecode(bytecode, (uint32_t)bytecode_len,
+                              "analysis allocation failure", &strict);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  ASSERT_TRUE(strstr(result.diagnostic.message,
+                     "out of memory recording instruction starts") != NULL);
+
+  alloc_test_fail_after(-1);
+  free(bytecode);
 }
 
 void test_bytecode_verify_minimal_and_header_errors(void) {

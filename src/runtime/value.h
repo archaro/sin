@@ -35,6 +35,19 @@ typedef enum { VALUE_NUMERIC_NONE,
                VALUE_NUMERIC_FLOAT
              } VALUE_numeric_kind_e;
 
+typedef enum { VALUE_TEXT_OK,
+               VALUE_TEXT_NIL,
+               VALUE_TEXT_BUFFER_TOO_SMALL,
+               VALUE_TEXT_FORMAT_ERROR,
+               VALUE_TEXT_UNKNOWN_TYPE
+             } VALUE_text_result_e;
+
+typedef enum { VALUE_TEXT_NIL_OMIT,
+               VALUE_TEXT_NIL_LITERAL
+             } VALUE_text_nil_policy_e;
+
+#define VALUE_PLAIN_TEXT_BUFFER_SIZE 64
+
 typedef struct {
   VALUE_e type; // What sort of value am I?
   union {
@@ -76,6 +89,16 @@ void value_to_bool_inplace(VALUE_t *value);
 
 const char *value_type_name(VALUE_e type);
 const char *value_debug_string(const VALUE_t *value, char *buffer, size_t buffer_size);
+/*
+ * Return non-owning plain user-visible text for value. Strings borrow their
+ * payload (a null payload is treated as empty text); all other text is written
+ * to buffer. The input and any string payload are never consumed or mutated.
+ * Nil is either omitted or rendered as "nil" according to nil_policy.
+ */
+VALUE_text_result_e value_plain_text(const VALUE_t *value,
+                                     VALUE_text_nil_policy_e nil_policy,
+                                     char *buffer, size_t buffer_size,
+                                     const char **text, size_t *text_length);
 bool value_is_type(const VALUE_t *value, VALUE_e type);
 void value_free(VALUE_t *value);
 bool value_string_within_limit(const VALUE_t *value);

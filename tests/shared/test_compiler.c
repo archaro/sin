@@ -77,6 +77,9 @@ void test_absyn_if_elsif_else_chain(void);
 void test_absyn_item_deref_chains(void);
 void test_absyn_float_value_preserves_bits(void);
 void test_absyn_malformed_float_valnode_returns_null(void);
+void test_absyn_constructor_allocation_failures(void);
+void test_absyn_valnode_string_second_allocation_failure(void);
+void test_absyn_stmtlist_growth_failure_preserves_statement(void);
 void test_sem_check_locals_reusable_context(void);
 void test_sem_duplicate_local_keeps_original_index(void);
 void test_sem_code_params_are_treated_as_defined_locals(void);
@@ -93,6 +96,8 @@ void test_bytecode_verify_local_index_bounds(void);
 void test_bytecode_verify_jump_targets(void);
 void test_bytecode_verify_stack_flow(void);
 void test_parser_input_api(void);
+void test_parser_scanner_setup_allocation_failures(void);
+void test_parser_cleanup_allocation_failures(void);
 void test_cli_io_helpers(void);
 void test_parser_float_literals_decimal_forms(void);
 void test_parser_float_literals_integer_still_int(void);
@@ -104,15 +109,25 @@ void test_floatconv_binary64_formatting(void);
 void test_floatconv_binary64_format_roundtrip(void);
 void test_fixture_policy_declared_goldens_exist(void);
 void test_find_item_cached_hit_and_negative_cache(void);
+void test_find_item_cached_rejects_invalid_names_without_counters(void);
+void test_find_item_cached_relative_invalid_name_preserves_counters(void);
 void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
 void test_find_item_cached_distinguishes_roots(void);
+void test_find_item_cached_root_lifecycle_invalidates_entries(void);
 void test_item_hashtable_resize_preserves_entries_and_count(void);
 void test_get_itemname_root_item(void);
 void test_loaded_zero_child_item_can_gain_runtime_child(void);
 void test_itemstore_value_and_code_roundtrip(void);
 void test_loaded_itemstore_mutation_roundtrip(void);
+void test_load_itemstore_handles_constructor_failure_with_children(void);
 void test_insert_code_item_rejects_inuse_replacement(void);
+void test_itemstore_payload_replacement_contracts(void);
+void test_itemstore_path_creation_rolls_back_on_failure(void);
 void test_itemstore_nested_depth_roundtrip(void);
+void test_itemstore_item_name_contract_boundaries_roundtrip(void);
+void test_itemstore_item_name_rejection_is_atomic(void);
+void test_itemstore_item_name_relative_depth_contract(void);
+void test_save_itemstore_rejects_manually_invalid_item_names(void);
 void test_itemstore_loads_generated_v1_wire_fixture(void);
 void test_load_itemstore_rejects_bad_headers(void);
 void test_load_itemstore_rejects_malformed_code_bytecode(void);
@@ -122,10 +137,12 @@ void test_load_itemstore_rejects_invalid_wire_tags(void);
 void test_load_itemstore_rejects_structural_corruption(void);
 void test_load_itemstore_rejects_resource_limit_violations(void);
 void test_save_itemstore_preserves_existing_file_on_failure(void);
+void test_save_itemsource_reports_write_and_close_failure(void);
 void test_itemstore_durability_modes(void);
 void test_itemstore_large_load_presizes_child_storage(void);
 void test_itemstore_verifier_rejects_malformed_code_item_bytecode(void);
 void test_libcall_registry_roundtrip(void);
+void test_runtime_init_validates_libcalls_once(void);
 void test_libcall_registry_init_failure_has_no_partial_state(void);
 void test_libcall_registry_lifecycle_reinit_sequence(void);
 void test_libcall_registry_repeated_teardown_is_safe(void);
@@ -135,7 +152,13 @@ void test_libcall_registry_self_check_invalid_entries(void);
 void test_libcall_invalid_arg_branches_return_contracts(void);
 void test_newgametask_rejects_invalid_intervals_before_timer_start(void);
 void test_newgametask_rejects_missing_event_loop_before_returning_task_id(void);
+void test_task_one_shot_auto_retires(void);
+void test_task_repeating_execution_and_explicit_kill(void);
+void test_task_setup_failures_unwind(void);
+void test_task_id_reuse_is_exactly_once(void);
+void test_task_finalise_handles_active_and_closing(void);
 void test_net_write_ignores_non_writable_lines(void);
+void test_net_input_fair_queue_progresses_connect_data_disconnect(void);
 void test_net_ditch_disconnects_active_lines(void);
 void test_net_flush_reports_line_status(void);
 void test_net_ditch_reports_inactive_lines(void);
@@ -183,10 +206,19 @@ void test_value_push_float_interprets_binary64_payloads(void);
 void test_value_float_arithmetic_helpers(void);
 void test_value_float_arithmetic_interpreter_bytecode(void);
 void test_value_string_concat_helpers(void);
+void test_value_string_tracker_releases_through_value_free(void);
+void test_value_string_tracker_releases_through_stack_discard(void);
+void test_value_string_tracker_forgets_before_reallocation(void);
+void test_value_plain_text_formats_nonowning(void);
+void test_value_string_tracker_itemname_cleanup(void);
 void test_value_string_concat_enforces_string_limit(void);
 void test_value_string_boundaries_enforce_string_limit(void);
 void test_value_bool_nil_truthiness_helpers(void);
 void test_stack_peek_returns_top_pointer_without_popping(void);
+void test_stack_reset_to_frees_values_at_boundaries(void);
+void test_nested_string_frames_release_locals_and_preserve_result(void);
+void test_nested_nil_return_releases_frame_locals(void);
+void test_top_level_string_frame_cleanup_and_vm_reuse(void);
 void test_value_float_construction_copy_truthiness_cleanup(void);
 void test_value_string_local_load_store_clones(void);
 void test_value_float_item_fetch_preserves_bits(void);
@@ -221,6 +253,7 @@ void test_emitbc_jumps(void);
 void test_emitbc_invariants(void);
 void test_emitbc_post_emission_verification(void);
 void test_bytecode_verify_policy_profiles(void);
+void test_bytecode_verify_analysis_storage_is_profile_scoped(void);
 void test_bytecode_verify_minimal_and_header_errors(void);
 void test_bytecode_verify_opcode_halt_and_trailing_bytes(void);
 void test_bytecode_verify_truncated_operand_widths(void);
@@ -256,6 +289,9 @@ static const test_case_t core_tests[] = {
     {"test_absyn_item_deref_chains", test_absyn_item_deref_chains},
     {"test_absyn_float_value_preserves_bits", test_absyn_float_value_preserves_bits},
     {"test_absyn_malformed_float_valnode_returns_null", test_absyn_malformed_float_valnode_returns_null},
+    {"test_absyn_constructor_allocation_failures", test_absyn_constructor_allocation_failures},
+    {"test_absyn_valnode_string_second_allocation_failure", test_absyn_valnode_string_second_allocation_failure},
+    {"test_absyn_stmtlist_growth_failure_preserves_statement", test_absyn_stmtlist_growth_failure_preserves_statement},
     {"test_sem_check_locals_reusable_context", test_sem_check_locals_reusable_context},
     {"test_sem_duplicate_local_keeps_original_index", test_sem_duplicate_local_keeps_original_index},
     {"test_sem_code_params_are_treated_as_defined_locals", test_sem_code_params_are_treated_as_defined_locals},
@@ -272,6 +308,8 @@ static const test_case_t core_tests[] = {
     {"test_bytecode_verify_jump_targets", test_bytecode_verify_jump_targets},
     {"test_bytecode_verify_stack_flow", test_bytecode_verify_stack_flow},
     {"test_parser_input_api", test_parser_input_api},
+    {"test_parser_scanner_setup_allocation_failures", test_parser_scanner_setup_allocation_failures},
+    {"test_parser_cleanup_allocation_failures", test_parser_cleanup_allocation_failures},
     {"test_cli_io_helpers", test_cli_io_helpers},
     {"test_parser_float_literals_decimal_forms", test_parser_float_literals_decimal_forms},
     {"test_parser_float_literals_integer_still_int", test_parser_float_literals_integer_still_int},
@@ -283,15 +321,25 @@ static const test_case_t core_tests[] = {
     {"test_floatconv_binary64_format_roundtrip", test_floatconv_binary64_format_roundtrip},
     {"test_fixture_policy_declared_goldens_exist", test_fixture_policy_declared_goldens_exist},
     {"test_find_item_cached_hit_and_negative_cache", test_find_item_cached_hit_and_negative_cache},
+    {"test_find_item_cached_rejects_invalid_names_without_counters", test_find_item_cached_rejects_invalid_names_without_counters},
+    {"test_find_item_cached_relative_invalid_name_preserves_counters", test_find_item_cached_relative_invalid_name_preserves_counters},
     {"test_find_item_cached_invalidation_on_delete_and_reinsert", test_find_item_cached_invalidation_on_delete_and_reinsert},
     {"test_find_item_cached_distinguishes_roots", test_find_item_cached_distinguishes_roots},
+    {"test_find_item_cached_root_lifecycle_invalidates_entries", test_find_item_cached_root_lifecycle_invalidates_entries},
     {"test_item_hashtable_resize_preserves_entries_and_count", test_item_hashtable_resize_preserves_entries_and_count},
     {"test_get_itemname_root_item", test_get_itemname_root_item},
     {"test_loaded_zero_child_item_can_gain_runtime_child", test_loaded_zero_child_item_can_gain_runtime_child},
     {"test_itemstore_value_and_code_roundtrip", test_itemstore_value_and_code_roundtrip},
     {"test_loaded_itemstore_mutation_roundtrip", test_loaded_itemstore_mutation_roundtrip},
+    {"test_load_itemstore_handles_constructor_failure_with_children", test_load_itemstore_handles_constructor_failure_with_children},
     {"test_insert_code_item_rejects_inuse_replacement", test_insert_code_item_rejects_inuse_replacement},
+    {"test_itemstore_payload_replacement_contracts", test_itemstore_payload_replacement_contracts},
+    {"test_itemstore_path_creation_rolls_back_on_failure", test_itemstore_path_creation_rolls_back_on_failure},
     {"test_itemstore_nested_depth_roundtrip", test_itemstore_nested_depth_roundtrip},
+    {"test_itemstore_item_name_contract_boundaries_roundtrip", test_itemstore_item_name_contract_boundaries_roundtrip},
+    {"test_itemstore_item_name_rejection_is_atomic", test_itemstore_item_name_rejection_is_atomic},
+    {"test_itemstore_item_name_relative_depth_contract", test_itemstore_item_name_relative_depth_contract},
+    {"test_save_itemstore_rejects_manually_invalid_item_names", test_save_itemstore_rejects_manually_invalid_item_names},
     {"test_itemstore_loads_generated_v1_wire_fixture", test_itemstore_loads_generated_v1_wire_fixture},
     {"test_load_itemstore_rejects_bad_headers", test_load_itemstore_rejects_bad_headers},
     {"test_load_itemstore_rejects_malformed_code_bytecode", test_load_itemstore_rejects_malformed_code_bytecode},
@@ -301,6 +349,7 @@ static const test_case_t core_tests[] = {
     {"test_load_itemstore_rejects_structural_corruption", test_load_itemstore_rejects_structural_corruption},
     {"test_load_itemstore_rejects_resource_limit_violations", test_load_itemstore_rejects_resource_limit_violations},
     {"test_save_itemstore_preserves_existing_file_on_failure", test_save_itemstore_preserves_existing_file_on_failure},
+    {"test_save_itemsource_reports_write_and_close_failure", test_save_itemsource_reports_write_and_close_failure},
     {"test_itemstore_durability_modes", test_itemstore_durability_modes},
     {"test_itemstore_large_load_presizes_child_storage", test_itemstore_large_load_presizes_child_storage},
     {"test_itemstore_verifier_rejects_malformed_code_item_bytecode", test_itemstore_verifier_rejects_malformed_code_item_bytecode},
@@ -323,11 +372,24 @@ static const test_case_t core_tests[] = {
     {"test_value_float_arithmetic_helpers", test_value_float_arithmetic_helpers},
     {"test_value_float_arithmetic_interpreter_bytecode", test_value_float_arithmetic_interpreter_bytecode},
     {"test_value_string_concat_helpers", test_value_string_concat_helpers},
+    {"test_value_string_tracker_releases_through_value_free", test_value_string_tracker_releases_through_value_free},
+    {"test_value_string_tracker_releases_through_stack_discard", test_value_string_tracker_releases_through_stack_discard},
+    {"test_value_string_tracker_forgets_before_reallocation", test_value_string_tracker_forgets_before_reallocation},
+    {"test_value_plain_text_formats_nonowning", test_value_plain_text_formats_nonowning},
+    {"test_value_string_tracker_itemname_cleanup", test_value_string_tracker_itemname_cleanup},
     {"test_value_string_concat_enforces_string_limit", test_value_string_concat_enforces_string_limit},
     {"test_value_string_boundaries_enforce_string_limit", test_value_string_boundaries_enforce_string_limit},
     {"test_value_bool_nil_truthiness_helpers", test_value_bool_nil_truthiness_helpers},
     {"test_stack_peek_returns_top_pointer_without_popping",
      test_stack_peek_returns_top_pointer_without_popping},
+    {"test_stack_reset_to_frees_values_at_boundaries",
+     test_stack_reset_to_frees_values_at_boundaries},
+    {"test_nested_string_frames_release_locals_and_preserve_result",
+     test_nested_string_frames_release_locals_and_preserve_result},
+    {"test_nested_nil_return_releases_frame_locals",
+     test_nested_nil_return_releases_frame_locals},
+    {"test_top_level_string_frame_cleanup_and_vm_reuse",
+     test_top_level_string_frame_cleanup_and_vm_reuse},
     {"test_value_float_construction_copy_truthiness_cleanup", test_value_float_construction_copy_truthiness_cleanup},
     {"test_value_string_local_load_store_clones", test_value_string_local_load_store_clones},
     {"test_value_float_item_fetch_preserves_bits", test_value_float_item_fetch_preserves_bits},
@@ -365,6 +427,7 @@ static const test_case_t compiler_tests[] = {
     {"test_emitbc_invariants", test_emitbc_invariants},
     {"test_emitbc_post_emission_verification", test_emitbc_post_emission_verification},
     {"test_bytecode_verify_policy_profiles", test_bytecode_verify_policy_profiles},
+    {"test_bytecode_verify_analysis_storage_is_profile_scoped", test_bytecode_verify_analysis_storage_is_profile_scoped},
     {"test_bytecode_verify_minimal_and_header_errors", test_bytecode_verify_minimal_and_header_errors},
     {"test_bytecode_verify_opcode_halt_and_trailing_bytes", test_bytecode_verify_opcode_halt_and_trailing_bytes},
     {"test_bytecode_verify_truncated_operand_widths", test_bytecode_verify_truncated_operand_widths},
@@ -392,6 +455,7 @@ static const test_case_t runtime_tests[] = {
     {"test_interpret_rejects_malformed_bytecode_before_execution", test_interpret_rejects_malformed_bytecode_before_execution},
     {"test_interpret_stress", test_interpret_stress},
     {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},
+    {"test_runtime_init_validates_libcalls_once", test_runtime_init_validates_libcalls_once},
     {"test_libcall_registry_init_failure_has_no_partial_state", test_libcall_registry_init_failure_has_no_partial_state},
     {"test_libcall_registry_lifecycle_reinit_sequence", test_libcall_registry_lifecycle_reinit_sequence},
     {"test_libcall_registry_repeated_teardown_is_safe", test_libcall_registry_repeated_teardown_is_safe},
@@ -401,7 +465,13 @@ static const test_case_t runtime_tests[] = {
     {"test_libcall_invalid_arg_branches_return_contracts", test_libcall_invalid_arg_branches_return_contracts},
     {"test_newgametask_rejects_invalid_intervals_before_timer_start", test_newgametask_rejects_invalid_intervals_before_timer_start},
     {"test_newgametask_rejects_missing_event_loop_before_returning_task_id", test_newgametask_rejects_missing_event_loop_before_returning_task_id},
+    {"test_task_one_shot_auto_retires", test_task_one_shot_auto_retires},
+    {"test_task_repeating_execution_and_explicit_kill", test_task_repeating_execution_and_explicit_kill},
+    {"test_task_setup_failures_unwind", test_task_setup_failures_unwind},
+    {"test_task_id_reuse_is_exactly_once", test_task_id_reuse_is_exactly_once},
+    {"test_task_finalise_handles_active_and_closing", test_task_finalise_handles_active_and_closing},
     {"test_net_write_ignores_non_writable_lines", test_net_write_ignores_non_writable_lines},
+    {"test_net_input_fair_queue_progresses_connect_data_disconnect", test_net_input_fair_queue_progresses_connect_data_disconnect},
     {"test_net_ditch_disconnects_active_lines", test_net_ditch_disconnects_active_lines},
     {"test_net_flush_reports_line_status", test_net_flush_reports_line_status},
     {"test_net_ditch_reports_inactive_lines", test_net_ditch_reports_inactive_lines},

@@ -6,6 +6,7 @@
 #include "compiler/compdiag.h"
 #include "error.h"
 #include "compiler/parse_input.h"
+#include "memory.h"
 #include "parser.h"
 #include "string_limits.h"
 #include "test_assert.h"
@@ -83,4 +84,43 @@ void test_parser_input_api(void) {
   ASSERT_TRUE(strstr(errdetail, "String literal too long.") != NULL);
   free(errdetail);
   free(large_literal);
+}
+
+void test_parser_scanner_setup_allocation_failures(void) {
+  const char source[] = "1;";
+  ParseInput input = {source, sizeof(source) - 1, "scanner-failure.src"};
+
+  for (long fail_at = 0; fail_at <= 4; ++fail_at) {
+    AS_NODE *absyn = NULL;
+    char *errdetail = NULL;
+    SCANNER_STATE_t state = {0};
+    alloc_test_fail_after(fail_at);
+    int8_t rc = parse_source_diag(&input, &absyn, &errdetail, &state);
+    alloc_test_fail_after(-1);
+    ASSERT_TRUE(rc != ERR_NOERROR);
+    ASSERT_TRUE(absyn == NULL);
+    free(errdetail);
+    free(state.offending_token);
+  }
+}
+
+void test_parser_cleanup_allocation_failures(void) {
+  const char source[] =
+      "1 + 2; if 3 then 4; elsif 0 then 5; else 6; endif; while 1 do 7; endwhile;";
+  ParseInput input = {source, sizeof(source) - 1, "parser-failure.src"};
+
+  for (long fail_at = 0; fail_at < 96; ++fail_at) {
+    AS_NODE *absyn = NULL;
+    char *errdetail = NULL;
+    alloc_test_fail_after(fail_at);
+    int8_t rc = parse_source(&input, &absyn, &errdetail);
+    alloc_test_fail_after(-1);
+    if (rc == ERR_NOERROR) {
+      ASSERT_NOT_NULL(absyn);
+      as_delete(absyn);
+    } else {
+      ASSERT_TRUE(absyn == NULL);
+    }
+    free(errdetail);
+  }
 }

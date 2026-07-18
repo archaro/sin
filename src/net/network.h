@@ -49,8 +49,11 @@ extern LINE_t *line;
 typedef struct {
   uv_loop_t *loop;
   uv_tcp_t *listener;
+  uv_tcp_t *listener_ipv4;
   LINE_t **lines;
   size_t maxconns;
+  bool listener_initialized;
+  bool listener_ipv4_initialized;
 } NetworkRuntimeDeps;
 
 bool validate_network_deps(const NetworkRuntimeDeps *deps);
@@ -58,11 +61,11 @@ bool line_is_active(const LINE_t *linep);
 bool line_is_disconnect_pending(const LINE_t *linep);
 bool line_is_disconnected(const LINE_t *linep);
 bool line_is_reusable(const LINE_t *linep);
-void init_networking_with_deps(NetworkRuntimeDeps *deps);
-void init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port);
+bool init_networking_with_deps(NetworkRuntimeDeps *deps);
+bool init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port);
 void client_on_close(uv_handle_t *handle);
 void destroy_line(LINE_t *line);
-void input_processor(uv_idle_t* handle);
+void input_processor(uv_timer_t *handle);
 char *get_input(LINE_t *line);
 void flush_output(LINE_t *line);
 void request_line_disconnect(LINE_t *line);

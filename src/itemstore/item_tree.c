@@ -25,8 +25,49 @@
 // The configuration object, defined in src/sin.c
 extern CONFIG_t config;
 
-bool validate_item_name(const char *item_name,
-                                               const char *func_name) {
+static ITEMSTORE_ITEM_CREATION_FAILURE_HOOK_t item_creation_failure_hook;
+
+bool item_layer_char_is_allowed(unsigned char character) {
+  return (character >= 'A' && character <= 'Z')
+      || (character >= 'a' && character <= 'z')
+      || (character >= '0' && character <= '9')
+      || character == '_';
+}
+
+static bool item_base_path_info(const ITEM_t *base, size_t *depth,
+                                size_t *name_length, const char *func_name) {
+  size_t base_depth = 0;
+  size_t base_name_length = 0;
+
+  for (const ITEM_t *current = base; current != NULL;
+       current = current->parent) {
+    size_t layer_length = strnlen(current->name,
+                                  ITEM_MAX_LAYER_NAME_LENGTH + 1u);
+    if (layer_length > ITEM_MAX_LAYER_NAME_LENGTH) {
+      logerr("%s called with malformed ancestor item name: layer exceeds "
+             "%u bytes.\n", func_name, ITEM_MAX_LAYER_NAME_LENGTH);
+      return false;
+    }
+    if (current->parent == NULL) {
+      break;
+    }
+    if (!is_valid_layer(current->name)) {
+      logerr("%s called relative to malformed ancestor item '%s'.\n",
+             func_name, current->name);
+      return false;
+    }
+    if (base_depth > 0) base_name_length++;
+    base_name_length += layer_length;
+    base_depth++;
+  }
+
+  *depth = base_depth;
+  *name_length = base_name_length;
+  return true;
+}
+
+bool validate_item_name_relative(const ITEM_t *base, const char *item_name,
+                                 const char *func_name) {
   /*
    * Item names are already-assembled strings, not numeric values. Integer
    * layers may be assembled by the compiler/runtime using base-10 integer
@@ -40,26 +81,60 @@ bool validate_item_name(const char *item_name,
     return false;
   }
 
-  const char *segment_start = item_name;
-  while (true) {
-    const char *dot = strchr(segment_start, '.');
-    size_t layer_len = (dot != NULL) ? (size_t)(dot - segment_start)
-                                     : strlen(segment_start);
-
-    if (layer_len == 0) {
-      logerr("%s called with malformed item name '%s': empty layer.\n",
-                                                     func_name, item_name);
-      return false;
-    }
-    if (layer_len > 32) {
-      logerr("%s called with malformed item name '%s': layer too long.\n",
-                                                     func_name, item_name);
-      return false;
-    }
-
-    if (dot == NULL) return true;
-    segment_start = dot + 1;
+  size_t depth;
+  size_t base_name_length;
+  if (!item_base_path_info(base, &depth, &base_name_length, func_name)) {
+    return false;
   }
+
+  size_t path_length = 0;
+  size_t layer_length = 0;
+  for (const unsigned char *current = (const unsigned char *)item_name;;
+       current++) {
+    unsigned char character = *current;
+    if (character != '\0' && character != '.') {
+      path_length++;
+      layer_length++;
+      if (!item_layer_char_is_allowed(character)) {
+        logerr("%s called with malformed item name '%s': character 0x%02x "
+               "is not allowed.\n", func_name, item_name, character);
+        return false;
+      }
+      if (layer_length > ITEM_MAX_LAYER_NAME_LENGTH) {
+        logerr("%s called with malformed item name '%s': layer exceeds %u "
+               "bytes.\n", func_name, item_name,
+               ITEM_MAX_LAYER_NAME_LENGTH);
+        return false;
+      }
+      if (base_name_length + (base != NULL && base->parent != NULL ? 1u : 0u)
+          + path_length > ITEM_MAX_FULL_NAME_LENGTH) {
+        logerr("%s called with malformed item name '%s': complete name "
+               "exceeds %u bytes.\n", func_name, item_name,
+               ITEM_MAX_FULL_NAME_LENGTH);
+        return false;
+      }
+      continue;
+    }
+
+    if (layer_length == 0) {
+      logerr("%s called with malformed item name '%s': empty layer.\n",
+             func_name, item_name);
+      return false;
+    }
+    depth++;
+    if (depth > ITEM_MAX_DEPTH) {
+      logerr("%s called with malformed item name '%s': depth exceeds %u "
+             "non-root layers.\n", func_name, item_name, ITEM_MAX_DEPTH);
+      return false;
+    }
+    if (character == '\0') return true;
+    path_length++;
+    layer_length = 0;
+  }
+}
+
+bool validate_item_name(const char *item_name, const char *func_name) {
+  return validate_item_name_relative(NULL, item_name, func_name);
 }
 
 
@@ -174,6 +249,8 @@ ITEM_t *make_loaded_item(const char *name, ITEM_t *parent, ITEM_e type,
 }
 
 void destroy_item(ITEM_t *item) {
+  if (!item) return;
+  if (item->parent == NULL) itemstore_invalidate_cache();
   if (item->type == ITEM_code) {
     free(item->bytecode);
   } else if (item->type == ITEM_value) {
@@ -186,133 +263,207 @@ void destroy_item(ITEM_t *item) {
   deallocate_item(item);
 }
 
-ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
-  // Function to insert a new item into the tree at the specified node.
-  if (!value_string_within_limit(&value)) {
-    logerr("insert_item called with string longer than maximum %zu bytes.\n",
-           SIN_MAX_STRING_BYTES);
-    value_free(&value);
-    return NULL;
+void itemstore_set_item_creation_failure_hook_for_tests(
+    ITEMSTORE_ITEM_CREATION_FAILURE_HOOK_t hook) {
+  item_creation_failure_hook = hook;
+}
+
+void detach_item_and_destroy(ITEM_t *item) {
+  if (!item) return;
+
+  ITEM_t *parent = item->parent;
+  if (parent) {
+    delete_hashtable(parent->children, item->name);
+    for (size_t i = 0; i < parent->ordered_size; i++) {
+      if (parent->ordered_array[i] != item) continue;
+      for (size_t j = i; j + 1 < parent->ordered_size; j++) {
+        parent->ordered_array[j] = parent->ordered_array[j + 1];
+      }
+      parent->ordered_size--;
+      break;
+    }
   }
-  if (!validate_item_name(item_name, "insert_item")) {
-    return NULL;
-  }
-  // If layers of the item don't exist, they are created with a default
-  // value of 0.
+  destroy_item(item);
+}
+
+static ITEM_t *find_or_create_item(ITEM_t *root, const char *item_name,
+                                   const char *func_name,
+                                   ITEM_t **created_root) {
+  if (created_root) *created_root = NULL;
+  if (!validate_item_name_relative(root, item_name, func_name)) return NULL;
+
   ITEM_t *current_item = root;
   const char *current_pos = item_name;
-  // Buffer to hold each layer of the item, with space for null terminator
-  char layer[33];
+  char layer[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
   logverbose("Creating new item %s\n", item_name);
   while (current_item != NULL && *current_pos != '\0') {
     const char *next_dot = strchr(current_pos, '.');
     size_t layer_len = (next_dot != NULL) ?
                      (size_t)(next_dot - current_pos) : strlen(current_pos);
-    // Copy the current layer into the buffer and null-terminate it
     memcpy(layer, current_pos, layer_len);
     layer[layer_len] = '\0';
-    // Check if the current layer exists as a child of the current item
+
     ITEM_t *child_item = search_hashtable(current_item->children, layer);
     if (child_item == NULL) {
-      // If the child does not exist, create it with a default value of 0
+      if (item_creation_failure_hook && item_creation_failure_hook(layer)) {
+        logerr("Unable to create item '%s': failed to create layer '%s'.\n",
+               item_name, layer);
+        if (created_root && *created_root) {
+          detach_item_and_destroy(*created_root);
+          *created_root = NULL;
+        }
+        return NULL;
+      }
       VALUE_t nil = {VALUE_nil, {0}};
       child_item = make_item(layer, current_item, ITEM_value, nil, NULL, 0);
       if (child_item == NULL) {
         logerr("Unable to create item '%s': failed to create layer '%s'.\n",
                item_name, layer);
+        if (created_root && *created_root) {
+          detach_item_and_destroy(*created_root);
+          *created_root = NULL;
+        }
         return NULL;
       }
+      if (created_root && !*created_root) *created_root = child_item;
     }
-    // Move to the child item
+
     current_item = child_item;
-    if (next_dot == NULL) {
-      // If there's no next dot, we've reached the last layer
-      // Possibly free currently in-use memory
-      // (it might have been newly-created, or might already exist)
-      if (current_item->type == ITEM_value) {
-          value_free(&current_item->value);
-      } else if (current_item->type == ITEM_code) {
-        if (current_item->inuse) {
-          char name[MAX_ITEM_NAME];
-          get_itemname(current_item, name);
-          logerr("Cannot delete item %s: currently in use.\n", name);
-          return NULL;
-        }
-        if (current_item->bytecode_len > 0) {
-          free(current_item->bytecode);
-        }
-      }
-      current_item->value = value;
-      break;
-    }
-    // Otherwise, move past the dot to the beginning of the next layer
+    if (next_dot == NULL) return current_item;
     current_pos = next_dot + 1;
   }
-  // Return a pointer to the last-created item
+  return NULL;
+}
+
+// Cross-kind aliases are included only for failure cleanup: replacement
+// helpers reject them before either payload can be freed or adopted.
+static bool value_aliases_owned_payload(const ITEM_t *item,
+                                        const VALUE_t *value) {
+  return item && value && value->type == VALUE_str && value->s &&
+      ((item->type == ITEM_value && item->value.type == VALUE_str &&
+        item->value.s == value->s) ||
+       (item->type == ITEM_code &&
+        (uint8_t *)item->bytecode == (uint8_t *)value->s));
+}
+
+static bool value_aliases_code_payload(const ITEM_t *item,
+                                       const VALUE_t *value) {
+  return item && value && value->type == VALUE_str && value->s &&
+      item->type == ITEM_code &&
+      (uint8_t *)item->bytecode == (uint8_t *)value->s;
+}
+
+static bool bytecode_aliases_value_payload(const ITEM_t *item,
+                                           const uint8_t *bytecode) {
+  return item && bytecode && item->type == ITEM_value &&
+      item->value.type == VALUE_str &&
+      (uint8_t *)item->value.s == bytecode;
+}
+
+static void log_incompatible_payload_alias(const ITEM_t *item) {
+  char name[MAX_ITEM_NAME];
+  get_itemname((ITEM_t *)item, name);
+  logerr("Cannot replace item %s: incoming payload aliases an incompatible "
+         "existing payload.\n", name);
+}
+
+static bool item_replacement_allowed(ITEM_t *item) {
+  if (!item->inuse) return true;
+
+  char name[MAX_ITEM_NAME];
+  get_itemname(item, name);
+  logerr("Cannot replace item %s: currently in use.\n", name);
+  return false;
+}
+
+static bool replace_item_value(ITEM_t *item, VALUE_t value) {
+  if (!item_replacement_allowed(item)) return false;
+  if (value_aliases_code_payload(item, &value)) {
+    log_incompatible_payload_alias(item);
+    return false;
+  }
+
+  if (!(value.type == VALUE_str && item->type == ITEM_value &&
+        item->value.type == VALUE_str && item->value.s == value.s)) {
+    if (item->type == ITEM_value) {
+      value_free(&item->value);
+    } else {
+      free(item->bytecode);
+    }
+  }
+  item->bytecode = NULL;
+  item->bytecode_len = 0;
+  item->type = ITEM_value;
+  item->value = value;
+  return true;
+}
+
+static bool replace_item_code(ITEM_t *item, uint32_t len, uint8_t *bytecode) {
+  if (!item_replacement_allowed(item)) return false;
+  if (bytecode_aliases_value_payload(item, bytecode)) {
+    log_incompatible_payload_alias(item);
+    return false;
+  }
+
+  bool aliases_old_payload = item->type == ITEM_code &&
+                             item->bytecode == bytecode;
+  if (!aliases_old_payload) {
+    if (item->type == ITEM_value) {
+      value_free(&item->value);
+    } else {
+      free(item->bytecode);
+    }
+  }
+  item->type = ITEM_code;
+  item->value = VALUE_NIL;
+  item->bytecode_len = len;
+  item->bytecode = bytecode;
+  return true;
+}
+
+ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
+  ITEM_t *created_root = NULL;
+  ITEM_t *item = find_or_create_item(root, item_name, "insert_item",
+                                     &created_root);
+  if (!item) return NULL;
+  if (value_aliases_code_payload(item, &value)) {
+    log_incompatible_payload_alias(item);
+    detach_item_and_destroy(created_root);
+    return NULL;
+  }
+  if (!value_string_within_limit(&value)) {
+    logerr("insert_item called with string longer than maximum %zu bytes.\n",
+           SIN_MAX_STRING_BYTES);
+    detach_item_and_destroy(created_root);
+    return NULL;
+  }
+  if (!replace_item_value(item, value)) {
+    detach_item_and_destroy(created_root);
+    return NULL;
+  }
+
   itemstore_bump_generation();
-  return current_item;
+  return item;
 }
 
 ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
                                                       uint8_t *bytecode) {
-  if (!validate_item_name(item_name, "insert_code_item")) {
+  ITEM_t *created_root = NULL;
+  ITEM_t *item = find_or_create_item(root, item_name, "insert_code_item",
+                                     &created_root);
+  if (!item) return NULL;
+  if (bytecode_aliases_value_payload(item, bytecode)) {
+    log_incompatible_payload_alias(item);
+    detach_item_and_destroy(created_root);
     return NULL;
   }
-  // This function is basically the same as insert_item() but creates a
-  // code item instead of a value item.
-  ITEM_t *current_item = root;
-  const char *current_pos = item_name;
-  // Buffer to hold each layer of the item, with space for null terminator
-  char layer[33];
-  logverbose("Creating new item %s\n", item_name);
-  while (current_item != NULL && *current_pos != '\0') {
-    const char *next_dot = strchr(current_pos, '.');
-    size_t layer_len = (next_dot != NULL) ?
-                     (size_t)(next_dot - current_pos) : strlen(current_pos);
-    // Copy the current layer into the buffer and null-terminate it
-    memcpy(layer, current_pos, layer_len);
-    layer[layer_len] = '\0';
-    // Check if the current layer exists as a child of the current item
-    ITEM_t *child_item = search_hashtable(current_item->children, layer);
-    if (child_item == NULL) {
-      // If the child does not exist, create it with a default value of 0
-      VALUE_t nil = {VALUE_nil, {0}};
-      child_item = make_item(layer, current_item, ITEM_value, nil, NULL, 0);
-      if (child_item == NULL) {
-        logerr("Unable to create code item '%s': failed to create layer '%s'.\n",
-               item_name, layer);
-        return NULL;
-      }
-    }
-    // Move to the child item
-    current_item = child_item;
-    if (next_dot == NULL) {
-      // If there's no next dot, we've reached the last layer
-      // It's code item, remember!
-      if (current_item->inuse) {
-        char name[MAX_ITEM_NAME];
-        get_itemname(current_item, name);
-        logerr("Cannot replace code item %s: currently in use.\n", name);
-        return NULL;
-      }
-      if (current_item->type == ITEM_value) {
-        value_free(&current_item->value);
-      }
-      current_item->type = ITEM_code;
-      current_item->value.type = VALUE_nil; // Just to be safe
-      if (current_item->bytecode_len > 0) {
-        free(current_item->bytecode);
-      }
-      current_item->bytecode_len = len;
-      current_item->bytecode = bytecode;
-      break;
-    }
-    // Otherwise, move past the dot to the beginning of the next layer
-    current_pos = next_dot + 1;
+  if (!replace_item_code(item, len, bytecode)) {
+    detach_item_and_destroy(created_root);
+    return NULL;
   }
-  // Return a pointer to the last-created item
+
   itemstore_bump_generation();
-  return current_item;
+  return item;
 }
 
 ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index) {
@@ -326,10 +477,10 @@ ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index) {
 
 void delete_item(ITEM_t *root, const char *item_name) {
   // Find an item and then delete it and all of its children.
-  if (!validate_item_name(item_name, "delete_item")) {
+  if (!validate_item_name_relative(root, item_name, "delete_item")) {
     return;
   }
-  ITEM_t *item = find_item(root, item_name);
+  ITEM_t *item = find_item_unchecked(root, item_name);
   if (item) {
     if (item->inuse) {
       char name[MAX_ITEM_NAME];
@@ -339,21 +490,7 @@ void delete_item(ITEM_t *root, const char *item_name) {
     }
     // We don't care about items that don't exist, just silently ignore the
     // delete request.  It's not there anyway, so why the complaining?
-    // First, remove the item from its parent's hashtable:
-    delete_hashtable(item->parent->children, item->name);
-    // Remove from order array
-    for (size_t i = 0; i < item->parent->ordered_size; i++) {
-      if (item->parent->ordered_array[i] == item) {
-        // Shift elements left
-        for (size_t j = i; j < item->parent->ordered_size - 1; j++) {
-          item->parent->ordered_array[j] = item->parent->ordered_array[j + 1];
-        }
-        item->parent->ordered_size--;
-        break;
-      }
-    }
-    // Now we have isolated this item, delete it and all its children.
-    destroy_item(item);
+    detach_item_and_destroy(item);
     itemstore_bump_generation();
     logverbose("Item %s has been deleted, along with all of its children.\n",
                                                                  item_name);
@@ -361,28 +498,32 @@ void delete_item(ITEM_t *root, const char *item_name) {
 }
 
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value) {
-  // Find an item, and set its value.
+  ITEM_t *created_root = NULL;
+  ITEM_t *item = find_or_create_item(root, item_name, "set_item",
+                                     &created_root);
+  if (!item) {
+    value_free(&value);
+    return;
+  }
+  if (value_aliases_code_payload(item, &value)) {
+    log_incompatible_payload_alias(item);
+    detach_item_and_destroy(created_root);
+    return;
+  }
   if (!value_string_within_limit(&value)) {
     logerr("set_item called with string longer than maximum %zu bytes.\n",
            SIN_MAX_STRING_BYTES);
     value_free(&value);
+    detach_item_and_destroy(created_root);
     return;
   }
-  if (!validate_item_name(item_name, "set_item")) {
+  if (!replace_item_value(item, value)) {
+    if (!value_aliases_owned_payload(item, &value)) value_free(&value);
+    detach_item_and_destroy(created_root);
     return;
   }
-  // If the item does not exist, it will be created, and then set.
-  logverbose("Trying to set item '%s'\n", item_name);
-  ITEM_t *item = find_item(root, item_name);
-  if (item) {
-    // Item exists, so just update its value.
-    value_replace(&item->value, value);
-  } else {
-    // Item doesn't exist, so create it.
-    if (!insert_item(root, item_name, value)) {
-      value_free(&value);
-    }
-  }
+
+  itemstore_bump_generation();
 }
 
 static bool append_itemname(ITEM_t *item, char *itemname, size_t itemname_size) {
@@ -439,22 +580,12 @@ char *get_itemfilename(ITEM_t *item) {
 }
 
 bool is_valid_layer(const char *str) {
-  // Courtesy of ChatGPT.
-  // Layer names may be no longer than 32 characters, and may also
-  // consist of characters in the set: A-Za-Z0-9_
-
-  // Early exit if too big
-  if (strlen(str) > 32) {
-    return false;
+  if (!str || *str == '\0') return false;
+  size_t length = 0;
+  for (const unsigned char *p = (const unsigned char *)str;; p++) {
+    if (*p == '\0') return true;
+    if (length >= ITEM_MAX_LAYER_NAME_LENGTH
+        || !item_layer_char_is_allowed(*p)) return false;
+    length++;
   }
-
-  // Character validation
-  for (const char *p = str; *p; ++p) {
-    if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
-          (*p >= '0' && *p <= '9') || *p == '_')) {
-      return false;
-    }
-  }
-
-  return true;
 }

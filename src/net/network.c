@@ -7,7 +7,7 @@
 #include <limits.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <netinet/in.h>
 
 #include "config.h"
 #include "memory.h"
@@ -74,6 +74,10 @@ bool line_is_reusable(const LINE_t *linep) {
 }
 
 bool validate_network_deps(const NetworkRuntimeDeps *deps) {
+  if (!deps || !deps->loop || !deps->listener) {
+    logerr("Invalid network runtime dependencies.\n");
+    return false;
+  }
   size_t maxconns = deps ? deps->maxconns : 0;
   if (maxconns == 0) {
     logerr("Invalid maxconns: must be greater than zero.\n");
@@ -92,19 +96,25 @@ bool validate_network_deps(const NetworkRuntimeDeps *deps) {
   return true;
 }
 
-void init_networking_with_deps(NetworkRuntimeDeps *deps) {
+bool init_networking_with_deps(NetworkRuntimeDeps *deps) {
   // Do that which needs to be done before starting the network interface
   if (!validate_network_deps(deps)) {
-    exit(EXIT_FAILURE);
+    return false;
   }
 
-  LINE_t **lines = deps && deps->lines ? deps->lines : &line;
-  *lines = calloc(deps->maxconns, sizeof **lines);
+  LINE_t **lines = deps->lines ? deps->lines : &line;
+  LINE_t *new_lines = calloc(deps->maxconns, sizeof *new_lines);
+  if (!new_lines) {
+    logerr("Failed to allocate network line state.\n");
+    return false;
+  }
+  *lines = new_lines;
   line = *lines;
   network_maxconns = deps->maxconns;
   for (size_t l = 0; l < deps->maxconns; l++) {
     (*lines)[l].linenum = l;
   }
+  return true;
 }
 
 LINE_t *add_line(uv_tcp_t *line_handle) {
@@ -659,7 +669,7 @@ void on_new_connection(uv_stream_t *server, int status) {
     return;
   }
 
-  err = uv_accept((uv_stream_t *)deps->listener, (uv_stream_t *)client);
+  err = uv_accept(server, (uv_stream_t *)client);
   if (err < 0) {
     logerr("Rejected connection: uv_accept failed: %s\n", uv_strerror(err));
     uv_close((uv_handle_t *)client, free_client_on_close);
@@ -718,28 +728,187 @@ void on_new_connection(uv_stream_t *server, int status) {
   logmsg("Line %zu: %s connected.\n", newline->linenum, newline->address);
 }
 
-void init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port) {
-  // Use libuv to elegantly create a listener
-  struct sockaddr_in6 addr;
-  uv_tcp_init(deps->loop, deps->listener);
-  deps->listener->data = deps;
-  if (port > UINT16_MAX) {
-    logerr("Invalid listener port %u.\n", port);
-    return;
+static void close_listener_handle(uv_tcp_t *listener, bool *initialized) {
+  if (!listener || !initialized || !*initialized) return;
+  if (!uv_is_closing((uv_handle_t *)listener)) {
+    uv_close((uv_handle_t *)listener, NULL);
   }
-  uv_ip6_addr("::", (int)port, &addr);
-  uv_tcp_bind(deps->listener, (const struct sockaddr *)&addr, 0);
-  uv_tcp_nodelay(deps->listener, 1);
-  int r = uv_listen((uv_stream_t *) deps->listener, 10, on_new_connection);
-  if (r) {
-    logerr("Failed to start listening: %s\n", uv_strerror(r));
-  } else {
-    logmsg("Listening on port %u.\n", port);
-  }
+  *initialized = false;
 }
 
-void input_processor(uv_idle_t* handle) {
-  // Called once per iteration of the game loop
+static bool init_ipv4_listener(NetworkRuntimeDeps *deps, uv_tcp_t *listener,
+                               bool *initialized, uint16_t port) {
+  struct sockaddr_in addr;
+  int err = uv_ip4_addr("0.0.0.0", (int)port, &addr);
+  if (err < 0) {
+    logerr("Failed to create IPv4 listener address: %s\n", uv_strerror(err));
+    return false;
+  }
+  err = uv_tcp_init(deps->loop, listener);
+  if (err < 0) {
+    logerr("Failed to initialize IPv4 listener: %s\n", uv_strerror(err));
+    return false;
+  }
+  *initialized = true;
+  listener->data = deps;
+  err = uv_tcp_bind(listener, (const struct sockaddr *)&addr, 0);
+  if (err < 0) {
+    logerr("Failed to bind IPv4 listener: %s\n", uv_strerror(err));
+    return false;
+  }
+  err = uv_tcp_nodelay(listener, 1);
+  if (err < 0) {
+    logerr("Failed to configure IPv4 listener: %s\n", uv_strerror(err));
+    return false;
+  }
+  err = uv_listen((uv_stream_t *)listener, 10, on_new_connection);
+  if (err < 0) {
+    logerr("Failed to listen on IPv4 listener: %s\n", uv_strerror(err));
+    return false;
+  }
+  return true;
+}
+
+static bool get_listener_port(uv_tcp_t *listener, int family,
+                              uint16_t *port) {
+  struct sockaddr_storage bound = {0};
+  int bound_len = (int)sizeof(bound);
+  int err = uv_tcp_getsockname(listener, (struct sockaddr *)&bound,
+                               &bound_len);
+  if (err != 0 || bound.ss_family != family) return false;
+  if (family == AF_INET6) {
+    *port = ntohs(((struct sockaddr_in6 *)&bound)->sin6_port);
+  } else {
+    *port = ntohs(((struct sockaddr_in *)&bound)->sin_port);
+  }
+  return true;
+}
+
+bool init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port) {
+  if (!deps || !deps->loop || !deps->listener) {
+    logerr("Invalid listener runtime dependencies.\n");
+    return false;
+  }
+  if (port > UINT16_MAX) {
+    logerr("Invalid listener port %u.\n", port);
+    return false;
+  }
+
+  /* Binding IPv4 first for port 0 avoids platform-specific failures when a
+   * just-selected IPv6 ephemeral port cannot be reused by a second socket. */
+  if (port == 0 && deps->listener_ipv4) {
+    if (!init_ipv4_listener(deps, deps->listener_ipv4,
+                            &deps->listener_ipv4_initialized, 0)) {
+      close_listener_handle(deps->listener_ipv4,
+                            &deps->listener_ipv4_initialized);
+      return false;
+    }
+    uint16_t selected_port = 0;
+    if (!get_listener_port(deps->listener_ipv4, AF_INET, &selected_port)) {
+      logerr("Failed to determine the ephemeral listener port.\n");
+      close_listener_handle(deps->listener_ipv4,
+                            &deps->listener_ipv4_initialized);
+      return false;
+    }
+    struct sockaddr_in6 ephemeral_addr6;
+    int ephemeral_err = uv_ip6_addr("::", (int)selected_port,
+                                    &ephemeral_addr6);
+    if (ephemeral_err == 0) {
+      ephemeral_err = uv_tcp_init(deps->loop, deps->listener);
+      if (ephemeral_err == 0) {
+        deps->listener_initialized = true;
+        deps->listener->data = deps;
+        ephemeral_err = uv_tcp_bind(deps->listener,
+                                    (const struct sockaddr *)&ephemeral_addr6,
+                                    UV_TCP_IPV6ONLY);
+        if (ephemeral_err == 0) {
+          ephemeral_err = uv_tcp_nodelay(deps->listener, 1);
+        }
+        if (ephemeral_err == 0) {
+          ephemeral_err = uv_listen((uv_stream_t *)deps->listener, 10,
+                                    on_new_connection);
+        }
+      }
+    }
+    if (ephemeral_err == 0) {
+      logmsg("Listening on port %u.\n", selected_port);
+      return true;
+    }
+    close_listener_handle(deps->listener, &deps->listener_initialized);
+    logmsg("IPv6 listener unavailable on ephemeral port %u (%s); "
+           "continuing with IPv4 only.\n", selected_port,
+           uv_strerror(ephemeral_err));
+    return true;
+  }
+
+  /* Bind IPv6-only plus IPv4 explicitly. This preserves localhost IPv4 on
+   * platforms whose IPv6 wildcard sockets are v6-only, while still allowing
+   * an IPv4-only fallback when IPv6 is unavailable. */
+  struct sockaddr_in6 addr6;
+  int err = uv_ip6_addr("::", (int)port, &addr6);
+  if (err == 0) {
+    err = uv_tcp_init(deps->loop, deps->listener);
+    if (err == 0) {
+      deps->listener_initialized = true;
+      deps->listener->data = deps;
+      err = uv_tcp_bind(deps->listener, (const struct sockaddr *)&addr6,
+                        UV_TCP_IPV6ONLY);
+      if (err == 0) {
+        err = uv_tcp_nodelay(deps->listener, 1);
+      }
+      if (err == 0) {
+        uint16_t selected_port = (uint16_t)port;
+        if (port == 0) {
+          if (!get_listener_port(deps->listener, AF_INET6, &selected_port)) {
+            err = UV_EINVAL;
+          }
+        }
+        if (err == 0) {
+          err = uv_listen((uv_stream_t *)deps->listener, 10,
+                          on_new_connection);
+        }
+        if (err == 0 && deps->listener_ipv4) {
+          if (!init_ipv4_listener(deps, deps->listener_ipv4,
+                                  &deps->listener_ipv4_initialized,
+                                  selected_port)) {
+            close_listener_handle(deps->listener_ipv4,
+                                  &deps->listener_ipv4_initialized);
+            close_listener_handle(deps->listener,
+                                  &deps->listener_initialized);
+            return false;
+          }
+        }
+        if (err == 0) {
+          logmsg("Listening on port %u.\n", selected_port);
+          return true;
+        }
+      }
+      if (err == UV_EADDRINUSE) {
+        logerr("Failed to listen on port %u: %s\n", port,
+               uv_strerror(err));
+        close_listener_handle(deps->listener, &deps->listener_initialized);
+        return false;
+      }
+      close_listener_handle(deps->listener, &deps->listener_initialized);
+    }
+  }
+
+  if (!deps->listener_ipv4) {
+    logerr("IPv6 listener unavailable and no IPv4 fallback is configured.\n");
+    return false;
+  }
+  if (!init_ipv4_listener(deps, deps->listener_ipv4,
+                          &deps->listener_ipv4_initialized, (uint16_t)port)) {
+    close_listener_handle(deps->listener_ipv4, &deps->listener_ipv4_initialized);
+    return false;
+  }
+  logmsg("Listening on IPv4 port %u.\n", port);
+  return true;
+}
+
+void input_processor(uv_timer_t *handle) {
+  // The timer callback runs on the loop thread, so input execution remains
+  // serialized with network callbacks and task timers.
   RuntimeContext *input_ctx = handle ? (RuntimeContext *)handle->data : NULL;
   if (!input_ctx) {
     logerr("Input runtime context is missing! Cannot continue.\n");
@@ -750,7 +919,8 @@ void input_processor(uv_idle_t* handle) {
     logerr("Input item does not exist!  Cannot continue.\n");
     exit(EXIT_FAILURE);
   }
-  interpret(input_ctx, input);
+  VALUE_t result = interpret(input_ctx, input);
+  value_free(&result);
   reset_stack(input_ctx->vm->stack);
   // Flush the output of every connected line
   size_t maxconns = input_ctx->maxconns ? *input_ctx->maxconns : input_ctx->network.maxconns ? *input_ctx->network.maxconns : 0;
@@ -760,12 +930,12 @@ void input_processor(uv_idle_t* handle) {
       flush_output(&line[l]);
     }
   }
-  // Don't hog the CPU.
-  usleep(100);
 }
 
 void shutdown_listener_with_deps(NetworkRuntimeDeps *deps) {
-  if (deps && deps->listener) uv_close((uv_handle_t *)deps->listener, NULL);
+  if (!deps) return;
+  close_listener_handle(deps->listener, &deps->listener_initialized);
+  close_listener_handle(deps->listener_ipv4, &deps->listener_ipv4_initialized);
 }
 
 void shutdown_networking(void) {

@@ -2,10 +2,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
 
 #include "config.h"
 #include "compiler/compiler_pipeline.h"
@@ -13,6 +9,7 @@
 #include "interpret.h"
 #include "item.h"
 #include "test_assert.h"
+#include "test_helpers.h"
 #include "value.h"
 #include "vm.h"
 
@@ -21,133 +18,12 @@ extern CONFIG_t config;
 typedef struct {
   const char *name;
   const char *src_path;
-  const char *generated_obj_path;
   const char *fixture_path;
 } InterpretGoldenCase;
 
-typedef struct {
-  char *stdout_text;
-  char *stderr_text;
-  int exit_code;
-} RunResult;
-
-static char *read_text_file(const char *path) {
-  FILE *f = fopen(path, "rb");
-  ASSERT_NOT_NULL(f);
-  ASSERT_EQ_INT(0, fseek(f, 0, SEEK_END));
-  long n = ftell(f);
-  ASSERT_TRUE(n >= 0);
-  ASSERT_EQ_INT(0, fseek(f, 0, SEEK_SET));
-  char *buf = malloc((size_t)n + 1);
-  ASSERT_NOT_NULL(buf);
-  size_t got = fread(buf, 1, (size_t)n, f);
-  ASSERT_EQ_INT((int)n, (int)got);
-  buf[n] = '\0';
-  fclose(f);
-  return buf;
-}
-
-static char *extract_block(const char *fixture, const char *header) {
-  const char *start = strstr(fixture, header);
-  ASSERT_NOT_NULL(start);
-  start += strlen(header);
-  const char *end = strstr(start, "\n===");
-  if (!end) {
-    end = fixture + strlen(fixture);
-  }
-  size_t len = (size_t)(end - start);
-  char *out = malloc(len + 1);
-  ASSERT_NOT_NULL(out);
-  memcpy(out, start, len);
-  out[len] = '\0';
-  return out;
-}
-
-static char *normalize_text(char *text) {
-  size_t len = strlen(text);
-  while (len > 0 && text[len - 1] == "\n"[0]) {
-    text[--len] = '\0';
-  }
-  return text;
-}
-
-static int contains_all_lines(const char *expected_lines, const char *actual, int *missing_line) {
-  char *copy = strdup(expected_lines);
-  ASSERT_NOT_NULL(copy);
-  int marker_line = 0;
-  for (char *tok = strtok(copy, "\n"); tok; tok = strtok(NULL, "\n")) {
-    marker_line++;
-    if (tok[0] == '\0') continue;
-    if (!strstr(actual, tok)) {
-      *missing_line = marker_line;
-      free(copy);
-      return 0;
-    }
-  }
-  free(copy);
-  return 1;
-}
-
-static RunResult run_and_capture_obj(const char *obj_path, const char *tag) {
-  char out_path[256];
-  char err_path[256];
-  int rc = snprintf(out_path, sizeof(out_path), "tests/fixtures/interpret/%s.stdout.tmp", tag);
-  ASSERT_TRUE(rc > 0 && (size_t)rc < sizeof(out_path));
-  rc = snprintf(err_path, sizeof(err_path), "tests/fixtures/interpret/%s.stderr.tmp", tag);
-  ASSERT_TRUE(rc > 0 && (size_t)rc < sizeof(err_path));
-
-  pid_t pid = fork();
-  ASSERT_TRUE(pid >= 0);
-
-  if (pid == 0) {
-    FILE *out = fopen(out_path, "wb");
-    FILE *err = fopen(err_path, "wb");
-    if (!out || !err) {
-      _exit(127);
-    }
-    if (dup2(fileno(out), STDOUT_FILENO) < 0 || dup2(fileno(err), STDERR_FILENO) < 0) {
-      _exit(127);
-    }
-    fclose(out);
-    fclose(err);
-    execl("./sin", "./sin", "-o", obj_path, (char *)NULL);
-    _exit(127);
-  }
-
-  int status = 0;
-  int waited = 0;
-  while (waited < 20) {
-    pid_t w = waitpid(pid, &status, WNOHANG);
-    ASSERT_TRUE(w >= 0);
-    if (w == pid) {
-      break;
-    }
-    usleep(100000);
-    waited++;
-  }
-  if (waited >= 20) {
-    kill(pid, SIGKILL);
-    ASSERT_EQ_INT(pid, waitpid(pid, &status, 0));
-  }
-
-  RunResult result;
-  result.stdout_text = normalize_text(read_text_file(out_path));
-  result.stderr_text = normalize_text(read_text_file(err_path));
-  if (WIFEXITED(status)) {
-    result.exit_code = WEXITSTATUS(status);
-  } else if (WIFSIGNALED(status)) {
-    result.exit_code = 128 + WTERMSIG(status);
-  } else {
-    result.exit_code = -1;
-  }
-
-  remove(out_path);
-  remove(err_path);
-  return result;
-}
-
 static void assert_run_matches(const char *case_name, const char *variant,
-                               const RunResult *actual, const RunResult *expected) {
+                               const TestProcessResult *actual,
+                               const TestProcessResult *expected) {
   if (expected->exit_code >= 0 && actual->exit_code != expected->exit_code) {
     fprintf(stderr,
             "[%s/%s] mismatch exit code: expected=%d actual=%d\n",
@@ -156,7 +32,8 @@ static void assert_run_matches(const char *case_name, const char *variant,
   }
 
   int missing_line = -1;
-  if (!contains_all_lines(expected->stdout_text, actual->stdout_text, &missing_line)) {
+  if (!test_contains_all_lines(expected->stdout_text, actual->stdout_text,
+                               &missing_line)) {
     fprintf(stderr,
             "[%s/%s] mismatch stdout: expected marker line %d not found\n",
             case_name, variant, missing_line);
@@ -164,7 +41,8 @@ static void assert_run_matches(const char *case_name, const char *variant,
   }
 
   missing_line = -1;
-  if (!contains_all_lines(expected->stderr_text, actual->stderr_text, &missing_line)) {
+  if (!test_contains_all_lines(expected->stderr_text, actual->stderr_text,
+                               &missing_line)) {
     fprintf(stderr,
             "[%s/%s] mismatch stderr: expected marker line %d not found\n",
             case_name, variant, missing_line);
@@ -173,47 +51,84 @@ static void assert_run_matches(const char *case_name, const char *variant,
 }
 
 static void run_case(const InterpretGoldenCase *tc) {
-  char compile_cmd[512];
-  int rc = snprintf(compile_cmd, sizeof(compile_cmd), "./scomp %s %s", tc->src_path, tc->generated_obj_path);
-  ASSERT_TRUE(rc > 0 && (size_t)rc < sizeof(compile_cmd));
-  ASSERT_EQ_INT(0, system(compile_cmd));
+  char generated_obj_path[128];
+  ASSERT_EQ_INT(0, test_make_temp_path("sin-interp-golden", generated_obj_path,
+                                       sizeof(generated_obj_path)));
+  char *const compile_argv[] = {
+    "./scomp", (char *)tc->src_path, generated_obj_path, NULL
+  };
+  TestProcessResult compile_result = {0};
+  int capture_rc = test_run_argv_capture(compile_argv, 0, &compile_result);
+  int compile_exit = compile_result.exit_code;
+  test_process_result_free(&compile_result);
+  if (capture_rc != 0) remove(generated_obj_path);
+  ASSERT_EQ_INT(0, capture_rc);
+  if (compile_exit != 0) remove(generated_obj_path);
+  ASSERT_EQ_INT(0, compile_exit);
 
-  char *fixture = read_text_file(tc->fixture_path);
-  char *expected_stdout = extract_block(fixture, "===stdout===\n");
-  char *expected_stderr = extract_block(fixture, "===stderr===\n");
-  char *expected_exit = extract_block(fixture, "===exit===\n");
+  char *const run_argv[] = {"./sin", "-o", generated_obj_path, NULL};
+  TestProcessResult generated = {0};
+  int run_capture_rc = test_run_argv_capture(run_argv, 2000, &generated);
+  remove(generated_obj_path);
+  ASSERT_EQ_INT(0, run_capture_rc);
 
-  normalize_text(expected_stdout);
-  normalize_text(expected_stderr);
+  char *fixture = test_read_text_file(tc->fixture_path);
+  ASSERT_NOT_NULL(fixture);
+  char *expected_stdout = test_extract_fixture_block(fixture, "===stdout===\n");
+  char *expected_stderr = test_extract_fixture_block(fixture, "===stderr===\n");
+  char *expected_exit = test_extract_fixture_block(fixture, "===exit===\n");
+  ASSERT_NOT_NULL(expected_stdout);
+  ASSERT_NOT_NULL(expected_stderr);
+  ASSERT_NOT_NULL(expected_exit);
+  test_normalize_text(expected_stdout);
+  test_normalize_text(expected_stderr);
 
-  RunResult expected = {.stdout_text = expected_stdout,
-                        .stderr_text = expected_stderr,
-                        .exit_code = atoi(expected_exit)};
-
-  RunResult generated = run_and_capture_obj(tc->generated_obj_path, "generated");
+  TestProcessResult expected = {.stdout_text = expected_stdout,
+                                .stderr_text = expected_stderr,
+                                .exit_code = atoi(expected_exit)};
   assert_run_matches(tc->name, "generated_obj", &generated, &expected);
 
-  free(generated.stdout_text);
-  free(generated.stderr_text);
-  free(expected_stdout);
-  free(expected_stderr);
+  test_process_result_free(&generated);
+  test_process_result_free(&expected);
   free(expected_exit);
   free(fixture);
-
-  remove(tc->generated_obj_path);
 }
 
 void test_interpret_semantics_golden(void) {
   const InterpretGoldenCase cases[] = {
-      {"chat_boot", "examples/chat-boot.src", "tests/fixtures/interpret/chat-boot.generated.obj", "tests/fixtures/interpret/chat-boot.expected.txt"},
-      {"chat_load", "examples/chat-load.src", "tests/fixtures/interpret/chat-load.generated.obj", "tests/fixtures/interpret/chat-load.expected.txt"},
-      {"echo_boot", "examples/echo-boot.src", "tests/fixtures/interpret/echo-boot.generated.obj", "tests/fixtures/interpret/echo-boot.expected.txt"},
-      {"echo_load", "examples/echo-load.src", "tests/fixtures/interpret/echo-load.generated.obj", "tests/fixtures/interpret/echo-load.expected.txt"},
+      {"chat_boot", "examples/chat-boot.src", "tests/fixtures/interpret/chat-boot.expected.txt"},
+      {"chat_load", "examples/chat-load.src", "tests/fixtures/interpret/chat-load.expected.txt"},
+      {"echo_boot", "examples/echo-boot.src", "tests/fixtures/interpret/echo-boot.expected.txt"},
+      {"echo_load", "examples/echo-load.src", "tests/fixtures/interpret/echo-load.expected.txt"},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
     run_case(&cases[i]);
   }
+
+  char *const failing_argv[] = {
+    "/bin/sh", "-c", "printf capture-failure; exit 23", NULL
+  };
+  TestProcessResult failing = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(failing_argv, 1000, &failing));
+  int failing_exit = failing.exit_code;
+  int captured_failure = failing.stdout_text &&
+                         strcmp(failing.stdout_text, "capture-failure") == 0;
+  test_process_result_free(&failing);
+  ASSERT_EQ_INT(23, failing_exit);
+  ASSERT_TRUE(captured_failure);
+
+  char *const timeout_argv[] = {
+    "/bin/sh", "-c", "printf timeout-output; while :; do :; done", NULL
+  };
+  TestProcessResult timeout = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(timeout_argv, 50, &timeout));
+  int timeout_exit = timeout.exit_code;
+  int timeout_seen = timeout.timed_out && timeout.stdout_text &&
+                     strcmp(timeout.stdout_text, "timeout-output") == 0;
+  test_process_result_free(&timeout);
+  ASSERT_EQ_INT(137, timeout_exit);
+  ASSERT_TRUE(timeout_seen);
 }
 
 static void setup_result_semantics_runtime(void) {

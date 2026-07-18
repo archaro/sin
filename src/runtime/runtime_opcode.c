@@ -28,6 +28,7 @@
 uint8_t *op_nop(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *op_undefined(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
+#ifndef NDEBUG
 typedef struct {
   OP_t *table;
 } RuntimeBindingCheckCtx;
@@ -40,6 +41,7 @@ static bool assert_runtime_binding(uint8_t opbyte, IR_Op op, const IR_OpSchema *
          && "Missing interpreter handler for schema-defined runtime opcode");
   return true;
 }
+#endif
 
 void runtime_opcode_bind_table(RuntimeContext *ctx) {
   for (int o = 0; o < 256; o++) {

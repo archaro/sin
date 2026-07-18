@@ -1,5 +1,6 @@
-  /* The input item is executed once per run-loop pass.
-   * net.input processes at most one pending network event each time it is called.
+  /* The input item is called by a nominal 10ms timer; a busy event loop can
+   * delay the callback. net.input processes at most one pending network event
+   * each time it is called.
    */
   input = code (
   /* Is there anyone out there?
@@ -18,5 +19,5 @@
     /* Newlines are stripped from input, so add one at the end */
     net.write{input.line, "\n"};
   endif;
-  /* That's it.  No loops, because the run-loop sorts that out. */
+  /* Return after this callback; the run-loop invokes the input item again. */
   );

@@ -31,15 +31,13 @@ void reset_stack(STACK_t *stack) {
   // Given a stack, throw away everything on it.
   // Note that this includes any local variables!
   // Really simple!
-  for (int v = 0; v < (stack->current + stack->locals); v++) {
-    value_free(&stack->stack[v]);
-  }
-  stack->current = -1;
+  reset_stack_to(stack, -1);
 }
 
 void reset_stack_to(STACK_t *stack, int32_t top) {
   // Like reset_stack, but only throw away values above 'top'
   while (stack->current > top) {
+    value_free(&stack->stack[stack->current]);
     stack->current--;
   }
 }

@@ -6,10 +6,13 @@
 #include "error.h"
 #include "compiler/ir.h"
 #include "compiler/lower.h"
+#include "libcall.h"
 #include "memory.h"
 #include "parser.h"
 #include "compiler/semant.h"
 #include "test_assert.h"
+
+enum { LOWER_ALLOC_FAILURE_TRIAL_LIMIT = 256 };
 
 static void test_context_parse_failure_cleanup(void) {
   CompilerContext ctx;
@@ -85,11 +88,81 @@ static void test_context_emit_failure_cleanup(void) {
   compiler_context_destroy(&ctx);
 }
 
+static void assert_lower_allocation_failures(const char *source) {
+  CompilerContext ctx;
+  char *errdetail = NULL;
+  IR_Unit *ir = NULL;
+  bool saw_failure = false;
+  bool saw_success_after_failure = false;
+
+  compiler_context_init(&ctx, source, strlen(source));
+  ctx.sem_ctx = sem_create_ctx();
+  ASSERT_NOT_NULL(ctx.sem_ctx);
+  ParseInput input = {ctx.source, ctx.source_len, "<test>"};
+  ASSERT_EQ_INT(ERR_NOERROR,
+                parse_source(&input, &ctx.ast_root, &errdetail));
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(ERR_NOERROR,
+                sem_check_locals(ctx.ast_root, &errdetail, ctx.sem_ctx));
+  ASSERT_TRUE(errdetail == NULL);
+
+  alloc_test_fail_after(-1);
+  ASSERT_EQ_INT(ERR_NOERROR,
+                lower_ast_to_ir(ctx.ast_root, ctx.sem_ctx, &ir, &errdetail));
+  ASSERT_NOT_NULL(ir);
+  ASSERT_TRUE(errdetail == NULL);
+  ir_destroy_unit(ir);
+
+  for (long fail_at = 0; fail_at < LOWER_ALLOC_FAILURE_TRIAL_LIMIT; fail_at++) {
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    ir = NULL;
+    errdetail = NULL;
+    alloc_test_fail_after(fail_at);
+    int8_t rc = lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ir,
+                                     &errdetail, &diag);
+    if (rc == ERR_NOERROR) {
+      ASSERT_NOT_NULL(ir);
+      ir_destroy_unit(ir);
+      saw_success_after_failure = true;
+      compiler_diag_reset(&diag);
+      break;
+    }
+
+    saw_failure = true;
+    ASSERT_TRUE(ir == NULL);
+    ASSERT_EQ_INT(ERR_COMP_UNKNOWN, rc);
+    ASSERT_NOT_NULL(errdetail);
+    ASSERT_EQ_INT(DIAG_PHASE_LOWER, diag.phase);
+    ASSERT_NOT_NULL(diag.message);
+    ASSERT_TRUE(strstr(diag.message, "lower:") != NULL);
+    free(errdetail);
+    compiler_diag_reset(&diag);
+  }
+
+  alloc_test_fail_after(-1);
+  ASSERT_TRUE(saw_failure);
+  ASSERT_TRUE(saw_success_after_failure);
+  compiler_context_destroy(&ctx);
+}
+
+static void test_lower_propagates_ir_allocation_failures(void) {
+  ASSERT_TRUE(libcall_init_registry());
+  assert_lower_allocation_failures(
+      "1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9;");
+  assert_lower_allocation_failures(
+      "if 1 then 2; elsif 0 then 3; else 4; endif;");
+  assert_lower_allocation_failures("while 1 do 2; endwhile;");
+  assert_lower_allocation_failures("foo.bar = 1 + 2; sys.log{foo.bar};");
+  assert_lower_allocation_failures("add = code {@a, @b} ( @a + @b; );");
+}
+
 void test_compiler_context_failures(void) {
   test_context_parse_failure_cleanup();
   test_context_semant_failure_cleanup();
   test_context_lower_failure_cleanup();
   test_context_emit_failure_cleanup();
+  test_lower_propagates_ir_allocation_failures();
 
   alloc_test_fail_after(-1);
   {

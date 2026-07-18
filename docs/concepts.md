@@ -7,7 +7,11 @@ The style of the language is something like the misbegotten offspring of Forth a
 When the runtime engine starts up, it first loads and executes the bootstrap code (which is separately compiled).  The engine is event-driven and this code sets things up ready for the game to run, including setting up the main game tasks.  Tasks are attached to the runloop and are called as necessary.  There are three kinds:
 - Network tasks: the listener, and any player connections created by it.  These tasks run outside the game and interact in limited ways with *Sinistra* code, and their purpose is to manage input from and output to connected players.
 - Timer tasks: these are managed by *Sinistra* code (for example, the bootstrap code).  Each time the timer expires, the specified code is run.
-- Input task: this is the most important task, and is run once per loop.  It processes connections, disconnections and data from the players and output back to them.  The input task expects to call the `input` item, which is written in *Sinistra*.  (And is, in fact, the only code item you *need* to write, making sure it calls the net.input libcall.)
+- Input task: this is the most important task. `sin` invokes the configured
+  input item from a repeating libuv timer with a nominal 10ms interval. The
+  callback runs on the event-loop thread, so it is serialized with network and
+  other timer callbacks; a busy loop can delay it. The input item should call
+  `net.input` to process network activity.
 
 ## The Item ##
 
@@ -36,6 +40,15 @@ layer value, while the dotted forms are normal multi-layer string names if
 written explicitly. Likewise `+0.0` and `-0.0` have no item-name mapping, and
 NaN payloads are neither preserved nor normalized for item names because NaN
 float values are rejected rather than formatted.
+
+Item paths used by the runtime and itemstore APIs have at most eight non-root
+layers. Each layer is 1 to 32 bytes and may contain only ASCII letters, digits,
+and `_`; the complete non-root path is at most 263 bytes including dots. These
+checks apply before mutation as well as to lookup and deletion. When an API is
+given a non-root item as its starting pointer, that item's ancestor depth and
+path are included in the same limits. Invalid paths are rejected without
+partially creating a path. The v1 root-name exception remains: the root name
+is limited to 32 bytes but is not restricted to the non-root character set.
 
 To assign an item, use the assignment operator, `=`.  If the item does not exist, it will be created (as will all of its parents, if it is a multi-layered item).  If the item exists, its value will be overwritten with the new value.  An item which does not exist has the default value of `nil`.  Thus:  
 `foo = 10;`  
@@ -139,7 +152,17 @@ runtime engine.
 
 ## Tasks ##
 
-An important concept to remember when writing Sinistra code is *no perpetual loops, ever*.  The engine is built around a run-loop, which responds to certain events.  The most important events are network events - connections, disconnections, and data - and there is limited control of these in-game.  Another important event is the *input* event, which is called approximately every 100ms by the run-loop, and which checks to see if there is any outstanding network activity to process.  The *input* event executes the `input` item, which is, technically, the only code item which *needs* to be created in order to have a functional system.  This item will need to call the `net.input` library call (also known as a libcall) and should then react appropriately to the network input received.  The last sort of event is the *task*: tasks are Sinistra code items which are executed according to a timer schedule - either once at a predetermined point, or repeated at a set interval.  Task management is entirely controlled within Sinistra, and (within reason) can do anything that the developer desires.  Tasks are either central or per-line, which means that they can be allocated to individual players.  A typical example of this would be to create a task that times-out the player after a period of idleness.  Because the creation and management of such a task is entirely within the management of Sinistra code, each individual time-out timer can be configured according to who is connected to the line: 15 seconds for a new login before the player character is loaded, 1 minute for a newbie, 30 minutes for a wizard, etc.
+An important concept to remember when writing Sinistra code is *no perpetual loops, ever*. The engine is built around a run-loop, which responds to network events, input callbacks, and timer tasks. The input timer has a nominal 10ms interval, but eligibility is not a real-time guarantee: other callbacks or a long-running input item can delay it. Each `net.input` call handles at most one pending connection, disconnection, or complete-line event, so queued events are handled over later fair-queue turns.
+
+`task.newgametask{item, start, repeat}` uses integer intervals in tenths of a
+second, converted to timer milliseconds. `start` is the delay before the first
+callback and `repeat` is the interval between later callbacks. A zero repeat
+interval makes the task one-shot; it retires automatically after its callback,
+including the `start = 0, repeat = 0` immediate case. A positive repeat
+interval keeps the task active until `task.killtask{id}` closes it. Intervals
+must be non-negative integers no greater than `INT64_MAX / 100`; a task also
+requires an initialized event loop and an existing item, and logs an error rather
+than executing when that item is not a code item.
 
 ## Libraries ##
 
@@ -150,7 +173,11 @@ The `sys` library does the sort of system-wide things that you might expect:
 `sys.log{<expression>}` writes something to the system log: it takes an expression and will try to evaluate the expression and write something sensible in the log.  Do not abuse it.  
 `sys.shutdown` will perform an orderly shutdown of the engine, saving the itemstore.  It takes no arguments.  
 `sys.abort` will abort the engine without saving the itemstore.  It takes no arguments.
-`sys.compile{<source>}` compiles and runs a string of Sinistra source code.
+`sys.compile{<source>}` compiles and runs a string of Sinistra source code,
+returns `true` on successful compilation/execution, and returns `false` for
+invalid source input or compilation/setup failure. The temporary code item's
+result is discarded, but its item mutations remain in memory; the normal
+itemstore save at safe shutdown is what makes those mutations durable.
 `sys.exists{<name>}` reports whether a string-named item exists.
 `sys.delete{<name>}` deletes a string-named item when it exists.
 `sys.nthname{<name>, <index>}` and `sys.rootname{<index>}` return child or root item names by index.  Item order is not guaranteed.
@@ -161,8 +188,9 @@ The `net` library handles network activity:
 `net.flush{<integer>}` requests an immediate flush of pending output for an active line.  It returns `true` when the line is active, `false` when the line is out of range or inactive, and `nil` when the argument is not a non-negative integer.  Invalid arguments set `ERR_RUNTIME_INVALIDARGS`; out-of-range or inactive-line failures set the network error item.
 `net.ditch{<integer>}` marks an active line for graceful disconnection.  It returns `true` when the line is active and has been marked, `false` when the line is out of range or already inactive/disconnecting, and `nil` when the argument is not a non-negative integer.  Invalid arguments set `ERR_RUNTIME_INVALIDARGS`; out-of-range or inactive-line failures set the network error item. Pending output is flushed first, and the handle closes after queued or in-flight output drains; the later `net.input` disconnection event destroys the line and makes the slot reusable.
 
-The `task` library is for scheduled code execution:  
-`task.newgametask{<expr>, <integer>, <integer>}` evaluates the first argument and, if it comes out as an existing item name, evaluates the second and third arguments.  The second argument, if it evaluates to a non-negative integer, is the number of tenths of a second after which the item in the first argument will be executed.  The third argument, if it evaluates to a non-negative integer, is the interval (expressed in tenths of a second) between executions of the item.  Negative start or repeat intervals are invalid, as are intervals above `INT64_MAX / 100` because they cannot be safely converted to timer milliseconds.  If both the second and third arguments evaluate to 0, the task is scheduled immediately and does not repeat.  If the interval is greater than 0, the task will repeat endlessly until killed.  Returns an integer, which is the task id.  When the task fires, the runtime executes the named item only if it is a code item.
+The `task` library is described in the task lifecycle above. `task.newgametask`
+returns an integer task id on success; a zero repeat interval makes the task
+one-shot, while a positive repeat interval keeps it active until killed.
 `task.killtask{<integer>}` takes one argument, which evaluates to the id of the task to be killed.  If the argument is not an integer, the libcall sets `ERR_RUNTIME_INVALIDARGS` and returns `nil`.  If the task does not exist or the id is negative, the libcall returns `false` without changing `error`.  Otherwise, the task is removed from the list of scheduled tasks and the libcall returns `true`.
 
 The `str` library contains libcalls which operate on or produce string values:  

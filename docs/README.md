@@ -20,8 +20,8 @@ kept in sync with the source files named in each document.
   boundaries.
 - [`itemstore-format.md`](itemstore-format.md): persisted itemstore wire format.
 - [`history.md`](history.md): project background.
-- [`documentation-roadmap.md`](documentation-roadmap.md): planned documentation
-  improvements and maintenance work.
+- [`documentation-roadmap.md`](documentation-roadmap.md): remaining
+  documentation improvements and longer-term reference work.
 
 ## Maintenance
 

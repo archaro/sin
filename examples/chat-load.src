@@ -1,5 +1,6 @@
-/* The input item is executed once per run-loop pass.
- * net.input processes at most one pending network event each time it is called.
+/* The input item is called by a nominal 10ms timer; a busy event loop can delay
+ * the callback. net.input processes at most one pending network event each time
+ * it is called.
  */
 input = code (
 @a = net.input;
@@ -11,7 +12,8 @@ if @a == 1 then
   /* input.line is the zero-based connection slot assigned by net.input. */
   /* Tell everyone else about the new connection. */
   @l = 0;
-  /* The default examples use eight connection slots: lines 0 through 7. */
+  /* This example broadcasts across lines 0 through 7; the runtime default is
+   * 50 reusable zero-based connection slots. */
   while @l < 8 do
     if @l != input.line then
       net.write{@l, "Line "};
@@ -28,7 +30,8 @@ elsif @a == 3 then
   else
     /* Tell every other line what was said. */
     @l = 0;
-    /* The default examples use eight connection slots: lines 0 through 7. */
+    /* This example broadcasts across lines 0 through 7; the runtime default is
+     * 50 reusable zero-based connection slots. */
     while @l < 8 do
       if @l != input.line then
         net.write{@l, "Line "};
@@ -44,7 +47,8 @@ elsif @a == 2 then
   /* net.input has reported the disconnect and made this slot reusable. */
   /* Tell every other line that there has been a disconnection. */
   @l = 0;
-  /* The default examples use eight connection slots: lines 0 through 7. */
+  /* This example broadcasts across lines 0 through 7; the runtime default is
+   * 50 reusable zero-based connection slots. */
   while @l < 8 do
     if @l != input.line then
       net.write{@l, "Line "};
@@ -54,7 +58,7 @@ elsif @a == 2 then
     @l++;
   endwhile;
 endif;
-/* That's it.  No loops, because the run-loop sorts that out. */
+/* Return after this callback; the run-loop invokes the input item again. */
 );
 
 /* A simple command processor */

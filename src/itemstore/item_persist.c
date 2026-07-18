@@ -9,8 +9,12 @@
 #include <errno.h>
 #include <limits.h>
 #ifdef _WIN32
-#include <process.h>
+#include <fcntl.h>
+#include <io.h>
+#include <share.h>
+#include <sys/stat.h>
 #else
+#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -26,13 +30,10 @@
 // The configuration object, defined in src/sin.c
 extern CONFIG_t config;
 
-static long current_process_id(void) {
-#ifdef _WIN32
-  return (long)_getpid();
-#else
-  return (long)getpid();
-#endif
-}
+static ITEMSTORE_LOAD_CONSTRUCTOR_FAILURE_HOOK_t
+    load_constructor_failure_hook;
+static ITEMSTORE_SOURCE_WRITE_HOOK_t source_write_hook = fputs;
+static ITEMSTORE_SOURCE_CLOSE_HOOK_t source_close_hook = fclose;
 
 bool itemstore_default_sync_hook(FILE *file, const char *path) {
 #ifdef _WIN32
@@ -49,10 +50,68 @@ bool itemstore_default_sync_hook(FILE *file, const char *path) {
 #endif
 }
 
+static bool itemstore_default_directory_sync_hook(const char *path) {
+#ifdef _WIN32
+  (void)path;
+  return true;
+#else
+  char *dircopy = strdup(path);
+  if (dircopy == NULL) {
+    logerr("Failed to allocate directory path for itemstore %s: %s\n", path,
+           strerror(errno));
+    return false;
+  }
+  char *directory = dirname(dircopy);
+  int directory_fd = open(directory, O_RDONLY);
+  if (directory_fd < 0) {
+    logerr("Failed to open itemstore directory %s for sync: %s\n", directory,
+           strerror(errno));
+    free(dircopy);
+    return false;
+  }
+
+  bool success = true;
+  if (fsync(directory_fd) != 0) {
+    logerr("Failed to sync itemstore directory %s: %s\n", directory,
+           strerror(errno));
+    success = false;
+  }
+  if (close(directory_fd) != 0) {
+    logerr("Failed to close itemstore directory %s after sync: %s\n",
+           directory, strerror(errno));
+    success = false;
+  }
+  free(dircopy);
+  return success;
+#endif
+}
+
 void itemstore_set_sync_hook_for_tests(ITEMSTORE_SYNC_HOOK_t hook) {
   itemstore_default_context()->sync_hook = hook != NULL
       ? hook
       : itemstore_default_sync_hook;
+}
+
+void itemstore_set_load_constructor_failure_hook_for_tests(
+    ITEMSTORE_LOAD_CONSTRUCTOR_FAILURE_HOOK_t hook) {
+  load_constructor_failure_hook = hook;
+}
+
+void itemstore_set_source_io_hooks_for_tests(
+    ITEMSTORE_SOURCE_WRITE_HOOK_t write_hook,
+    ITEMSTORE_SOURCE_CLOSE_HOOK_t close_hook) {
+  source_write_hook = write_hook != NULL ? write_hook : fputs;
+  source_close_hook = close_hook != NULL ? close_hook : fclose;
+}
+
+static ITEMSTORE_DIRECTORY_SYNC_HOOK_t directory_sync_hook =
+    itemstore_default_directory_sync_hook;
+
+void itemstore_set_directory_sync_hook_for_tests(
+    ITEMSTORE_DIRECTORY_SYNC_HOOK_t hook) {
+  directory_sync_hook = hook != NULL
+      ? hook
+      : itemstore_default_directory_sync_hook;
 }
 
 bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability) {
@@ -66,8 +125,17 @@ bool save_itemsource_in_srcroot(ITEM_t *item, char *source, const char *srcroot)
   // source was saved, otherwise false.
 
   char *filename = get_itemfilename_in_srcroot(item, srcroot);
+  if (filename == NULL) {
+    logerr("Failed to allocate source filename.\n");
+    return false;
+  }
   // There is a much better way to do this, but I don't care right now.
   char *dircopy = strdup(filename);
+  if (dircopy == NULL) {
+    logerr("Failed to allocate source directory path for %s.\n", filename);
+    free(filename);
+    return false;
+  }
   char *dir = dirname(dircopy);
   bool res = make_path(dir);
   free(dircopy);
@@ -82,14 +150,17 @@ bool save_itemsource_in_srcroot(ITEM_t *item, char *source, const char *srcroot)
     free(filename);
     return false;
   }
-  if (fputs(source, out) == EOF) {
+  bool success = true;
+  if (source_write_hook(source, out) == EOF) {
     logerr("Failed to write text to file %s\n", filename);
+    success = false;
   }
-  if (fclose(out) != 0) {
+  if (source_close_hook(out) != 0) {
     logerr("Failed to close file %s\n", filename);
+    success = false;
   }
   free(filename);
-  return true;
+  return success;
 }
 
 bool save_itemsource(ITEM_t *item, char *source) {
@@ -116,7 +187,6 @@ enum {
   ITEMSTORE_VALUE_TAG_BOOL = 4
 };
 
-#define ITEMSTORE_MAX_DEPTH 8u
 #define ITEMSTORE_MAX_CHILDREN_PER_ITEM 250u
 #define ITEMSTORE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
 
@@ -145,6 +215,91 @@ static bool write_bytes(FILE *file, const void *data, size_t length,
            context, written, length);
   }
   return false;
+}
+
+static FILE *create_temp_itemstore(const char *filename, char **temp_path_out) {
+  int temp_path_len = snprintf(NULL, 0, "%s.tmp.XXXXXX", filename);
+  if (temp_path_len < 0) {
+    logerr("Failed to build temporary itemstore path for %s.\n", filename);
+    return NULL;
+  }
+
+  size_t temp_path_size = (size_t)temp_path_len + 1u;
+  char *temp_path = malloc(temp_path_size);
+  if (temp_path == NULL) {
+    logerr("Failed to allocate temporary itemstore path for %s.\n", filename);
+    return NULL;
+  }
+  (void)snprintf(temp_path, temp_path_size, "%s.tmp.XXXXXX", filename);
+
+#ifdef _WIN32
+  int file_descriptor = -1;
+  for (unsigned attempt = 0; attempt < 100u; attempt++) {
+    (void)snprintf(temp_path, temp_path_size, "%s.tmp.XXXXXX", filename);
+    errno_t name_result = _mktemp_s(temp_path, temp_path_size);
+    if (name_result != 0) {
+      logerr("Failed to create temporary itemstore name beside %s: %s\n",
+             filename, strerror(name_result));
+      free(temp_path);
+      return NULL;
+    }
+    file_descriptor = -1;
+    errno_t open_result = _sopen_s(&file_descriptor, temp_path,
+                                   _O_CREAT | _O_EXCL | _O_WRONLY | _O_BINARY,
+                                   _SH_DENYNO, _S_IREAD | _S_IWRITE);
+    if (open_result == 0) break;
+    if (open_result != EEXIST) {
+      logerr("Failed to create temporary itemstore %s: %s\n", temp_path,
+             strerror(open_result));
+      free(temp_path);
+      return NULL;
+    }
+  }
+  if (file_descriptor < 0) {
+    logerr("Failed to create an unused temporary itemstore beside %s: %s\n",
+           filename, strerror(EEXIST));
+    free(temp_path);
+    return NULL;
+  }
+  FILE *file = _fdopen(file_descriptor, "wb");
+  if (file == NULL) {
+    int saved_errno = errno;
+    int close_result = _close(file_descriptor);
+    if (close_result != 0) {
+      logerr("Failed to close temporary itemstore descriptor %s: %s\n",
+             temp_path, strerror(errno));
+    }
+    if (remove(temp_path) != 0 && errno != ENOENT) {
+      logerr("Failed to remove temporary itemstore %s: %s\n", temp_path,
+             strerror(errno));
+    }
+    logerr("Failed to open temporary itemstore %s as a stream: %s\n",
+           temp_path, strerror(saved_errno));
+    free(temp_path);
+    return NULL;
+  }
+#else
+  int file_descriptor = mkstemp(temp_path);
+  if (file_descriptor < 0) {
+    logerr("Failed to create temporary itemstore beside %s: %s\n", filename,
+           strerror(errno));
+    free(temp_path);
+    return NULL;
+  }
+  FILE *file = fdopen(file_descriptor, "wb");
+  if (file == NULL) {
+    int saved_errno = errno;
+    (void)close(file_descriptor);
+    (void)remove(temp_path);
+    logerr("Failed to open temporary itemstore %s as a stream: %s\n",
+           temp_path, strerror(saved_errno));
+    free(temp_path);
+    return NULL;
+  }
+#endif
+
+  *temp_path_out = temp_path;
+  return file;
 }
 
 static bool read_bytes(FILE *file, void *data, size_t length,
@@ -232,19 +387,19 @@ bool write_item(FILE *file, ITEM_t *item) {
        ancestor = ancestor->parent) {
     depth++;
   }
-  if (depth > ITEMSTORE_MAX_DEPTH) {
+  if (depth > ITEM_MAX_DEPTH) {
     logerr("Failed to write itemstore item '%s': depth %zu exceeds maximum "
-           "%u.\n", item->name, depth, ITEMSTORE_MAX_DEPTH);
+           "%u.\n", item->name, depth, ITEM_MAX_DEPTH);
     return false;
   }
 
-  size_t name_len = strlen(item->name);
-  if (name_len > 32) {
-    logerr("Failed to write itemstore item '%s': name exceeds 32 bytes.\n",
-           item->name);
+  size_t name_len = strnlen(item->name, ITEM_MAX_LAYER_NAME_LENGTH + 1u);
+  if (name_len > ITEM_MAX_LAYER_NAME_LENGTH) {
+    logerr("Failed to write itemstore item: name exceeds %u bytes.\n",
+           ITEM_MAX_LAYER_NAME_LENGTH);
     return false;
   }
-  if (item->parent != NULL && (name_len == 0 || !is_valid_layer(item->name))) {
+  if (item->parent != NULL && !is_valid_layer(item->name)) {
     logerr("Failed to write itemstore item: invalid layer name '%s'.\n",
            item->name);
     return false;
@@ -352,26 +507,10 @@ bool save_itemstore_with_options(const char *filename, ITEM_t *root,
   FILE *file = NULL;
   char *temp_path = NULL;
   bool success = false;
-  long pid = current_process_id();
-  int temp_path_len = snprintf(NULL, 0, "%s.tmp.%ld", filename, pid);
-  if (temp_path_len < 0) {
-    logerr("Failed to build temporary itemstore path for %s.\n", filename);
-    return false;
-  }
+  bool replaced = false;
 
-  temp_path = malloc((size_t)temp_path_len + 1);
-  if (temp_path == NULL) {
-    logerr("Failed to allocate temporary itemstore path for %s.\n", filename);
-    return false;
-  }
-  snprintf(temp_path, (size_t)temp_path_len + 1, "%s.tmp.%ld", filename, pid);
-
-  file = fopen(temp_path, "wb");
-  if (file == NULL) {
-    logerr("Failed to open temporary itemstore %s for writing: %s\n",
-           temp_path, strerror(errno));
-    goto cleanup;
-  }
+  file = create_temp_itemstore(filename, &temp_path);
+  if (file == NULL) return false;
 
   if (!write_bytes(file, ITEMSTORE_V1_MAGIC, ITEMSTORE_V1_MAGIC_SIZE,
                    "file-header magic")
@@ -389,6 +528,7 @@ bool save_itemstore_with_options(const char *filename, ITEM_t *root,
 
   if (itemstore_durability_requires_sync(durability)
       && !itemstore_default_context()->sync_hook(file, temp_path)) {
+    logerr("Failed to sync temporary itemstore %s.\n", temp_path);
     goto cleanup;
   }
 
@@ -405,6 +545,14 @@ bool save_itemstore_with_options(const char *filename, ITEM_t *root,
            temp_path, strerror(errno));
     goto cleanup;
   }
+  replaced = true;
+
+  if (itemstore_durability_requires_sync(durability)
+      && !directory_sync_hook(filename)) {
+    logerr("Failed to sync the containing directory after replacing itemstore "
+           "%s.\n", filename);
+    goto cleanup;
+  }
 
   success = true;
 
@@ -413,40 +561,26 @@ cleanup:
     logerr("Failed to close temporary itemstore %s during cleanup: %s\n",
            temp_path, strerror(errno));
   }
-  if (!success) {
+  if (!success && !replaced) {
     if (remove(temp_path) != 0 && errno != ENOENT) {
       logerr("Failed to remove temporary itemstore %s: %s\n", temp_path,
              strerror(errno));
     }
     logerr("Failed to save itemstore '%s'; existing data was not replaced.\n",
            filename);
+  } else if (!success) {
+    logerr("Failed to save itemstore '%s'; replacement already happened, so "
+           "the destination may contain the new data.\n", filename);
   }
   free(temp_path);
   return success;
-}
-
-void detach_loaded_item(ITEM_t *item) {
-  ITEM_t *parent = item->parent;
-  if (parent != NULL) {
-    delete_hashtable(parent->children, item->name);
-    for (size_t i = 0; i < parent->ordered_size; i++) {
-      if (parent->ordered_array[i] == item) {
-        for (size_t j = i + 1; j < parent->ordered_size; j++) {
-          parent->ordered_array[j - 1] = parent->ordered_array[j];
-        }
-        parent->ordered_size--;
-        break;
-      }
-    }
-  }
-  destroy_item(item);
 }
 
 static ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,
                                                    size_t depth) {
   ITEMSTORE_READ_CTX_t ctx = {
     .depth = depth,
-    .max_depth = ITEMSTORE_MAX_DEPTH,
+    .max_depth = ITEM_MAX_DEPTH,
     .max_children_per_item = ITEMSTORE_MAX_CHILDREN_PER_ITEM,
     .max_string_len = (uint32_t)SIN_MAX_STRING_BYTES,
     .max_bytecode_len = ITEMSTORE_MAX_BYTECODE_LEN,
@@ -465,7 +599,7 @@ static void free_unowned_item_payload(ITEM_e type, VALUE_t *value,
 
 static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
                                 ITEMSTORE_READ_CTX_t *ctx) {
-  char name[33];
+  char name[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
   uint8_t name_len;
   uint8_t item_tag;
   uint8_t value_tag;
@@ -482,9 +616,10 @@ static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
   }
 
   if (!read_u8(file, &name_len, "item name length")) return NULL;
-  if (name_len > 32) {
-    logerr("Corrupt itemstore '%s': item name length %u exceeds 32 bytes "
-           "at depth %zu.\n", ctx->filename, name_len, ctx->depth);
+  if (name_len > ITEM_MAX_LAYER_NAME_LENGTH) {
+    logerr("Corrupt itemstore '%s': item name length %u exceeds %u bytes "
+           "at depth %zu.\n", ctx->filename, name_len,
+           ITEM_MAX_LAYER_NAME_LENGTH, ctx->depth);
     return NULL;
   }
   if (!read_bytes(file, name, name_len, "item name")) return NULL;
@@ -494,7 +629,7 @@ static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
     return NULL;
   }
   name[name_len] = '\0';
-  if (parent != NULL && (name_len == 0 || !is_valid_layer(name))) {
+  if (parent != NULL && !is_valid_layer(name)) {
     logerr("Corrupt itemstore '%s': invalid item layer name '%s' at depth "
            "%zu.\n", ctx->filename, name, ctx->depth);
     return NULL;
@@ -624,15 +759,37 @@ static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
     goto fail_before_item;
   }
 
-  ITEM_t *item = make_loaded_item(name, parent, type, itemval, bytecode,
-                                  (int)bytecode_len, numchildren);
+  /* Keep payload ownership here until construction succeeds.  The
+   * constructor is allowed to clean up the placeholder payload on failure,
+   * while the loaded payload is adopted only by a fully constructed item. */
+  VALUE_t constructor_value = itemval;
+  uint8_t *constructor_bytecode = NULL;
+  if (type == ITEM_value && constructor_value.type == VALUE_str) {
+    constructor_value.s = NULL;
+  }
+  ITEM_t *item = NULL;
+  if (load_constructor_failure_hook == NULL
+      || !load_constructor_failure_hook(name)) {
+    item = make_loaded_item(name, parent, type, constructor_value,
+                            constructor_bytecode, (int)bytecode_len,
+                            numchildren);
+  }
+  if (item == NULL) goto fail_before_item;
+
+  if (type == ITEM_value) {
+    item->value = itemval;
+    itemval = (VALUE_t){VALUE_nil, {0}};
+  } else {
+    item->bytecode = bytecode;
+    bytecode = NULL;
+  }
 
   for (uint32_t i = 0; i < numchildren; i++) {
     ctx->depth++;
     ITEM_t *child = read_item_record(file, item, ctx);
     ctx->depth--;
     if (!child) {
-      detach_loaded_item(item);
+      detach_item_and_destroy(item);
       return NULL;
     }
   }

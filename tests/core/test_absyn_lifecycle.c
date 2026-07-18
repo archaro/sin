@@ -1,6 +1,8 @@
 #include <string.h>
+#include <stdlib.h>
 
 #include "compiler/absyn.h"
+#include "memory.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 
@@ -97,6 +99,59 @@ void test_absyn_malformed_float_valnode_returns_null(void) {
   AS_NODE *node = as_new_valnode(V_FLOAT, strdup("not-a-float"));
 
   ASSERT_TRUE(node == NULL);
+}
+
+void test_absyn_constructor_allocation_failures(void) {
+  char *text = strdup("owned-on-value-failure");
+  ASSERT_NOT_NULL(text);
+  alloc_test_fail_after(0);
+  ASSERT_TRUE(as_new_value(V_STR, 0, text) == NULL);
+  ASSERT_TRUE(strcmp(text, "owned-on-value-failure") == 0);
+  alloc_test_fail_after(-1);
+  free(text);
+
+  AS_NODE *lhs = t_int(1);
+  AS_NODE *rhs = t_int(2);
+  alloc_test_fail_after(0);
+  ASSERT_TRUE(as_new_node(N_ADD, lhs, rhs) == NULL);
+  alloc_test_fail_after(-1);
+  as_delete(lhs);
+  as_delete(rhs);
+
+  AS_NODE *condition = t_int(1);
+  AS_NODE *then_branch = t_stmtlist_with_one(t_int(2));
+  alloc_test_fail_after(0);
+  ASSERT_TRUE(as_new_if(condition, then_branch, NULL) == NULL);
+  alloc_test_fail_after(-1);
+  as_delete(condition);
+  as_delete(then_branch);
+}
+
+void test_absyn_valnode_string_second_allocation_failure(void) {
+  char *text = strdup("owned-by-valnode");
+  ASSERT_NOT_NULL(text);
+
+  /* as_new_value() succeeds; the following node allocation must clean text. */
+  alloc_test_fail_after(2);
+  ASSERT_TRUE(as_new_valnode(V_STR, text) == NULL);
+  alloc_test_fail_after(-1);
+}
+
+void test_absyn_stmtlist_growth_failure_preserves_statement(void) {
+  AS_NODE *list_node = as_new_stmtlist_node();
+  ASSERT_NOT_NULL(list_node);
+  for (int i = 0; i < 8; ++i) {
+    AS_NODE *stmt = t_int(i);
+    ASSERT_TRUE(as_stmtlist_append_checked(list_node, stmt));
+  }
+
+  AS_NODE *extra = t_int(8);
+  alloc_test_fail_after(1);
+  ASSERT_TRUE(!as_stmtlist_append_checked(list_node, extra));
+  alloc_test_fail_after(-1);
+  ASSERT_EQ_INT(8, ((AS_STMTLIST *)list_node->lhs)->count);
+  as_delete(extra);
+  as_delete(list_node);
 }
 
 void test_absyn_float_value_preserves_bits(void) {

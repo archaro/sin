@@ -88,7 +88,7 @@ The v1 reader and writer enforce these limits:
 | Property | Limit |
 | --- | ---: |
 | Item depth | Root is depth 0; maximum record depth is 8 |
-| Name length | 32 bytes |
+| Name length | 32 bytes per layer |
 | Children of one item | 250 |
 | String payload | 65,535 bytes (`SIN_MAX_STRING_BYTES`) |
 | Bytecode payload | 64 MiB (`64 * 1024 * 1024` bytes) |
@@ -99,25 +99,56 @@ Sibling names must be unique. The root name is also limited to 32 bytes and
 may not contain an embedded NUL, but it is not subject to the non-root character
 set restriction.
 
+The in-memory item APIs use these same limits before changing a tree. A path
+passed to `insert_item`, `insert_code_item`, `set_item`, `find_item`,
+`find_item_cached`, or `delete_item` is relative to the supplied item pointer;
+the supplied item's ancestor depth counts toward the depth limit. Its complete
+non-root path must fit within 263 bytes including separators. Invalid paths are
+rejected without creating intermediate items, changing the itemstore
+generation, or updating cache hit/miss counters.
+
 The loader aborts the entire load on any validation, allocation, truncation, or
 I/O failure. A partially constructed tree is destroyed and `load_itemstore`
 returns `NULL`.
 
+Mutations through the in-memory item APIs take effect immediately in the loaded
+tree, but are not durable until `save_itemstore` completes. Normal safe
+shutdown, including `sin --loadonly`, saves the itemstore; `sys.abort` skips that
+save. A failed save reports failure and does not claim durability. A code-item
+source copy written under `srcroot` is a separate best-effort file write and is
+not covered by the itemstore durability mode.
+
 ## Save and replacement behavior
 
-`save_itemstore` writes a temporary file beside the destination, flushes and
-closes it, and then renames it over the destination. The
-`--itemstore-durability` startup option controls synchronization:
+`save_itemstore` creates an exclusive, collision-resistant temporary file
+beside the destination, writes the v1 stream to it, flushes and closes it, and
+then renames it over the destination. A pre-existing temporary file is never
+opened with truncation or replaced. The `--itemstore-durability` startup option
+controls synchronization:
 
 - `full` is the default. On POSIX systems, it calls `fsync` on the temporary
-  file after `fflush` and before close and replacement.
-- `fast` skips `fsync`, but still flushes, closes, and renames the temporary
-  file. This can substantially reduce save latency on physical storage, but an
-  operating-system crash or power loss can lose or corrupt the latest save.
+  file after `fflush` and before close and replacement, then calls `fsync` on
+  the containing directory after the rename. This is the strongest contract
+  available from this implementation, subject to the filesystem's own crash
+  semantics; it is not a guarantee against hardware or operating-system
+  failure.
+- `fast` skips both synchronization calls, but still flushes, closes, and
+  renames the temporary file. This can substantially reduce save latency on
+  physical storage, but an operating-system crash or power loss can lose or
+  corrupt the latest save.
 
-In either mode, if serialization or a reported file operation fails, the
-temporary file is removed where possible and the existing destination is left
-in place. The function returns `true` only after replacement succeeds.
+On Windows builds, the synchronization hooks are no-ops, so `full` still
+flushes, closes, and replaces the file but does not provide POSIX-style file or
+directory `fsync` durability. Other platforms should be treated similarly
+unless their build supplies equivalent synchronization semantics.
+
+In either mode, serialization, temporary-file creation, flush, file sync,
+close, rename, or any required directory sync failure returns `false`. A
+failure before rename removes the temporary file where possible and leaves the
+existing destination in place. A directory-sync failure occurs after rename:
+the function still returns `false`, but the destination may already contain the
+new data. The function returns `true` only after replacement and all required
+durability steps succeed.
 
 ## Versioning
 

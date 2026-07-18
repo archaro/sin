@@ -20,6 +20,8 @@
 extern CONFIG_t config;
 extern uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop,
                                   ITEM_t *item);
+extern uint8_t *op_assignitem(RuntimeContext *ctx, uint8_t *nextop,
+                              ITEM_t *item);
 
 static void setup_runtime(void) {
   memset(&config, 0, sizeof(config));
@@ -568,6 +570,204 @@ void test_value_string_concat_helpers(void) {
   teardown_runtime();
 }
 
+void test_value_string_tracker_releases_through_value_free(void) {
+  size_t baseline = strbuf_tracked_count_for_tests();
+
+  for (int iteration = 0; iteration < 100; iteration++) {
+    VALUE_t left = {VALUE_str, {.s = strdup("0123456789abcdef")}};
+    VALUE_t right = {VALUE_str, {.s = strdup("x")}};
+    VALUE_t result = concat_two_strings(left, right);
+    ASSERT_EQ_INT(VALUE_str, result.type);
+    ASSERT_EQ_INT((long long)baseline + 1,
+                  (long long)strbuf_tracked_count_for_tests());
+    value_free(&result);
+    ASSERT_EQ_INT((long long)baseline,
+                  (long long)strbuf_tracked_count_for_tests());
+  }
+}
+
+void test_value_string_tracker_releases_through_stack_discard(void) {
+  size_t baseline = strbuf_tracked_count_for_tests();
+  STACK_t *stack = make_stack();
+  ASSERT_NOT_NULL(stack);
+
+  VALUE_t left = {VALUE_str, {.s = strdup("left")}};
+  VALUE_t right = {VALUE_str, {.s = strdup(" right")}};
+  VALUE_t result = concat_two_strings(left, right);
+  ASSERT_EQ_INT((long long)baseline + 1,
+                (long long)strbuf_tracked_count_for_tests());
+  push_stack(stack, result);
+  throwaway_stack(stack);
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+  destroy_stack(stack);
+}
+
+void test_value_string_tracker_forgets_before_reallocation(void) {
+  size_t baseline = strbuf_tracked_count_for_tests();
+  VALUE_t left = {VALUE_str, {.s = strdup("0123456789abcdef")}};
+  VALUE_t right = {VALUE_str, {.s = strdup("x")}};
+  VALUE_t tracked = concat_two_strings(left, right);
+  ASSERT_EQ_INT(VALUE_str, tracked.type);
+  tracked = concat_two_strings(tracked,
+                               (VALUE_t){VALUE_str, {.s = strdup("y")}});
+  ASSERT_EQ_INT(VALUE_str, tracked.type);
+
+  value_free(&tracked);
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+
+  char *unrelated = malloc(2);
+  ASSERT_NOT_NULL(unrelated);
+  unrelated[0] = 'z';
+  unrelated[1] = '\0';
+  char *suffix = malloc(20);
+  ASSERT_NOT_NULL(suffix);
+  memset(suffix, 'y', 19);
+  suffix[19] = '\0';
+  VALUE_t result = concat_two_strings((VALUE_t){VALUE_str, {.s = unrelated}},
+                                      (VALUE_t){VALUE_str, {.s = suffix}});
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_EQ_INT(20, (long long)strlen(result.s));
+  value_free(&result);
+}
+
+void test_value_plain_text_formats_nonowning(void) {
+  typedef struct {
+    VALUE_e type;
+    int64_t integer;
+    uint64_t float_bits;
+    VALUE_text_nil_policy_e nil_policy;
+    VALUE_text_result_e result;
+    const char *expected;
+  } plain_text_case_t;
+
+  const plain_text_case_t cases[] = {
+    {VALUE_int, INT64_MIN, 0, VALUE_TEXT_NIL_LITERAL, VALUE_TEXT_OK,
+     "-9223372036854775808"},
+    {VALUE_int, INT64_MAX, 0, VALUE_TEXT_NIL_LITERAL, VALUE_TEXT_OK,
+     "9223372036854775807"},
+    {VALUE_float, 0, UINT64_C(0x0000000000000000), VALUE_TEXT_NIL_LITERAL,
+     VALUE_TEXT_OK, "0.0"},
+    {VALUE_float, 0, UINT64_C(0x8000000000000000), VALUE_TEXT_NIL_LITERAL,
+     VALUE_TEXT_OK, "-0.0"},
+    {VALUE_float, 0, UINT64_C(0x7ff0000000000000), VALUE_TEXT_NIL_LITERAL,
+     VALUE_TEXT_OK, "inf"},
+    {VALUE_float, 0, UINT64_C(0xfff0000000000000), VALUE_TEXT_NIL_LITERAL,
+     VALUE_TEXT_OK, "-inf"},
+    {VALUE_float, 0, UINT64_C(0x7ff8000000000042), VALUE_TEXT_NIL_LITERAL,
+     VALUE_TEXT_OK, "nan"},
+    {VALUE_bool, 1, 0, VALUE_TEXT_NIL_LITERAL, VALUE_TEXT_OK, "true"},
+    {VALUE_bool, 0, 0, VALUE_TEXT_NIL_LITERAL, VALUE_TEXT_OK, "false"},
+    {VALUE_nil, 0, 0, VALUE_TEXT_NIL_OMIT, VALUE_TEXT_NIL, NULL},
+    {VALUE_nil, 0, 0, VALUE_TEXT_NIL_LITERAL, VALUE_TEXT_OK, "nil"},
+  };
+
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+    VALUE_t value = {.type = cases[i].type, .i = cases[i].integer};
+    if (value.type == VALUE_float) {
+      value.f = value_float_from_bits(cases[i].float_bits);
+    }
+    VALUE_t before = value;
+    char buffer[VALUE_PLAIN_TEXT_BUFFER_SIZE];
+    const char *text = NULL;
+    size_t text_length = 0;
+    VALUE_text_result_e result = value_plain_text(
+        &value, cases[i].nil_policy, buffer, sizeof(buffer), &text,
+        &text_length);
+    ASSERT_EQ_INT(cases[i].result, result);
+    ASSERT_EQ_INT(before.type, value.type);
+    ASSERT_EQ_INT(before.i, value.i);
+    if (result == VALUE_TEXT_OK) {
+      ASSERT_NOT_NULL(text);
+      ASSERT_TRUE(strcmp(text, cases[i].expected) == 0);
+      ASSERT_EQ_INT(strlen(cases[i].expected), text_length);
+    } else {
+      ASSERT_TRUE(text == NULL);
+      ASSERT_EQ_INT(0, text_length);
+    }
+  }
+
+  char *string_storage = strdup("borrowed text");
+  ASSERT_NOT_NULL(string_storage);
+  VALUE_t string_value = {VALUE_str, {.s = string_storage}};
+  char untouched[] = "unchanged";
+  const char *text = NULL;
+  size_t text_length = 0;
+  VALUE_text_result_e result = value_plain_text(
+      &string_value, VALUE_TEXT_NIL_LITERAL, untouched, sizeof(untouched),
+      &text, &text_length);
+  ASSERT_EQ_INT(VALUE_TEXT_OK, result);
+  ASSERT_TRUE(text == string_storage);
+  ASSERT_EQ_INT(strlen(string_storage), text_length);
+  ASSERT_TRUE(strcmp(untouched, "unchanged") == 0);
+  ASSERT_TRUE(string_value.s == string_storage);
+  ASSERT_TRUE(strcmp(string_value.s, "borrowed text") == 0);
+  value_free(&string_value);
+
+  VALUE_t null_string = {VALUE_str, {.s = NULL}};
+  result = value_plain_text(&null_string, VALUE_TEXT_NIL_LITERAL, NULL, 0,
+                            &text, &text_length);
+  ASSERT_EQ_INT(VALUE_TEXT_OK, result);
+  ASSERT_TRUE(text != NULL && text[0] == '\0');
+  ASSERT_EQ_INT(0, text_length);
+
+  const plain_text_case_t undersized[] = {
+    {VALUE_int, 42, 0, VALUE_TEXT_NIL_LITERAL, VALUE_TEXT_BUFFER_TOO_SMALL,
+     NULL},
+    {VALUE_float, 0, UINT64_C(0x3ff8000000000000), VALUE_TEXT_NIL_LITERAL,
+     VALUE_TEXT_BUFFER_TOO_SMALL, NULL},
+    {VALUE_bool, 1, 0, VALUE_TEXT_NIL_LITERAL, VALUE_TEXT_BUFFER_TOO_SMALL,
+     NULL},
+    {VALUE_nil, 0, 0, VALUE_TEXT_NIL_LITERAL, VALUE_TEXT_BUFFER_TOO_SMALL,
+     NULL},
+  };
+  for (size_t i = 0; i < sizeof(undersized) / sizeof(undersized[0]); i++) {
+    VALUE_t value = {.type = undersized[i].type, .i = undersized[i].integer};
+    if (value.type == VALUE_float) value.f = value_float_from_bits(undersized[i].float_bits);
+    char buffer[1] = {'x'};
+    result = value_plain_text(&value, undersized[i].nil_policy, buffer,
+                              sizeof(buffer), &text, &text_length);
+    ASSERT_EQ_INT(VALUE_TEXT_BUFFER_TOO_SMALL, result);
+    ASSERT_TRUE(text == NULL);
+    ASSERT_EQ_INT(0, text_length);
+    ASSERT_EQ_INT('x', buffer[0]);
+  }
+
+  VALUE_t unknown = {.type = (VALUE_e)99, .i = 7};
+  char buffer[VALUE_PLAIN_TEXT_BUFFER_SIZE];
+  result = value_plain_text(&unknown, VALUE_TEXT_NIL_LITERAL, buffer,
+                            sizeof(buffer), &text, &text_length);
+  ASSERT_EQ_INT(VALUE_TEXT_UNKNOWN_TYPE, result);
+  ASSERT_TRUE(text == NULL);
+  ASSERT_EQ_INT(0, text_length);
+  result = value_plain_text(NULL, VALUE_TEXT_NIL_LITERAL, buffer,
+                            sizeof(buffer), &text, &text_length);
+  ASSERT_EQ_INT(VALUE_TEXT_FORMAT_ERROR, result);
+}
+
+void test_value_string_tracker_itemname_cleanup(void) {
+  setup_runtime();
+  size_t baseline = strbuf_tracked_count_for_tests();
+  VALUE_t name_left = {VALUE_str, {.s = strdup("tracked")}};
+  VALUE_t name_right = {VALUE_str, {.s = strdup(".item")}};
+  VALUE_t itemname = concat_two_strings(name_left, name_right);
+  ASSERT_EQ_INT(VALUE_str, itemname.type);
+  push_stack(config.vm->stack, itemname);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 7}});
+
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = config.itemroot;
+  op_assignitem(&ctx, NULL, config.itemroot);
+  ASSERT_NOT_NULL(find_item(config.itemroot, "tracked.item"));
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+  teardown_runtime();
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+}
+
 void test_value_string_concat_enforces_string_limit(void) {
   char *left_s = malloc(SIN_MAX_STRING_BYTES + 1);
   ASSERT_NOT_NULL(left_s);
@@ -599,6 +799,7 @@ void test_value_string_boundaries_enforce_string_limit(void) {
   VALUE_t stored = {VALUE_str, {.s = too_long}};
   ASSERT_TRUE(insert_item(config.itemroot, "oversized.value", stored) == NULL);
   ASSERT_TRUE(find_item(config.itemroot, "oversized.value") == NULL);
+  value_free(&stored);
   teardown_runtime();
 }
 

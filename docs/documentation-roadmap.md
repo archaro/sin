@@ -1,9 +1,10 @@
 # Documentation Improvement Roadmap
 
-This roadmap proposes follow-up documentation tasks for making Sinistra easier to
-learn now, while leaving space for a formal language reference once the language
-has stabilised. It focuses on documentation structure, source-of-truth ownership,
-and reviewable increments rather than prematurely freezing syntax or semantics.
+This roadmap lists remaining documentation work for making Sinistra easier to
+learn while leaving space for a formal language reference once the language has
+stabilised. The documentation index, tools reference, and source-of-truth
+maintenance guidance are already present; the items below are follow-up work,
+not descriptions of missing current documentation.
 
 ## Near-term tasks
 
@@ -28,24 +29,12 @@ runtime behaviour they demonstrate. Start with the existing echo and chat server
 examples, then add small single-purpose examples for language features as they
 stabilise.
 
-### Document command-line tools consistently
-
-Add a tools reference for `sin`, `scomp`, and `sdiss`. For each tool, document
-its purpose, expected inputs and outputs, common flags, generated files, and how
-it fits into the quickstart workflow.
-
 ### Add a diagnostics and troubleshooting page
 
 Document common compiler and runtime failure modes, including how `error` and
 `error.msg` are set, where log output appears, how invalid libcall arguments are
 reported, and how to reset generated itemstore/source-root state during local
 experiments.
-
-### Add documentation maintenance notes
-
-Extend contributor guidance with a small documentation checklist. The checklist
-should identify which documents must be considered when changing syntax,
-semantics, libcalls, bytecode encoding, examples, tests, or command-line flags.
 
 ## Medium-term tasks
 
@@ -99,10 +88,9 @@ manual drift without requiring every document to be generated.
 If Sinistra starts preserving compatibility across releases, add versioned notes
 for syntax, bytecode, library calls, and itemstore/runtime behaviour.
 
-## Suggested first documentation issues
+## Suggested next issues
 
-1. Link `docs/README.md` from `README.md`.
-2. Split `docs/concepts.md` into focused concept pages without changing content
+1. Split `docs/concepts.md` into focused concept pages without changing content
    semantics.
-3. Add a troubleshooting page for diagnostics, logs, and generated state.
-4. Add a provisional language-reference skeleton with stability notes.
+2. Add a troubleshooting page for diagnostics, logs, and generated state.
+3. Add a provisional language-reference skeleton with stability notes.

@@ -47,13 +47,23 @@ struct AS_IF_s {
 };
 typedef struct AS_IF_s AS_IF;
 
+/*
+ * as_new_value() borrows sval on failure and takes ownership on success.
+ * as_new_valnode() always consumes sval, including when construction fails.
+ */
 AS_VALUE *as_new_value(ENUM_VALUE valtype, uint64_t ival, char *sval);
 AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval);
 AS_NODE *as_new_intnode(int64_t value);
 AS_STMTLIST *as_new_stmtlist(void);
 AS_NODE *as_new_stmtlist_node(void);
+/* On failure, the convenience append consumes stmt because it cannot report it. */
 AS_NODE *as_stmtlist_append(AS_NODE *stmtlist_node, AS_NODE *stmt);
+/* The checked append does not consume stmt when it returns false. */
 bool as_stmtlist_append_checked(AS_NODE *stmtlist_node, AS_NODE *stmt);
+/*
+ * as_new_node() and as_new_if() leave pointer inputs untouched when
+ * allocation fails. The successful result owns those inputs.
+ */
 AS_NODE *as_new_node(ENUM_NODE nodetype, void *lhs, void *rhs);
 AS_IF *as_new_if(AS_NODE *condition, AS_NODE *then, AS_IF *elsif);
 void as_delete(AS_NODE *root);

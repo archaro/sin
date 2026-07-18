@@ -19,6 +19,12 @@ void itemstore_bump_generation(void) {
   itemstore_default_context()->generation++;
 }
 
+void itemstore_invalidate_cache(void) {
+  ITEMSTORE_CONTEXT_t *ctx = itemstore_default_context();
+  ctx->generation++;
+  memset(ctx->fetchitem_cache, 0, sizeof(ctx->fetchitem_cache));
+}
+
 uint64_t get_itemstore_generation(void) {
   return itemstore_default_context()->generation;
 }
@@ -29,6 +35,13 @@ static uint32_t fetchitem_cache_hash(const char *key) {
 
 ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
   ITEMSTORE_CONTEXT_t *ctx = itemstore_default_context();
+  if (found) *found = false;
+  if (!validate_item_name_relative(root, item_name, "find_item_cached")) {
+    return NULL;
+  }
+
+  size_t item_name_len = strlen(item_name);
+
   uint32_t index =
       fetchitem_cache_hash(item_name) & (FETCHITEM_CACHE_SIZE - 1u);
   FETCHITEM_CACHE_ENTRY_t *entry = &ctx->fetchitem_cache[index];
@@ -45,14 +58,13 @@ ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
   }
 
   ctx->fetchitem_cache_misses++;
-  ITEM_t *item = find_item(root, item_name);
+  ITEM_t *item = find_item_unchecked(root, item_name);
   entry->valid = true;
   entry->generation = ctx->generation;
   entry->root = root;
   entry->item = item;
   entry->found = (item != NULL);
-  strncpy(entry->key, item_name, MAX_ITEM_NAME - 1);
-  entry->key[MAX_ITEM_NAME - 1] = '\0';
+  memcpy(entry->key, item_name, item_name_len + 1);
   if (found) *found = entry->found;
   logverbose("itemcache miss: %s (hits=%llu misses=%llu)\n", item_name,
              (unsigned long long)ctx->fetchitem_cache_hits,
@@ -60,20 +72,16 @@ ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
   return item;
 }
 
-ITEM_t *find_item(ITEM_t *root, const char *item_name) {
-  // Function to dereference an item by a multi-layer item.
-  if (!validate_item_name(item_name, "find_item")) {
-    return NULL;
-  }
+ITEM_t *find_item_unchecked(ITEM_t *root, const char *item_name) {
   ITEM_t *current_item = root;
   const char *current_pos = item_name;
-  char layer[33]; // 32 characters + 1 for null-terminator
+  char layer[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
 
   while (current_item != NULL && *current_pos != '\0') {
     // Find the length of the next layer of the item
     const char *next_dot = strchr(current_pos, '.');
     size_t layer_len = (next_dot != NULL) ? (size_t)(next_dot - current_pos) : strlen(current_pos);
-    // Since the constraints guarantee that layer_len will be <= 32,
+    // Since validation guarantees that layer_len fits the layer buffer,
     // we don't need to check for overflow
     memcpy(layer, current_pos, layer_len);
     layer[layer_len] = '\0'; // Null-terminate the layer string
@@ -87,4 +95,12 @@ ITEM_t *find_item(ITEM_t *root, const char *item_name) {
     current_pos = next_dot + 1;
   }
   return current_item;
+}
+
+ITEM_t *find_item(ITEM_t *root, const char *item_name) {
+  // Function to dereference an item by a multi-layer item.
+  if (!validate_item_name_relative(root, item_name, "find_item")) {
+    return NULL;
+  }
+  return find_item_unchecked(root, item_name);
 }

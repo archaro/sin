@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <inttypes.h>
 #include <string.h>
 
 #include "floatconv.h"
@@ -13,7 +14,8 @@
 void execute_task_cb(uv_timer_t *req) {
   // This callback is for executing tasks when they are due.
   TASK_t *task = req->data;
-  logverbose("Executing task %s (id: %d)\n", task->itemname, task->id);
+  logverbose("Executing task %s (id: %" PRIu64 ")\n", task->itemname,
+             task->id);
   // Each task runs in its own VM (which may not be necessary, but
   // we will keep it up for now).
   RuntimeContext *task_ctx = &task->runtime_context;
@@ -45,6 +47,9 @@ void execute_task_cb(uv_timer_t *req) {
     }
   } else {
     logerr("Cannot execute %s - not a code item.\n", task->itemname);
+  }
+  if (task->interval == 0) {
+    (void)request_task_close(task);
   }
 }
 
@@ -115,7 +120,10 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   newtask->runtime_context = *ctx;
   newtask->runtime_context.libcalls = NULL;
   newtask->runtime_context.initialized = false;
-  (void)runtime_init(&newtask->runtime_context, newtask->vm);
+  if (!runtime_init(&newtask->runtime_context, newtask->vm)) {
+    return lc_task_timer_setup_failed(ctx, nextop, newtask, &itemname,
+                                      "task.newgametask failed to initialize runtime");
+  }
   newtask->runtime_context.itemroot = newtask->itemroot;
   newtask->runtime_context.loop = newtask->loop;
   // Now add the task to the game loop starting at the correct interval
@@ -123,19 +131,12 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
     return lc_task_timer_setup_failed(ctx, nextop, newtask, &itemname,
                                       "task.newgametask requires an active event loop");
   }
-  int timer_rc = uv_timer_init(ctx->loop, newtask->timer);
-  if (timer_rc != 0) {
+  if (!start_task_timer(newtask, ctx->loop, execute_task_cb, start_ms)) {
+    const char *detail = newtask->state == TASK_ALLOCATED
+        ? "task.newgametask failed to initialize timer"
+        : "task.newgametask failed to start timer";
     return lc_task_timer_setup_failed(ctx, nextop, newtask, &itemname,
-                                      "task.newgametask failed to initialize timer");
-  }
-  // The handle needs to be able to access its task
-  newtask->timer->data = newtask;
-  // Off we go!
-  timer_rc = uv_timer_start(newtask->timer, execute_task_cb, start_ms, repeat_ms);
-  if (timer_rc != 0) {
-    uv_timer_stop(newtask->timer);
-    return lc_task_timer_setup_failed(ctx, nextop, newtask, &itemname,
-                                      "task.newgametask failed to start timer");
+                                      detail);
   }
   // Success path: this is the only free on this path (the !taskitem branch returns).
   FREE_STR(itemname);
@@ -169,8 +170,8 @@ uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     push_stack(ctx->vm->stack, VALUE_FALSE);
   } else {
     // Yes, so kill this task.
-    uv_close((uv_handle_t *)task->timer, NULL);
-    push_stack(ctx->vm->stack, VALUE_TRUE);
+    push_stack(ctx->vm->stack,
+               request_task_close(task) ? VALUE_TRUE : VALUE_FALSE);
   }
   return nextop;
 }

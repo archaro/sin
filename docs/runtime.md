@@ -15,6 +15,13 @@ runtime decoder, current item pointer, pending call item pointer, opcode table,
 and interpreter-initialization flag. The bytecode and items referenced by that
 bookkeeping remain owned by the itemstore or by the caller that supplied them.
 
+The runtime input item is scheduled by `sin` with a repeating libuv timer at a
+nominal 10ms cadence. Timer eligibility is not a real-time guarantee: other
+callbacks or a long-running input item can delay the next invocation. The input
+item executes on the event-loop thread, and `net.input` processes at most one
+fair-queue network event per invocation. The timer is stopped and closed by the
+centralized startup cleanup path on both partial startup failure and shutdown.
+
 `interpret(ctx, item)` returns a `VALUE_t` by value. The caller owns that returned
 value and must free any string payload in it when the value is no longer needed.
 The interpreter borrows and mutates `ctx->vm`: it uses the existing VM stack and

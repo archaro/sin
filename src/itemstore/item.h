@@ -16,10 +16,14 @@
 #include "value.h"
 #include "compiler/compdiag.h"
 
-// Items are up to 8 layers deep, and each layer name is a maximum of
-// 32 characters.  There is a dot separating each layer name (7 in total)
-// and a terminating null.  So the maximum size is (32 * 8) + 7 + 1.
-#define MAX_ITEM_NAME 264
+// Item names follow the v1 itemstore contract.  The root is depth 0; public
+// item paths contain at most eight non-root layers.  MAX_ITEM_NAME includes
+// the terminating NUL, while ITEM_MAX_FULL_NAME_LENGTH does not.
+#define ITEM_MAX_LAYER_NAME_LENGTH 32u
+#define ITEM_MAX_DEPTH 8u
+#define ITEM_MAX_FULL_NAME_LENGTH \
+  (ITEM_MAX_LAYER_NAME_LENGTH * ITEM_MAX_DEPTH + (ITEM_MAX_DEPTH - 1u))
+#define MAX_ITEM_NAME (ITEM_MAX_FULL_NAME_LENGTH + 1u)
 
 // Item children are also stored in an indexable array for iteration
 // performance.  This value controls the size of that array.
@@ -39,7 +43,7 @@ typedef bool (*ITEMSTORE_SYNC_HOOK_t)(FILE *file, const char *path);
 struct Item {
   ITEM_e type;           // 4 bytes
   uint32_t bytecode_len; // 4 bytes
-  char name[33];         // 33 bytes (32 characters + null terminator)
+  char name[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
   bool inuse;            // Set when an item is being executed.
   uint8_t pad[7];        // 6 bytes of padding for 8-byte alignment
   ITEM_t *parent;        // 8 bytes - Pointer to the parent item
@@ -67,22 +71,32 @@ void destroy_item(ITEM_t *item);
 // insert_item creates or replaces a value item. On success, the itemstore takes
 // ownership of value, including any VALUE_str payload; callers must not free the
 // string after transfer. Existing value payloads or code bytecode are freed
-// before replacement. If validation fails or replacement is rejected before the
-// value is stored, the caller retains ownership of value.
+// before replacement. If validation, input-limit checks, or replacement fails
+// before the value is stored, the caller retains ownership of value. An
+// incompatible alias of an existing item payload is rejected without mutation;
+// that pointer is already owned by the item and must not be freed by the caller.
 ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value);
 // insert_code_item creates or replaces a code item. On success, the itemstore
 // takes ownership of bytecode and frees any previous code bytecode/value payload.
-// If validation fails, the target item is in use, or installation does not reach
-// the final item, the caller retains ownership of bytecode.
+// If validation or replacement fails before bytecode is stored, the caller
+// retains ownership of bytecode. An incompatible alias of an existing value
+// payload is rejected without mutation; that pointer is already item-owned.
 ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
                                                         uint8_t *bytecode);
 ITEM_t *find_item(ITEM_t *root, const char *item_name);
+// Cached lookup validates item_name before touching the cache. Invalid names
+// return NULL, set found to false when supplied, and do not affect cache
+// counters. Valid lookups cache both found and not-found results; cached item
+// pointers are borrowed and valid only for the current itemstore generation.
 ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found);
 ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index);
 void delete_item(ITEM_t *root, const char *item_name);
 // set_item creates or replaces a value item. The itemstore takes ownership of
 // value, including any VALUE_str payload, whether updating an existing item or
-// inserting a new one. If validation fails, the caller retains ownership.
+// inserting a new one. set_item always consumes value, including when
+// validation, input-limit checks, replacement, or path creation fails. The
+// exception is an incompatible alias of an existing code payload: it is
+// rejected without mutation because the pointer is already item-owned.
 void set_item(ITEM_t *root, const char *item_name, VALUE_t value);
 void get_itemname(ITEM_t *item, char *itemname);
 // Returns a newly allocated source filename string owned by the caller; free it

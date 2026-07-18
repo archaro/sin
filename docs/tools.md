@@ -6,8 +6,8 @@ This page documents the command-line tools built by the top-level `Makefile`:
 ## `scomp`
 
 `scomp` compiles Sinistra source text to Sinistra bytecode/object data. It is
-the tool to use when turning a `.sin` source file into an object file that can be
-loaded by `sin` or inspected by `sdiss`.
+the tool to use when turning a source file such as an `.src` example into an
+object file that can be loaded by `sin` or inspected by `sdiss`.
 
 Usage:
 
@@ -78,11 +78,11 @@ Options:
 | `-h`, `--help` | Print help and exit successfully. |
 | `--version` | Print the runtime version and exit successfully. |
 | `-i <file>`, `--itemstore <file>` | Load the itemstore from `<file>`. If the file does not exist, a new itemstore is created and saved under that name. If omitted, `items.dat` is used. Existing itemstores that fail to load are not replaced. |
-| `-d <mode>`, `--itemstore-durability <mode>` | Select itemstore replacement durability. `full` is the default and synchronizes itemstore data before replacement. `fast` skips that synchronization but still flushes, closes, and renames the temporary file. |
+| `-d <mode>`, `--itemstore-durability <mode>` | Select itemstore replacement durability. `full` is the default and synchronizes the temporary file and containing directory where the platform supports those operations. `fast` skips synchronization but still flushes, closes, and renames the temporary file. |
 | `-l[<file>]`, `--log[=<file>]` | Redirect log output. If no filename is supplied, `sin` is used. The runtime writes `<file>.log` for standard output messages and `<file>.err` for error output. For the short form, a following non-option argument is also accepted as the log basename. |
 | `-n <item>`, `--input <item>` | Use `<item>` as the input-handler code item instead of `input`. This option must appear after `-i`/`--itemstore`, and the named item must already exist as a code item. The runtime derives `<item>.line` and `<item>.text` for network input details. |
 | `-o <file>`, `--object <file>` | Read the compiled bootstrap object from `<file>`. This option is required. |
-| `-p <port>`, `--port <port>` | Listen for network connections on `<port>`. The default is the build-time listener port from `src/config.h`. Ports must be non-negative. |
+| `-p <port>`, `--port <port>` | Listen for network connections on `<port>`. The option requires an argument in both forms; `--port=<port>` is also accepted. The value must be decimal digits only and fit `0` through `65535`; signs, empty values, junk, overflow, and out-of-range values are rejected. Port `0` is accepted and asks the kernel to choose an ephemeral port. The default is the build-time listener port from `src/config.h`. |
 | `-s <dir>`, `--srcroot <dir>` | Use `<dir>` as the source root for saved source files. If omitted, `srcroot` in the current directory is used and created when missing. If supplied, the directory must already exist and be writable. |
 | `--strict-validation` | Verify bytecode before runtime execution and while loading itemstores. |
 | `--strict-runtime-contracts` | Report runtime argument contract mismatches that normal live-update operation intentionally tolerates, such as discarded item-call arguments while callers and callees are being updated. Stack effects and return values stay the same, but the extra checks add runtime overhead. |
@@ -99,3 +99,18 @@ runtime repair/coercion details are shown only with `--verbose`.
 When `sin` shuts down safely, it saves the itemstore using the selected
 durability mode. `sys.abort` marks shutdown as unsafe, causing the runtime to
 exit without the normal itemstore save.
+
+`--help` and `--version` print their output and exit successfully even when
+options before them have already loaded an itemstore or redirected logging.
+These early exits release startup resources without persisting the itemstore.
+
+Invalid or missing `--port`/`-p` arguments, and any required listener address,
+bind, or listen failure such as an occupied port, exit nonzero before the main
+libuv loop runs. The listener binds an IPv6 wildcard and an IPv4 wildcard on
+the same selected port so IPv4 localhost remains available when the IPv6
+wildcard is IPv6-only; when IPv6 is unavailable it falls back to the IPv4
+wildcard. With port `0`, the IPv4 bind selects the ephemeral port and the
+IPv6 listener attempts to use that same port. If optional IPv6 setup fails in
+the port-`0` path, `sin` reports the fallback and continues IPv4-only.
+Startup failures unwind initialized handles, tasks, runtime contexts, VMs,
+network line state, the loop, itemstore tree, and configuration strings.

@@ -26,7 +26,7 @@ static strbuf_meta_t *strbuf_find(char *ptr) {
   return NULL;
 }
 
-void strbuf_forget(char *ptr) {
+static void strbuf_forget(char *ptr) {
   strbuf_meta_t **scan = &strbuf_head;
   while (*scan) {
     if ((*scan)->ptr == ptr) {
@@ -39,7 +39,7 @@ void strbuf_forget(char *ptr) {
   }
 }
 
-void strbuf_track(char *ptr, size_t cap) {
+static void strbuf_track(char *ptr, size_t cap) {
   strbuf_meta_t *meta = strbuf_find(ptr);
   if (!meta) {
     meta = malloc(sizeof(strbuf_meta_t));
@@ -51,21 +51,18 @@ void strbuf_track(char *ptr, size_t cap) {
   meta->cap = cap;
 }
 
+size_t strbuf_tracked_count_for_tests(void) {
+  size_t count = 0;
+  for (strbuf_meta_t *meta = strbuf_head; meta; meta = meta->next) {
+    count++;
+  }
+  return count;
+}
+
 void free_runtime_string(char *s) {
   if (!s) return;
   strbuf_forget(s);
   free(s);
-}
-
-void value_free_runtime(VALUE_t *value) {
-  if (!value) return;
-  if (value->type == VALUE_str) {
-    free_runtime_string(value->s);
-    value->type = VALUE_nil;
-    value->i = 0;
-  } else {
-    value_free(value);
-  }
 }
 
 static size_t strbuf_growth_capacity(size_t needed) {
@@ -95,8 +92,7 @@ VALUE_t concat_two_strings(VALUE_t left, VALUE_t right) {
     out = left.s;
     memcpy(out + left_len, right.s, right_len + 1);
     out_cap = left_meta->cap;
-    strbuf_forget(right.s);
-    free(right.s);
+    free_runtime_string(right.s);
   } else {
     if (left_meta) {
       out_cap = strbuf_growth_capacity(needed);

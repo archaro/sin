@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <setjmp.h>
 #include <errno.h>
+#include <ctype.h>
 #include <uv.h>
 
 #include "version.h"
@@ -27,14 +28,26 @@
 #include "item.h"
 #include "stack.h"
 #include "interpret.h"
+#include "runtime_value.h"
 
-// Error handling
-jmp_buf recovery;
+// Error handling.  The handler only transfers control to a target that has
+// already been established by sigsetjmp(); all diagnostics and cleanup stay
+// on the normal execution path.
+typedef enum SinRecoveryTarget {
+  SIN_RECOVERY_NONE,
+  SIN_RECOVERY_BOOT,
+  SIN_RECOVERY_RUNTIME
+} SinRecoveryTarget;
+
+static sigjmp_buf boot_recovery;
+static sigjmp_buf runtime_recovery;
+static volatile sig_atomic_t recovery_target;
+static volatile sig_atomic_t recovery_pending;
 
 // The configuration object - for passing interesting data around globally.
 CONFIG_t config;
 
-static void runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
+static bool runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
   runtime_context_init(ctx, vm);
   ctx->itemroot = config.itemroot;
   ctx->loop = config.loop;
@@ -55,7 +68,9 @@ static void runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
   ctx->network.inputtext_name = config.inputtext;
   ctx->strict_validation = config.strict_validation;
   ctx->strict_runtime_contracts = config.strict_runtime_contracts;
-  (void)runtime_init(ctx, vm);
+  if (runtime_init(ctx, vm)) return true;
+  runtime_destroy(ctx);
+  return false;
 }
 
 void close_all_tasks(uv_handle_t* handle, void* arg) {
@@ -66,11 +81,14 @@ void close_all_tasks(uv_handle_t* handle, void* arg) {
 }
 
 void handle_sigusr1(int sig) {
-  // SIGUSR1 is raised in various places, and should cause the interpret()
-  // function to terminate.
   (void)sig;
-  logerr(errmsg[ERR_RUNTIME_SIGUSR1]);
-  longjmp(recovery, ERR_RUNTIME_SIGUSR1);
+  if (recovery_target == SIN_RECOVERY_BOOT) {
+    siglongjmp(boot_recovery, ERR_RUNTIME_SIGUSR1);
+  }
+  if (recovery_target == SIN_RECOVERY_RUNTIME) {
+    siglongjmp(runtime_recovery, ERR_RUNTIME_SIGUSR1);
+  }
+  recovery_pending = 1;
 }
 
 static void usage(void) {
@@ -146,10 +164,36 @@ static bool flag_requested(int argc, char **argv, const char *flag) {
 
 typedef struct SinStartupOptions {
   size_t filesize;
-  int listener_port;
+  uint16_t listener_port;
   uint8_t *bytecode;
   bool loadonly;
 } SinStartupOptions;
+
+// One net.input event is processed per callback. This interval keeps queued
+// events responsive without keeping the loop in an always-active idle phase.
+#define INPUT_SCHEDULER_INTERVAL_MS 10u
+
+typedef struct SinStartupState {
+  bool loop_initialized;
+  bool tasks_initialized;
+  bool input_context_initialized;
+  bool input_vm_initialized;
+  bool input_task_initialized;
+  bool input_task_started;
+  bool networking_initialized;
+  bool log_redirected;
+  bool loop_storage_retained;
+  NetworkRuntimeDeps network_deps;
+  uv_tcp_t listener;
+  uv_tcp_t listener_ipv4;
+  uv_timer_t input_task;
+  RuntimeContext input_ctx;
+  bool boot_context_initialized;
+  bool boot_vm_initialized;
+  bool boot_completed;
+  RuntimeContext boot_ctx;
+  ITEM_t *boot_item;
+} SinStartupState;
 
 static char *make_input_alias(const char *input, const char *suffix) {
   size_t name_len = 0;
@@ -185,6 +229,7 @@ static bool set_config_input_name(const char *input_name) {
 }
 
 static int init_default_config(int argc, char **argv, SinStartupOptions *startup) {
+  memset(&config, 0, sizeof(config));
   startup->filesize = 0;
   startup->listener_port = LISTENER_PORT;
   startup->bytecode = NULL;
@@ -213,7 +258,7 @@ static int init_default_config(int argc, char **argv, SinStartupOptions *startup
   return EXIT_SUCCESS;
 }
 
-static void init_signal_handler(void) {
+static bool init_signal_handler(void) {
   init_errmsg();
   struct sigaction act;
   act.sa_handler = handle_sigusr1;
@@ -221,11 +266,39 @@ static void init_signal_handler(void) {
   act.sa_flags = 0;
   if (sigaction(SIGUSR1, &act, NULL) < 0) {
     logerr("Unable to install signal handler.\n");
-    exit(EXIT_FAILURE);
+    return false;
   }
+  return true;
 }
 
-static int parse_sin_options(int argc, char **argv, SinStartupOptions *startup) {
+static bool parse_listener_port(const char *text, uint16_t *port) {
+  if (!text || !*text || !port || text[0] == '+' || text[0] == '-') {
+    return false;
+  }
+  for (const unsigned char *p = (const unsigned char *)text; *p; p++) {
+    if (!isdigit(*p)) return false;
+  }
+
+  errno = 0;
+  char *end = NULL;
+  unsigned long parsed = strtoul(text, &end, 10);
+  if (errno == ERANGE || end == text || *end != '\0' ||
+      parsed > UINT16_MAX) {
+    return false;
+  }
+  *port = (uint16_t)parsed;
+  return true;
+}
+
+typedef enum SinParseResult {
+  SIN_PARSE_OK = 0,
+  SIN_PARSE_FAILURE = 1,
+  SIN_PARSE_EXIT_SUCCESS = 2
+} SinParseResult;
+
+static SinParseResult parse_sin_options(int argc, char **argv,
+                                        SinStartupOptions *startup,
+                                        SinStartupState *state) {
   int opt;
   enum { OPT_STRICT_VALIDATION = 1000, OPT_STRICT_RUNTIME_CONTRACTS = 1001,
          OPT_VERSION = 1002, OPT_LOADONLY = 1003 };
@@ -239,7 +312,7 @@ static int parse_sin_options(int argc, char **argv, SinStartupOptions *startup) 
     {"log", optional_argument, 0, 'l'},
     {"input", required_argument, 0, 'n'},
     {"object", required_argument, 0, 'o'},
-    {"port", optional_argument, 0, 'p'},
+    {"port", required_argument, 0, 'p'},
     {"srcroot", required_argument, 0, 's'},
     {"strict-validation", no_argument, 0, OPT_STRICT_VALIDATION},
     {"strict-runtime-contracts", no_argument, 0, OPT_STRICT_RUNTIME_CONTRACTS},
@@ -264,19 +337,28 @@ static int parse_sin_options(int argc, char **argv, SinStartupOptions *startup) 
           return EXIT_FAILURE;
         }
         break;
-      case 'h': usage(); exit(EXIT_SUCCESS);
+      case 'h':
+        usage();
+        return SIN_PARSE_EXIT_SUCCESS;
       case OPT_VERSION:
         printf("sin %s\n", SINVERSION);
-        exit(EXIT_SUCCESS);
+        return SIN_PARSE_EXIT_SUCCESS;
       case 'i':
+        destroy_item(config.itemroot);
+        config.itemroot = NULL;
         free(config.itemstore);
         config.itemstore = strdup(optarg);
+        if (!config.itemstore) {
+          logerr("Unable to allocate itemstore filename.\n");
+          return EXIT_FAILURE;
+        }
         config.itemroot = load_or_create_itemstore_with_options(config.itemstore,
             config.strict_validation);
         if (!config.itemroot) return EXIT_FAILURE;
         break;
       case 'l':
         if (optarg == NULL && optind < argc && argv[optind][0] != '-') optarg = argv[optind++];
+        state->log_redirected = true;
         log_to_file(optarg != NULL ? optarg : "sin");
         break;
       case 'n': {
@@ -315,8 +397,21 @@ static int parse_sin_options(int argc, char **argv, SinStartupOptions *startup) 
         logmsg("Bytecode loaded: %zu bytes from %s.\n", startup->filesize, optarg);
         break;
       }
-      case 'p': startup->listener_port = atoi(optarg); break;
-      case 's': free(config.srcroot); config.srcroot = strdup(optarg); break;
+      case 'p':
+        if (!parse_listener_port(optarg, &startup->listener_port)) {
+          logerr("Invalid listener port '%s'; expected an integer from 0 to 65535.\n",
+                 optarg ? optarg : "");
+          return EXIT_FAILURE;
+        }
+        break;
+      case 's':
+        free(config.srcroot);
+        config.srcroot = strdup(optarg);
+        if (!config.srcroot) {
+          logerr("Unable to allocate source root name.\n");
+          return EXIT_FAILURE;
+        }
+        break;
       case OPT_STRICT_VALIDATION: config.strict_validation = true; break;
       case OPT_STRICT_RUNTIME_CONTRACTS: config.strict_runtime_contracts = true; break;
       default:
@@ -328,12 +423,16 @@ static int parse_sin_options(int argc, char **argv, SinStartupOptions *startup) 
     usage_error("unexpected positional arguments");
     return EXIT_FAILURE;
   }
-  return EXIT_SUCCESS;
+  return SIN_PARSE_OK;
 }
 
 static int ensure_source_root(void) {
   if (!config.srcroot) {
     config.srcroot = strdup("srcroot");
+    if (!config.srcroot) {
+      logerr("Unable to allocate source root name.\n");
+      return EXIT_FAILURE;
+    }
     struct stat s;
     int err = stat(config.srcroot, &s);
     if (err == -1) {
@@ -364,6 +463,10 @@ static int ensure_source_root(void) {
 static int ensure_itemstore(void) {
   if (!config.itemroot) {
     config.itemstore = strdup("items.dat");
+    if (!config.itemstore) {
+      logerr("Unable to allocate itemstore filename.\n");
+      return EXIT_FAILURE;
+    }
     config.itemroot = load_or_create_itemstore_with_options(config.itemstore,
             config.strict_validation);
     if (!config.itemroot) return EXIT_FAILURE;
@@ -376,7 +479,7 @@ static void log_interpreter_return(VALUE_t ret) {
     logverbose("Bytecode interpreter returned: %ld\n", ret.i);
   } else if (ret.type == VALUE_str) {
     logverbose("Bytecode interpreter returned: %s\n", ret.s);
-    free(ret.s);
+    free_runtime_string(ret.s);
   } else if (ret.type == VALUE_float) {
     char fbuffer[64];
     if (sin_format_binary64_buf(ret.f, fbuffer, sizeof(fbuffer))) {
@@ -393,130 +496,302 @@ static void log_interpreter_return(VALUE_t ret) {
   }
 }
 
-static int run_boot_item(const SinStartupOptions *startup) {
-  config.vm = make_vm();
-  RuntimeContext boot_ctx;
-  if (ensure_itemstore() != EXIT_SUCCESS) return EXIT_FAILURE;
-
-  ITEM_t *boot = make_root_item("boot");
-  boot->type = ITEM_code;
-  boot->bytecode = startup->bytecode;
-  boot->bytecode_len = (uint32_t)startup->filesize;
-
-  config.loop = malloc(sizeof *config.loop);
-  uv_loop_init(config.loop);
-  runtime_context_from_config(&boot_ctx, config.vm);
-  if (!boot_ctx.initialized) return EXIT_FAILURE;
-
-  if (setjmp(recovery) == 0) {
-    logverbose("Setting up error handler.\n");
-  } else {
-    logerr("SIGUSR1 received.  Restarting boot item.\n");
-    logerr("Destroying and recreating all stacks.\n");
-    destroy_vm(config.vm);
-    config.vm = make_vm();
-    runtime_context_from_config(&boot_ctx, config.vm);
+static void deliver_pending_recovery(void) {
+  if (!recovery_pending) return;
+  recovery_pending = 0;
+  if (recovery_target == SIN_RECOVERY_BOOT) {
+    siglongjmp(boot_recovery, ERR_RUNTIME_SIGUSR1);
   }
-
-  log_interpreter_return(interpret(&boot_ctx, boot));
-  runtime_destroy(&boot_ctx);
-  destroy_vm(config.vm);
-  destroy_item(boot);
-  return EXIT_SUCCESS;
+  if (recovery_target == SIN_RECOVERY_RUNTIME) {
+    siglongjmp(runtime_recovery, ERR_RUNTIME_SIGUSR1);
+  }
 }
 
-static int run_network_loop(int listener_port) {
-  uv_idle_t input_task;
-  RuntimeContext input_ctx = {0};
+static void destroy_boot_runtime(SinStartupState *state, bool destroy_boot_item) {
+  if (state->boot_context_initialized) {
+    runtime_destroy(&state->boot_ctx);
+    state->boot_context_initialized = false;
+  }
+  if (state->boot_vm_initialized) {
+    VM_t *vm = config.vm;
+    config.vm = NULL;
+    state->boot_vm_initialized = false;
+    destroy_vm(vm);
+  }
+  if (destroy_boot_item && state->boot_item) {
+    ITEM_t *boot = state->boot_item;
+    state->boot_item = NULL;
+    destroy_item(boot);
+  }
+}
+
+static int run_boot_item(SinStartupOptions *startup, SinStartupState *state) {
+  int recovery_result = sigsetjmp(boot_recovery, 1);
+  if (recovery_result != 0) {
+    // Do not let a second signal interrupt teardown. Any signal received in
+    // this short window is delivered after ownership state is consistent.
+    recovery_target = SIN_RECOVERY_NONE;
+    recovery_pending = 0;
+    logerr("SIGUSR1 received.  Restarting boot item.\n");
+    logerr("Destroying and recreating all stacks.\n");
+    destroy_boot_runtime(state, false);
+    recovery_target = SIN_RECOVERY_BOOT;
+    deliver_pending_recovery();
+  }
+
+  recovery_target = SIN_RECOVERY_BOOT;
+  deliver_pending_recovery();
+
+  if (ensure_itemstore() != EXIT_SUCCESS) goto boot_failure;
+  if (!state->boot_item) {
+    state->boot_item = make_root_item("boot");
+    if (!state->boot_item) {
+      logerr("Unable to allocate boot item.\n");
+      goto boot_failure;
+    }
+    state->boot_item->type = ITEM_code;
+    state->boot_item->bytecode = startup->bytecode;
+    state->boot_item->bytecode_len = (uint32_t)startup->filesize;
+    startup->bytecode = NULL;
+  }
+  if (!state->boot_vm_initialized) {
+    config.vm = make_vm();
+    if (!config.vm) {
+      logerr("Unable to allocate boot VM.\n");
+      goto boot_failure;
+    }
+    state->boot_vm_initialized = true;
+  }
+
+  if (!state->loop_initialized) {
+    config.loop = malloc(sizeof *config.loop);
+    if (!config.loop || uv_loop_init(config.loop) != 0) {
+      logerr("Unable to initialize the runtime event loop.\n");
+      free(config.loop);
+      config.loop = NULL;
+      goto boot_failure;
+    }
+    state->loop_initialized = true;
+  }
+  if (!state->boot_context_initialized) {
+    runtime_context_init(&state->boot_ctx, config.vm);
+    state->boot_context_initialized = true;
+    if (!runtime_context_from_config(&state->boot_ctx, config.vm)) {
+      logerr("Unable to initialize the boot runtime context.\n");
+      goto boot_failure;
+    }
+  }
+
+  logverbose("Setting up error handler.\n");
+  log_interpreter_return(interpret(&state->boot_ctx, state->boot_item));
+  state->boot_completed = true;
+  recovery_target = SIN_RECOVERY_NONE;
+  destroy_boot_runtime(state, true);
+  recovery_target = SIN_RECOVERY_RUNTIME;
+  deliver_pending_recovery();
+  return EXIT_SUCCESS;
+
+boot_failure:
+  recovery_target = SIN_RECOVERY_NONE;
+  destroy_boot_runtime(state, true);
+  recovery_target = SIN_RECOVERY_RUNTIME;
+  deliver_pending_recovery();
+  return EXIT_FAILURE;
+}
+
+static int run_network_loop(uint16_t listener_port, SinStartupState *state) {
 
   logmsg("Using `%s` as the input item.\n", config.input);
   config.input_vm = make_vm();
+  if (!config.input_vm) {
+    logerr("Unable to allocate input VM.\n");
+    return EXIT_FAILURE;
+  }
+  state->input_vm_initialized = true;
   config.maxconns = MAXCONNS;
   config.lastconn = config.maxconns;
-  uv_tcp_t listener;
-  NetworkRuntimeDeps network_deps = {
+  state->network_deps = (NetworkRuntimeDeps){
     .loop = config.loop,
-    .listener = &listener,
+    .listener = &state->listener,
+    .listener_ipv4 = &state->listener_ipv4,
     .lines = &line,
     .maxconns = config.maxconns
   };
-  runtime_context_from_config(&input_ctx, config.input_vm);
-  uv_idle_init(config.loop, &input_task);
-  input_task.data = &input_ctx;
-  uv_idle_start(&input_task, input_processor);
-
-  logmsg("Running...\n");
-  if (!validate_network_deps(&network_deps)) return EXIT_FAILURE;
-  init_networking_with_deps(&network_deps);
-  if (listener_port < 0) {
-    logerr("Listener port must be non-negative.\n");
+  runtime_context_init(&state->input_ctx, config.input_vm);
+  state->input_context_initialized = true;
+  if (!runtime_context_from_config(&state->input_ctx, config.input_vm)) {
+    logerr("Unable to initialize the input runtime context.\n");
     return EXIT_FAILURE;
   }
-  init_listener_with_deps(&network_deps, (uint32_t)listener_port);
+
+  state->networking_initialized = true;
+  if (!init_networking_with_deps(&state->network_deps)) {
+    return EXIT_FAILURE;
+  }
+  if (!init_listener_with_deps(&state->network_deps, listener_port)) {
+    return EXIT_FAILURE;
+  }
+  if (uv_timer_init(config.loop, &state->input_task) != 0) {
+    logerr("Unable to initialize the input scheduler timer.\n");
+    return EXIT_FAILURE;
+  }
+  state->input_task_initialized = true;
+  state->input_task.data = &state->input_ctx;
+  if (uv_timer_start(&state->input_task, input_processor, 0,
+                    INPUT_SCHEDULER_INTERVAL_MS) != 0) {
+    logerr("Unable to start the input scheduler timer.\n");
+    return EXIT_FAILURE;
+  }
+  state->input_task_started = true;
+
+  logmsg("Running...\n");
   int runloop_retval = uv_run(config.loop, UV_RUN_DEFAULT);
   if (config.shutdown_requested) runloop_retval = 0;
-
-  shutdown_listener_with_deps(&network_deps);
-  uv_idle_stop(&input_task);
-  uv_walk(config.loop, close_all_tasks, NULL);
-  while (uv_run(config.loop, UV_RUN_DEFAULT) != 0) {
-    // Drain close callbacks before freeing task and network state.
-  }
-  finalise_tasks();
-  shutdown_networking();
-  runtime_destroy(&input_ctx);
-  destroy_vm(config.input_vm);
   return runloop_retval;
 }
 
-static int shutdown_runtime(bool loadonly, int runloop_retval) {
-  logmsg("Shutting down.\n");
-  (void)loadonly;
-  uv_loop_close(config.loop);
-  if (config.safe_shutdown) {
+static int run_startup_with_recovery(SinStartupOptions *startup,
+                                     SinStartupState *state) {
+  int recovery_result = sigsetjmp(runtime_recovery, 1);
+  if (recovery_result != 0) {
+    recovery_target = SIN_RECOVERY_NONE;
+    recovery_pending = 0;
+    logerr("SIGUSR1 received during runtime; shutting down.\n");
+    return EXIT_FAILURE;
+  }
+
+  recovery_target = SIN_RECOVERY_RUNTIME;
+  deliver_pending_recovery();
+  init_tasks();
+  state->tasks_initialized = true;
+  if (run_boot_item(startup, state) != EXIT_SUCCESS) {
+    recovery_target = SIN_RECOVERY_NONE;
+    return EXIT_FAILURE;
+  }
+  if (startup->loadonly) {
+    recovery_target = SIN_RECOVERY_NONE;
+    return EXIT_SUCCESS;
+  }
+
+  int runloop_retval = run_network_loop(startup->listener_port, state);
+  recovery_target = SIN_RECOVERY_NONE;
+  return runloop_retval;
+}
+
+static int shutdown_startup(SinStartupState *state, SinStartupOptions *startup,
+                            bool persist_itemstore, int runloop_retval) {
+  if (persist_itemstore) logmsg("Shutting down.\n");
+  if (state->input_task_started) {
+    uv_timer_stop(&state->input_task);
+    state->input_task_started = false;
+  }
+  if (state->networking_initialized) {
+    shutdown_listener_with_deps(&state->network_deps);
+  }
+  if (state->tasks_initialized) {
+    finalise_tasks(state->loop_initialized ? config.loop : NULL);
+    state->tasks_initialized = false;
+  }
+  if (state->input_task_initialized && !uv_is_closing(
+          (uv_handle_t *)&state->input_task)) {
+    uv_close((uv_handle_t *)&state->input_task, NULL);
+    state->input_task_initialized = false;
+  }
+  if (state->loop_initialized) {
+    uv_walk(config.loop, close_all_tasks, NULL);
+    while (uv_run(config.loop, UV_RUN_DEFAULT) != 0) {
+      // Drain close callbacks before freeing task and network state.
+    }
+  }
+  if (state->networking_initialized) {
+    shutdown_networking();
+    state->networking_initialized = false;
+  }
+  if (state->input_context_initialized) {
+    runtime_destroy(&state->input_ctx);
+    state->input_context_initialized = false;
+  }
+  if (state->input_vm_initialized) {
+    destroy_vm(config.input_vm);
+    config.input_vm = NULL;
+    state->input_vm_initialized = false;
+  }
+  if (state->loop_initialized) {
+    int loop_result = uv_loop_close(config.loop);
+    if (loop_result != 0) {
+      logerr("Unable to close the runtime event loop: %s\n",
+             uv_strerror(loop_result));
+      if (runloop_retval == 0) runloop_retval = EXIT_FAILURE;
+      /* Keep the loop allocation alive until process exit. A failed close
+       * means libuv still owns state reachable through this storage. */
+      state->loop_storage_retained = true;
+      state->loop_initialized = false;
+    } else {
+      free(config.loop);
+      config.loop = NULL;
+      state->loop_initialized = false;
+    }
+  }
+  if (persist_itemstore && config.safe_shutdown) {
     if (!save_itemstore_with_options(config.itemstore, config.itemroot,
                                      config.itemstore_durability)) {
       logerr("Shutdown could not persist itemstore '%s'.\n", config.itemstore);
       if (runloop_retval == 0) runloop_retval = EXIT_FAILURE;
     }
   }
-  free(config.loop);
+  destroy_boot_runtime(state, true);
+  destroy_vm(config.vm);
+  config.vm = NULL;
+  free(startup->bytecode);
+  startup->bytecode = NULL;
   free(config.itemstore);
   free(config.srcroot);
   free(config.input);
   free(config.inputline);
   free(config.inputtext);
   destroy_item(config.itemroot);
-  close_log();
+  config.itemroot = NULL;
+  if (persist_itemstore || state->log_redirected) close_log();
   return runloop_retval;
 }
 
 int main(int argc, char **argv) {
   SinStartupOptions startup;
+  SinStartupState state = {0};
+  int result = EXIT_FAILURE;
+  bool persist_itemstore = false;
 
   if (argc < 2) {
     usage_error("missing object file");
     exit(EXIT_FAILURE);
   }
 
-  if (init_default_config(argc, argv, &startup) != EXIT_SUCCESS) return EXIT_FAILURE;
-  init_signal_handler();
+  if (init_default_config(argc, argv, &startup) != EXIT_SUCCESS) goto cleanup;
+  if (!init_signal_handler()) goto cleanup;
 
-  if (parse_sin_options(argc, argv, &startup) != EXIT_SUCCESS) return EXIT_FAILURE;
-  if (ensure_source_root() != EXIT_SUCCESS) return EXIT_FAILURE;
+  SinParseResult parse_result = parse_sin_options(argc, argv, &startup, &state);
+  if (parse_result == SIN_PARSE_EXIT_SUCCESS) {
+    result = EXIT_SUCCESS;
+    goto cleanup;
+  }
+  if (parse_result != SIN_PARSE_OK) goto cleanup;
+  if (ensure_source_root() != EXIT_SUCCESS) goto cleanup;
 
   logmsg("Runtime options: loadonly=%d strict_validation=%d strict_runtime_contracts=%d.\n",
              startup.loadonly, config.strict_validation, config.strict_runtime_contracts);
 
   if (!startup.bytecode) {
     usage_error("missing object file");
-    exit(EXIT_FAILURE);
+    goto cleanup;
   }
 
-  if (run_boot_item(&startup) != EXIT_SUCCESS) return EXIT_FAILURE;
+  int runloop_retval = run_startup_with_recovery(&startup, &state);
+  persist_itemstore = state.boot_completed;
 
-  int runloop_retval = 0;
-  if (!startup.loadonly) runloop_retval = run_network_loop(startup.listener_port);
+  result = shutdown_startup(&state, &startup, persist_itemstore,
+                            runloop_retval);
+  return result;
 
-  return shutdown_runtime(startup.loadonly, runloop_retval);
+cleanup:
+  return shutdown_startup(&state, &startup, persist_itemstore, result);
 }

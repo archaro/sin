@@ -20,13 +20,15 @@ static uint8_t *bytecode;
 static int opt_raw = 0, opt_no_header = 0;
 
 static void usage(void) {
-  printf("Syntax: sdiss <options>\n");
+  printf("Usage: sdiss -o <object file> [options]\n");
   printf("Options:\n");
   printf(" -h, --help\t\tThis message.\n");
   printf("     --version\t\tShow version information.\n");
   printf(" -o, --object <file>\tObject code to disassemble.\n");
   printf("     --raw\t\tShow raw bytes per instruction.\n");
   printf("     --no-header\tSkip locals/params header output.\n");
+  printf(" -q, --quiet\t\tSuppress progress messages.\n");
+  printf(" -v, --verbose\t\tPrint progress messages.\n");
 }
 
 static void usage_error(const char *message) {
@@ -42,18 +44,18 @@ static void stdout_write(void *ctx, const char *data, size_t len) {
 int main(int argc, char **argv) {
   size_t filesize = 0;
   bytecode = NULL;
-  if (argc < 2) {
-    usage_error("missing object file");
-    exit(EXIT_FAILURE);
-  }
   int opt;
-  enum { OPT_VERSION = 1002 };
+  enum {
+    OPT_RAW = 1000,
+    OPT_NO_HEADER = 1001,
+    OPT_VERSION = 1002
+  };
   const struct option options[] = {
     {"help", no_argument, 0, 'h'},
     {"version", no_argument, 0, OPT_VERSION},
     {"object", required_argument, 0, 'o'},
-    {"raw", no_argument, 0, 1000},
-    {"no-header", no_argument, 0, 1001},
+    {"raw", no_argument, 0, OPT_RAW},
+    {"no-header", no_argument, 0, OPT_NO_HEADER},
     {"quiet", no_argument, 0, 'q'},
     {"verbose", no_argument, 0, 'v'},
     {NULL, 0, 0, '\0'}
@@ -96,10 +98,10 @@ int main(int argc, char **argv) {
         logmsg("Bytecode loaded: %zu bytes from %s.\n", filesize, optarg);
         break;
       }
-      case 1000:
+      case OPT_RAW:
         opt_raw = 1;
         break;
-      case 1001:
+      case OPT_NO_HEADER:
         opt_no_header = 1;
         break;
       default:

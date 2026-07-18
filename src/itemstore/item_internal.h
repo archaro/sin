@@ -25,6 +25,8 @@ struct HashTable {
 };
 
 typedef struct FetchItemCacheEntry {
+  // These pointers are borrowed from the item tree.  An entry is usable only
+  // while its generation matches the context generation.
   bool valid;
   bool found;
   char key[MAX_ITEM_NAME];
@@ -45,17 +47,38 @@ typedef struct ItemstoreContext {
   ITEMSTORE_SYNC_HOOK_t sync_hook;
 } ITEMSTORE_CONTEXT_t;
 
+typedef bool (*ITEMSTORE_LOAD_CONSTRUCTOR_FAILURE_HOOK_t)(const char *name);
+typedef int (*ITEMSTORE_SOURCE_WRITE_HOOK_t)(const char *source, FILE *file);
+typedef int (*ITEMSTORE_SOURCE_CLOSE_HOOK_t)(FILE *file);
+typedef bool (*ITEMSTORE_ITEM_CREATION_FAILURE_HOOK_t)(const char *name);
+typedef bool (*ITEMSTORE_DIRECTORY_SYNC_HOOK_t)(const char *path);
+
 ITEMSTORE_CONTEXT_t *itemstore_default_context(void);
 void itemstore_bump_generation(void);
+void itemstore_invalidate_cache(void);
 bool itemstore_default_sync_hook(FILE *file, const char *path);
+void itemstore_set_load_constructor_failure_hook_for_tests(
+    ITEMSTORE_LOAD_CONSTRUCTOR_FAILURE_HOOK_t hook);
+void itemstore_set_item_creation_failure_hook_for_tests(
+    ITEMSTORE_ITEM_CREATION_FAILURE_HOOK_t hook);
+void itemstore_set_source_io_hooks_for_tests(
+    ITEMSTORE_SOURCE_WRITE_HOOK_t write_hook,
+    ITEMSTORE_SOURCE_CLOSE_HOOK_t close_hook);
+void itemstore_set_directory_sync_hook_for_tests(
+    ITEMSTORE_DIRECTORY_SYNC_HOOK_t hook);
 
 bool validate_item_name(const char *item_name, const char *func_name);
+bool validate_item_name_relative(const ITEM_t *base, const char *item_name,
+                                 const char *func_name);
+bool item_layer_char_is_allowed(unsigned char character);
+// Internal lookup for callers that have already validated item_name.
+ITEM_t *find_item_unchecked(ITEM_t *root, const char *item_name);
 bool create_ordered_array(ITEM_t *item);
 bool resize_ordered_array(ITEM_t *item);
 ITEM_t *make_loaded_item(const char *name, ITEM_t *parent, ITEM_e type,
                          VALUE_t value, uint8_t *bytecode, int len,
                          uint32_t expected_children);
-void detach_loaded_item(ITEM_t *item);
+void detach_item_and_destroy(ITEM_t *item);
 
 // Hash table internals.
 HASHTABLE_t *create_hashtable(int size);

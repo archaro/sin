@@ -59,7 +59,7 @@ invoke runtime execution.
 
 Key entry points:
 
-- `verify_bytecode()` from `src/bytecode/bytecode_verify.h`.
+- `bc_verify_bytecode()` from `src/bytecode/bytecode_verify.h`.
 - `sdiss_*` APIs from `src/bytecode/sdiss_core.h`.
 
 ### Runtime VM
@@ -119,8 +119,9 @@ Key entry points:
 Files: `src/net/network.*`, `src/net/libtelnet.*`.
 
 Ownership: libuv/libtelnet integration, connection state, input queues, and
-output buffering. Networking may depend on common support and runtime config
-types, but should not depend on compiler internals.
+output buffering. The `input_processor()` callback also runs the configured
+input code item and flushes network output, so this boundary depends on the
+runtime interpreter but not on compiler internals.
 
 ### Application Entry Points
 
@@ -128,25 +129,24 @@ Files: `src/scomp.c`, `src/sdiss.c`, `src/sin.c`, `src/config.h`,
 `src/version.h`.
 
 Ownership: CLI argument handling, program startup/shutdown, version constants,
-and process-wide configuration wiring. Entry points are allowed to depend on the
+process-wide configuration wiring, and the serialized runtime input scheduler.
+`sin` stages the input timer after listener setup and closes it through the
+centralized startup cleanup path. Entry points are allowed to depend on the
 library modules they orchestrate. Library modules should not depend on CLI entry
 points.
 
 ## Intended Dependency Direction
 
-Prefer dependencies to flow upward through this stack:
+Most low-level dependencies flow from common support into bytecode/itemstore,
+then into the compiler and runtime. The runtime, libcalls, and networking form
+an intentional service boundary rather than a strict dependency chain:
 
-```text
-common
-  ↑
-bytecode, itemstore
-  ↑
-compiler      runtime VM
-                 ↑
-              libcall / networking
-                 ↑
-          application entry points
-```
+- The runtime owns execution and provides the `RuntimeContext` used by libcall
+  handlers.
+- Libcalls use runtime values and context, itemstore operations, networking, and
+  the compiler pipeline when a primitive requires them.
+- Networking invokes the runtime input callback from the event-loop thread.
+- Application entry points orchestrate these services and own startup/shutdown.
 
 The compiler and runtime are peers that share bytecode, values, diagnostics, and
 item data. Crossings between them should be explicit. Examples:
@@ -161,8 +161,14 @@ item data. Crossings between them should be explicit. Examples:
   tool and network dependencies.
 - Add new libcalls through `src/libcall/libcall_list.h`, implement the
   handler, and add runtime coverage in `tests/core/test_libcall_registry.c`.
-- Keep compiler behavior tests under `tests/compiler/` and interpreter behavior
-  under `tests/interpreter/`.
+- Keep low-level, itemstore, task, stack, value, and libcall tests under
+  `tests/core/`; compiler and disassembler tests under `tests/compiler/`; and
+  interpreter semantic/stress/benchmark tests under `tests/interpreter/`.
+- The dedicated network harnesses live under `tests/network/`: one uses local
+  libuv/libtelnet stubs and the other runs the chat example over localhost.
+  Shared harness and fixture-policy code lives under `tests/shared/`, golden
+  inputs and outputs under `tests/fixtures/`, and fuzz harnesses/corpora under
+  `tests/fuzz/`.
 - If moving files later, do it as behavior-preserving path/build/include updates
   with no semantic edits in the same change.
 

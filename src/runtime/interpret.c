@@ -71,12 +71,6 @@ static VALUE_t pop_frame_result(STACK_t *stack) {
   return VALUE_NIL;
 }
 
-static void discard_stack_to(STACK_t *stack, int32_t top) {
-  while (stack->current > top) {
-    throwaway_stack(stack);
-  }
-}
-
 static void runtime_registry_untrack(LibcallRegistry *registry) {
   RuntimeRegistryNode **link = &runtime_registry_nodes;
   while (*link) {
@@ -103,7 +97,6 @@ bool runtime_init(RuntimeContext *ctx, VM_t *vm) {
       return false;
     }
   }
-  libcall_registry_self_check(libcalls, true);
   if (!libcall_registry_init(ctx->libcalls)) {
     logerr("Failed to initialize libcall registry.\n");
     return false;
@@ -266,8 +259,8 @@ static inline int pop_compare_and_push_bool(VM_t *vm, CMP_MODE_t mode, const cha
       break;
   }
 
-  value_free_runtime(&v1);
-  value_free_runtime(&v2);
+  value_free(&v1);
+  value_free(&v2);
   push_stack(vm->stack, result);
   (void)opcode_tag;
   if (!result.i) {
@@ -473,16 +466,16 @@ uint8_t *op_add(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   v2 = pop_stack(VM->stack);
   VALUE_t result;
   if (value_add(&v2, &v1, &result)) {
-    value_free_runtime(&v1);
-    value_free_runtime(&v2);
+    value_free(&v1);
+    value_free(&v2);
     push_stack(VM->stack, result);
   } else if (v1.type == VALUE_str && v2.type == VALUE_str) {
     push_stack(VM->stack, concat_two_strings(v2, v1));
   } else {
     VALUE_e left_type = v2.type;
     VALUE_e right_type = v1.type;
-    value_free_runtime(&v1);
-    value_free_runtime(&v2);
+    value_free(&v1);
+    value_free(&v2);
     logverbose("OP_ADD invalid operand types: left '%s', right '%s'. Result is NIL.\n",
                value_type_name(left_type), value_type_name(right_type));
     push_stack(VM->stack, VALUE_NIL);
@@ -506,8 +499,8 @@ uint8_t *op_subtract(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     log_invalid_binary_operands("OP_SUB", &v2, &v1);
     logverbose("OP_SUB: invalid operand types %d and %d\n", v2.type, v1.type);
   }
-  value_free_runtime(&v1);
-  value_free_runtime(&v2);
+  value_free(&v1);
+  value_free(&v2);
   push_stack(VM->stack, result);
   return nextop;
 }
@@ -531,8 +524,8 @@ uint8_t *op_divide(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     log_invalid_binary_operands("OP_DIV", &v2, &v1);
     logverbose("OP_DIV: invalid operand types %d and %d\n", v2.type, v1.type);
   }
-  value_free_runtime(&v1);
-  value_free_runtime(&v2);
+  value_free(&v1);
+  value_free(&v2);
   push_stack(VM->stack, result);
   return nextop;
 }
@@ -551,8 +544,8 @@ uint8_t *op_multiply(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     log_invalid_binary_operands("OP_MUL", &v2, &v1);
     logverbose("OP_MUL: invalid operand types %d and %d\n", v2.type, v1.type);
   }
-  value_free_runtime(&v1);
-  value_free_runtime(&v2);
+  value_free(&v1);
+  value_free(&v2);
   push_stack(VM->stack, result);
   return nextop;
 }
@@ -716,7 +709,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
                              ctx ? ctx->current_item : NULL);
       goto cleanup;
     }
-    free(itemname.s);
+    free_runtime_string(itemname.s);
     itemname.s = strdup(fullname);
   }
 
@@ -751,7 +744,7 @@ uint8_t *op_assignitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (itemname.type == VALUE_str) {
     char fullname[MAX_ITEM_NAME];
     if (canonicalize_itemname(itemname.s, item, fullname)) {
-      free(itemname.s);
+      free_runtime_string(itemname.s);
       itemname.s = strdup(fullname);
     } else {
       logverbose("Unable to create item '%s': failed to resolve canonical name.\n", itemname.s);
@@ -1134,7 +1127,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
       ctx->current_item->inuse = false;
 
       if (size_callstack(VM->callstack) == entry_callstack_depth) {
-        discard_stack_to(VM->stack, entry_stack_current);
+        reset_stack_to(VM->stack, entry_stack_current);
         VM->stack->base = entry_stack_base;
         VM->stack->locals = entry_stack_locals;
         VM->stack->params = entry_stack_params;
@@ -1144,8 +1137,6 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
         return return_value;
       }
 
-      int32_t caller_stack_top = VM->callstack->entry[VM->callstack->current].current_stack;
-      discard_stack_to(VM->stack, caller_stack_top);
       FRAME_t *prev_frame = pop_callstack(VM);
       // Invariant at return:
       // - pop_callstack restored caller stack/base/locals/params.
@@ -1173,7 +1164,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
         continue;
       }
       ctx->current_item->inuse = false;
-      discard_stack_to(VM->stack, entry_stack_current);
+      reset_stack_to(VM->stack, entry_stack_current);
       VM->stack->base = entry_stack_base;
       VM->stack->locals = entry_stack_locals;
       VM->stack->params = entry_stack_params;

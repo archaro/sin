@@ -4,8 +4,90 @@
   #include <limits.h>
   #include <stdbool.h>
   #include "log.h"
+  #include "memory.h"
   #include "parser.h"
   #include "string_limits.h"
+
+  SCANNER_STATE_t *yyget_extra(yyscan_t yyscanner);
+  static void yy_fatal_error(const char *message, yyscan_t yyscanner);
+
+  struct scanner_alloc_s {
+    struct scanner_alloc_s *next;
+    SCANNER_STATE_t *owner;
+    size_t size;
+  };
+
+  void *yyalloc(yy_size_t size, yyscan_t yyscanner);
+  void yyfree(void *ptr, yyscan_t yyscanner);
+
+  static void sin_lexer_fatal(const char *message, yyscan_t yyscanner) {
+    (void)message;
+    SCANNER_STATE_t *state = yyget_extra(yyscanner);
+    if (state) {
+      state->scanner_failed = true;
+      if (state->scanner_fatal_jmp_active) {
+        longjmp(state->scanner_fatal_jmp, 1);
+      }
+    }
+  }
+
+  #define YY_FATAL_ERROR(message) \
+    do { (void)yy_fatal_error; sin_lexer_fatal(message, yyscanner); } while (0)
+
+  void *yyalloc(yy_size_t size, yyscan_t yyscanner) {
+    SCANNER_STATE_t *state = yyget_extra(yyscanner);
+    size_t total = 0;
+    if (alloc_add_overflow(sizeof(struct scanner_alloc_s), (size_t)size, &total)) {
+      return NULL;
+    }
+    struct scanner_alloc_s *block = alloc_malloc(total);
+    if (!block) return NULL;
+    block->owner = state;
+    block->size = (size_t)size;
+    if (state) {
+      block->next = state->scanner_allocs;
+      state->scanner_allocs = block;
+    } else {
+      block->next = NULL;
+    }
+    return block + 1;
+  }
+
+  void *yyrealloc(void *ptr, yy_size_t size, yyscan_t yyscanner) {
+    if (!ptr) return yyalloc(size, yyscanner);
+    if (size == 0) {
+      yyfree(ptr, yyscanner);
+      return NULL;
+    }
+    struct scanner_alloc_s *old = ((struct scanner_alloc_s *)ptr) - 1;
+    void *replacement = yyalloc(size, yyscanner);
+    if (!replacement) return NULL;
+    size_t copy_size = old->size < (size_t)size ? old->size : (size_t)size;
+    memcpy(replacement, ptr, copy_size);
+    yyfree(ptr, yyscanner);
+    return replacement;
+  }
+
+  void yyfree(void *ptr, yyscan_t yyscanner) {
+    (void)yyscanner;
+    if (!ptr) return;
+    struct scanner_alloc_s *block = ((struct scanner_alloc_s *)ptr) - 1;
+    SCANNER_STATE_t *state = block->owner;
+    bool destroying_scanner = state && state->scanner_handle == ptr;
+    if (state) {
+      struct scanner_alloc_s **link = &state->scanner_allocs;
+      while (*link && *link != block) link = &(*link)->next;
+      if (*link == block) *link = block->next;
+    }
+    free(block);
+    if (destroying_scanner) {
+      while (state->scanner_allocs) {
+        struct scanner_alloc_s *leftover = state->scanner_allocs;
+        state->scanner_allocs = leftover->next;
+        free(leftover);
+      }
+    }
+  }
 
   static int sin_utf8_columns(const char *text, int len) {
     int cols = 0;
@@ -91,13 +173,23 @@
     (void)str_append_bytes(buf, bufptr, len, max, &append, 1);
   }
 
+  static char *sin_strdup(const char *s) {
+    size_t len = strlen(s);
+    size_t size = 0;
+    if (alloc_add_overflow(len, 1, &size)) return NULL;
+    char *copy = alloc_malloc(size);
+    if (!copy) return NULL;
+    memcpy(copy, s, size);
+    return copy;
+  }
+
   static char *strbuf_too_long_msg(void) {
-    return strdup("String literal too long.");
+    return sin_strdup("String literal too long.");
   }
 
   char *strdup_lc(const char *s) {
     size_t n = strlen(s);
-    char *d = malloc(n + 1);
+    char *d = alloc_malloc(n + 1);
     if (!d) return NULL;
     const unsigned char *src = (const unsigned char *)s;
     unsigned char *dst = (unsigned char *)d;
@@ -112,7 +204,7 @@
   }
 %}
 
-%option noinput nounput noyywrap reentrant bison-bridge bison-locations case-insensitive extra-type="SCANNER_STATE_t *"
+%option noinput nounput noyywrap noyyalloc noyyrealloc noyyfree reentrant bison-bridge bison-locations case-insensitive extra-type="SCANNER_STATE_t *"
 %x STRINGLIT
 %x CODE
 %x CODEBODY
@@ -178,7 +270,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                   strbuf_capacity = 4;
                   strbuf = (char *)malloc(strbuf_capacity + 1);
                   if (!strbuf) {
-                    yylval->TSTRINGLIT = strdup("Out of memory.");
+                    yylval->TSTRINGLIT = sin_strdup("Out of memory.");
                     return TUNKNOWNCHAR;
                   }
                   strbuf_ptr = strbuf;
@@ -186,8 +278,8 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                   BEGIN(STRINGLIT);
                 }
   [ \t\n]+      ; // Inline whitespace handling
-  {float}       { yylval->TSTRINGLIT = strdup(yytext); return TFLOAT; }
-  {integer}     { yylval->TSTRINGLIT = strdup(yytext); return TINTEGER; }
+  {float}       { yylval->TSTRINGLIT = sin_strdup(yytext); return TFLOAT; }
+  {integer}     { yylval->TSTRINGLIT = sin_strdup(yytext); return TINTEGER; }
   {local}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLOCAL; }
   {layer}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLAYER; }
   "\."          { return TLAYERSEP; }
@@ -203,7 +295,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                     return TUNKNOWNCHAR;
                   }
                   *strbuf_ptr = '\0';
-                  yylval->TSTRINGLIT = strdup(strbuf);
+                  yylval->TSTRINGLIT = sin_strdup(strbuf);
                   free(strbuf);
                   return TSTRINGLIT;
                 }
@@ -213,7 +305,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                   yylloc->first_column = strbuf_start_column;
                   yylloc->last_line = strbuf_start_line;
                   yylloc->last_column = strbuf_start_column;
-                  yylval->TSTRINGLIT = strdup("Newline in string.");
+                  yylval->TSTRINGLIT = sin_strdup("Newline in string.");
                   free(strbuf);
                   return TUNKNOWNCHAR;
                 }
@@ -223,7 +315,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                   (void) sscanf( yytext + 1, "%o", &result );
                   if ( result > 0xff ) {
                     BEGIN(INITIAL);
-                    yylval->TSTRINGLIT = strdup("Escape sequence too big.");
+                    yylval->TSTRINGLIT = sin_strdup("Escape sequence too big.");
                     free(strbuf);
                     return TUNKNOWNCHAR;
                   }
@@ -250,7 +342,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                   strbuf_capacity = 512;
                   strbuf = (char *)malloc(strbuf_capacity + 1);
                   if (!strbuf) {
-                    yylval->TSTRINGLIT = strdup("Out of memory.");
+                    yylval->TSTRINGLIT = sin_strdup("Out of memory.");
                     return TUNKNOWNCHAR;
                   }
                   strbuf_ptr = strbuf;
@@ -287,7 +379,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                       return TUNKNOWNCHAR;
                     }
                     *strbuf_ptr = '\0';
-                    yylval->TSTRINGLIT = strdup(strbuf);
+                    yylval->TSTRINGLIT = sin_strdup(strbuf);
                     free(strbuf);
                     return TCODEBODY;
                   }
@@ -326,7 +418,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   .|\n        { /* Eat everything else */ }
 }
 <INITIAL,CODE>{
-  .             { yylval->TSTRINGLIT = strdup(yytext); return TUNKNOWNCHAR; }
+  .             { yylval->TSTRINGLIT = sin_strdup(yytext); return TUNKNOWNCHAR; }
 }
 <STRINGLIT><<EOF>> {
   BEGIN(INITIAL);
@@ -335,27 +427,27 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   yylloc->last_line = strbuf_start_line;
   yylloc->last_column = strbuf_start_column;
   yylval->TSTRINGLIT = strbuf_size < 0 ? strbuf_too_long_msg() :
-      strdup("EOF in string.");
+      sin_strdup("EOF in string.");
   free(strbuf);
   return TUNKNOWNCHAR;
 }
 <CODEBODY><<EOF>> {
   BEGIN(INITIAL);
   yylval->TSTRINGLIT = strbuf_size < 0 ? strbuf_too_long_msg() :
-      strdup("Unterminated code(...) body.");
+      sin_strdup("Unterminated code(...) body.");
   free(strbuf);
   return TUNKNOWNCHAR;
 }
 <CODESTREMBED><<EOF>> {
   BEGIN(INITIAL);
   yylval->TSTRINGLIT = strbuf_size < 0 ? strbuf_too_long_msg() :
-      strdup("Unterminated quoted string inside code(...) body.");
+      sin_strdup("Unterminated quoted string inside code(...) body.");
   free(strbuf);
   return TUNKNOWNCHAR;
 }
 <COMMENT><<EOF>> {
   BEGIN(INITIAL);
-  yylval->TSTRINGLIT = strdup("Unterminated comment.");
+  yylval->TSTRINGLIT = sin_strdup("Unterminated comment.");
   return TUNKNOWNCHAR;
 }
 %%
