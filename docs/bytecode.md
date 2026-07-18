@@ -94,7 +94,7 @@ arguments as described below.
 | `x` | `IR_OP_NOT` | none | Pop the top value, apply logical not, and push the boolean result. |
 | `y` | `IR_OP_AND` | none | Pop the top two values, apply logical and, and push the boolean result. |
 | `z` | `IR_OP_OR` | none | Pop the top two values, apply logical or, and push the boolean result. |
-| `B` | `IR_OP_ITEM_SAVE_CODE` | optional params, then source block | Compile embedded source code and assign the compiled code item to the item name on top of the stack. On success, clear the error item; on failure, assign `nil` and store the compiler error message. |
+| `B` | `IR_OP_ITEM_SAVE_CODE` | optional params, then source block | Compile embedded source code and assign the compiled code item to the item name on top of the stack. On success, clear the error item. Malformed embedded payloads set `ERR_RUNTIME_BYTECODE`; invalid target item names set `ERR_RUNTIME_INVALIDITEM`; source compilation failures set the compiler error item. |
 | `C` | `IR_OP_ITEM_SAVE` | none | Pop an item name and value, then save the value into the item. |
 | `D` | `IR_OP_ITEM_PUSH_DEREF` | deref payload | Inside item assembly, append a dereferenced layer name. The payload identifies the dereference source, such as `V` plus a local index. |
 | `E` | `IR_OP_ITEM_END` | none | End item assembly. Evaluate the assembled item name and push the resulting name, or `nil` if the name is invalid. |

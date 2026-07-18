@@ -161,7 +161,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   int namelen = snprintf(tmpname, sizeof(tmpname),
       "__sys_compile_tmp__%llu", (unsigned long long)++tmpname_counter);
   if (namelen < 0 || namelen >= (int)sizeof(tmpname)) {
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INTERNAL,
         "Sys.compile temporary item name generation failed.",
         ctx ? ctx->current_item : NULL);
     return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
@@ -169,7 +169,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   ptrdiff_t raw_len = out->nextbyte - out->bytecode;
   if (raw_len < 0 || (uintmax_t)raw_len > UINT32_MAX) {
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
         "Sys.compile bytecode output length is out of range.",
         ctx ? ctx->current_item : NULL);
     return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
@@ -178,8 +178,9 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   ITEM_t *tmpitem = insert_code_item(ctx->itemroot, tmpname, len, out->bytecode);
 
   if (!tmpitem) {
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_COMP_INUSE, NULL,
-                           ctx ? ctx->current_item : NULL);
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INTERNAL,
+        "Sys.compile temporary code item could not be created.",
+        ctx ? ctx->current_item : NULL);
     return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
   }
 

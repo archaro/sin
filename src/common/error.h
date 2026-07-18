@@ -10,12 +10,9 @@
 #define ERR_NOERROR               0
 
 #define ERR_COMP_SYNTAX           1
-#define ERR_COMP_MAXDEPTH         2
 #define ERR_COMP_TOOMANYLOCALS    3
 #define ERR_COMP_LOCALBEFOREDEF   4
 #define ERR_COMP_UNKNOWNCHAR      5
-#define ERR_COMP_UNKNOWNLIB       6
-#define ERR_COMP_WRONGARGS        7
 #define ERR_COMP_INUSE            8
 #define ERR_COMP_TOOMANYPARAMS    9
 #define ERR_COMP_TOOMANYARGS      10
@@ -27,6 +24,8 @@
 #define ERR_RUNTIME_TRUNCATED     23
 #define ERR_RUNTIME_INVLIB        24
 #define ERR_RUNTIME_BYTECODE      25
+#define ERR_RUNTIME_INVALIDITEM   26
+#define ERR_RUNTIME_INTERNAL      27
 
 #define ERR_NETWORK_ERROR         30
 

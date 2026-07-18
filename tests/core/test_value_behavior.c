@@ -18,6 +18,8 @@
 #include "vm.h"
 
 extern CONFIG_t config;
+extern uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop,
+                                  ITEM_t *item);
 
 static void setup_runtime(void) {
   memset(&config, 0, sizeof(config));
@@ -70,6 +72,48 @@ static VALUE_t run_code(const char *name, const uint8_t *template_code, size_t l
   return run_interpret(code);
 }
 
+static void assert_error_code_and_detail(int expected_code, const char *needle) {
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(expected_code, err->value.i);
+
+  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_EQ_INT(VALUE_str, msg->value.type);
+  ASSERT_TRUE(strstr(msg->value.s, needle) != NULL);
+}
+
+void test_error_message_table_defines_active_errors(void) {
+  init_errmsg();
+
+  int active_errors[] = {
+      ERR_NOERROR,
+      ERR_COMP_SYNTAX,
+      ERR_COMP_TOOMANYLOCALS,
+      ERR_COMP_LOCALBEFOREDEF,
+      ERR_COMP_UNKNOWNCHAR,
+      ERR_COMP_INUSE,
+      ERR_COMP_TOOMANYPARAMS,
+      ERR_COMP_TOOMANYARGS,
+      ERR_COMP_UNKNOWN,
+      ERR_RUNTIME_SIGUSR1,
+      ERR_RUNTIME_INVALIDARGS,
+      ERR_RUNTIME_NOSUCHITEM,
+      ERR_RUNTIME_TRUNCATED,
+      ERR_RUNTIME_INVLIB,
+      ERR_RUNTIME_BYTECODE,
+      ERR_RUNTIME_INVALIDITEM,
+      ERR_RUNTIME_INTERNAL,
+      ERR_NETWORK_ERROR,
+  };
+
+  for (size_t i = 0; i < sizeof(active_errors) / sizeof(active_errors[0]); i++) {
+    int code = active_errors[i];
+    ASSERT_TRUE(code >= 0 && code < MAXERRORS);
+    ASSERT_NOT_NULL(errmsg[code]);
+    ASSERT_TRUE(errmsg[code][0] != '\0');
+  }
+}
 
 static void assert_truncated_bytecode_for_opcode(const char *name, uint8_t opcode, const char *opname) {
   uint8_t code[] = {0, 0, opcode};
@@ -836,6 +880,50 @@ void test_interpreter_truncated_single_byte_operands(void) {
   setup_runtime();
   assert_truncated_bytecode_for_opcode("test.truncated_getlocal", 'e', "OP_GETLOCAL");
   assert_truncated_bytecode_for_opcode("test.truncated_libcall_token", 'M', "OP_LIBCALL");
+  teardown_runtime();
+}
+
+void test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error(void) {
+  setup_runtime();
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = config.itemroot;
+  ITEM_t *current = insert_item(config.itemroot, "test.assigncode_bad_source",
+                                VALUE_NIL);
+  ASSERT_NOT_NULL(current);
+  ctx.current_item = current;
+
+  VALUE_t target = {VALUE_str, {.s = strdup("test.bad_code_source")}};
+  ASSERT_NOT_NULL(target.s);
+  push_stack(config.vm->stack, target);
+
+  uint8_t code[] = {'B'};
+  runtime_decoder_init(&ctx.decoder, code + 1, code + sizeof(code));
+  uint8_t *next = op_assigncodeitem(&ctx, code + 1, current);
+  ASSERT_TRUE(next == NULL);
+  assert_error_code_and_detail(ERR_RUNTIME_BYTECODE,
+                               "Invalid source block in code assignment bytecode.");
+  teardown_runtime();
+}
+
+void test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error(void) {
+  setup_runtime();
+  uint8_t code[64] = {0};
+  size_t pos = 0;
+  uint16_t source_len = 0;
+  code[pos++] = 0;
+  code[pos++] = 0;
+  code[pos++] = 'p';
+  emit_i64(code, &pos, 1);
+  code[pos++] = 'B';
+  memcpy(code + pos, &source_len, sizeof(source_len));
+  pos += sizeof(source_len);
+  code[pos++] = 'h';
+
+  VALUE_t result = run_code("test.assigncode_bad_target_type", code, pos);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error_code_and_detail(ERR_RUNTIME_INVALIDITEM,
+                               "Invalid item name type for code assignment.");
   teardown_runtime();
 }
 

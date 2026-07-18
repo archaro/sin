@@ -677,28 +677,32 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   int8_t result = ERR_COMP_UNKNOWN;
   char *errdetail = NULL;
 
-  if (*nextop == 'P') {
+  RuntimeDecodeStatus marker_status =
+      require_bytes(ctx ? &ctx->decoder : NULL, nextop, 1, "OP_ASSIGNCODEITEM");
+  if (runtime_decode_status_ok(marker_status) && *nextop == 'P') {
     nextop++;
     if (!decode_assigncode_params(ctx, &nextop, &in)) {
-      set_error_item(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN,
+      set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
                              "Invalid parameter block in code assignment bytecode.",
                              ctx ? ctx->current_item : NULL);
+      nextop = NULL;
       goto cleanup;
     }
   }
 
   itemname = pop_stack(VM->stack);
   if (!decode_assigncode_source(ctx, &nextop, &in)) {
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
                            "Invalid source block in code assignment bytecode.",
                            ctx ? ctx->current_item : NULL);
+    nextop = NULL;
     goto cleanup;
   }
 
   logverbose("Source to compile: %s\n", in.source);
   if (itemname.type != VALUE_str) {
     logerr("Unable to assign code item: invalid name type %d.\n", itemname.type);
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN,
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDITEM,
                            "Invalid item name type for code assignment.",
                            ctx ? ctx->current_item : NULL);
     goto cleanup;
@@ -707,7 +711,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (itemname.type == VALUE_str) {
     char fullname[MAX_ITEM_NAME];
     if (!canonicalize_itemname(itemname.s, item, fullname)) {
-      set_error_item(ctx ? ctx->itemroot : NULL, ERR_COMP_UNKNOWN,
+      set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDITEM,
                              "Invalid item name for code assignment.",
                              ctx ? ctx->current_item : NULL);
       goto cleanup;
@@ -719,9 +723,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   result = compile_and_insert_codeitem(ctx->itemroot, &itemname, &in, &errdetail);
   if (result == 0) {
     persist_codeitem_source(ctx->itemroot, &itemname, &in, ctx ? ctx->srcroot : NULL);
-    set_item(ctx->itemroot, "error", VALUE_NIL);
-    set_item(ctx->itemroot, "error.msg", VALUE_NIL);
-    set_item(ctx->itemroot, "error.item", VALUE_NIL);
+    clear_error_item(ctx->itemroot);
   } else {
     logerr("Compilation failed.\n");
     set_error_item(ctx ? ctx->itemroot : NULL, result, errdetail,
@@ -1103,9 +1105,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   if (!ctx->initialized) {
     init_interpreter(ctx);
   }
-  set_item(ctx->itemroot, "error", VALUE_NIL);
-  set_item(ctx->itemroot, "error.msg", VALUE_NIL);
-  set_item(ctx->itemroot, "error.item", VALUE_NIL);
+  clear_error_item(ctx->itemroot);
   // Given some bytecode, interpret it until the HALT instruction is seen
   // NB: The HALT opcode (currently represented by the character 'h') does
   // not have an associated function.
@@ -1173,6 +1173,10 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
         continue;
       }
       ctx->current_item->inuse = false;
+      discard_stack_to(VM->stack, entry_stack_current);
+      VM->stack->base = entry_stack_base;
+      VM->stack->locals = entry_stack_locals;
+      VM->stack->params = entry_stack_params;
       ctx->decoder = saved_decoder;
       ctx->current_item = saved_current_item;
       ctx->pending_call_item = saved_pending_call_item;

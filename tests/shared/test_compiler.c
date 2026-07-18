@@ -173,6 +173,7 @@ void test_relative_item_leading_dot_existing_absolute_item_unchanged(void);
 void test_float_item_literal_layer_rejected_at_compile_time(void);
 void test_float_local_deref_layer_returns_nil_and_does_not_save_item(void);
 void test_error_item_preserves_compiler_diagnostic_fields(void);
+void test_error_message_table_defines_active_errors(void);
 void test_value_ieee754_environment_contract(void);
 void test_value_integer_arithmetic_helpers(void);
 void test_value_arithmetic_invalid_and_nil_operands(void);
@@ -197,6 +198,8 @@ void test_value_comparison_mismatched_type_equality_quirk(void);
 void test_value_comparison_unsupported_ordering_is_false(void);
 void test_runtime_decode_requires_frame_bounds(void);
 void test_interpreter_truncated_single_byte_operands(void);
+void test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error(void);
+void test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error(void);
 void test_strict_runtime_contracts_default_preserves_fetch_argument_drops(void);
 void test_strict_validation_alone_preserves_fetch_argument_drops(void);
 void test_strict_runtime_contracts_reports_too_many_item_arguments(void);
@@ -310,6 +313,7 @@ static const test_case_t core_tests[] = {
     {"test_float_item_literal_layer_rejected_at_compile_time", test_float_item_literal_layer_rejected_at_compile_time},
     {"test_float_local_deref_layer_returns_nil_and_does_not_save_item", test_float_local_deref_layer_returns_nil_and_does_not_save_item},
     {"test_error_item_preserves_compiler_diagnostic_fields", test_error_item_preserves_compiler_diagnostic_fields},
+    {"test_error_message_table_defines_active_errors", test_error_message_table_defines_active_errors},
     {"test_value_ieee754_environment_contract", test_value_ieee754_environment_contract},
     {"test_value_integer_arithmetic_helpers", test_value_integer_arithmetic_helpers},
     {"test_value_arithmetic_invalid_and_nil_operands", test_value_arithmetic_invalid_and_nil_operands},
@@ -335,6 +339,10 @@ static const test_case_t core_tests[] = {
     {"test_value_comparison_unsupported_ordering_is_false", test_value_comparison_unsupported_ordering_is_false},
     {"test_runtime_decode_requires_frame_bounds", test_runtime_decode_requires_frame_bounds},
     {"test_interpreter_truncated_single_byte_operands", test_interpreter_truncated_single_byte_operands},
+    {"test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error",
+     test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error},
+    {"test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error",
+     test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error},
     {"test_strict_runtime_contracts_default_preserves_fetch_argument_drops", test_strict_runtime_contracts_default_preserves_fetch_argument_drops},
     {"test_strict_validation_alone_preserves_fetch_argument_drops", test_strict_validation_alone_preserves_fetch_argument_drops},
     {"test_strict_runtime_contracts_reports_too_many_item_arguments", test_strict_runtime_contracts_reports_too_many_item_arguments},
