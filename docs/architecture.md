@@ -3,7 +3,7 @@
 This document describes the current module boundaries in Sinistra and the
 intended dependency direction. It is a reasoning aid, not a file-move plan.
 
-## Current Source Layout
+## Source Organization
 
 Top-level `src/` holds the CLI entry points and integration headers, with
 reusable implementation grouped under `src/common/`, `src/compiler/`,
@@ -180,9 +180,14 @@ For normal changes, run:
 make test
 ```
 
-For module-boundary, compiler, runtime, or build-system changes, also run:
+For module-boundary, compiler, runtime, or build-system changes, also run the
+relevant checks documented in [`CONTRIBUTING.md`](../CONTRIBUTING.md). The
+hosted workflow keeps the warning, release, leak-sanitizer, and fuzz checks in
+separate parallel jobs; the combined local entry point is:
 
 ```sh
 make test-warnings
-./ci/gate_ir_absyn_emitbc.sh
+make test-release
+make test-lsan
+FUZZ_SEED=1 FUZZ_ARTIFACT_DIR="$PWD/tests/fuzz/artifacts" make fuzz-smoke
 ```

@@ -35,7 +35,8 @@ STRICT_WARNING_FLAGS := -Werror -Wshadow -Wformat=2 \
 	-Wno-error=implicit-fallthrough -Wno-error=missing-field-initializers \
 	-Wno-error=pedantic -Wno-error=shadow -Wno-error=type-limits \
 	-Wno-error=format-nonliteral -Wno-error=conversion -Wno-error=sign-conversion
-GENERATED_WARNING_FLAGS := -Wno-conversion -Wno-sign-conversion -Wno-pedantic
+GENERATED_WARNING_FLAGS := -Wno-conversion -Wno-sign-conversion -Wno-pedantic \
+	-Wno-unused-but-set-variable
 
 ifeq ($(BUILD),debug)
 CFLAGS += $(DEBUG_CFLAGS)
@@ -77,7 +78,10 @@ FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
 FUZZ_SEED ?= 1
+FUZZ_ARTIFACT_DIR ?=
+XXD ?= xxd
 FUZZ_DIR := $(TEST_DIR)/fuzz
+FUZZ_LOCAL_ARTIFACT_DIR := $(FUZZ_DIR)/artifacts
 FUZZ_BIN := $(FUZZ_DIR)/fuzz_scomp
 FUZZ_CORPUS_DIR := $(FUZZ_DIR)/corpus/scomp
 FUZZ_SDISS_BIN := $(FUZZ_DIR)/fuzz_sdiss
@@ -168,7 +172,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) -c $(CFLAGS) $< -o $@
 
 .PHONY: all lib clean help debug release sanitize
-.PHONY: test test-network test-chat-smoke test-strict test-warnings test-asan test-lsan
+.PHONY: test test-network test-chat-smoke test-strict test-release test-warnings test-asan test-lsan
 .PHONY: fuzz-build fuzz-corpora fuzz-smoke fuzz-smoke-run
 .PHONY: fuzz-scomp fuzz-sdiss fuzz-sin-object
 .PHONY: seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
@@ -197,13 +201,14 @@ help:
 		'  release          Clean, then build all with BUILD=release' \
 		'  sanitize         Clean, then build all with BUILD=sanitize and ASan/UBSan' \
 		'  lib              Build lib/libsinshared.a only' \
-		'  clean            Remove objects, binaries, libraries, tests, and stale generated files' \
+		'  clean            Remove objects, binaries, libraries, tests, fuzz artifacts, and stale generated files' \
 		'' \
 		'Test targets:' \
 		'  test             Build debug artifacts and run network + standard suite' \
 		'  test-network     Build and run network tests only' \
 		'  test-chat-smoke  Run the real chat example through localhost' \
 		'  test-strict      Run standard suite with benchmark budgets enabled' \
+		'  test-release     Clean, rebuild, and test with BUILD=release and strict warnings' \
 		'  test-warnings    Clean, rebuild, and test with STRICT_WARNINGS=1' \
 		'  test-asan        Clean, rebuild, and test with BUILD=sanitize, leak checks off' \
 		'  test-lsan        Clean, rebuild, and test with BUILD=sanitize, leak checks on' \
@@ -224,7 +229,9 @@ help:
 		'  PKG_CONFIG=pkg-config         Dependency discovery command' \
 		'  LIBUV_PC=libuv                pkg-config module for libuv' \
 		'  STRICT_WARNINGS=1             Promote selected warnings to errors' \
-		'  FUZZ_CC=clang                 Compiler used by fuzz targets'
+		'  FUZZ_CC=clang                 Compiler used by fuzz targets' \
+		'  FUZZ_ARTIFACT_DIR=DIR         Preserve fuzz artifacts in DIR; default is temporary' \
+		'  XXD=xxd                       Required tool for sdiss corpus seeding'
 
 $(LIB): $(LIB_OBJECTS)
 	@mkdir -p $(LIB_DIR)
@@ -270,6 +277,9 @@ test-strict: $(TEST_BIN)
 test-warnings: clean
 	+$(MAKE) STRICT_WARNINGS=1 test
 
+test-release: clean
+	+$(MAKE) BUILD=release STRICT_WARNINGS=1 test
+
 test-asan: clean
 	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=0" $(MAKE) BUILD=sanitize STRICT_WARNINGS=1 test
 
@@ -300,15 +310,19 @@ $(FUZZ_SIN_OBJECT_BIN): $(OBJ_DIR)/tests/fuzz/fuzz_sin_object.o $(LIB)
 	$(CC) -o $@ $^ $(FUZZ_LINK_FLAGS) $(LIBS)
 
 seed-fuzz-sdiss-corpus:
-	@mkdir -p $(FUZZ_SDISS_CORPUS_DIR)
-	@if command -v xxd >/dev/null 2>&1; then \
-		for hex in $(TEST_DIR)/fixtures/sdiss/*.hex; do \
-			[ -e "$$hex" ] || continue; \
-			xxd -r -p "$$hex" "$(FUZZ_SDISS_CORPUS_DIR)/$$(basename "$$hex" .hex).obj"; \
-		done; \
-	else \
-		printf 'xxd not found; skipping sdiss fixture corpus seeding\n'; \
-	fi
+	@set -eu; \
+	command -v "$(XXD)" >/dev/null 2>&1 || { \
+		printf 'Required fuzz corpus tool not found: %s\n' "$(XXD)" >&2; \
+		exit 1; \
+	}; \
+	mkdir -p $(FUZZ_SDISS_CORPUS_DIR); \
+	for hex in $(TEST_DIR)/fixtures/sdiss/*.hex; do \
+		[ -e "$$hex" ] || continue; \
+		"$(XXD)" -r -p "$$hex" "$(FUZZ_SDISS_CORPUS_DIR)/$$(basename "$$hex" .hex).obj" || { \
+			printf 'Failed to seed fuzz corpus from %s\n' "$$hex" >&2; \
+			exit 1; \
+		}; \
+	done
 
 fuzz-corpora: seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
 
@@ -324,12 +338,17 @@ fuzz-smoke-run:
 	for bin in $(FUZZ_BINS); do \
 		[ -x "$$bin" ] || { printf 'Missing %s; run make fuzz-build first.\n' "$$bin" >&2; exit 1; }; \
 	done; \
-	tmp="$$(mktemp -d)"; \
-	trap 'rm -rf "$$tmp"' EXIT; \
-	mkdir -p "$$tmp/scomp" "$$tmp/sdiss" "$$tmp/sin-object"; \
-	$(FUZZ_BIN) -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) "$$tmp/scomp" $(FUZZ_CORPUS_DIR); \
-	$(FUZZ_SDISS_BIN) -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) "$$tmp/sdiss" $(FUZZ_SDISS_CORPUS_DIR); \
-	$(FUZZ_SIN_OBJECT_BIN) -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) "$$tmp/sin-object" $(FUZZ_SIN_OBJECT_CORPUS_DIR)
+	work_dir="$$(mktemp -d)"; \
+	trap 'rm -rf "$$work_dir"' EXIT; \
+	artifact_dir="$(FUZZ_ARTIFACT_DIR)"; \
+	if [ -z "$$artifact_dir" ]; then \
+		artifact_dir="$$work_dir/artifacts"; \
+	fi; \
+	mkdir -p "$$work_dir/scomp" "$$work_dir/sdiss" "$$work_dir/sin-object" \
+		"$$artifact_dir/scomp" "$$artifact_dir/sdiss" "$$artifact_dir/sin-object"; \
+	$(FUZZ_BIN) -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) -artifact_prefix="$$artifact_dir/scomp/" "$$work_dir/scomp" $(FUZZ_CORPUS_DIR); \
+	$(FUZZ_SDISS_BIN) -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) -artifact_prefix="$$artifact_dir/sdiss/" "$$work_dir/sdiss" $(FUZZ_SDISS_CORPUS_DIR); \
+	$(FUZZ_SIN_OBJECT_BIN) -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) -artifact_prefix="$$artifact_dir/sin-object/" "$$work_dir/sin-object" $(FUZZ_SIN_OBJECT_CORPUS_DIR)
 
 fuzz-scomp: clean
 	+$(FUZZ_MAKE) $(FUZZ_BIN)
@@ -354,7 +373,7 @@ fuzz-sin-object: clean
 
 clean:
 	rm -rf $(OBJ_DIR) $(LIB_DIR) $(PROGRAMS) $(TEST_BINS) $(TEST_DEPS) \
-		$(TEST_TMP_ARTIFACTS) $(FUZZ_BINS) $(GENERATED_FUZZ_CORPUS) \
+		$(TEST_TMP_ARTIFACTS) $(FUZZ_BINS) $(GENERATED_FUZZ_CORPUS) $(FUZZ_LOCAL_ARTIFACT_DIR) \
 		$(SRC_DIR)/parser.c $(SRC_DIR)/parser.h $(SRC_DIR)/lexer.c
 	find $(TEST_DIR)/fixtures -type f \( -name '*.tmp' -o -name '*.tmp.*' \
 		-o -name '*.generated.obj' -o -name '*.reference.obj' \) -delete

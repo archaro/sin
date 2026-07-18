@@ -15,3 +15,5 @@
 ## Compiling and Running ##
 
 See `QUICKSTART.md` for instructions on compiling some code and starting the runtime engine.
+Development prerequisites and the local/hosted CI gates are documented in
+[`CONTRIBUTING.md`](CONTRIBUTING.md).

@@ -26,8 +26,9 @@ kept in sync with the source files named in each document.
 ## Maintenance
 
 When changing syntax, bytecode, libcalls, itemstore persistence, runtime error
-contracts, command-line flags, or source layout, update the relevant document in
-the same change. Prefer linking to source-of-truth files such as
+contracts, or command-line flags, update the relevant document in the same
+change. Module ownership and dependency direction are maintained in
+[`architecture.md`](architecture.md). Prefer linking to source-of-truth files such as
 `src/libcall/libcall_list.h`, `src/compiler/ir/opcode_schema.def`, and
 `src/common/string_limits.h` rather than duplicating implementation details
 without context.

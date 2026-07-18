@@ -19,6 +19,7 @@ tests/fuzz/fuzz_sin_object
 /tests/fixtures/**/*.generated.obj
 /tests/fixtures/**/*.reference.obj
 /tests/fuzz/corpus/**/*.obj
+/tests/fuzz/artifacts/
 .vscode/
 .*.swp
 sin.code-workspace

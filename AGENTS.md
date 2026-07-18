@@ -84,7 +84,7 @@ Choose the narrowest test set that meaningfully covers your change, then run bro
 2. `make test-warnings` for strict-warning regressions.
 3. `make test-asan` for ASan/UBSan coverage with leak checks disabled.
 4. `make test-lsan` for ASan/UBSan with leak checks enabled; this may fail in ptrace-constrained environments.
-5. `./ci/gate_ir_absyn_emitbc.sh` when changing compiler/interpreter/language paths.
+5. `make test-release` when changing compiler/interpreter/language paths.
 6. `./ci/gate_sanitizers_fuzz.sh` for changes touching compiler, runtime, parser, bytecode, itemstore loading, or fuzz harnesses.
 
 Fuzz commands:
@@ -203,7 +203,7 @@ When preparing a PR or final summary, include:
 - Documentation-only changes: inspect rendered Markdown if practical and run no build unless the docs include generated examples that need verification.
 - Build system changes: run `make clean`, `make`, and `make test` when feasible.
 - Core C logic changes: run `make test` and consider `make test-warnings`.
-- Compiler/parser/language changes: run `make test`, `./ci/gate_ir_absyn_emitbc.sh`, and targeted fixture/golden tests if available.
+- Compiler/parser/language changes: run `make test`, `./ci/gate_sanitizers_fuzz.sh`, and targeted fixture/golden tests if available.
 - Runtime/bytecode/itemstore changes: run `make test`, sanitizer tests where feasible, and relevant fuzz smoke tests.
 - Fuzz harness changes: run `make fuzz-smoke` or the specific harness target plus a seeded run.
 - Code changes: always ensure the test harness is updated to reflect the new code, including new or changed unit, golden, integration, benchmark, or fuzz coverage as appropriate.
