@@ -1,4 +1,6 @@
-/* The input item - executed by the run-loop */
+/* The input item is executed once per run-loop pass.
+ * net.input processes at most one pending network event each time it is called.
+ */
 input = code (
 @a = net.input;
 if @a == 1 then
@@ -6,9 +8,10 @@ if @a == 1 then
   net.write{input.line, "Hello!  You are on line "};
   net.write{input.line, input.line};
   net.write{input.line, "\n"};
-  /* Tell everyone else about the new connection */
+  /* input.line is the zero-based connection slot assigned by net.input. */
+  /* Tell everyone else about the new connection. */
   @l = 0;
-  /* Hardcoded to 8 lines, because I'm lazy */
+  /* The default examples use eight connection slots: lines 0 through 7. */
   while @l < 8 do
     if @l != input.line then
       net.write{@l, "Line "};
@@ -25,7 +28,7 @@ elsif @a == 3 then
   else
     /* Tell every other line what was said. */
     @l = 0;
-    /* Hardcoded to 8 lines, because I'm lazy */
+    /* The default examples use eight connection slots: lines 0 through 7. */
     while @l < 8 do
       if @l != input.line then
         net.write{@l, "Line "};
@@ -38,9 +41,10 @@ elsif @a == 3 then
     endwhile;
   endif;
 elsif @a == 2 then
+  /* net.input has reported the disconnect and made this slot reusable. */
   /* Tell every other line that there has been a disconnection. */
   @l = 0;
-  /* Hardcoded to 8 lines, because I'm lazy */
+  /* The default examples use eight connection slots: lines 0 through 7. */
   while @l < 8 do
     if @l != input.line then
       net.write{@l, "Line "};
@@ -58,6 +62,7 @@ docommand = code {@l, @cmd} (
   /* This is really naive. */
   if str.eqcasei{@cmd, "quit"} then
     net.write{@l, "You have been disconnected.\n"};
+    /* Flush before ditching so the farewell is sent before the graceful close. */
     net.flush{@l};
     net.ditch{@l};
   elsif str.eqcasei{@cmd, "shutdown"} then

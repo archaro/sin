@@ -1,8 +1,12 @@
-  /* The input item - executed by the run-loop */
+  /* The input item is executed once per run-loop pass.
+   * net.input processes at most one pending network event each time it is called.
+   */
   input = code (
   /* Is there anyone out there?
    * A return value of 0 means no network activity
+   * A return value of 1 is a new connection
    * A return value of 2 is a disconnection, which isn't relevant here
+   * A return value of 3 is a complete input line
    */
   @a = net.input;
   if @a == 1 then

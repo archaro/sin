@@ -106,6 +106,30 @@ arguments as described below.
 | `V` | `IR_OP_ITEM_PUSH_DEREF_LOCAL` | `u8 local_index` | Inside a `D` dereference payload, turn the addressed local value into a layer name. |
 
 
+## Code item result semantics
+
+At `IR_OP_HALT`, the interpreter returns the value above the current frame. If
+there is no value above the frame, the result is `nil`. For nested code-item
+calls, the callee result is pushed back onto the caller's stack; for top-level
+execution, it is returned by the interpreter.
+
+The compiler makes result-producing source code explicit with `IR_OP_DISCARD`.
+Only a final top-level expression statement is left as the code item's result.
+Earlier expression statements are evaluated for side effects and then compiled
+with `DISCARD`, so `1; 2;` returns `2`, not `1`. Assignments, `if` statements,
+and `while` statements do not themselves produce a result, so `@x = 7;`,
+`if true then 7; endif;`, and `while ... do 7; endwhile;` all return `nil`
+unless followed by a final top-level expression statement. Expression statements
+inside `if` branches and loop bodies are discarded as part of those statements;
+they do not become the enclosing code item's result.
+
+Libcalls follow the same rule. A final libcall expression, such as
+`sys.exists{"foo"};`, returns the libcall result. A non-final libcall expression,
+such as `sys.exists{"foo"}; 5;`, still performs its side effects, but its return
+value is discarded and the code item returns `5`. `sys.compile{source}` also
+follows this rule: the compiled source can create or update items even when the
+`sys.compile` return value is discarded by a following expression statement.
+
 ## Numeric edge cases
 
 Integer arithmetic is signed 64-bit arithmetic with checked overflow. `IR_OP_ADD` is the only arithmetic opcode that treats `nil` as integer `0`; `IR_OP_SUB`, `IR_OP_MUL`, `IR_OP_DIV`, and `IR_OP_NEG` do not treat `nil` as numeric. Overflow in
