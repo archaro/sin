@@ -350,6 +350,34 @@ void test_compiler_diag_pipeline(void){
   ASSERT_TRUE(strcmp("☃;", d.excerpt)==0);
 
   compiler_diag_reset(&d);
+  const char *newline_string_source = "@x = \"abc\n@z = 1;";
+  rc = compile_source_to_bytecode_diag(newline_string_source,
+                                      strlen(newline_string_source), &out, &d);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_EQ_INT(DIAG_PHASE_PARSE, d.phase);
+  ASSERT_TRUE(strstr(d.message, "Newline in string.") != NULL);
+  ASSERT_EQ_INT(1, d.line);
+  ASSERT_EQ_INT(6, d.column);
+  ASSERT_EQ_INT(1, d.span);
+  ASSERT_TRUE(d.has_loc);
+  ASSERT_NOT_NULL(d.excerpt);
+  ASSERT_TRUE(strcmp("@x = \"abc", d.excerpt)==0);
+
+  compiler_diag_reset(&d);
+  const char *eof_string_source = "@x = \"abc";
+  rc = compile_source_to_bytecode_diag(eof_string_source,
+                                      strlen(eof_string_source), &out, &d);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_EQ_INT(DIAG_PHASE_PARSE, d.phase);
+  ASSERT_TRUE(strstr(d.message, "EOF in string.") != NULL);
+  ASSERT_EQ_INT(1, d.line);
+  ASSERT_EQ_INT(6, d.column);
+  ASSERT_EQ_INT(1, d.span);
+  ASSERT_TRUE(d.has_loc);
+  ASSERT_NOT_NULL(d.excerpt);
+  ASSERT_TRUE(strcmp("@x = \"abc", d.excerpt)==0);
+
+  compiler_diag_reset(&d);
   const char *named_source = "@x = ;";
   ParseInput named_input = {named_source, strlen(named_source), "custom_source.sin"};
   char *errdetail = NULL;

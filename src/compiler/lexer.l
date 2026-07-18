@@ -128,6 +128,8 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                 // String literal payloads are capped by SIN_MAX_STRING_BYTES.
                 char *strbuf, *strbuf_ptr;
                 int strbuf_size, strbuf_capacity;
+                int strbuf_start_line = 1;
+                int strbuf_start_column = 1;
                 int code_paren = 0;
 
 <INITIAL>{
@@ -170,7 +172,9 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   "{"           { return TLBRACE; }
   "}"           { return TRBRACE; }
   ";"           { return TSEMI; }
-  "\""          { 
+  "\""          {
+                  strbuf_start_line = yylloc->first_line;
+                  strbuf_start_column = yylloc->first_column;
                   strbuf_capacity = 4;
                   strbuf = (char *)malloc(strbuf_capacity + 1);
                   if (!strbuf) {
@@ -205,6 +209,10 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                 }
   \n            {
                   BEGIN(INITIAL);
+                  yylloc->first_line = strbuf_start_line;
+                  yylloc->first_column = strbuf_start_column;
+                  yylloc->last_line = strbuf_start_line;
+                  yylloc->last_column = strbuf_start_column;
                   yylval->TSTRINGLIT = strdup("Newline in string.");
                   free(strbuf);
                   return TUNKNOWNCHAR;
@@ -322,8 +330,12 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
 }
 <STRINGLIT><<EOF>> {
   BEGIN(INITIAL);
+  yylloc->first_line = strbuf_start_line;
+  yylloc->first_column = strbuf_start_column;
+  yylloc->last_line = strbuf_start_line;
+  yylloc->last_column = strbuf_start_column;
   yylval->TSTRINGLIT = strbuf_size < 0 ? strbuf_too_long_msg() :
-      strdup("Unterminated string literal.");
+      strdup("EOF in string.");
   free(strbuf);
   return TUNKNOWNCHAR;
 }
