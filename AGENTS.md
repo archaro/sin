@@ -1,8 +1,57 @@
 # AGENTS.md
 
-## Scope and precedence
-
 These instructions apply to the entire repository rooted at this directory. If a more deeply nested `AGENTS.md` is added later, follow that file for its subtree when it conflicts with this one. Direct instructions from the user, system, or developer messages take precedence over this file.
+
+# Multi-agent implementation policy
+
+The root agent is the orchestrator and final reviewer.
+
+For non-trivial code changes:
+
+1. Analyze the request and inspect enough of the repository to produce a bounded implementation task.
+2. Define explicit acceptance criteria, relevant files or subsystems, constraints, and required tests.
+3. Delegate the first implementation attempt to the `luna_writer` custom agent.
+4. Review Luna's changes yourself. Inspect the diff and run or verify the relevant tests rather than accepting the worker's summary uncritically.
+5. Accept the implementation only when all acceptance criteria are met.
+
+## Mandatory escalation rule
+
+Never send rejected Luna work back to `luna_writer` more than once.
+
+If Luna's work:
+- fails a test or check,
+- is incomplete,
+- violates an acceptance criterion,
+- requires substantial correction,
+- reports unresolved uncertainty,
+- or would otherwise be returned for a third implementation attempt, delegate the corrective attempt to `terra_writer` instead.
+
+Give Terra:
+- the original task,
+- all acceptance criteria,
+- Luna's result,
+- the current working-tree state,
+- concrete review findings,
+- failing command output where relevant,
+- and the exact reason Luna's attempt was rejected.
+
+After Terra finishes, independently review and validate the result.
+
+## Root-agent responsibilities
+
+The root agent retains responsibility for:
+- requirements analysis,
+- architectural decisions,
+- task decomposition,
+- acceptance criteria,
+- reviewing worker output,
+- running final validation,
+- and presenting the final answer.
+
+Do not delegate the final acceptance decision.
+
+The root agent may make tiny mechanical edits itself, but substantive
+implementation should follow the Luna-first, Terra-on-rejection policy.
 
 ## Project overview
 
