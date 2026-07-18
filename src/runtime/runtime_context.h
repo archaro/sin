@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <signal.h>
 #include <uv.h>
 
 #include "item.h"
@@ -50,6 +51,8 @@ struct RuntimeContext {
   bool *shutdown_requested;
   bool strict_validation;
   bool strict_runtime_contracts;
+  volatile sig_atomic_t *interrupt_pending;
+  bool *signal_shutdown_requested;
 
   // Owned by this RuntimeContext invocation and freely mutated while the
   // interpreter runs. The bytecode and ITEM_t objects referenced by these
@@ -60,6 +63,7 @@ struct RuntimeContext {
   OP_t opcode[256];
   LibcallRegistry *libcalls;
   bool initialized;
+  bool interrupted;
 };
 
 bool runtime_init(RuntimeContext *ctx, VM_t *vm);

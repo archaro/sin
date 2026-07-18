@@ -124,6 +124,39 @@ static void wait_for_log_text(const char *path, const char *needle) {
   fail("timed out waiting for server startup log");
 }
 
+static size_t log_text_occurrences(const char *path, const char *needle) {
+  if (!needle || needle[0] == '\0') fail("empty log occurrence marker");
+  FILE *file = fopen(path, "r");
+  if (!file) return 0;
+
+  char buffer[16384] = {0};
+  size_t used = fread(buffer, 1, sizeof(buffer) - 1u, file);
+  if (ferror(file)) {
+    fclose(file);
+    fail_errno("read server log");
+  }
+  buffer[used] = '\0';
+  if (fclose(file) != 0) fail_errno("close server log");
+
+  size_t count = 0;
+  size_t needle_len = strlen(needle);
+  for (char *match = strstr(buffer, needle); match;
+       match = strstr(match + needle_len, needle)) {
+    count++;
+  }
+  return count;
+}
+
+static void wait_for_log_occurrences(const char *path, const char *needle,
+                                     size_t expected_count) {
+  int64_t deadline = monotonic_ms() + TEST_TIMEOUT_MS;
+  while (monotonic_ms() < deadline) {
+    if (log_text_occurrences(path, needle) >= expected_count) return;
+    usleep(50000);
+  }
+  fail("timed out waiting for repeated server log marker");
+}
+
 static void wait_server_failure(void) {
   pid_t pid = resources.server_pid;
   int64_t deadline = monotonic_ms() + TEST_TIMEOUT_MS;
@@ -382,6 +415,8 @@ int main(void) {
   char server_log[512];
   char metadata_log[512];
   char metadata_output[512];
+  char restart_src[512];
+  char restart_obj[512];
   make_path(srcroot, sizeof(srcroot), tmp, "srcroot");
   make_path(boot_obj, sizeof(boot_obj), tmp, "chat-boot.obj");
   make_path(load_obj, sizeof(load_obj), tmp, "chat-load.obj");
@@ -389,6 +424,8 @@ int main(void) {
   make_path(server_log, sizeof(server_log), tmp, "server.log");
   make_path(metadata_log, sizeof(metadata_log), tmp, "metadata");
   make_path(metadata_output, sizeof(metadata_output), tmp, "metadata.log");
+  make_path(restart_src, sizeof(restart_src), tmp, "restart.src");
+  make_path(restart_obj, sizeof(restart_obj), tmp, "restart.obj");
   if (mkdir(srcroot, 0700) != 0) fail_errno("mkdir srcroot");
 
   char *const compile_boot[] = {
@@ -434,6 +471,41 @@ int main(void) {
   run_expect_failure(junk_port, "junk port");
   run_expect_failure(overflow_port, "overflow port");
   run_expect_failure(high_port, "high port");
+
+  FILE *restart_file = fopen(restart_src, "w");
+  if (!restart_file) fail_errno("fopen restart source");
+  const char *entry_marker = "boot interrupt entry";
+  if (fputs("sys.log{\"boot interrupt entry\\n\"}; "
+            "while true do @x = 1; endwhile;\n", restart_file) < 0) {
+    fclose(restart_file);
+    fail_errno("write restart source");
+  }
+  if (fclose(restart_file) != 0) fail_errno("close restart source");
+  char *const compile_restart[] = {
+    "./scomp", restart_src, restart_obj, NULL
+  };
+  run_checked(compile_restart, "compile SIGUSR1 restart source");
+  resources.server_pid = spawn_server(itemstore, srcroot, restart_obj, 0,
+                                       server_log);
+  wait_for_log_occurrences(server_log, entry_marker, 1);
+  if (kill(resources.server_pid, SIGUSR1) != 0) {
+    fail_errno("kill boot-phase SIGUSR1");
+  }
+  wait_for_log_occurrences(server_log,
+                           "SIGUSR1 received.  Restarting boot item.", 1);
+  wait_for_log_occurrences(server_log, entry_marker, 2);
+  if (kill(resources.server_pid, SIGUSR1) != 0) {
+    fail_errno("kill repeated boot-phase SIGUSR1");
+  }
+  wait_for_log_occurrences(server_log,
+                           "SIGUSR1 received.  Restarting boot item.", 2);
+  wait_for_log_occurrences(server_log, entry_marker, 3);
+  wait_for_log_occurrences(server_log,
+                           "Destroying and recreating all stacks.", 2);
+  if (kill(resources.server_pid, 0) != 0) {
+    fail_errno("boot restart process exited");
+  }
+  stop_server();
 
   resources.server_pid = spawn_server(itemstore, srcroot, boot_obj, 0,
                                        server_log);

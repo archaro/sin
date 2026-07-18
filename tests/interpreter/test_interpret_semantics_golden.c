@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 #include "config.h"
 #include "compiler/compiler_pipeline.h"
@@ -19,7 +21,21 @@ typedef struct {
   const char *name;
   const char *src_path;
   const char *fixture_path;
+  const char *expected_code_items[2];
 } InterpretGoldenCase;
+
+static void normalize_runtime_path(char *text, const char *path,
+                                   const char *replacement) {
+  if (!text || !path || !replacement) return;
+  size_t path_len = strlen(path);
+  size_t replacement_len = strlen(replacement);
+  char *match = NULL;
+  while ((match = strstr(text, path)) != NULL) {
+    memcpy(match, replacement, replacement_len);
+    memmove(match + replacement_len, match + path_len,
+            strlen(match + path_len) + 1u);
+  }
+}
 
 static void assert_run_matches(const char *case_name, const char *variant,
                                const TestProcessResult *actual,
@@ -41,12 +57,51 @@ static void assert_run_matches(const char *case_name, const char *variant,
   }
 
   missing_line = -1;
-  if (!test_contains_all_lines(expected->stderr_text, actual->stderr_text,
-                               &missing_line)) {
+  bool stderr_matches = expected->stderr_text[0] == '\0'
+      ? actual->stderr_text[0] == '\0'
+      : test_contains_all_lines(expected->stderr_text, actual->stderr_text,
+                                &missing_line);
+  if (!stderr_matches) {
     fprintf(stderr,
             "[%s/%s] mismatch stderr: expected marker line %d not found\n",
             case_name, variant, missing_line);
     ASSERT_TRUE(0);
+  }
+}
+
+static void assert_persisted_code_items(const InterpretGoldenCase *tc,
+                                        const char *itemstore_path) {
+  if (!tc->expected_code_items[0]) return;
+
+  ITEM_t *root = load_itemstore_with_options(itemstore_path, true);
+  ASSERT_NOT_NULL(root);
+  for (size_t i = 0; i < sizeof(tc->expected_code_items) /
+                         sizeof(tc->expected_code_items[0]); i++) {
+    const char *name = tc->expected_code_items[i];
+    if (!name) continue;
+    ITEM_t *item = find_item(root, name);
+    ASSERT_NOT_NULL(item);
+    ASSERT_EQ_INT(ITEM_code, item->type);
+  }
+  destroy_item(root);
+}
+
+static void remove_persisted_source_files(const InterpretGoldenCase *tc,
+                                          const char *srcroot_path) {
+  for (size_t i = 0; i < sizeof(tc->expected_code_items) /
+                         sizeof(tc->expected_code_items[0]); i++) {
+    const char *name = tc->expected_code_items[i];
+    if (!name) continue;
+    char item_dir[512];
+    char source_path[sizeof(item_dir) + sizeof("/source.sin")];
+    int written = snprintf(item_dir, sizeof(item_dir), "%s/%s",
+                           srcroot_path, name);
+    ASSERT_TRUE(written > 0 && (size_t)written < sizeof(item_dir));
+    written = snprintf(source_path, sizeof(source_path), "%s/source.sin",
+                       item_dir);
+    ASSERT_TRUE(written > 0 && (size_t)written < sizeof(source_path));
+    ASSERT_EQ_INT(0, remove(source_path));
+    ASSERT_EQ_INT(0, rmdir(item_dir));
   }
 }
 
@@ -66,11 +121,31 @@ static void run_case(const InterpretGoldenCase *tc) {
   if (compile_exit != 0) remove(generated_obj_path);
   ASSERT_EQ_INT(0, compile_exit);
 
-  char *const run_argv[] = {"./sin", "-o", generated_obj_path, NULL};
+  char run_dir[] = "/tmp/sin-interp-golden-run-XXXXXX";
+  ASSERT_NOT_NULL(mkdtemp(run_dir));
+  char itemstore_path[sizeof(run_dir) + sizeof("/items.dat")];
+  char srcroot_path[sizeof(run_dir) + sizeof("/srcroot")];
+  ASSERT_TRUE(snprintf(itemstore_path, sizeof(itemstore_path), "%s/items.dat",
+                       run_dir) > 0);
+  ASSERT_TRUE(snprintf(srcroot_path, sizeof(srcroot_path), "%s/srcroot",
+                       run_dir) > 0);
+  ASSERT_EQ_INT(0, mkdir(srcroot_path, 0700));
+  char *const run_argv[] = {
+    "./sin", "--loadonly", "-i", itemstore_path, "-s", srcroot_path,
+    "-o", generated_obj_path, NULL
+  };
   TestProcessResult generated = {0};
   int run_capture_rc = test_run_argv_capture(run_argv, 2000, &generated);
-  remove(generated_obj_path);
+  ASSERT_EQ_INT(0, remove(generated_obj_path));
+  normalize_runtime_path(generated.stdout_text, srcroot_path, "srcroot");
+  normalize_runtime_path(generated.stdout_text, itemstore_path, "items.dat");
+  test_normalize_text(generated.stderr_text);
   ASSERT_EQ_INT(0, run_capture_rc);
+  assert_persisted_code_items(tc, itemstore_path);
+  ASSERT_EQ_INT(0, remove(itemstore_path));
+  remove_persisted_source_files(tc, srcroot_path);
+  ASSERT_EQ_INT(0, rmdir(srcroot_path));
+  ASSERT_EQ_INT(0, rmdir(run_dir));
 
   char *fixture = test_read_text_file(tc->fixture_path);
   ASSERT_NOT_NULL(fixture);
@@ -96,10 +171,14 @@ static void run_case(const InterpretGoldenCase *tc) {
 
 void test_interpret_semantics_golden(void) {
   const InterpretGoldenCase cases[] = {
-      {"chat_boot", "examples/chat-boot.src", "tests/fixtures/interpret/chat-boot.expected.txt"},
-      {"chat_load", "examples/chat-load.src", "tests/fixtures/interpret/chat-load.expected.txt"},
-      {"echo_boot", "examples/echo-boot.src", "tests/fixtures/interpret/echo-boot.expected.txt"},
-      {"echo_load", "examples/echo-load.src", "tests/fixtures/interpret/echo-load.expected.txt"},
+      {"chat_boot", "examples/chat-boot.src",
+       "tests/fixtures/interpret/chat-boot.expected.txt", {NULL, NULL}},
+      {"chat_load", "examples/chat-load.src",
+       "tests/fixtures/interpret/chat-load.expected.txt", {"input", "docommand"}},
+      {"echo_boot", "examples/echo-boot.src",
+       "tests/fixtures/interpret/echo-boot.expected.txt", {NULL, NULL}},
+      {"echo_load", "examples/echo-load.src",
+       "tests/fixtures/interpret/echo-load.expected.txt", {"input", NULL}},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
@@ -282,4 +361,62 @@ void test_interpret_rejects_malformed_bytecode_before_execution(void) {
   destroy_vm(config.vm);
   destroy_item(config.itemroot);
   memset(&config, 0, sizeof(config));
+}
+
+void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void) {
+  static const uint8_t short_header[] = {0};
+  static const uint8_t truncated_operand[] = {0, 0, 'e'};
+  static const uint8_t missing_halt[] = {0, 0, 'b', 1};
+  static const uint8_t invalid_opcode[] = {0, 0, 0x7f, 'h'};
+  struct {
+    const char *name;
+    const uint8_t *bytes;
+    size_t len;
+    const char *diagnostic;
+  } cases[] = {
+    {"short_header", short_header, sizeof(short_header),
+     "missing two-byte locals/params header"},
+    {"truncated_operand", truncated_operand, sizeof(truncated_operand),
+     "truncated LOAD_LOCAL"},
+    {"missing_halt", missing_halt, sizeof(missing_halt),
+     "missing terminating HALT opcode"},
+    {"invalid_opcode", invalid_opcode, sizeof(invalid_opcode),
+     "opcode 0x7F (.): invalid opcode; recompile from Sinistra source"},
+    {"null_bytecode", NULL, 0, "null bytecode pointer"},
+  };
+
+  for (int strict = 0; strict <= 1; strict++) {
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+      setup_result_semantics_runtime();
+      config.strict_validation = strict != 0;
+      uint8_t *owned = NULL;
+      if (cases[i].len > 0) {
+        owned = malloc(cases[i].len);
+        ASSERT_NOT_NULL(owned);
+        memcpy(owned, cases[i].bytes, cases[i].len);
+      }
+      ITEM_t *code = insert_code_item(config.itemroot, cases[i].name,
+                                      (uint32_t)cases[i].len, owned);
+      ASSERT_NOT_NULL(code);
+      RuntimeContext ctx;
+      runtime_context_init(&ctx, config.vm);
+      ctx.itemroot = config.itemroot;
+      ctx.strict_validation = config.strict_validation;
+      VALUE_t result = interpret(&ctx, code);
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      ITEM_t *err = find_item(config.itemroot, "error");
+      ASSERT_NOT_NULL(err);
+      ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, err->value.i);
+      ITEM_t *msg = find_item(config.itemroot, "error.msg");
+      ASSERT_NOT_NULL(msg);
+      ASSERT_EQ_INT(VALUE_str, msg->value.type);
+      ASSERT_TRUE(strstr(msg->value.s, cases[i].diagnostic) != NULL);
+      ITEM_t *error_item = find_item(config.itemroot, "error.item");
+      ASSERT_NOT_NULL(error_item);
+      ASSERT_EQ_INT(VALUE_str, error_item->value.type);
+      ASSERT_TRUE(strcmp(error_item->value.s, cases[i].name) == 0);
+      runtime_destroy(&ctx);
+      teardown_result_semantics_runtime();
+    }
+  }
 }

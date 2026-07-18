@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 #include "test_assert.h"
 #include "test_helpers.h"
@@ -10,6 +12,19 @@ typedef struct {
   const char *src_path;
   const char *expected_path;
 } StressCase;
+
+static void normalize_runtime_path(char *text, const char *path,
+                                   const char *replacement) {
+  if (!text || !path || !replacement) return;
+  size_t path_len = strlen(path);
+  size_t replacement_len = strlen(replacement);
+  char *match = NULL;
+  while ((match = strstr(text, path)) != NULL) {
+    memcpy(match, replacement, replacement_len);
+    memmove(match + replacement_len, match + path_len,
+            strlen(match + path_len) + 1u);
+  }
+}
 
 void test_interpret_stress(void) {
   const StressCase cases[] = {
@@ -40,10 +55,28 @@ void test_interpret_stress(void) {
       if (compile_exit != 0) remove(obj_paths[i]);
       ASSERT_EQ_INT(0, compile_exit);
 
-      char *const run_argv[] = {"./sin", "-o", obj_paths[i], NULL};
+      char run_dir[] = "/tmp/sin-interp-stress-run-XXXXXX";
+      ASSERT_NOT_NULL(mkdtemp(run_dir));
+      char itemstore_path[sizeof(run_dir) + sizeof("/items.dat")];
+      char srcroot_path[sizeof(run_dir) + sizeof("/srcroot")];
+      ASSERT_TRUE(snprintf(itemstore_path, sizeof(itemstore_path),
+                           "%s/items.dat", run_dir) > 0);
+      ASSERT_TRUE(snprintf(srcroot_path, sizeof(srcroot_path), "%s/srcroot",
+                           run_dir) > 0);
+      ASSERT_EQ_INT(0, mkdir(srcroot_path, 0700));
+      char *const run_argv[] = {
+        "./sin", "--loadonly", "-i", itemstore_path, "-s", srcroot_path,
+        "-o", obj_paths[i], NULL
+      };
       TestProcessResult current = {0};
-      int run_capture_rc = test_run_argv_capture(run_argv, 0, &current);
-      remove(obj_paths[i]);
+      int run_capture_rc = test_run_argv_capture(run_argv, 2000, &current);
+      ASSERT_EQ_INT(0, remove(obj_paths[i]));
+      normalize_runtime_path(current.stdout_text, srcroot_path, "srcroot");
+      normalize_runtime_path(current.stdout_text, itemstore_path, "items.dat");
+      test_normalize_text(current.stderr_text);
+      ASSERT_EQ_INT(0, remove(itemstore_path));
+      ASSERT_EQ_INT(0, rmdir(srcroot_path));
+      ASSERT_EQ_INT(0, rmdir(run_dir));
       ASSERT_EQ_INT(0, run_capture_rc);
 
       char *fixture = test_read_text_file(cases[i].expected_path);
@@ -66,8 +99,14 @@ void test_interpret_stress(void) {
       }
       ASSERT_TRUE(test_contains_all_lines(expected_stdout, current.stdout_text,
                                           &missing_line));
-      ASSERT_TRUE(test_contains_all_lines(expected_stderr, current.stderr_text,
-                                          &missing_line));
+      missing_line = -1;
+      if (expected_stderr[0] == '\0') {
+        ASSERT_EQ_INT(0, strcmp("", current.stderr_text));
+      } else {
+        ASSERT_TRUE(test_contains_all_lines(expected_stderr,
+                                            current.stderr_text,
+                                            &missing_line));
+      }
 
       free(expected_stdout);
       free(expected_stderr);

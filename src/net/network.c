@@ -914,6 +914,17 @@ void input_processor(uv_timer_t *handle) {
     logerr("Input runtime context is missing! Cannot continue.\n");
     exit(EXIT_FAILURE);
   }
+  if (input_ctx->interrupt_pending && *input_ctx->interrupt_pending) {
+    *input_ctx->interrupt_pending = 0;
+    if (input_ctx->signal_shutdown_requested) {
+      *input_ctx->signal_shutdown_requested = true;
+    }
+    if (input_ctx->safe_shutdown) *input_ctx->safe_shutdown = false;
+    if (input_ctx->shutdown_requested) *input_ctx->shutdown_requested = true;
+    logerr("SIGUSR1 received during runtime; shutting down.\n");
+    if (input_ctx->loop) uv_stop(input_ctx->loop);
+    return;
+  }
   ITEM_t *input = find_item(input_ctx->itemroot, input_ctx->input_name);
   if (!input) {
     logerr("Input item does not exist!  Cannot continue.\n");
@@ -921,6 +932,16 @@ void input_processor(uv_timer_t *handle) {
   }
   VALUE_t result = interpret(input_ctx, input);
   value_free(&result);
+  if (input_ctx->interrupted) {
+    if (input_ctx->signal_shutdown_requested) {
+      *input_ctx->signal_shutdown_requested = true;
+    }
+    if (input_ctx->safe_shutdown) *input_ctx->safe_shutdown = false;
+    if (input_ctx->shutdown_requested) *input_ctx->shutdown_requested = true;
+    logerr("SIGUSR1 received during runtime; shutting down.\n");
+    if (input_ctx->loop) uv_stop(input_ctx->loop);
+    return;
+  }
   reset_stack(input_ctx->vm->stack);
   // Flush the output of every connected line
   size_t maxconns = input_ctx->maxconns ? *input_ctx->maxconns : input_ctx->network.maxconns ? *input_ctx->network.maxconns : 0;

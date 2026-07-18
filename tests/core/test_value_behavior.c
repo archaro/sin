@@ -124,13 +124,15 @@ static void assert_truncated_bytecode_for_opcode(const char *name, uint8_t opcod
 
   ITEM_t *err = find_item(config.itemroot, "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_RUNTIME_TRUNCATED, err->value.i);
+  ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, err->value.i);
 
   ITEM_t *msg = find_item(config.itemroot, "error.msg");
   ASSERT_NOT_NULL(msg);
   ASSERT_EQ_INT(VALUE_str, msg->value.type);
-  ASSERT_TRUE(strstr(msg->value.s, opname) != NULL);
-  ASSERT_TRUE(strstr(msg->value.s, "truncated bytecode read") != NULL);
+  char expected[96];
+  int written = snprintf(expected, sizeof(expected), "truncated %s", opname);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(expected));
+  ASSERT_TRUE(strstr(msg->value.s, expected) != NULL);
 }
 
 void test_runtime_decode_requires_frame_bounds(void) {
@@ -1079,8 +1081,8 @@ void test_value_comparison_unsupported_ordering_is_false(void) {
 
 void test_interpreter_truncated_single_byte_operands(void) {
   setup_runtime();
-  assert_truncated_bytecode_for_opcode("test.truncated_getlocal", 'e', "OP_GETLOCAL");
-  assert_truncated_bytecode_for_opcode("test.truncated_libcall_token", 'M', "OP_LIBCALL");
+  assert_truncated_bytecode_for_opcode("test.truncated_getlocal", 'e', "LOAD_LOCAL");
+  assert_truncated_bytecode_for_opcode("test.truncated_libcall_token", 'M', "LIBCALL_TOKEN");
   teardown_runtime();
 }
 

@@ -50,14 +50,25 @@ typedef struct {
 
 BC_VerifyOptions bc_verify_strict_options(void) {
   return (BC_VerifyOptions){
+      .validate_local_indices = true,
       .validate_control_flow = true,
       .validate_stack_effects = true,
       .trailing_bytes = BC_TRAILING_BYTES_ERROR,
   };
 }
 
+BC_VerifyOptions bc_verify_runtime_options(void) {
+  return (BC_VerifyOptions){
+      .validate_local_indices = false,
+      .validate_control_flow = false,
+      .validate_stack_effects = false,
+      .trailing_bytes = BC_TRAILING_BYTES_WARNING,
+  };
+}
+
 BC_VerifyOptions bc_verify_disassembly_options(void) {
   return (BC_VerifyOptions){
+      .validate_local_indices = true,
       .validate_control_flow = false,
       .validate_stack_effects = false,
       .trailing_bytes = BC_TRAILING_BYTES_WARNING,
@@ -570,7 +581,10 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
   if (!bc_need(d, start, 1, 0, "opcode")) return 0;
   uint8_t op = *(*cursor)++;
   const BC_OpcodeSchema *bc_schema = bc_opcode_lookup(op, ctx);
-  if (!bc_schema || !bc_schema->ir) return bc_fail(d, start, op, "unknown opcode");
+  if (!bc_schema || !bc_schema->ir) {
+    return bc_fail(d, start, op,
+                   "invalid opcode; recompile from Sinistra source");
+  }
   const IR_OpSchema *schema = bc_schema->ir;
   d->result.instruction_count++;
 
@@ -768,7 +782,7 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
   uint8_t params = bytecode[1];
   if (metadata) { metadata->locals = locals; metadata->params = params; }
   d.local_count = locals;
-  d.validate_local_indices = true;
+  d.validate_local_indices = d.options.validate_local_indices;
   if (params > locals) {
     bc_fail(&d, bytecode + 1, params, "parameter count exceeds local count");
     return d.result;

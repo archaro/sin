@@ -7,8 +7,9 @@ BUILD ?= debug
 CSTD ?= c17
 
 SRC_DIR := src
-OBJ_DIR := obj
-LIB_DIR := lib
+BUILD_TAG := $(BUILD)-$(notdir $(CC))
+OBJ_DIR := obj/$(BUILD_TAG)
+LIB_DIR := lib/$(BUILD_TAG)
 GENERATED_DIR := $(OBJ_DIR)/generated
 
 BASE_CFLAGS := -std=$(CSTD) -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -MMD -MP
@@ -51,7 +52,7 @@ else
 $(error Unknown BUILD '$(BUILD)'; expected debug, release, or sanitize)
 endif
 
-CFLAGS += $(CPPFLAGS) $(LIBUV_CFLAGS)
+CFLAGS += $(LIBUV_CFLAGS)
 
 ifeq ($(BUILD),sanitize)
 CFLAGS += $(SANITIZE_FLAGS)
@@ -169,10 +170,10 @@ DEPS := $(OBJECTS:.o=.d)
 
 $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
-	$(CC) -c $(CFLAGS) $< -o $@
+	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
 
-.PHONY: all lib clean help debug release sanitize
-.PHONY: test test-network test-chat-smoke test-strict test-release test-warnings test-asan test-lsan
+.PHONY: all lib clean help debug release sanitize FORCE_BUILD
+.PHONY: test test-network test-chat-smoke test-build-switch test-strict test-release test-warnings test-asan test-lsan
 .PHONY: fuzz-build fuzz-corpora fuzz-smoke fuzz-smoke-run
 .PHONY: fuzz-scomp fuzz-sdiss fuzz-sin-object
 .PHONY: seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
@@ -207,6 +208,7 @@ help:
 		'  test             Build debug artifacts and run network + standard suite' \
 		'  test-network     Build and run network tests only' \
 		'  test-chat-smoke  Run the real chat example through localhost' \
+		'  test-build-switch Verify build variants can be switched without cleaning' \
 		'  test-strict      Run standard suite with benchmark budgets enabled' \
 		'  test-release     Clean, rebuild, and test with BUILD=release and strict warnings' \
 		'  test-warnings    Clean, rebuild, and test with STRICT_WARNINGS=1' \
@@ -238,8 +240,10 @@ $(LIB): $(LIB_OBJECTS)
 	rm -f $@
 	ar rcs $@ $^
 
-scomp sdiss sin: %: $(OBJ_DIR)/%.o $(LIB)
-	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS)
+scomp sdiss sin: %: $(OBJ_DIR)/%.o $(LIB) FORCE_BUILD
+	$(CC) -o $@ $(filter-out FORCE_BUILD,$^) $(LDFLAGS) $(LIBS)
+
+FORCE_BUILD:
 
 $(PARSER_GENERATED) &: $(PARSER_SOURCES)
 	@mkdir -p $(GENERATED_DIR)
@@ -254,10 +258,10 @@ $(OBJECTS): $(PARSER_H)
 
 $(OBJ_DIR)/parser.o: $(PARSER_C) $(PARSER_H)
 	@mkdir -p $(@D)
-	$(CC) -c $(CFLAGS) $(GENERATED_WARNING_FLAGS) $< -o $@
+	$(CC) -c $(CPPFLAGS) $(CFLAGS) $(GENERATED_WARNING_FLAGS) $< -o $@
 $(OBJ_DIR)/lexer.o: $(LEXER_C) $(PARSER_H)
 	@mkdir -p $(@D)
-	$(CC) -c $(CFLAGS) $(GENERATED_WARNING_FLAGS) $< -o $@
+	$(CC) -c $(CPPFLAGS) $(CFLAGS) $(GENERATED_WARNING_FLAGS) $< -o $@
 
 # Include dependency files
 -include $(DEPS)
@@ -270,6 +274,15 @@ test-network: $(NETWORK_TEST_BIN)
 
 test-chat-smoke: $(CHAT_SMOKE_BIN) scomp sin
 	./$(CHAT_SMOKE_BIN)
+
+test-build-switch:
+	+$(MAKE) BUILD=sanitize all
+	+$(MAKE) BUILD=debug all
+	+$(MAKE) BUILD=release all
+	+$(MAKE) BUILD=debug all
+	@test -f obj/sanitize-$(notdir $(CC))/runtime/interpret.o
+	@test -f obj/release-$(notdir $(CC))/runtime/interpret.o
+	@test -f obj/debug-$(notdir $(CC))/runtime/interpret.o
 
 test-strict: $(TEST_BIN)
 	SIN_STRICT_BENCH=1 ./$(TEST_BIN)
@@ -286,19 +299,19 @@ test-asan: clean
 test-lsan: clean
 	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=1" $(MAKE) BUILD=sanitize STRICT_WARNINGS=1 test
 
-$(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin
-	$(CC) $(TEST_CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
+$(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin FORCE_BUILD
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
-$(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/net/network.c $(SRC_DIR)/net/network.h
-	$(CC) $(TEST_CFLAGS) -I$(TEST_DIR) \
+$(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/net/network.c $(SRC_DIR)/net/network.h FORCE_BUILD
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(TEST_DIR) \
 		-o $@ $(TEST_DIR)/network/test_network.c $(LDFLAGS) $(LIBS)
 
-$(CHAT_SMOKE_BIN): $(TEST_DIR)/network/test_chat_smoke.c scomp sin
-	$(CC) $(TEST_CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_DIR)/network/test_chat_smoke.c
+$(CHAT_SMOKE_BIN): $(TEST_DIR)/network/test_chat_smoke.c scomp sin FORCE_BUILD
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_DIR)/network/test_chat_smoke.c
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)
-	$(CC) -c $(CFLAGS) $< -o $@
+	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
 
 $(FUZZ_BIN): $(OBJ_DIR)/tests/fuzz/fuzz_scomp.o $(LIB)
 	$(CC) -o $@ $^ $(FUZZ_LINK_FLAGS) $(LIBS)
@@ -372,7 +385,7 @@ fuzz-sin-object: clean
 	@printf 'Built %s. Run with: %s %s\n' "$(FUZZ_SIN_OBJECT_BIN)" "$(FUZZ_SIN_OBJECT_BIN)" "$(FUZZ_SIN_OBJECT_CORPUS_DIR)"
 
 clean:
-	rm -rf $(OBJ_DIR) $(LIB_DIR) $(PROGRAMS) $(TEST_BINS) $(TEST_DEPS) \
+	rm -rf obj lib $(PROGRAMS) $(TEST_BINS) $(TEST_DEPS) \
 		$(TEST_TMP_ARTIFACTS) $(FUZZ_BINS) $(GENERATED_FUZZ_CORPUS) $(FUZZ_LOCAL_ARTIFACT_DIR) \
 		$(SRC_DIR)/parser.c $(SRC_DIR)/parser.h $(SRC_DIR)/lexer.c
 	find $(TEST_DIR)/fixtures -type f \( -name '*.tmp' -o -name '*.tmp.*' \

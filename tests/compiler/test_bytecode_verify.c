@@ -24,11 +24,19 @@ static void assert_verify_status(const uint8_t *bytes, uint32_t len,
 
 void test_bytecode_verify_policy_profiles(void) {
   BC_VerifyOptions strict = bc_verify_strict_options();
+  ASSERT_TRUE(strict.validate_local_indices);
   ASSERT_TRUE(strict.validate_control_flow);
   ASSERT_TRUE(strict.validate_stack_effects);
   ASSERT_EQ_INT(BC_TRAILING_BYTES_ERROR, strict.trailing_bytes);
 
+  BC_VerifyOptions runtime = bc_verify_runtime_options();
+  ASSERT_TRUE(!runtime.validate_local_indices);
+  ASSERT_TRUE(!runtime.validate_control_flow);
+  ASSERT_TRUE(!runtime.validate_stack_effects);
+  ASSERT_EQ_INT(BC_TRAILING_BYTES_WARNING, runtime.trailing_bytes);
+
   BC_VerifyOptions disassembly = bc_verify_disassembly_options();
+  ASSERT_TRUE(disassembly.validate_local_indices);
   ASSERT_TRUE(!disassembly.validate_control_flow);
   ASSERT_TRUE(!disassembly.validate_stack_effects);
   ASSERT_EQ_INT(BC_TRAILING_BYTES_WARNING, disassembly.trailing_bytes);
@@ -38,6 +46,9 @@ void test_bytecode_verify_policy_profiles(void) {
       trailing, sizeof(trailing), "strict trailing", &strict);
   ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
   result = bc_verify_bytecode(trailing, sizeof(trailing),
+                              "runtime trailing", &runtime);
+  ASSERT_EQ_INT(BC_VERIFY_WARNING, result.status);
+  result = bc_verify_bytecode(trailing, sizeof(trailing),
                               "disassembly trailing", &disassembly);
   ASSERT_EQ_INT(BC_VERIFY_WARNING, result.status);
 
@@ -45,6 +56,9 @@ void test_bytecode_verify_policy_profiles(void) {
   result = bc_verify_bytecode(invalid_jump, sizeof(invalid_jump),
                               "strict jump", &strict);
   ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  result = bc_verify_bytecode(invalid_jump, sizeof(invalid_jump),
+                              "runtime jump", &runtime);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
   result = bc_verify_bytecode(invalid_jump, sizeof(invalid_jump),
                               "disassembly jump", &disassembly);
   ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
@@ -54,8 +68,22 @@ void test_bytecode_verify_policy_profiles(void) {
                               "strict stack", &strict);
   ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
   result = bc_verify_bytecode(underflow, sizeof(underflow),
+                              "runtime stack", &runtime);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+  result = bc_verify_bytecode(underflow, sizeof(underflow),
                               "disassembly stack", &disassembly);
   ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+
+  const uint8_t invalid_local[] = {0, 0, 'e', 1, 'h'};
+  result = bc_verify_bytecode(invalid_local, sizeof(invalid_local),
+                              "strict local", &strict);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  result = bc_verify_bytecode(invalid_local, sizeof(invalid_local),
+                              "runtime local", &runtime);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+  result = bc_verify_bytecode(invalid_local, sizeof(invalid_local),
+                              "disassembly local", &disassembly);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
 }
 
 void test_bytecode_verify_analysis_storage_is_profile_scoped(void) {
@@ -106,9 +134,14 @@ void test_bytecode_verify_minimal_and_header_errors(void) {
 }
 
 void test_bytecode_verify_opcode_halt_and_trailing_bytes(void) {
-  const uint8_t unknown_opcode[] = {0, 0, 0x7F, 'h'};
-  assert_verify_status(unknown_opcode, sizeof(unknown_opcode), BC_VERIFY_ERROR,
-                       "unknown_opcode", "unknown opcode");
+  const uint8_t invalid_opcode[] = {0, 0, 0x7F, 'h'};
+  BC_VerifyResult invalid_result = bc_verify_bytecode(
+      invalid_opcode, sizeof(invalid_opcode), "invalid_opcode", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, invalid_result.status);
+  ASSERT_EQ_INT(2, invalid_result.diagnostic.offset);
+  ASSERT_EQ_INT(0x7F, invalid_result.diagnostic.opcode);
+  ASSERT_TRUE(strstr(invalid_result.diagnostic.message,
+                     "invalid opcode; recompile from Sinistra source") != NULL);
 
   const uint8_t missing_halt[] = {0, 0, 'b', 1};
   assert_verify_status(missing_halt, sizeof(missing_halt), BC_VERIFY_ERROR,

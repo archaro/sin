@@ -110,6 +110,7 @@ typedef enum {
  * Executable-level policy, such as sin's --strict-validation gate, remains
  * the caller's responsibility. */
 typedef struct {
+  bool validate_local_indices;
   bool validate_control_flow;
   bool validate_stack_effects;
   BC_TrailingBytesPolicy trailing_bytes;
@@ -129,6 +130,7 @@ typedef enum {
 } BC_ItemExprKind;
 
 BC_VerifyOptions bc_verify_strict_options(void);
+BC_VerifyOptions bc_verify_runtime_options(void);
 BC_VerifyOptions bc_verify_disassembly_options(void);
 BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
                                    uint32_t bytecode_len,

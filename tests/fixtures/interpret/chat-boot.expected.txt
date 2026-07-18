@@ -2,6 +2,6 @@
 Using 'srcroot' as the source root.
 Starting the chat server...
 ===stderr===
-Input item does not exist!  Cannot continue.
+
 ===exit===
--1
+0

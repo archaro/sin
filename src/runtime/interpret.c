@@ -136,7 +136,10 @@ static const char *runtime_item_label(ITEM_t *item, char *buffer, size_t size) {
 
 static void set_runtime_bytecode_error(RuntimeContext *ctx, const char *label,
                                        uint32_t offset, const char *message) {
-  const char *safe_label = label ? label : "<null>";
+  char item_name[MAX_ITEM_NAME] = {0};
+  const char *safe_label = label ? label
+      : runtime_item_label(ctx ? ctx->current_item : NULL,
+                           item_name, sizeof(item_name));
   const char *safe_message = message ? message : "<no diagnostic>";
   int needed = snprintf(NULL, 0,
       "Runtime bytecode validation failed for item '%s' at offset %u: %s",
@@ -177,22 +180,32 @@ static void report_strict_runtime_contract(RuntimeContext *ctx, const char *deta
 }
 
 static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
-  if (!ctx->strict_validation || !item || item->type != ITEM_code) return true;
-
   char item_name[MAX_ITEM_NAME] = {0};
   const char *label = runtime_item_label(item, item_name, sizeof(item_name));
+  if (!item || item->type != ITEM_code) {
+    set_runtime_bytecode_error(ctx, label, 0, "item is not executable code");
+    return false;
+  }
   if (!item->bytecode) {
     set_runtime_bytecode_error(ctx, label, 0, "null bytecode pointer");
     return false;
   }
-  BC_VerifyOptions options = bc_verify_strict_options();
+  BC_VerifyOptions options = ctx->strict_validation
+      ? bc_verify_strict_options() : bc_verify_runtime_options();
   BC_VerifyResult result = bc_verify_bytecode(item->bytecode,
       (uint32_t)item->bytecode_len, label, &options);
-  if (result.status == BC_VERIFY_OK) return true;
+  if (result.status != BC_VERIFY_ERROR) return true;
 
   set_runtime_bytecode_error(ctx, label, result.diagnostic.offset,
                              result.diagnostic.message);
   return false;
+}
+
+static bool consume_runtime_interrupt(RuntimeContext *ctx) {
+  if (!ctx || !ctx->interrupt_pending || !*ctx->interrupt_pending) return false;
+  *ctx->interrupt_pending = 0;
+  ctx->interrupted = true;
+  return true;
 }
 
 static bool report_decode_status(RuntimeContext *ctx, RuntimeDecodeStatus status) {
@@ -207,6 +220,27 @@ static bool report_decode_status(RuntimeContext *ctx, RuntimeDecodeStatus status
 
 static uint8_t *decode_next(RuntimeContext *ctx, RuntimeDecodeStatus status) {
   return report_decode_status(ctx, status) ? status.next : NULL;
+}
+
+static uint8_t *runtime_jump_target(RuntimeContext *ctx, uint8_t *origin,
+                                    int16_t relative, const char *opname) {
+  if (!ctx || !ctx->decoder.frame_start || !ctx->decoder.frame_end ||
+      origin < ctx->decoder.frame_start || origin > ctx->decoder.frame_end) {
+    set_runtime_bytecode_error(ctx, NULL, 0, "invalid jump decoder bounds");
+    return NULL;
+  }
+  ptrdiff_t origin_offset = origin - ctx->decoder.frame_start;
+  ptrdiff_t frame_len = ctx->decoder.frame_end - ctx->decoder.frame_start;
+  int64_t target_offset = (int64_t)origin_offset + relative;
+  if (target_offset < 0 || target_offset >= frame_len) {
+    char detail[128];
+    snprintf(detail, sizeof(detail), "%s target is outside the bytecode frame",
+             opname);
+    uint32_t bytecode_offset = (uint32_t)origin_offset + 2u;
+    set_runtime_bytecode_error(ctx, NULL, bytecode_offset, detail);
+    return NULL;
+  }
+  return (uint8_t *)ctx->decoder.frame_start + (size_t)target_offset;
 }
 
 #define REQUIRE_BYTES(nextop, n, opname) \
@@ -277,10 +311,18 @@ uint8_t *op_nop(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 }
 
 uint8_t *op_undefined(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  (void)ctx;
   (void)item;
-  logerr("Undefined opcode: %c\n", *(nextop-1));
-  return nextop;
+  uint8_t opcode = *(nextop - 1);
+  uint32_t offset = 0;
+  if (ctx && ctx->current_item && ctx->current_item->bytecode) {
+    offset = (uint32_t)((nextop - 1) - ctx->current_item->bytecode);
+  }
+  char detail[144];
+  snprintf(detail, sizeof(detail),
+           "invalid opcode 0x%02X at byte offset %u; recompile from Sinistra source",
+           opcode, offset);
+  set_runtime_bytecode_error(ctx, NULL, offset, detail);
+  return NULL;
 }
 
 uint8_t *op_pushint(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -366,7 +408,7 @@ uint8_t *op_jump(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   nextop = decode_next(ctx, bc_read_i16(&ctx->decoder, nextop, &offset, "OP_JUMP"));
   if (!nextop) return NULL;
   logverbose("OP_JUMP: offset is  %d.\n", offset);
-  return nextop - sizeof(offset) + offset;
+  return runtime_jump_target(ctx, nextop - sizeof(offset), offset, "OP_JUMP");
 }
 
 uint8_t *op_jumpfalse(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -392,7 +434,7 @@ uint8_t *op_jumpfalse(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     // If not true then it must be false.  That's logic.
     logverbose("OP_JUMPFALSE: evaluates to false (jump offset %d).\n", offset);
     value_free(&v1);
-    return offset_start + offset;
+    return runtime_jump_target(ctx, offset_start, offset, "OP_JUMPFALSE");
   }
 }
 
@@ -1105,8 +1147,15 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
 
   ctx->current_item = item;
   ctx->pending_call_item = NULL;
+  ctx->interrupted = false;
 
   if (!verify_runtime_bytecode(ctx, ctx->current_item)) {
+    ctx->current_item = saved_current_item;
+    ctx->pending_call_item = saved_pending_call_item;
+    ctx->decoder = saved_decoder;
+    return VALUE_NIL;
+  }
+  if (consume_runtime_interrupt(ctx)) {
     ctx->current_item = saved_current_item;
     ctx->pending_call_item = saved_pending_call_item;
     ctx->decoder = saved_decoder;
@@ -1122,6 +1171,14 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   runtime_decoder_init(&ctx->decoder, op, ctx->current_item->bytecode + ctx->current_item->bytecode_len);
 
   while (true) {
+    if (consume_runtime_interrupt(ctx)) goto interpretation_failure;
+    if (op < ctx->decoder.frame_start || op >= ctx->decoder.frame_end) {
+      uint32_t offset = ctx->current_item && ctx->current_item->bytecode
+          ? (uint32_t)(ctx->decoder.frame_end - ctx->current_item->bytecode) : 0;
+      set_runtime_bytecode_error(ctx, NULL, offset,
+          "execution reached the bytecode frame boundary without HALT");
+      goto interpretation_failure;
+    }
     if (*op == 'h') {
       VALUE_t return_value = pop_frame_result(VM->stack);
       ctx->current_item->inuse = false;
@@ -1155,6 +1212,9 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
       if (ctx->pending_call_item) {
         ctx->current_item = ctx->pending_call_item;
         ctx->pending_call_item = NULL;
+        if (!verify_runtime_bytecode(ctx, ctx->current_item)) {
+          goto interpretation_failure;
+        }
         ctx->current_item->inuse = true;
         VM->stack->current += ctx->current_item->bytecode[0] - ctx->current_item->bytecode[1];
         VM->stack->locals = ctx->current_item->bytecode[0];
@@ -1163,7 +1223,13 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
         runtime_decoder_init(&ctx->decoder, op, ctx->current_item->bytecode + ctx->current_item->bytecode_len);
         continue;
       }
+interpretation_failure:
       ctx->current_item->inuse = false;
+      while (size_callstack(VM->callstack) > entry_callstack_depth) {
+        FRAME_t *abandoned_frame = pop_callstack(VM);
+        if (!abandoned_frame) break;
+        if (abandoned_frame->item) abandoned_frame->item->inuse = false;
+      }
       reset_stack_to(VM->stack, entry_stack_current);
       VM->stack->base = entry_stack_base;
       VM->stack->locals = entry_stack_locals;

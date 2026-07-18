@@ -53,6 +53,14 @@ static VALUE_t run_frame_item(ITEM_t *item) {
   return interpret(&ctx, item);
 }
 
+static uint8_t *interrupt_in_callee(RuntimeContext *ctx, uint8_t *nextop,
+                                    ITEM_t *item) {
+  (void)item;
+  ASSERT_NOT_NULL(ctx->interrupt_pending);
+  *ctx->interrupt_pending = 1;
+  return nextop;
+}
+
 static ITEM_t *insert_runner(const char *name, const char *target) {
   uint8_t code[64] = {0};
   size_t pos = 2;
@@ -221,5 +229,52 @@ void test_top_level_string_frame_cleanup_and_vm_reuse(void) {
     ASSERT_EQ_INT(-1, config.vm->stack->current);
     ASSERT_EQ_INT(-1, config.vm->callstack->current);
   }
+  teardown_stack_frame_runtime();
+}
+
+void test_deferred_interrupt_unwinds_nested_call_frames(void) {
+  setup_stack_frame_runtime();
+  uint8_t callee_code[] = {0, 0, 'a', 'h'};
+  ITEM_t *callee = insert_frame_code("frames.interrupt_callee", callee_code,
+                                     sizeof(callee_code));
+  ITEM_t *caller = insert_runner("frames.interrupt_caller",
+                                 "frames.interrupt_callee");
+  ITEM_t *preexisting = insert_frame_code("frames.preexisting",
+                                          (uint8_t[]){0, 0, 'h'}, 3);
+
+  STACK_t *stack = config.vm->stack;
+  stack->current = 2;
+  stack->base = 1;
+  stack->locals = 7;
+  stack->params = 3;
+  config.vm->callstack->current = 0;
+  config.vm->callstack->entry[0].item = preexisting;
+
+  volatile sig_atomic_t interrupt_pending = 0;
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = config.itemroot;
+  ctx.current_item = preexisting;
+  ctx.interrupt_pending = &interrupt_pending;
+  ASSERT_TRUE(runtime_init(&ctx, config.vm));
+  ctx.opcode[(uint8_t)'a'] = interrupt_in_callee;
+
+  VALUE_t result = interpret(&ctx, caller);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_TRUE(ctx.interrupted);
+  ASSERT_EQ_INT(0, interrupt_pending);
+  ASSERT_EQ_INT(1, size_callstack(config.vm->callstack));
+  ASSERT_TRUE(config.vm->callstack->entry[0].item == preexisting);
+  ASSERT_EQ_INT(2, stack->current);
+  ASSERT_EQ_INT(1, stack->base);
+  ASSERT_EQ_INT(7, stack->locals);
+  ASSERT_EQ_INT(3, stack->params);
+  ASSERT_TRUE(!caller->inuse);
+  ASSERT_TRUE(!callee->inuse);
+  ASSERT_TRUE(ctx.current_item == preexisting);
+
+  runtime_destroy(&ctx);
+  config.vm->callstack->current = -1;
+  stack->current = -1;
   teardown_stack_frame_runtime();
 }

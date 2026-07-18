@@ -5,6 +5,12 @@ The IR opcode metadata in `src/compiler/ir/opcode_schema.def` is the source of
 truth for opcode symbols, operand kinds, size policies, validators, and runtime
 handler requirements.
 
+Bytecode is an internal, release-local format. Compatibility with bytecode
+emitted by an earlier prerelease, build, or release is not guaranteed. If a
+tool rejects bytecode produced by another version, recompile it from Sinistra
+source; there is no legacy-opcode compatibility layer or automatic bytecode
+migration.
+
 ## Code block layout
 
 Every compiled code item starts with a two-byte header followed by the
@@ -196,5 +202,5 @@ change set:
    symbol, especially `F`.
 4. Run the opcode schema, emitter, and compiler pipeline tests that cover the
    changed rows, then include those commands in the change summary.
-5. If compatibility matters for existing persisted bytecode, document any
-   migration or versioning implications here.
+5. Treat changed bytecode as release-local and document that affected programs
+   must be recompiled from source.

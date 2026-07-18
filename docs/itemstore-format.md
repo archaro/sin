@@ -155,3 +155,9 @@ durability steps succeed.
 Readers accept only the version they implement. A future incompatible layout
 must use a new header version and update this document. Version 1 does not
 provide migration from the earlier unversioned raw layout.
+
+The itemstore version describes the container's wire structure, not the
+compatibility of bytecode payloads stored in code items. Prerelease bytecode is
+release-local and may be rejected by a newer runtime even when the surrounding
+itemstore remains structurally valid version 1. Retain source and recompile code
+items for the current build; the runtime does not migrate embedded bytecode.

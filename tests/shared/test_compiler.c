@@ -217,6 +217,7 @@ void test_value_bool_nil_truthiness_helpers(void);
 void test_stack_peek_returns_top_pointer_without_popping(void);
 void test_stack_reset_to_frees_values_at_boundaries(void);
 void test_nested_string_frames_release_locals_and_preserve_result(void);
+void test_deferred_interrupt_unwinds_nested_call_frames(void);
 void test_nested_nil_return_releases_frame_locals(void);
 void test_top_level_string_frame_cleanup_and_vm_reuse(void);
 void test_value_float_construction_copy_truthiness_cleanup(void);
@@ -279,6 +280,7 @@ void test_sys_compile_libcall_runtime(void);
 void test_interpret_semantics_golden(void);
 void test_interpret_result_semantics(void);
 void test_interpret_rejects_malformed_bytecode_before_execution(void);
+void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void);
 void test_interpret_stress(void);
 void test_runtime_benchmark_optin(void);
 
@@ -386,6 +388,8 @@ static const test_case_t core_tests[] = {
      test_stack_reset_to_frees_values_at_boundaries},
     {"test_nested_string_frames_release_locals_and_preserve_result",
      test_nested_string_frames_release_locals_and_preserve_result},
+    {"test_deferred_interrupt_unwinds_nested_call_frames",
+     test_deferred_interrupt_unwinds_nested_call_frames},
     {"test_nested_nil_return_releases_frame_locals",
      test_nested_nil_return_releases_frame_locals},
     {"test_top_level_string_frame_cleanup_and_vm_reuse",
@@ -453,6 +457,7 @@ static const test_case_t runtime_tests[] = {
     {"test_interpret_semantics_golden", test_interpret_semantics_golden},
     {"test_interpret_result_semantics", test_interpret_result_semantics},
     {"test_interpret_rejects_malformed_bytecode_before_execution", test_interpret_rejects_malformed_bytecode_before_execution},
+    {"test_interpret_baseline_bytecode_safety_in_default_and_strict_modes", test_interpret_baseline_bytecode_safety_in_default_and_strict_modes},
     {"test_interpret_stress", test_interpret_stress},
     {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},
     {"test_runtime_init_validates_libcalls_once", test_runtime_init_validates_libcalls_once},

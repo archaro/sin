@@ -10,7 +10,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <signal.h>
-#include <setjmp.h>
 #include <errno.h>
 #include <ctype.h>
 #include <uv.h>
@@ -30,19 +29,8 @@
 #include "interpret.h"
 #include "runtime_value.h"
 
-// Error handling.  The handler only transfers control to a target that has
-// already been established by sigsetjmp(); all diagnostics and cleanup stay
-// on the normal execution path.
-typedef enum SinRecoveryTarget {
-  SIN_RECOVERY_NONE,
-  SIN_RECOVERY_BOOT,
-  SIN_RECOVERY_RUNTIME
-} SinRecoveryTarget;
-
-static sigjmp_buf boot_recovery;
-static sigjmp_buf runtime_recovery;
-static volatile sig_atomic_t recovery_target;
 static volatile sig_atomic_t recovery_pending;
+static bool runtime_signal_shutdown;
 
 // The configuration object - for passing interesting data around globally.
 CONFIG_t config;
@@ -68,6 +56,8 @@ static bool runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
   ctx->network.inputtext_name = config.inputtext;
   ctx->strict_validation = config.strict_validation;
   ctx->strict_runtime_contracts = config.strict_runtime_contracts;
+  ctx->interrupt_pending = &recovery_pending;
+  ctx->signal_shutdown_requested = &runtime_signal_shutdown;
   if (runtime_init(ctx, vm)) return true;
   runtime_destroy(ctx);
   return false;
@@ -82,12 +72,6 @@ void close_all_tasks(uv_handle_t* handle, void* arg) {
 
 void handle_sigusr1(int sig) {
   (void)sig;
-  if (recovery_target == SIN_RECOVERY_BOOT) {
-    siglongjmp(boot_recovery, ERR_RUNTIME_SIGUSR1);
-  }
-  if (recovery_target == SIN_RECOVERY_RUNTIME) {
-    siglongjmp(runtime_recovery, ERR_RUNTIME_SIGUSR1);
-  }
   recovery_pending = 1;
 }
 
@@ -496,17 +480,6 @@ static void log_interpreter_return(VALUE_t ret) {
   }
 }
 
-static void deliver_pending_recovery(void) {
-  if (!recovery_pending) return;
-  recovery_pending = 0;
-  if (recovery_target == SIN_RECOVERY_BOOT) {
-    siglongjmp(boot_recovery, ERR_RUNTIME_SIGUSR1);
-  }
-  if (recovery_target == SIN_RECOVERY_RUNTIME) {
-    siglongjmp(runtime_recovery, ERR_RUNTIME_SIGUSR1);
-  }
-}
-
 static void destroy_boot_runtime(SinStartupState *state, bool destroy_boot_item) {
   if (state->boot_context_initialized) {
     runtime_destroy(&state->boot_ctx);
@@ -526,22 +499,13 @@ static void destroy_boot_runtime(SinStartupState *state, bool destroy_boot_item)
 }
 
 static int run_boot_item(SinStartupOptions *startup, SinStartupState *state) {
-  int recovery_result = sigsetjmp(boot_recovery, 1);
-  if (recovery_result != 0) {
-    // Do not let a second signal interrupt teardown. Any signal received in
-    // this short window is delivered after ownership state is consistent.
-    recovery_target = SIN_RECOVERY_NONE;
+restart_boot:
+  if (recovery_pending) {
     recovery_pending = 0;
     logerr("SIGUSR1 received.  Restarting boot item.\n");
     logerr("Destroying and recreating all stacks.\n");
     destroy_boot_runtime(state, false);
-    recovery_target = SIN_RECOVERY_BOOT;
-    deliver_pending_recovery();
   }
-
-  recovery_target = SIN_RECOVERY_BOOT;
-  deliver_pending_recovery();
-
   if (ensure_itemstore() != EXIT_SUCCESS) goto boot_failure;
   if (!state->boot_item) {
     state->boot_item = make_root_item("boot");
@@ -584,18 +548,18 @@ static int run_boot_item(SinStartupOptions *startup, SinStartupState *state) {
 
   logverbose("Setting up error handler.\n");
   log_interpreter_return(interpret(&state->boot_ctx, state->boot_item));
+  if (state->boot_ctx.interrupted) {
+    logerr("SIGUSR1 received.  Restarting boot item.\n");
+    logerr("Destroying and recreating all stacks.\n");
+    destroy_boot_runtime(state, false);
+    goto restart_boot;
+  }
   state->boot_completed = true;
-  recovery_target = SIN_RECOVERY_NONE;
   destroy_boot_runtime(state, true);
-  recovery_target = SIN_RECOVERY_RUNTIME;
-  deliver_pending_recovery();
   return EXIT_SUCCESS;
 
 boot_failure:
-  recovery_target = SIN_RECOVERY_NONE;
   destroy_boot_runtime(state, true);
-  recovery_target = SIN_RECOVERY_RUNTIME;
-  deliver_pending_recovery();
   return EXIT_FAILURE;
 }
 
@@ -646,35 +610,29 @@ static int run_network_loop(uint16_t listener_port, SinStartupState *state) {
 
   logmsg("Running...\n");
   int runloop_retval = uv_run(config.loop, UV_RUN_DEFAULT);
+  if (runtime_signal_shutdown) return EXIT_FAILURE;
   if (config.shutdown_requested) runloop_retval = 0;
   return runloop_retval;
 }
 
 static int run_startup_with_recovery(SinStartupOptions *startup,
                                      SinStartupState *state) {
-  int recovery_result = sigsetjmp(runtime_recovery, 1);
-  if (recovery_result != 0) {
-    recovery_target = SIN_RECOVERY_NONE;
-    recovery_pending = 0;
-    logerr("SIGUSR1 received during runtime; shutting down.\n");
-    return EXIT_FAILURE;
-  }
-
-  recovery_target = SIN_RECOVERY_RUNTIME;
-  deliver_pending_recovery();
   init_tasks();
   state->tasks_initialized = true;
   if (run_boot_item(startup, state) != EXIT_SUCCESS) {
-    recovery_target = SIN_RECOVERY_NONE;
+    return EXIT_FAILURE;
+  }
+  if (recovery_pending) {
+    recovery_pending = 0;
+    config.safe_shutdown = false;
+    logerr("SIGUSR1 received during runtime; shutting down.\n");
     return EXIT_FAILURE;
   }
   if (startup->loadonly) {
-    recovery_target = SIN_RECOVERY_NONE;
     return EXIT_SUCCESS;
   }
 
   int runloop_retval = run_network_loop(startup->listener_port, state);
-  recovery_target = SIN_RECOVERY_NONE;
   return runloop_retval;
 }
 
