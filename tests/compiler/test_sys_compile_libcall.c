@@ -12,6 +12,7 @@
 #include "memory.h"
 #include "test_assert.h"
 #include "value.h"
+#include "version.h"
 #include "vm.h"
 
 CONFIG_t config;
@@ -65,6 +66,14 @@ static ITEM_t *assert_int_item(const char *name, int64_t expected) {
   ASSERT_NOT_NULL(item);
   ASSERT_EQ_INT(VALUE_int, item->value.type);
   ASSERT_EQ_INT(expected, item->value.i);
+  return item;
+}
+
+static ITEM_t *assert_nil_item(const char *name) {
+  ITEM_t *item = find_item(config.itemroot, name);
+  ASSERT_NOT_NULL(item);
+  ASSERT_EQ_INT(ITEM_value, item->type);
+  ASSERT_EQ_INT(VALUE_nil, item->value.type);
   return item;
 }
 
@@ -186,6 +195,76 @@ void test_sys_compile_libcall_runtime(void) {
   assert_compile_success_bool("if 1 then sys.log{\"int truthy\"}; endif;");
   assert_compile_success_bool("if \"\" then sys.log{\"empty string truthy\"}; endif;");
   assert_compile_success_bool("sys.exists{\"foo\"}; sys.delete{\"foo\"}; sys.nthname{\"foo\", 0}; sys.rootname{0};");
+
+  assert_compile_success_bool(
+      "introspection.callee = code ("
+      " introspection.results.callee_this = sys.thisitem;"
+      " introspection.results.callee_parent = sys.parentitem;"
+      ");"
+      "introspection.caller = code ("
+      " introspection.results.caller_before = sys.thisitem;"
+      " introspection.callee;"
+      " introspection.results.caller_after = sys.thisitem;"
+      " introspection.results.caller_parent = sys.parentitem;"
+      ");"
+      "introspection_top = code ("
+      " introspection.results.top_this = sys.thisitem;"
+      " introspection.results.top_parent = sys.parentitem;"
+      ");"
+      "introspection.caller;"
+      "introspection_top;"
+      "introspection.results.item_type = sys.itemtype{\"introspection.caller\"};"
+      "introspection.results.child_count = sys.childcount{\"introspection\"};"
+      "introspection.results.root_count = sys.rootcount;"
+      "introspection.results.version = sys.version;"
+      "introspection.results.now = sys.now;"
+      "introspection.results.monotime = sys.monotime;"
+  );
+  ITEM_t *introspection_value = assert_string_item(
+      "introspection.results.callee_this", NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "introspection.callee") == 0);
+  introspection_value = assert_string_item(
+      "introspection.results.callee_parent", NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "introspection") == 0);
+  introspection_value = assert_string_item(
+      "introspection.results.caller_before", NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "introspection.caller") == 0);
+  introspection_value = assert_string_item(
+      "introspection.results.caller_after", NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "introspection.caller") == 0);
+  introspection_value = assert_string_item(
+      "introspection.results.caller_parent", NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "introspection") == 0);
+  introspection_value = assert_string_item(
+      "introspection.results.top_this", NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "introspection_top") == 0);
+  assert_nil_item("introspection.results.top_parent");
+  introspection_value = assert_string_item(
+      "introspection.results.item_type", NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "code") == 0);
+  ITEM_t *introspection_count = find_item(
+      config.itemroot, "introspection.results.child_count");
+  ASSERT_NOT_NULL(introspection_count);
+  ASSERT_EQ_INT(VALUE_int, introspection_count->value.type);
+  ASSERT_TRUE(introspection_count->value.i >= 3);
+  introspection_count = find_item(config.itemroot,
+                                  "introspection.results.root_count");
+  ASSERT_NOT_NULL(introspection_count);
+  ASSERT_EQ_INT(VALUE_int, introspection_count->value.type);
+  ASSERT_TRUE(introspection_count->value.i > 0);
+  introspection_value = assert_string_item(
+      "introspection.results.version", NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, SINVERSION) == 0);
+  ITEM_t *introspection_time = find_item(config.itemroot,
+                                         "introspection.results.now");
+  ASSERT_NOT_NULL(introspection_time);
+  ASSERT_EQ_INT(VALUE_int, introspection_time->value.type);
+  ASSERT_TRUE(introspection_time->value.i > 0);
+  introspection_time = find_item(config.itemroot,
+                                 "introspection.results.monotime");
+  ASSERT_NOT_NULL(introspection_time);
+  ASSERT_EQ_INT(VALUE_int, introspection_time->value.type);
+  ASSERT_TRUE(introspection_time->value.i >= 0);
 
   push_stack(config.vm->stack, vstr("sys.log{;"));
   (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);

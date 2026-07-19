@@ -73,6 +73,14 @@ This document maps major subsystems to concrete test entry points so reviewers c
   - `tests/interpreter/test_interpret_semantics_golden.c`
     - `test_interpret_result_semantics`
       - source compilation and runtime execution of `sys.save` with a loadable checkpoint
+- **Runtime system introspection, enumeration, version, and clocks**
+  - `tests/core/test_libcall_registry.c`
+    - `test_sys_introspection_libcalls`
+      - exact append-only tokens, call indices, arities, and handler mappings for `sys.thisitem` through `sys.monotime`
+      - top-level/nested current-item and namespace-parent names, including missing-current-item defense
+      - all public item-type names, current-item-relative lookup, invalid/missing names, and invalid-argument provenance
+      - child/root counts, leaf zero, and agreement with `sys.nthname` / `sys.rootname` enumeration
+      - raw version, wall-clock milliseconds, nondecreasing monotonic milliseconds, and prior-error preservation
 - **Core value/float semantics**
   - `tests/core/test_value_behavior.c`
     - `test_value_push_float_interprets_binary64_payloads`
@@ -180,6 +188,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
       - compile diagnostics, runtime errors, handled errors, and prior-error clearing
       - interrupted nested execution, frame unwinding, and temporary-item cleanup
       - collision-safe temporary names preserve existing items and descendants
+      - source-level execution of all introspection/version/time calls, including nested callee identity, namespace parents, and caller restoration
 - **Runtime performance guard (opt-in strict mode)**
   - `tests/interpreter/test_runtime_benchmark_optin.c`
     - `test_runtime_benchmark_optin`

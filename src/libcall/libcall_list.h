@@ -40,4 +40,12 @@
   X("str",  "padleft",     4, 16, 2, lc_str_padleft) \
   X("str",  "padright",    4, 17, 2, lc_str_padright) \
   X("net",  "flush",       3,  3, 1, lc_net_flush) \
-  X("sys",  "save",        1,  9, 0, lc_sys_save)
+  X("sys",  "save",        1,  9, 0, lc_sys_save) \
+  X("sys",  "thisitem",    1, 10, 0, lc_sys_thisitem) \
+  X("sys",  "parentitem",  1, 11, 0, lc_sys_parentitem) \
+  X("sys",  "itemtype",    1, 12, 1, lc_sys_itemtype) \
+  X("sys",  "childcount",  1, 13, 1, lc_sys_childcount) \
+  X("sys",  "rootcount",   1, 14, 0, lc_sys_rootcount) \
+  X("sys",  "version",     1, 15, 0, lc_sys_version) \
+  X("sys",  "now",         1, 16, 0, lc_sys_now) \
+  X("sys",  "monotime",    1, 17, 0, lc_sys_monotime)

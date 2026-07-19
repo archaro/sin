@@ -18,6 +18,7 @@
 #include "memory.h"
 #include "runtime_value.h"
 #include "string_limits.h"
+#include "version.h"
 
 #include "network.h"
 
@@ -31,6 +32,15 @@ uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_save(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_thisitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_parentitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_itemtype(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_childcount(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_rootcount(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_version(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_now(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_monotime(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+int64_t lc_sys_wall_milliseconds(int64_t seconds, int64_t microseconds);
 uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -169,6 +179,35 @@ static void assert_invalid_args_float_detail_contains(const char *expected) {
 static void assert_bool_return(VALUE_t value, int expected) {
   ASSERT_EQ_INT(VALUE_bool, value.type);
   ASSERT_EQ_INT(expected, value.i);
+}
+
+static VALUE_t call_sys_noarg(OP_t func, RuntimeContext *ctx) {
+  (void)func(ctx, NULL, NULL);
+  return pop_stack(ctx->vm->stack);
+}
+
+static VALUE_t call_sys_name(OP_t func, RuntimeContext *ctx, VALUE_t name) {
+  push_stack(ctx->vm->stack, name);
+  (void)func(ctx, NULL, NULL);
+  return pop_stack(ctx->vm->stack);
+}
+
+static void assert_string_return(VALUE_t value, const char *expected) {
+  ASSERT_EQ_INT(VALUE_str, value.type);
+  ASSERT_NOT_NULL(value.s);
+  ASSERT_TRUE(strcmp(value.s, expected) == 0);
+  value_free(&value);
+}
+
+static ITEM_t *insert_halt_code(ITEM_t *root, const char *name) {
+  uint8_t *bytecode = malloc(3u);
+  ASSERT_NOT_NULL(bytecode);
+  bytecode[0] = 0;
+  bytecode[1] = 0;
+  bytecode[2] = (uint8_t)'h';
+  ITEM_t *item = insert_code_item(root, name, 3u, bytecode);
+  ASSERT_NOT_NULL(item);
+  return item;
 }
 
 static void assert_persistence_error(const char *operation,
@@ -410,6 +449,39 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_EQ_INT(9, libcalls[token].call_index);
   ASSERT_EQ_INT(0, libcalls[token].args);
   ASSERT_TRUE(libcalls[token].func == lc_sys_save);
+
+  const struct {
+    const char *name;
+    uint8_t token;
+    int call_index;
+    uint8_t arity;
+    OP_t handler;
+  } sys_introspection_calls[] = {
+    {"thisitem", 34, 10, 0, lc_sys_thisitem},
+    {"parentitem", 35, 11, 0, lc_sys_parentitem},
+    {"itemtype", 36, 12, 1, lc_sys_itemtype},
+    {"childcount", 37, 13, 1, lc_sys_childcount},
+    {"rootcount", 38, 14, 0, lc_sys_rootcount},
+    {"version", 39, 15, 0, lc_sys_version},
+    {"now", 40, 16, 0, lc_sys_now},
+    {"monotime", 41, 17, 0, lc_sys_monotime},
+  };
+  for (size_t i = 0; i < sizeof(sys_introspection_calls) /
+                              sizeof(sys_introspection_calls[0]); i++) {
+    const uint8_t expected_token = sys_introspection_calls[i].token;
+    token = 0;
+    args = 255;
+    ASSERT_TRUE(libcall_lookup_token("sys", sys_introspection_calls[i].name,
+                                     &token, &args));
+    ASSERT_EQ_INT(expected_token, token);
+    ASSERT_EQ_INT(sys_introspection_calls[i].arity, args);
+    ASSERT_EQ_INT(1, libcalls[token].lib_index);
+    ASSERT_EQ_INT(sys_introspection_calls[i].call_index,
+                  libcalls[token].call_index);
+    ASSERT_EQ_INT(sys_introspection_calls[i].arity, libcalls[token].args);
+    ASSERT_TRUE(libcalls[token].func == sys_introspection_calls[i].handler);
+    ASSERT_TRUE(libcall_func_token(token) == sys_introspection_calls[i].handler);
+  }
 
   ASSERT_TRUE(libcall_lookup_token("task", "newgametask", &token, &args));
   ASSERT_EQ_INT(3, args);
@@ -1136,6 +1208,229 @@ void test_sys_persistence_libcalls(void) {
   itemstore_set_directory_sync_hook_for_tests(NULL);
   ASSERT_EQ_INT(0, unlink(store_path));
   teardown_libcall_runtime();
+}
+
+void test_sys_introspection_libcalls(void) {
+  setup_libcall_runtime();
+
+  ITEM_t *top = insert_halt_code(config.itemroot, "topcode");
+  ITEM_t *nested = insert_halt_code(config.itemroot, "scope.runner");
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "scope.runner.relative",
+                              (VALUE_t){VALUE_bool, {.i = 1}}));
+  insert_halt_code(config.itemroot, "types.code");
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "types.nil", VALUE_NIL));
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "types.bool",
+                              (VALUE_t){VALUE_bool, {.i = 1}}));
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "types.int",
+                              (VALUE_t){VALUE_int, {.i = 42}}));
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "types.float",
+                              (VALUE_t){VALUE_float, {.f = 1.25}}));
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "types.string",
+                              (VALUE_t){VALUE_str, {.s = strdup("value")}}));
+
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = config.itemroot;
+  ctx.current_item = top;
+
+  assert_string_return(call_sys_noarg(lc_sys_thisitem, &ctx), "topcode");
+  VALUE_t result = call_sys_noarg(lc_sys_parentitem, &ctx);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+
+  ctx.current_item = nested;
+  assert_string_return(call_sys_noarg(lc_sys_thisitem, &ctx), "scope.runner");
+  assert_string_return(call_sys_noarg(lc_sys_parentitem, &ctx), "scope");
+
+  ctx.current_item = NULL;
+  result = call_sys_noarg(lc_sys_thisitem, &ctx);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  result = call_sys_noarg(lc_sys_parentitem, &ctx);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ctx.current_item = nested;
+
+  set_error_item(config.itemroot, ERR_RUNTIME_NOSUCHITEM,
+                 "unrelated prior error", nested);
+  assert_string_return(call_sys_noarg(lc_sys_thisitem, &ctx), "scope.runner");
+  assert_string_return(call_sys_noarg(lc_sys_parentitem, &ctx), "scope");
+  static const struct {
+    const char *name;
+    const char *type;
+  } type_cases[] = {
+    {"types.code", "code"},
+    {"types.nil", "nil"},
+    {"types.bool", "bool"},
+    {"types.int", "int"},
+    {"types.float", "float"},
+    {"types.string", "string"},
+    {".relative", "bool"},
+  };
+  for (size_t i = 0; i < sizeof(type_cases) / sizeof(type_cases[0]); i++) {
+    result = call_sys_name(lc_sys_itemtype, &ctx,
+        (VALUE_t){VALUE_str, {.s = strdup(type_cases[i].name)}});
+    assert_string_return(result, type_cases[i].type);
+  }
+
+  result = call_sys_name(lc_sys_itemtype, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup("types.missing")}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  result = call_sys_name(lc_sys_itemtype, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup("invalid-name!")}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ITEM_t *error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, error->value.i);
+
+  result = call_sys_name(lc_sys_childcount, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup("types")}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(6, result.i);
+  int64_t type_child_count = result.i;
+  result = call_sys_name(lc_sys_childcount, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup("types.nil")}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(0, result.i);
+  result = call_sys_name(lc_sys_childcount, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup(".relative")}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(0, result.i);
+  result = call_sys_name(lc_sys_childcount, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup("types.missing")}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  result = call_sys_name(lc_sys_childcount, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup("invalid-name!")}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, error->value.i);
+
+  int64_t enumerated_children = 0;
+  for (int64_t i = 0; i < type_child_count; i++) {
+    push_stack(config.vm->stack,
+               (VALUE_t){VALUE_str, {.s = strdup("types")}});
+    push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = i}});
+    (void)lc_sys_nthname(&ctx, NULL, NULL);
+    result = pop_stack(config.vm->stack);
+    ASSERT_EQ_INT(VALUE_str, result.type);
+    enumerated_children++;
+    value_free(&result);
+  }
+  ASSERT_EQ_INT(type_child_count, enumerated_children);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("types")}});
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_int, {.i = type_child_count}});
+  (void)lc_sys_nthname(&ctx, NULL, NULL);
+  result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+
+  result = call_sys_noarg(lc_sys_rootcount, &ctx);
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  int64_t root_count = result.i;
+  ASSERT_TRUE(root_count > 0);
+  int64_t enumerated_roots = 0;
+  for (int64_t i = 0; i < root_count; i++) {
+    push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = i}});
+    (void)lc_sys_rootname(&ctx, NULL, NULL);
+    result = pop_stack(config.vm->stack);
+    ASSERT_EQ_INT(VALUE_str, result.type);
+    enumerated_roots++;
+    value_free(&result);
+  }
+  ASSERT_EQ_INT(root_count, enumerated_roots);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = root_count}});
+  (void)lc_sys_rootname(&ctx, NULL, NULL);
+  result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+
+  assert_string_return(call_sys_noarg(lc_sys_version, &ctx), SINVERSION);
+
+  uv_timeval64_t wall_before = {0};
+  uv_timeval64_t wall_after = {0};
+  ASSERT_EQ_INT(0, uv_gettimeofday(&wall_before));
+  result = call_sys_noarg(lc_sys_now, &ctx);
+  ASSERT_EQ_INT(0, uv_gettimeofday(&wall_after));
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  int64_t wall_before_ms = wall_before.tv_sec * INT64_C(1000) +
+                           wall_before.tv_usec / INT64_C(1000);
+  int64_t wall_after_ms = wall_after.tv_sec * INT64_C(1000) +
+                          wall_after.tv_usec / INT64_C(1000);
+  int64_t wall_low = wall_before_ms < wall_after_ms
+      ? wall_before_ms : wall_after_ms;
+  int64_t wall_high = wall_before_ms > wall_after_ms
+      ? wall_before_ms : wall_after_ms;
+  ASSERT_TRUE(result.i >= wall_low - INT64_C(1000));
+  ASSERT_TRUE(result.i <= wall_high + INT64_C(1000));
+
+  uint64_t mono_before = uv_hrtime() / UINT64_C(1000000);
+  VALUE_t monotime_first = call_sys_noarg(lc_sys_monotime, &ctx);
+  VALUE_t monotime_second = call_sys_noarg(lc_sys_monotime, &ctx);
+  uint64_t mono_after = uv_hrtime() / UINT64_C(1000000);
+  ASSERT_EQ_INT(VALUE_int, monotime_first.type);
+  ASSERT_EQ_INT(VALUE_int, monotime_second.type);
+  ASSERT_TRUE(monotime_first.i >= 0);
+  ASSERT_TRUE(monotime_second.i >= monotime_first.i);
+  ASSERT_TRUE((uint64_t)monotime_first.i >= mono_before);
+  ASSERT_TRUE((uint64_t)monotime_second.i <= mono_after);
+
+  error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, error->value.i);
+
+  result = call_sys_name(lc_sys_itemtype, &ctx,
+                         (VALUE_t){VALUE_int, {.i = 1}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, error->value.i);
+  ITEM_t *message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_EQ_INT(VALUE_str, message->value.type);
+  ASSERT_TRUE(strstr(message->value.s, "sys.itemtype") != NULL);
+  ITEM_t *provenance = find_item(config.itemroot, "error.item");
+  ASSERT_NOT_NULL(provenance);
+  ASSERT_EQ_INT(VALUE_str, provenance->value.type);
+  ASSERT_TRUE(strcmp(provenance->value.s, "scope.runner") == 0);
+
+  result = call_sys_name(lc_sys_childcount, &ctx,
+                         (VALUE_t){VALUE_bool, {.i = 1}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, error->value.i);
+  message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_TRUE(strstr(message->value.s, "sys.childcount") != NULL);
+  provenance = find_item(config.itemroot, "error.item");
+  ASSERT_NOT_NULL(provenance);
+  ASSERT_TRUE(strcmp(provenance->value.s, "scope.runner") == 0);
+
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  teardown_libcall_runtime();
+}
+
+void test_sys_wall_milliseconds_boundaries(void) {
+  const int64_t lower_second = INT64_C(-9223372036854775) - INT64_C(1);
+  ASSERT_EQ_INT(INT64_MIN,
+                lc_sys_wall_milliseconds(lower_second, INT64_C(191000)));
+  ASSERT_EQ_INT(INT64_MIN,
+                lc_sys_wall_milliseconds(lower_second, INT64_C(192000)));
+  ASSERT_EQ_INT(INT64_MIN + INT64_C(1),
+                lc_sys_wall_milliseconds(lower_second, INT64_C(193000)));
+  ASSERT_EQ_INT(INT64_C(-9223372036854775001),
+                lc_sys_wall_milliseconds(lower_second, INT64_C(999000)));
+  ASSERT_EQ_INT(INT64_MIN,
+                lc_sys_wall_milliseconds(lower_second - INT64_C(1),
+                                         INT64_C(999000)));
+
+  const int64_t upper_second = INT64_C(9223372036854775);
+  ASSERT_EQ_INT(INT64_MAX - INT64_C(1),
+                lc_sys_wall_milliseconds(upper_second, INT64_C(806000)));
+  ASSERT_EQ_INT(INT64_MAX,
+                lc_sys_wall_milliseconds(upper_second, INT64_C(807000)));
+  ASSERT_EQ_INT(INT64_MAX,
+                lc_sys_wall_milliseconds(upper_second, INT64_C(808000)));
+  ASSERT_EQ_INT(INT64_MAX,
+                lc_sys_wall_milliseconds(upper_second + INT64_C(1), 0));
 }
 
 

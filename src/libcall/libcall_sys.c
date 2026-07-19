@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <stdint.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
@@ -14,6 +15,7 @@
 #include "log.h"
 #include "runtime_item_ops.h"
 #include "stack.h"
+#include "version.h"
 
 static uint8_t *lc_sys_return(RuntimeContext *ctx, uint8_t *nextop,
                               VALUE_t ret) {
@@ -178,6 +180,175 @@ uint8_t *lc_sys_save(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   return lc_sys_persist(ctx, nextop, "sys.save",
                         ctx ? ctx->itemstore_filename : NULL);
+}
+
+static VALUE_t lc_sys_string_copy(const char *text) {
+  if (!text) return VALUE_NIL;
+  char *copy = strdup(text);
+  if (!copy) return VALUE_NIL;
+  return (VALUE_t){VALUE_str, {.s = copy}};
+}
+
+static int64_t lc_sys_count_value(size_t count) {
+  if ((uintmax_t)count > (uintmax_t)INT64_MAX) return INT64_MAX;
+  return (int64_t)count;
+}
+
+static const char *lc_sys_item_type_name(const ITEM_t *target) {
+  if (!target) return NULL;
+  if (target->type == ITEM_code) return "code";
+  if (target->type != ITEM_value) return NULL;
+  switch (target->value.type) {
+    case VALUE_nil: return "nil";
+    case VALUE_bool: return "bool";
+    case VALUE_int: return "int";
+    case VALUE_float: return "float";
+    case VALUE_str: return "string";
+  }
+  return NULL;
+}
+
+int64_t lc_sys_wall_milliseconds(int64_t seconds, int64_t microseconds) {
+  int64_t fraction = microseconds / INT64_C(1000);
+  int64_t fraction_seconds = fraction / INT64_C(1000);
+  int64_t fraction_milliseconds = fraction % INT64_C(1000);
+  if (fraction_milliseconds < 0) {
+    fraction_milliseconds += INT64_C(1000);
+    fraction_seconds--;
+  }
+
+  if (fraction_seconds > 0 && seconds > INT64_MAX - fraction_seconds) {
+    return INT64_MAX;
+  }
+  if (fraction_seconds < 0 && seconds < INT64_MIN - fraction_seconds) {
+    return INT64_MIN;
+  }
+  int64_t normalized_seconds = seconds + fraction_seconds;
+
+  const int64_t maximum_seconds = INT64_MAX / INT64_C(1000);
+  if (normalized_seconds > maximum_seconds) return INT64_MAX;
+  const int64_t minimum_seconds = INT64_MIN / INT64_C(1000);
+  if (normalized_seconds < minimum_seconds) {
+    const int64_t adjacent_second = minimum_seconds - INT64_C(1);
+    const int64_t minimum_fraction =
+        INT64_C(1000) + (INT64_MIN % INT64_C(1000));
+    if (normalized_seconds != adjacent_second ||
+        fraction_milliseconds < minimum_fraction) {
+      return INT64_MIN;
+    }
+    return INT64_MIN + (fraction_milliseconds - minimum_fraction);
+  }
+
+  int64_t milliseconds = normalized_seconds * INT64_C(1000);
+  if (normalized_seconds == maximum_seconds &&
+      fraction_milliseconds > INT64_MAX - milliseconds) {
+    return INT64_MAX;
+  }
+  return milliseconds + fraction_milliseconds;
+}
+
+uint8_t *lc_sys_thisitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  if (!ctx || !ctx->current_item) return lc_sys_return_nil(ctx, nextop);
+
+  char name[MAX_ITEM_NAME] = {0};
+  get_itemname(ctx->current_item, name);
+  return lc_sys_return(ctx, nextop, lc_sys_string_copy(name));
+}
+
+uint8_t *lc_sys_parentitem(RuntimeContext *ctx, uint8_t *nextop,
+                           ITEM_t *item) {
+  (void)item;
+  if (!ctx || !ctx->current_item || !ctx->current_item->parent ||
+      !ctx->current_item->parent->parent) {
+    return lc_sys_return_nil(ctx, nextop);
+  }
+
+  char name[MAX_ITEM_NAME] = {0};
+  get_itemname(ctx->current_item->parent, name);
+  return lc_sys_return(ctx, nextop, lc_sys_string_copy(name));
+}
+
+uint8_t *lc_sys_itemtype(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  VALUE_t itemname = pop_stack(ctx->vm->stack);
+  if (!lc_value_is_type(itemname, VALUE_str)) {
+    value_free(&itemname);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "sys.itemtype item name must be a string");
+  }
+
+  VALUE_t result = VALUE_NIL;
+  char fullname[MAX_ITEM_NAME];
+  ITEM_t *current_item = ctx ? ctx->current_item : NULL;
+  if (canonicalize_itemname(itemname.s, current_item, fullname)) {
+    ITEM_t *target = find_item(ctx->itemroot, fullname);
+    result = lc_sys_string_copy(lc_sys_item_type_name(target));
+  }
+  value_free(&itemname);
+  return lc_sys_return(ctx, nextop, result);
+}
+
+uint8_t *lc_sys_childcount(RuntimeContext *ctx, uint8_t *nextop,
+                           ITEM_t *item) {
+  (void)item;
+  VALUE_t itemname = pop_stack(ctx->vm->stack);
+  if (!lc_value_is_type(itemname, VALUE_str)) {
+    value_free(&itemname);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "sys.childcount item name must be a string");
+  }
+
+  VALUE_t result = VALUE_NIL;
+  char fullname[MAX_ITEM_NAME];
+  ITEM_t *current_item = ctx ? ctx->current_item : NULL;
+  if (canonicalize_itemname(itemname.s, current_item, fullname)) {
+    ITEM_t *target = find_item(ctx->itemroot, fullname);
+    if (target) {
+      result = (VALUE_t){VALUE_int,
+                         {.i = lc_sys_count_value(target->ordered_size)}};
+    }
+  }
+  value_free(&itemname);
+  return lc_sys_return(ctx, nextop, result);
+}
+
+uint8_t *lc_sys_rootcount(RuntimeContext *ctx, uint8_t *nextop,
+                          ITEM_t *item) {
+  (void)item;
+  int64_t count = ctx && ctx->itemroot
+      ? lc_sys_count_value(ctx->itemroot->ordered_size) : 0;
+  return lc_sys_return(ctx, nextop,
+                       (VALUE_t){VALUE_int, {.i = count}});
+}
+
+uint8_t *lc_sys_version(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  return lc_sys_return(ctx, nextop, lc_sys_string_copy(SINVERSION));
+}
+
+uint8_t *lc_sys_now(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  uv_timeval64_t wall = {0};
+  int status = uv_gettimeofday(&wall);
+  if (status != 0) {
+    logerr("sys.now failed to read wall clock: %s.\n", uv_strerror(status));
+    return lc_sys_return(ctx, nextop,
+                         (VALUE_t){VALUE_int, {.i = 0}});
+  }
+  int64_t milliseconds = lc_sys_wall_milliseconds(wall.tv_sec, wall.tv_usec);
+  return lc_sys_return(ctx, nextop,
+                       (VALUE_t){VALUE_int, {.i = milliseconds}});
+}
+
+uint8_t *lc_sys_monotime(RuntimeContext *ctx, uint8_t *nextop,
+                         ITEM_t *item) {
+  (void)item;
+  uint64_t milliseconds = uv_hrtime() / UINT64_C(1000000);
+  int64_t result = milliseconds > (uint64_t)INT64_MAX
+      ? INT64_MAX : (int64_t)milliseconds;
+  return lc_sys_return(ctx, nextop,
+                       (VALUE_t){VALUE_int, {.i = result}});
 }
 
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {

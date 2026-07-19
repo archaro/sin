@@ -193,7 +193,23 @@ remain in memory; the normal itemstore save at safe shutdown is what makes
 those mutations durable.
 `sys.exists{<name>}` reports whether a string-named item exists.
 `sys.delete{<name>}` deletes a string-named item when it exists.
-`sys.nthname{<name>, <index>}` and `sys.rootname{<index>}` return child or root item names by index.  Item order is not guaranteed.
+`sys.thisitem` returns the fully qualified name of the currently executing code
+item. `sys.parentitem` returns that item's fully qualified namespace parent, or
+`nil` for a top-level item; this is the namespace parent, not the call-stack
+caller. `sys.itemtype{<name>}` reports `"code"`, `"nil"`, `"bool"`, `"int"`,
+`"float"`, or `"string"`, and `sys.childcount{<name>}` reports the number of
+immediate children. Name arguments use the normal item-name rules, including
+relative names resolved from the executing item. Missing or invalid names
+return `nil`; non-string names set `ERR_RUNTIME_INVALIDARGS`.
+`sys.nthname{<name>, <index>}` and `sys.rootname{<index>}` return child or root
+item names by index. `sys.rootcount` and `sys.childcount` bound those
+enumerations, but child ordering is not stable across runtime restarts.
+`sys.version` returns a copy of the raw engine version string, currently
+`"0.6"`. `sys.now` returns signed Unix-epoch milliseconds. `sys.monotime`
+returns signed monotonic milliseconds from an unspecified operating-system
+origin; only differences are meaningful, and readings do not decrease within
+a process run. These successful introspection and time calls do not clear an
+unrelated existing `error`.
 
 The `net` library handles network activity:  
 `net.input` checks to see if there is any interesting network activity.  It takes no arguments, processes at most one pending event per call, and advances a fair-queue cursor across zero-based connection slots.  A new connection returns `1`, a disconnection returns `2`, and data returns `3`.  If there is no activity, `0` is returned.  For connection, disconnection, and data events, `input.line` is set to the zero-based line number.  For data, `input.text` is set to the complete line of text without its terminating newline.  Data is only signalled after receiving a `\n` character from a connection, so the developer can be assured that if a line signals that data has been received, they will be processing a whole line of input. A disconnection event destroys the line and makes the slot reusable before `net.input` returns.
