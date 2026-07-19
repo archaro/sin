@@ -164,6 +164,7 @@ void test_net_flush_reports_line_status(void);
 void test_net_ditch_reports_inactive_lines(void);
 void test_net_ditch_invalid_line_returns_nil(void);
 void test_sys_item_libcalls(void);
+void test_sys_persistence_libcalls(void);
 void test_libcall_float_integer_only_arguments_rejected(void);
 void test_libcall_output_formats_values(void);
 void test_str_libcalls_float_returns_invalidargs_nil(void);
@@ -482,6 +483,7 @@ static const test_case_t runtime_tests[] = {
     {"test_net_ditch_reports_inactive_lines", test_net_ditch_reports_inactive_lines},
     {"test_net_ditch_invalid_line_returns_nil", test_net_ditch_invalid_line_returns_nil},
     {"test_sys_item_libcalls", test_sys_item_libcalls},
+    {"test_sys_persistence_libcalls", test_sys_persistence_libcalls},
     {"test_libcall_float_integer_only_arguments_rejected", test_libcall_float_integer_only_arguments_rejected},
     {"test_str_libcalls_float_returns_invalidargs_nil", test_str_libcalls_float_returns_invalidargs_nil},
     {"test_str_len_returns_string_byte_length", test_str_len_returns_string_byte_length},

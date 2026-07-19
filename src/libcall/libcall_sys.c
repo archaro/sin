@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <time.h>
 #include <string.h>
 #include <stdio.h>
@@ -26,6 +27,58 @@ static uint8_t *lc_sys_return_nil(RuntimeContext *ctx, uint8_t *nextop) {
 
 static uint8_t *lc_sys_return_false(RuntimeContext *ctx, uint8_t *nextop) {
   return lc_sys_return(ctx, nextop, VALUE_FALSE);
+}
+
+static uint8_t *lc_sys_persistence_return(RuntimeContext *ctx,
+                                           uint8_t *nextop, bool success) {
+  if (!ctx || !ctx->vm || !ctx->vm->stack) return nextop;
+  return lc_sys_return(ctx, nextop, success ? VALUE_TRUE : VALUE_FALSE);
+}
+
+static bool lc_sys_persistence_runtime_ready(RuntimeContext *ctx) {
+  // A real libcall invocation always has these channels: interpret() needs the
+  // VM stack to dispatch the handler, and the item root carries diagnostics.
+  // Keep direct invalid C-level invocations defensive, but do not persist when
+  // their result or error cannot be delivered through the normal ABI.
+  return ctx && ctx->vm && ctx->vm->stack && ctx->itemroot;
+}
+
+static void lc_sys_set_persistence_error(RuntimeContext *ctx,
+                                         const char *operation,
+                                         const char *target) {
+  ITEM_t *root = ctx ? ctx->itemroot : NULL;
+  ITEM_t *current_item = ctx ? ctx->current_item : NULL;
+  const char *display_target = target && target[0] ? target : "<unconfigured>";
+  int needed = snprintf(NULL, 0, "%s failed for '%s'", operation,
+                        display_target);
+  if (needed < 0) {
+    set_error_item(root, ERR_RUNTIME_PERSISTENCE, operation, current_item);
+    return;
+  }
+
+  size_t detail_size = (size_t)needed + 1u;
+  char *detail = malloc(detail_size);
+  if (!detail) {
+    set_error_item(root, ERR_RUNTIME_PERSISTENCE, operation, current_item);
+    return;
+  }
+  (void)snprintf(detail, detail_size, "%s failed for '%s'", operation,
+                 display_target);
+  set_error_item(root, ERR_RUNTIME_PERSISTENCE, detail, current_item);
+  free(detail);
+}
+
+static uint8_t *lc_sys_persist(RuntimeContext *ctx, uint8_t *nextop,
+                               const char *operation, const char *target) {
+  if (!lc_sys_persistence_runtime_ready(ctx) || !target || target[0] == '\0') {
+    lc_sys_set_persistence_error(ctx, operation, target);
+    return lc_sys_persistence_return(ctx, nextop, false);
+  }
+
+  bool success = save_itemstore_with_options(target, ctx->itemroot,
+                                             ctx->itemstore_durability);
+  if (!success) lc_sys_set_persistence_error(ctx, operation, target);
+  return lc_sys_persistence_return(ctx, nextop, success);
 }
 
 static void lc_sys_free_output(OUTPUT_t *out, bool free_bytecode) {
@@ -78,24 +131,53 @@ static uint8_t *lc_sys_compile_fail(RuntimeContext *ctx, uint8_t *nextop,
 }
 
 uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  // Save a timestamped itemstore backup and push nil. Backup I/O failures are
-  // logged but are not exposed through the return value.
+  // Save a timestamped itemstore backup and report whether persistence was
+  // fully confirmed.
   (void)item;
+
+  if (!lc_sys_persistence_runtime_ready(ctx) || !ctx->itemstore_filename ||
+      ctx->itemstore_filename[0] == '\0') {
+    lc_sys_set_persistence_error(ctx, "sys.backup",
+                                 ctx ? ctx->itemstore_filename : NULL);
+    return lc_sys_persistence_return(ctx, nextop, false);
+  }
 
   char timestamp[64];
   time_t now = time(NULL);
   struct tm *tm_now = localtime(&now);
-  strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S", tm_now);
-  size_t filename_len = strlen(ctx->itemstore_filename);
-  size_t timestamp_len = strlen(timestamp);
-  char backupfile[filename_len + timestamp_len + 2];
-  snprintf(backupfile, sizeof(backupfile), "%s_%s", ctx->itemstore_filename,
-                                                                timestamp);
-  if (!save_itemstore(backupfile, ctx->itemroot)) {
-    logerr("sys.backup failed to persist itemstore backup '%s'.\n",
-           backupfile);
+  if (!tm_now || strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S",
+                          tm_now) == 0) {
+    lc_sys_set_persistence_error(ctx, "sys.backup",
+                                 ctx->itemstore_filename);
+    return lc_sys_persistence_return(ctx, nextop, false);
   }
-  return lc_sys_return_nil(ctx, nextop);
+
+  int needed = snprintf(NULL, 0, "%s_%s", ctx->itemstore_filename,
+                        timestamp);
+  if (needed < 0) {
+    lc_sys_set_persistence_error(ctx, "sys.backup",
+                                 ctx->itemstore_filename);
+    return lc_sys_persistence_return(ctx, nextop, false);
+  }
+  size_t backupfile_size = (size_t)needed + 1u;
+  char *backupfile = malloc(backupfile_size);
+  if (!backupfile) {
+    lc_sys_set_persistence_error(ctx, "sys.backup",
+                                 ctx->itemstore_filename);
+    return lc_sys_persistence_return(ctx, nextop, false);
+  }
+  (void)snprintf(backupfile, backupfile_size, "%s_%s",
+                 ctx->itemstore_filename, timestamp);
+  uint8_t *result = lc_sys_persist(ctx, nextop, "sys.backup", backupfile);
+  free(backupfile);
+  return result;
+}
+
+uint8_t *lc_sys_save(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Synchronize the current item tree to the configured primary itemstore.
+  (void)item;
+  return lc_sys_persist(ctx, nextop, "sys.save",
+                        ctx ? ctx->itemstore_filename : NULL);
 }
 
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {

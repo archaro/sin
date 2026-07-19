@@ -60,6 +60,19 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - Loaded itemstore mutation after persistence: root-level children, nested
       children, code items, deletion, reinsertion, and ordered name
       enumeration before and after a second save/load cycle.
+- **Synchronous runtime persistence libcalls**
+  - `tests/core/test_libcall_registry.c`
+    - `test_libcall_registry_roundtrip`
+      - `sys.save` package index, call index, arity, token, and handler mapping
+    - `test_sys_persistence_libcalls`
+      - primary checkpoint snapshot isolation and loadability
+      - context-selected full/fast durability propagation
+      - separate timestamped backup creation without primary replacement
+      - boolean failure results, structured persistence diagnostics, executing-item provenance, and prior-error preservation
+      - defensive no-crash behavior for invalid direct C-level calls without a root, VM, or stack
+  - `tests/interpreter/test_interpret_semantics_golden.c`
+    - `test_interpret_result_semantics`
+      - source compilation and runtime execution of `sys.save` with a loadable checkpoint
 - **Core value/float semantics**
   - `tests/core/test_value_behavior.c`
     - `test_value_push_float_interprets_binary64_payloads`

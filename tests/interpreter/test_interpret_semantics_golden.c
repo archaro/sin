@@ -257,6 +257,8 @@ static VALUE_t run_result_semantics_source(const char *label, const char *source
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
   ctx.itemroot = config.itemroot;
+  ctx.itemstore_filename = config.itemstore;
+  ctx.itemstore_durability = config.itemstore_durability;
   ctx.strict_validation = config.strict_validation;
   ctx.strict_runtime_contracts = config.strict_runtime_contracts;
   return interpret(&ctx, item);
@@ -284,6 +286,12 @@ static void assert_result_nil(const char *name, const char *source) {
 
 void test_interpret_result_semantics(void) {
   setup_result_semantics_runtime();
+
+  char save_path[128];
+  ASSERT_EQ_INT(0, test_make_temp_path("sin-interp-sys-save", save_path,
+                                      sizeof(save_path)));
+  config.itemstore = save_path;
+  config.itemstore_durability = ITEMSTORE_DURABLE_FAST;
 
   assert_result_int("result.final_expression", "42;", 42);
   assert_result_int("result.expression_statement_discard", "1; 2;", 2);
@@ -317,6 +325,18 @@ void test_interpret_result_semantics(void) {
   ASSERT_NOT_NULL(compiled_discard);
   ASSERT_EQ_INT(VALUE_int, compiled_discard->value.type);
   ASSERT_EQ_INT(23, (int)compiled_discard->value.i);
+
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "result.save.marker",
+                              (VALUE_t){VALUE_int, {.i = 44}}));
+  assert_result_bool("result.final_sys_save", "sys.save;", true);
+  ITEM_t *saved = load_itemstore(save_path);
+  ASSERT_NOT_NULL(saved);
+  ITEM_t *saved_marker = find_item(saved, "result.save.marker");
+  ASSERT_NOT_NULL(saved_marker);
+  ASSERT_EQ_INT(VALUE_int, saved_marker->value.type);
+  ASSERT_EQ_INT(44, (int)saved_marker->value.i);
+  destroy_item(saved);
+  ASSERT_EQ_INT(0, unlink(save_path));
 
   teardown_result_semantics_runtime();
 }

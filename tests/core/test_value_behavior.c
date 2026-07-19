@@ -87,6 +87,7 @@ static void assert_error_code_and_detail(int expected_code, const char *needle) 
 
 void test_error_message_table_defines_active_errors(void) {
   init_errmsg();
+  ASSERT_EQ_INT(28, ERR_RUNTIME_PERSISTENCE);
 
   int active_errors[] = {
       ERR_NOERROR,
@@ -106,6 +107,7 @@ void test_error_message_table_defines_active_errors(void) {
       ERR_RUNTIME_BYTECODE,
       ERR_RUNTIME_INVALIDITEM,
       ERR_RUNTIME_INTERNAL,
+      ERR_RUNTIME_PERSISTENCE,
       ERR_NETWORK_ERROR,
   };
 

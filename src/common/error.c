@@ -24,5 +24,6 @@ void init_errmsg(void) {
   errmsg[ERR_RUNTIME_BYTECODE] = "Invalid bytecode.";
   errmsg[ERR_RUNTIME_INVALIDITEM] = "Invalid item name.";
   errmsg[ERR_RUNTIME_INTERNAL] = "Internal runtime error.";
+  errmsg[ERR_RUNTIME_PERSISTENCE] = "Itemstore persistence failed.";
   errmsg[ERR_NETWORK_ERROR] = "Network error.";
 }

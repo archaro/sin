@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <glob.h>
 #include <unistd.h>
 #include <stdint.h>
 
@@ -9,7 +10,9 @@
 #include "error.h"
 #include "interpret.h"
 #include "item.h"
+#include "item_internal.h"
 #include "test_assert.h"
+#include "test_helpers.h"
 #include "task.h"
 #include "vm.h"
 #include "memory.h"
@@ -26,6 +29,8 @@ LINE_t *add_line(uv_tcp_t *line_handle);
 uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_save(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -159,6 +164,48 @@ static void assert_invalid_args_detail_contains(const char *expected) {
 static void assert_invalid_args_float_detail_contains(const char *expected) {
   assert_invalid_args_detail_contains("float");
   assert_invalid_args_detail_contains(expected);
+}
+
+static void assert_bool_return(VALUE_t value, int expected) {
+  ASSERT_EQ_INT(VALUE_bool, value.type);
+  ASSERT_EQ_INT(expected, value.i);
+}
+
+static void assert_persistence_error(const char *operation,
+                                     const char *target,
+                                     const char *current_item) {
+  ITEM_t *error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(VALUE_int, error->value.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_PERSISTENCE, error->value.i);
+
+  ITEM_t *message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_EQ_INT(VALUE_str, message->value.type);
+  ASSERT_TRUE(strstr(message->value.s, errmsg[ERR_RUNTIME_PERSISTENCE]) != NULL);
+  ASSERT_TRUE(strstr(message->value.s, operation) != NULL);
+  ASSERT_TRUE(strstr(message->value.s, target) != NULL);
+
+  ITEM_t *provenance = find_item(config.itemroot, "error.item");
+  ASSERT_NOT_NULL(provenance);
+  ASSERT_EQ_INT(VALUE_str, provenance->value.type);
+  ASSERT_TRUE(strcmp(provenance->value.s, current_item) == 0);
+}
+
+static int persistence_sync_calls;
+static int persistence_directory_sync_calls;
+
+static bool count_persistence_sync(FILE *file, const char *path) {
+  (void)file;
+  (void)path;
+  persistence_sync_calls++;
+  return true;
+}
+
+static bool count_persistence_directory_sync(const char *path) {
+  (void)path;
+  persistence_directory_sync_calls++;
+  return true;
 }
 
 static void assert_float_string_libcall_returns_invalidargs_nil(
@@ -355,6 +402,15 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_TRUE(libcall_func_token(255) == NULL);
   ASSERT_TRUE(!libcall_token_arg_count(255, &args));
 
+  ASSERT_TRUE(libcall_lookup_token("sys", "save", &token, &args));
+  ASSERT_EQ_INT(33, token);
+  ASSERT_EQ_INT(0, args);
+  ASSERT_TRUE(libcall_func_token(token) == lc_sys_save);
+  ASSERT_EQ_INT(1, libcalls[token].lib_index);
+  ASSERT_EQ_INT(9, libcalls[token].call_index);
+  ASSERT_EQ_INT(0, libcalls[token].args);
+  ASSERT_TRUE(libcalls[token].func == lc_sys_save);
+
   ASSERT_TRUE(libcall_lookup_token("task", "newgametask", &token, &args));
   ASSERT_EQ_INT(3, args);
   args = 0;
@@ -378,6 +434,7 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_EQ_INT(2, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
   ASSERT_TRUE(libcall_lookup_token("net", "flush", &token, &args));
+  ASSERT_EQ_INT(32, token);
   ASSERT_EQ_INT(1, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
 
@@ -886,6 +943,198 @@ void test_sys_item_libcalls(void) {
   ASSERT_EQ_INT(0, ret.i);
   assert_invalid_args_detail_contains("sys.exists");
 
+  teardown_libcall_runtime();
+}
+
+void test_sys_persistence_libcalls(void) {
+  setup_libcall_runtime();
+
+  char store_path[128];
+  ASSERT_EQ_INT(0, test_make_temp_path("sin-sys-save", store_path,
+                                      sizeof(store_path)));
+  ITEM_t *caller = insert_item(config.itemroot, "persistence.caller",
+                               (VALUE_t){VALUE_bool, {.i = 1}});
+  ASSERT_NOT_NULL(caller);
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "checkpoint.value",
+                              (VALUE_t){VALUE_int, {.i = 1}}));
+
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = config.itemroot;
+  ctx.itemstore_filename = store_path;
+  ctx.current_item = caller;
+
+  itemstore_set_sync_hook_for_tests(count_persistence_sync);
+  itemstore_set_directory_sync_hook_for_tests(
+      count_persistence_directory_sync);
+
+  set_error_item(config.itemroot, ERR_RUNTIME_INVALIDARGS,
+                 "unrelated prior error", caller);
+  ITEM_t *prior_message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(prior_message);
+  ASSERT_EQ_INT(VALUE_str, prior_message->value.type);
+  char *prior_message_text = strdup(prior_message->value.s);
+  ASSERT_NOT_NULL(prior_message_text);
+
+  config.itemstore_durability = ITEMSTORE_DURABLE_FULL;
+  ctx.itemstore_durability = ITEMSTORE_DURABLE_FAST;
+  persistence_sync_calls = 0;
+  persistence_directory_sync_calls = 0;
+  (void)lc_sys_save(&ctx, NULL, caller);
+  assert_bool_return(pop_stack(config.vm->stack), 1);
+  ASSERT_EQ_INT(0, persistence_sync_calls);
+  ASSERT_EQ_INT(0, persistence_directory_sync_calls);
+  ITEM_t *error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, error->value.i);
+  prior_message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(prior_message);
+  ASSERT_EQ_INT(VALUE_str, prior_message->value.type);
+  ASSERT_TRUE(strcmp(prior_message->value.s, prior_message_text) == 0);
+  free(prior_message_text);
+
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "checkpoint.value",
+                              (VALUE_t){VALUE_int, {.i = 2}}));
+  ITEM_t *loaded = load_itemstore(store_path);
+  ASSERT_NOT_NULL(loaded);
+  ITEM_t *loaded_checkpoint = find_item(loaded, "checkpoint.value");
+  ASSERT_NOT_NULL(loaded_checkpoint);
+  ASSERT_EQ_INT(VALUE_int, loaded_checkpoint->value.type);
+  ASSERT_EQ_INT(1, loaded_checkpoint->value.i);
+  destroy_item(loaded);
+
+  config.itemstore_durability = ITEMSTORE_DURABLE_FAST;
+  ctx.itemstore_durability = ITEMSTORE_DURABLE_FULL;
+  persistence_sync_calls = 0;
+  persistence_directory_sync_calls = 0;
+  (void)lc_sys_save(&ctx, NULL, caller);
+  assert_bool_return(pop_stack(config.vm->stack), 1);
+  ASSERT_EQ_INT(1, persistence_sync_calls);
+  ASSERT_EQ_INT(1, persistence_directory_sync_calls);
+
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "backup.only",
+                              (VALUE_t){VALUE_int, {.i = 3}}));
+  set_error_item(config.itemroot, ERR_RUNTIME_INVALIDARGS,
+                 "backup prior error", caller);
+  prior_message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(prior_message);
+  prior_message_text = strdup(prior_message->value.s);
+  ASSERT_NOT_NULL(prior_message_text);
+  ctx.itemstore_durability = ITEMSTORE_DURABLE_FULL;
+  persistence_sync_calls = 0;
+  persistence_directory_sync_calls = 0;
+  (void)lc_sys_backup(&ctx, NULL, caller);
+  assert_bool_return(pop_stack(config.vm->stack), 1);
+  ASSERT_EQ_INT(1, persistence_sync_calls);
+  ASSERT_EQ_INT(1, persistence_directory_sync_calls);
+  error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, error->value.i);
+  prior_message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(prior_message);
+  ASSERT_TRUE(strcmp(prior_message->value.s, prior_message_text) == 0);
+  free(prior_message_text);
+
+  loaded = load_itemstore(store_path);
+  ASSERT_NOT_NULL(loaded);
+  ASSERT_TRUE(find_item(loaded, "backup.only") == NULL);
+  destroy_item(loaded);
+
+  char backup_pattern[sizeof(store_path) + 4u];
+  int written = snprintf(backup_pattern, sizeof(backup_pattern), "%s_*",
+                         store_path);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(backup_pattern));
+  glob_t backups = {0};
+  ASSERT_EQ_INT(0, glob(backup_pattern, 0, NULL, &backups));
+  ASSERT_EQ_INT(1, backups.gl_pathc);
+  loaded = load_itemstore(backups.gl_pathv[0]);
+  ASSERT_NOT_NULL(loaded);
+  ASSERT_NOT_NULL(find_item(loaded, "backup.only"));
+  loaded_checkpoint = find_item(loaded, "checkpoint.value");
+  ASSERT_NOT_NULL(loaded_checkpoint);
+  ASSERT_EQ_INT(2, loaded_checkpoint->value.i);
+  destroy_item(loaded);
+  ASSERT_EQ_INT(0, unlink(backups.gl_pathv[0]));
+  globfree(&backups);
+
+  char missing_parent[128];
+  ASSERT_EQ_INT(0, test_make_temp_path("sin-sys-save-missing",
+                                      missing_parent,
+                                      sizeof(missing_parent)));
+  char failing_path[sizeof(missing_parent) + 16u];
+  written = snprintf(failing_path, sizeof(failing_path), "%s/store",
+                     missing_parent);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(failing_path));
+  ctx.itemstore_filename = failing_path;
+
+  (void)lc_sys_save(&ctx, NULL, caller);
+  assert_bool_return(pop_stack(config.vm->stack), 0);
+  assert_persistence_error("sys.save", failing_path, "persistence.caller");
+
+  (void)lc_sys_backup(&ctx, NULL, caller);
+  assert_bool_return(pop_stack(config.vm->stack), 0);
+  assert_persistence_error("sys.backup", failing_path,
+                           "persistence.caller");
+  ITEM_t *backup_failure_message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(backup_failure_message);
+  const char *backup_target = strstr(backup_failure_message->value.s,
+                                     failing_path);
+  ASSERT_NOT_NULL(backup_target);
+  ASSERT_EQ_INT('_', backup_target[strlen(failing_path)]);
+
+  ctx.itemstore_filename = NULL;
+  (void)lc_sys_save(&ctx, NULL, caller);
+  assert_bool_return(pop_stack(config.vm->stack), 0);
+  assert_persistence_error("sys.save", "<unconfigured>",
+                           "persistence.caller");
+  (void)lc_sys_backup(&ctx, NULL, caller);
+  assert_bool_return(pop_stack(config.vm->stack), 0);
+  assert_persistence_error("sys.backup", "<unconfigured>",
+                           "persistence.caller");
+
+  ctx.itemstore_filename = store_path;
+  ctx.itemroot = NULL;
+  (void)lc_sys_save(&ctx, NULL, caller);
+  assert_bool_return(pop_stack(config.vm->stack), 0);
+  (void)lc_sys_backup(&ctx, NULL, caller);
+  assert_bool_return(pop_stack(config.vm->stack), 0);
+
+  ctx.itemroot = config.itemroot;
+  char invalid_runtime_path[128];
+  ASSERT_EQ_INT(0, test_make_temp_path("sin-sys-save-invalid-runtime",
+                                      invalid_runtime_path,
+                                      sizeof(invalid_runtime_path)));
+  ctx.itemstore_filename = invalid_runtime_path;
+  uint8_t nextop_marker = 0;
+  ctx.vm = NULL;
+  ASSERT_TRUE(lc_sys_save(&ctx, &nextop_marker, caller) == &nextop_marker);
+  assert_persistence_error("sys.save", invalid_runtime_path,
+                           "persistence.caller");
+  ASSERT_TRUE(lc_sys_backup(&ctx, &nextop_marker, caller) == &nextop_marker);
+  assert_persistence_error("sys.backup", invalid_runtime_path,
+                           "persistence.caller");
+  ASSERT_TRUE(access(invalid_runtime_path, F_OK) != 0);
+
+  VM_t stackless_vm = {0};
+  ctx.vm = &stackless_vm;
+  ASSERT_TRUE(lc_sys_save(&ctx, &nextop_marker, caller) == &nextop_marker);
+  ASSERT_TRUE(lc_sys_backup(&ctx, &nextop_marker, caller) == &nextop_marker);
+  ASSERT_TRUE(access(invalid_runtime_path, F_OK) != 0);
+
+  ASSERT_TRUE(lc_sys_save(NULL, &nextop_marker, caller) == &nextop_marker);
+  ASSERT_TRUE(lc_sys_backup(NULL, &nextop_marker, caller) == &nextop_marker);
+  char invalid_backup_pattern[sizeof(invalid_runtime_path) + 4u];
+  written = snprintf(invalid_backup_pattern, sizeof(invalid_backup_pattern),
+                     "%s_*", invalid_runtime_path);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(invalid_backup_pattern));
+  glob_t invalid_backups = {0};
+  ASSERT_EQ_INT(GLOB_NOMATCH,
+                glob(invalid_backup_pattern, 0, NULL, &invalid_backups));
+  globfree(&invalid_backups);
+
+  itemstore_set_sync_hook_for_tests(NULL);
+  itemstore_set_directory_sync_hook_for_tests(NULL);
+  ASSERT_EQ_INT(0, unlink(store_path));
   teardown_libcall_runtime();
 }
 

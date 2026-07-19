@@ -169,7 +169,17 @@ than executing when that item is not a code item.
 Libraries look like items, but they aren't, and they are read-only.  Don't try to assign something to a library function: it will not end well.  Library calls always return a value - this can be assumed to be `nil` unless otherwise stated.
 
 The `sys` library does the sort of system-wide things that you might expect:  
-`sys.backup` creates a backup of the itemstore as it is currently held in memory.  
+`sys.backup` synchronously creates a timestamped backup of the itemstore as it
+is currently held in memory and returns a boolean success result. This return
+type is an intentional compatibility change from the previous `nil` result.
+`sys.save` synchronously checkpoints the current in-memory itemstore to the
+configured primary itemstore path and returns a boolean success result. Runtime
+state can continue changing after the call; those later mutations are not part
+of the completed checkpoint. Both persistence calls pause event-loop progress
+while writing. `false` means the configured durability level was not fully
+confirmed and sets `ERR_RUNTIME_PERSISTENCE`; if failure occurs after atomic
+replacement, the target may nevertheless contain the new snapshot. Successful
+persistence does not clear an unrelated existing `error`.
 `sys.log{<expression>}` writes something to the system log: it takes an expression and will try to evaluate the expression and write something sensible in the log.  Do not abuse it.  
 `sys.shutdown` will perform an orderly shutdown of the engine, saving the itemstore.  It takes no arguments.  
 `sys.abort` will abort the engine without saving the itemstore.  It takes no arguments.
