@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - '[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  strict-warnings-gcc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential clang bison flex libuv1-dev pkg-config xxd
+      - name: Run strict-warning tests
+        run: make CC=gcc test-warnings
+
+  strict-warnings-clang:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential clang bison flex libuv1-dev pkg-config xxd
+      - name: Run strict-warning tests
+        run: make CC=clang test-warnings
+
+  release-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential clang bison flex libuv1-dev pkg-config xxd
+      - name: Run release tests
+        run: make test-release
+
+  sanitizer-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential clang bison flex libuv1-dev pkg-config xxd
+      - name: Run leak-detecting sanitizer tests
+        run: make test-lsan
+
+  fuzz-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      FUZZ_RUNS: 1000
+      FUZZ_TIME: 30
+      FUZZ_SEED: 1
+      FUZZ_ARTIFACT_DIR: ${{ runner.temp }}/sin-libfuzzer-artifacts
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential clang bison flex libuv1-dev pkg-config xxd
+      - name: Prepare libFuzzer artifact directory
+        run: mkdir -p "$FUZZ_ARTIFACT_DIR"
+      - name: Run seeded fuzz smoke
+        run: make FUZZ_RUNS="$FUZZ_RUNS" FUZZ_TIME="$FUZZ_TIME" FUZZ_SEED="$FUZZ_SEED" FUZZ_ARTIFACT_DIR="$FUZZ_ARTIFACT_DIR" fuzz-smoke
+      - name: Upload libFuzzer artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: sin-libfuzzer-artifacts
+          path: ${{ runner.temp }}/sin-libfuzzer-artifacts
+          if-no-files-found: ignore

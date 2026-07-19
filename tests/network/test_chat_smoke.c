@@ -29,6 +29,7 @@ typedef struct {
   pid_t server_pid;
   int client_fd;
   int shutdown_client_fd;
+  bool failed;
   bool cleaned;
 } SmokeResources;
 
@@ -42,6 +43,7 @@ static void cleanup_resources(void);
 static void stop_server(void);
 
 static void fail(const char *message) {
+  resources.failed = true;
   fprintf(stderr, "[chat-smoke][FAIL] %s\n", message);
   cleanup_resources();
   exit(EXIT_FAILURE);
@@ -49,6 +51,7 @@ static void fail(const char *message) {
 
 static void fail_errno(const char *message) {
   int saved_errno = errno;
+  resources.failed = true;
   fprintf(stderr, "[chat-smoke][FAIL] %s: %s\n", message,
           strerror(saved_errno));
   cleanup_resources();
@@ -108,7 +111,76 @@ static void run_expect_failure(char *const argv[], const char *label) {
   }
 }
 
-static void wait_for_log_text(const char *path, const char *needle) {
+static void print_child_status(pid_t pid, int status) {
+  if (WIFEXITED(status)) {
+    fprintf(stderr, "[chat-smoke][FAIL] server child %ld exited with code %d\n",
+            (long)pid, WEXITSTATUS(status));
+  } else if (WIFSIGNALED(status)) {
+    fprintf(stderr,
+            "[chat-smoke][FAIL] server child %ld terminated by signal %d\n",
+            (long)pid, WTERMSIG(status));
+  } else {
+    fprintf(stderr, "[chat-smoke][FAIL] server child %ld has status %d\n",
+            (long)pid, status);
+  }
+}
+
+static void report_log_wait_failure(const char *path, const char *phase,
+                                    const char *needle,
+                                    const int *known_status) {
+  fprintf(stderr, "[chat-smoke][FAIL] phase '%s' %s log marker '%s'\n",
+          phase, known_status ? "lost its server before observing"
+                              : "timed out waiting for",
+          needle);
+  if (known_status) {
+    print_child_status(resources.server_pid, *known_status);
+    resources.server_pid = -1;
+  } else if (resources.server_pid > 0) {
+    int status = 0;
+    pid_t ret = waitpid(resources.server_pid, &status, WNOHANG);
+    if (ret == 0) {
+      fprintf(stderr, "[chat-smoke][FAIL] server child %ld is still running\n",
+              (long)resources.server_pid);
+    } else if (ret == resources.server_pid) {
+      print_child_status(resources.server_pid, status);
+      resources.server_pid = -1;
+    } else {
+      fprintf(stderr, "[chat-smoke][FAIL] waitpid(%ld) failed: %s\n",
+              (long)resources.server_pid, strerror(errno));
+    }
+  }
+
+  fprintf(stderr, "[chat-smoke][FAIL] captured log %s:\n", path);
+  FILE *file = fopen(path, "r");
+  if (!file) {
+    fprintf(stderr, "<unavailable: %s>\n", strerror(errno));
+  } else {
+    char buffer[4096];
+    size_t used;
+    while ((used = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+      (void)fwrite(buffer, 1, used, stderr);
+    }
+    fclose(file);
+    fputc('\n', stderr);
+  }
+  fail(known_status ? "server exited before expected log marker"
+                    : "timed out waiting for server log");
+}
+
+static void fail_if_server_exited(const char *path, const char *phase,
+                                  const char *needle) {
+  if (resources.server_pid <= 0) return;
+  int status = 0;
+  pid_t ret = waitpid(resources.server_pid, &status, WNOHANG);
+  if (ret < 0 && errno == EINTR) return;
+  if (ret < 0) fail_errno("waitpid while waiting for server log");
+  if (ret == resources.server_pid) {
+    report_log_wait_failure(path, phase, needle, &status);
+  }
+}
+
+static void wait_for_log_text(const char *path, const char *phase,
+                              const char *needle) {
   int64_t deadline = monotonic_ms() + TEST_TIMEOUT_MS;
   while (monotonic_ms() < deadline) {
     FILE *file = fopen(path, "r");
@@ -119,9 +191,10 @@ static void wait_for_log_text(const char *path, const char *needle) {
       fclose(file);
       if (strstr(buffer, needle)) return;
     }
+    fail_if_server_exited(path, phase, needle);
     usleep(50000);
   }
-  fail("timed out waiting for server startup log");
+  report_log_wait_failure(path, phase, needle, NULL);
 }
 
 static size_t log_text_occurrences(const char *path, const char *needle) {
@@ -147,14 +220,22 @@ static size_t log_text_occurrences(const char *path, const char *needle) {
   return count;
 }
 
-static void wait_for_log_occurrences(const char *path, const char *needle,
+static void wait_for_log_occurrences(const char *path, const char *phase,
+                                     const char *needle,
                                      size_t expected_count) {
+  char expected_marker[512];
+  int written = snprintf(expected_marker, sizeof(expected_marker),
+                         "%s (occurrence %zu)", needle, expected_count);
+  if (written < 0 || (size_t)written >= sizeof(expected_marker)) {
+    fail("log marker diagnostic overflow");
+  }
   int64_t deadline = monotonic_ms() + TEST_TIMEOUT_MS;
   while (monotonic_ms() < deadline) {
     if (log_text_occurrences(path, needle) >= expected_count) return;
+    fail_if_server_exited(path, phase, expected_marker);
     usleep(50000);
   }
-  fail("timed out waiting for repeated server log marker");
+  report_log_wait_failure(path, phase, expected_marker, NULL);
 }
 
 static void wait_server_failure(void) {
@@ -393,9 +474,12 @@ static void cleanup_resources(void) {
     resources.shutdown_client_fd = -1;
   }
   stop_server();
-  if (resources.tmp_dir) {
+  if (resources.tmp_dir && !resources.failed) {
     cleanup_tmp(resources.tmp_dir);
     resources.tmp_dir = NULL;
+  } else if (resources.tmp_dir) {
+    fprintf(stderr, "[chat-smoke][FAIL] artifacts preserved in %s\n",
+            resources.tmp_dir);
   }
 }
 
@@ -412,7 +496,10 @@ int main(void) {
   char boot_obj[512];
   char load_obj[512];
   char itemstore[512];
-  char server_log[512];
+  char boot_interrupt_log[512];
+  char runtime_interrupt_log[512];
+  char occupied_port_log[512];
+  char chat_flow_log[512];
   char metadata_log[512];
   char metadata_output[512];
   char restart_src[512];
@@ -421,7 +508,13 @@ int main(void) {
   make_path(boot_obj, sizeof(boot_obj), tmp, "chat-boot.obj");
   make_path(load_obj, sizeof(load_obj), tmp, "chat-load.obj");
   make_path(itemstore, sizeof(itemstore), tmp, "items.dat");
-  make_path(server_log, sizeof(server_log), tmp, "server.log");
+  make_path(boot_interrupt_log, sizeof(boot_interrupt_log), tmp,
+            "boot-interrupt.log");
+  make_path(runtime_interrupt_log, sizeof(runtime_interrupt_log), tmp,
+            "runtime-interrupt.log");
+  make_path(occupied_port_log, sizeof(occupied_port_log), tmp,
+            "occupied-port.log");
+  make_path(chat_flow_log, sizeof(chat_flow_log), tmp, "chat-flow.log");
   make_path(metadata_log, sizeof(metadata_log), tmp, "metadata");
   make_path(metadata_output, sizeof(metadata_output), tmp, "metadata.log");
   make_path(restart_src, sizeof(restart_src), tmp, "restart.src");
@@ -451,7 +544,7 @@ int main(void) {
   };
   run_checked(help_after_itemstore, "help after itemstore");
   run_checked(version_after_itemstore, "version after itemstore");
-  wait_for_log_text(metadata_output, "sin ");
+  wait_for_log_text(metadata_output, "metadata version output", "sin ");
 
   char *const missing_short_port[] = {"./sin", "-p", NULL};
   char *const missing_long_port[] = {"./sin", "--port", NULL};
@@ -486,21 +579,25 @@ int main(void) {
   };
   run_checked(compile_restart, "compile SIGUSR1 restart source");
   resources.server_pid = spawn_server(itemstore, srcroot, restart_obj, 0,
-                                       server_log);
-  wait_for_log_occurrences(server_log, entry_marker, 1);
+                                       boot_interrupt_log);
+  wait_for_log_occurrences(boot_interrupt_log, "initial boot interrupt",
+                           entry_marker, 1);
   if (kill(resources.server_pid, SIGUSR1) != 0) {
     fail_errno("kill boot-phase SIGUSR1");
   }
-  wait_for_log_occurrences(server_log,
+  wait_for_log_occurrences(boot_interrupt_log, "first boot interrupt recovery",
                            "SIGUSR1 received.  Restarting boot item.", 1);
-  wait_for_log_occurrences(server_log, entry_marker, 2);
+  wait_for_log_occurrences(boot_interrupt_log, "first boot restart",
+                           entry_marker, 2);
   if (kill(resources.server_pid, SIGUSR1) != 0) {
     fail_errno("kill repeated boot-phase SIGUSR1");
   }
-  wait_for_log_occurrences(server_log,
+  wait_for_log_occurrences(boot_interrupt_log,
+                           "second boot interrupt recovery",
                            "SIGUSR1 received.  Restarting boot item.", 2);
-  wait_for_log_occurrences(server_log, entry_marker, 3);
-  wait_for_log_occurrences(server_log,
+  wait_for_log_occurrences(boot_interrupt_log, "second boot restart",
+                           entry_marker, 3);
+  wait_for_log_occurrences(boot_interrupt_log, "boot stack recreation",
                            "Destroying and recreating all stacks.", 2);
   if (kill(resources.server_pid, 0) != 0) {
     fail_errno("boot restart process exited");
@@ -508,11 +605,12 @@ int main(void) {
   stop_server();
 
   resources.server_pid = spawn_server(itemstore, srcroot, boot_obj, 0,
-                                       server_log);
-  wait_for_log_text(server_log, "Listening on port");
+                                       runtime_interrupt_log);
+  wait_for_log_text(runtime_interrupt_log, "runtime interrupt startup",
+                    "Listening on port");
   if (kill(resources.server_pid, SIGUSR1) != 0) fail_errno("kill SIGUSR1");
   wait_server_failure();
-  wait_for_log_text(server_log,
+  wait_for_log_text(runtime_interrupt_log, "runtime interrupt shutdown",
                     "SIGUSR1 received during runtime; shutting down.");
 
   int occupied_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -539,13 +637,13 @@ int main(void) {
   if (listen(occupied_fd, 1) != 0) fail_errno("listen occupied port");
   resources.server_pid = spawn_server(itemstore, srcroot, boot_obj,
                                        ntohs(occupied_addr.sin_port),
-                                       server_log);
+                                       occupied_port_log);
   wait_server_failure();
   close(occupied_fd);
 
   uint16_t port = reserve_port();
   resources.server_pid = spawn_server(itemstore, srcroot, boot_obj, port,
-                                       server_log);
+                                       chat_flow_log);
 
   char seen[4096] = {0};
   resources.client_fd = connect_loop(port);

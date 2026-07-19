@@ -132,7 +132,10 @@ Choose the narrowest test set that meaningfully covers your change, then run bro
 1. `make test` for the standard harness and network tests.
 2. `make test-warnings` for strict-warning regressions.
 3. `make test-asan` for ASan/UBSan coverage with leak checks disabled.
-4. `make test-lsan` for ASan/UBSan with leak checks enabled; this may fail in ptrace-constrained environments.
+4. `make test-lsan` for ASan/UBSan with leak checks enabled. Run this target
+   outside the restricted sandbox on the first attempt because LeakSanitizer
+   cannot run while the process is controlled through `ptrace`; do not first
+   attempt it in a ptrace-constrained environment.
 5. `make test-release` when changing compiler/interpreter/language paths.
 6. `./ci/gate_sanitizers_fuzz.sh` for changes touching compiler, runtime, parser, bytecode, itemstore loading, or fuzz harnesses.
 
