@@ -1,5 +1,9 @@
+#include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "config.h"
 #include "error.h"
@@ -70,11 +74,112 @@ static void assert_compile_success_bool(const char *source) {
   assert_bool(pop_stack(config.vm->stack), 1);
 }
 
+static void assert_error_fields_nil(void) {
+  static const char *const names[] = {
+    "error", "error.msg", "error.item", "error.code", "error.stage",
+    "error.file", "error.line", "error.column", "error.excerpt"
+  };
+  for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+    ITEM_t *field = find_item(config.itemroot, names[i]);
+    ASSERT_NOT_NULL(field);
+    ASSERT_EQ_INT(VALUE_nil, field->value.type);
+  }
+}
+
+static void assert_only_temp_item_named(const char *expected_name) {
+  const char *prefix = "__sys_compile_tmp__";
+  size_t prefix_len = strlen(prefix);
+  size_t found = 0;
+  for (size_t i = 0; i < config.itemroot->ordered_size; i++) {
+    ITEM_t *child = config.itemroot->ordered_array[i];
+    if (strncmp(child->name, prefix, prefix_len) == 0) {
+      ASSERT_NOT_NULL(expected_name);
+      ASSERT_TRUE(strcmp(child->name, expected_name) == 0);
+      found++;
+    }
+  }
+  ASSERT_EQ_INT(expected_name ? 1 : 0, found);
+}
+
+static uint64_t parse_temp_counter(const char *name) {
+  const char *prefix = "__sys_compile_tmp__";
+  size_t prefix_len = strlen(prefix);
+  ASSERT_NOT_NULL(name);
+  ASSERT_TRUE(strncmp(name, prefix, prefix_len) == 0);
+
+  errno = 0;
+  char *end = NULL;
+  unsigned long long parsed = strtoull(name + prefix_len, &end, 10);
+  ASSERT_EQ_INT(0, errno);
+  ASSERT_TRUE(end != name + prefix_len && *end == '\0');
+  return (uint64_t)parsed;
+}
+
+static void assert_compile_stdout(const char *source, const char *expected) {
+  fflush(stdout);
+  FILE *capture = tmpfile();
+  ASSERT_NOT_NULL(capture);
+  int saved_stdout = dup(STDOUT_FILENO);
+  ASSERT_TRUE(saved_stdout >= 0);
+  ASSERT_TRUE(dup2(fileno(capture), STDOUT_FILENO) >= 0);
+
+  push_stack(config.vm->stack, vstr(source));
+  (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);
+  VALUE_t result = pop_stack(config.vm->stack);
+  fflush(stdout);
+
+  ASSERT_TRUE(dup2(saved_stdout, STDOUT_FILENO) >= 0);
+  close(saved_stdout);
+  rewind(capture);
+  char output[128] = {0};
+  size_t used = fread(output, 1, sizeof(output) - 1u, capture);
+  output[used] = '\0';
+  fclose(capture);
+
+  assert_bool(result, 1);
+  ASSERT_TRUE(strcmp(output, expected) == 0);
+}
+
+static uint8_t *inject_interrupt_after_push_bool(RuntimeContext *ctx,
+                                                 uint8_t *nextop,
+                                                 ITEM_t *item) {
+  (void)item;
+  ASSERT_NOT_NULL(ctx->interrupt_pending);
+  push_stack(ctx->vm->stack,
+             *nextop ? (VALUE_t){VALUE_bool, {.i = 1}} : VALUE_FALSE);
+  *ctx->interrupt_pending = 1;
+  return nextop + 1;
+}
+
 void test_sys_compile_libcall_runtime(void) {
   setup_runtime();
 
-  assert_compile_success_bool("sys.log{\"ok\\n\"};");
+  assert_compile_success_bool("foo = 42;");
+  ITEM_t *foo = assert_int_item("foo", 42);
+  ASSERT_EQ_INT(ITEM_value, foo->type);
+  assert_compile_success_bool("syscompile.observed = foo;");
+  assert_int_item("syscompile.observed", 42);
+
+  assert_compile_success_bool("foo = code {@in} ( @in+10; );");
+  foo = find_item(config.itemroot, "foo");
+  ASSERT_NOT_NULL(foo);
+  ASSERT_EQ_INT(ITEM_code, foo->type);
+  ASSERT_NOT_NULL(foo->bytecode);
+  ASSERT_TRUE(foo->bytecode_len >= 3u);
+  ASSERT_EQ_INT(1, foo->bytecode[1]);
+  assert_compile_success_bool("syscompile.observed = foo{10};");
+  assert_int_item("syscompile.observed", 20);
+
+  assert_compile_stdout("sys.log{\"Hello\\n\"};", "Hello\n");
+  assert_only_temp_item_named(NULL);
+
+  set_error_item(config.itemroot, ERR_RUNTIME_INVALIDARGS, "stale error",
+                 NULL);
+  assert_compile_success_bool("prior_error_cleared = true;");
+  assert_error_fields_nil();
+
   assert_compile_success_bool("@l = true;");
+  assert_compile_success_bool("false;");
   assert_compile_success_bool("foo.bar = false;");
   assert_compile_success_bool("@l = false; @l == false;");
   assert_compile_success_bool("@l = false; if @l == false then sys.log{\"False\"}; endif;");
@@ -126,16 +231,87 @@ void test_sys_compile_libcall_runtime(void) {
 
   int32_t baseline = config.vm->stack->current;
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
+
+  push_stack(config.vm->stack, vstr("sys.exists{42};"));
+  (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);
+  assert_bool(pop_stack(config.vm->stack), 0);
+  err_item = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err_item);
+  ASSERT_EQ_INT(VALUE_int, err_item->value.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err_item->value.i);
+  msg_item = assert_string_item("error.msg", "sys.exists");
+  ASSERT_NOT_NULL(msg_item);
+  error_item = assert_string_item("error.item", "__sys_compile_tmp__");
+  char failed_tmp_name[MAX_ITEM_NAME];
+  int written = snprintf(failed_tmp_name, sizeof(failed_tmp_name), "%s",
+                         error_item->value.s);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(failed_tmp_name));
+  ASSERT_TRUE(find_item(config.itemroot, failed_tmp_name) == NULL);
+  ASSERT_EQ_INT(baseline, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  assert_only_temp_item_named(NULL);
+
+  uint64_t failed_counter = parse_temp_counter(failed_tmp_name);
+  uint64_t collision_counter = failed_counter == UINT64_MAX
+      ? UINT64_C(0) : failed_counter + 1u;
+  char collision_name[MAX_ITEM_NAME];
+  written = snprintf(collision_name, sizeof(collision_name),
+                     "__sys_compile_tmp__%llu",
+                     (unsigned long long)collision_counter);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(collision_name));
+  char collision_child_name[MAX_ITEM_NAME];
+  written = snprintf(collision_child_name, sizeof(collision_child_name),
+                     "%s.child", collision_name);
+  ASSERT_TRUE(written > 0 &&
+              (size_t)written < sizeof(collision_child_name));
+  ASSERT_NOT_NULL(insert_item(config.itemroot, collision_name,
+                              (VALUE_t){VALUE_int, {.i = 777}}));
+  ASSERT_NOT_NULL(insert_item(config.itemroot, collision_child_name,
+                              (VALUE_t){VALUE_int, {.i = 888}}));
+
+  assert_compile_success_bool("collision_probe = true;");
+  assert_int_item(collision_name, 777);
+  assert_int_item(collision_child_name, 888);
+  assert_only_temp_item_named(collision_name);
+
+  push_stack(config.vm->stack,
+             vstr("sys.exists{42}; error = nil; compiled_value = 91;"));
+  (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);
+  assert_bool(pop_stack(config.vm->stack), 1);
+  assert_int_item("compiled_value", 91);
+  assert_error_fields_nil();
+  ASSERT_EQ_INT(baseline, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  assert_only_temp_item_named(collision_name);
+
+  volatile sig_atomic_t interrupt_pending = 0;
+  RuntimeContext *interrupt_ctx = test_ctx();
+  interrupt_ctx->interrupt_pending = &interrupt_pending;
+  ASSERT_TRUE(runtime_init(interrupt_ctx, config.vm));
+  interrupt_ctx->opcode[(uint8_t)'b'] = inject_interrupt_after_push_bool;
+  push_stack(config.vm->stack, vstr("true;"));
+  (void)lc_sys_compile(interrupt_ctx, NULL, config.itemroot);
+  assert_bool(pop_stack(config.vm->stack), 0);
+  ASSERT_TRUE(interrupt_ctx->interrupted);
+  ASSERT_EQ_INT(0, interrupt_pending);
+  err_item = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err_item);
+  ASSERT_EQ_INT(VALUE_int, err_item->value.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_SIGUSR1, err_item->value.i);
+  ASSERT_EQ_INT(baseline, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  // The only prefix-matching item is the pre-existing collision sentinel;
+  // the interrupted execution's temporary item has been deleted.
+  assert_only_temp_item_named(collision_name);
+  runtime_destroy(interrupt_ctx);
+
   for (int i = 0; i < 50; i++) {
     push_stack(config.vm->stack, vstr("sys.log{\"x\\n\"};"));
     (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);
     assert_bool(pop_stack(config.vm->stack), 1);
     ASSERT_EQ_INT(baseline, config.vm->stack->current);
     ASSERT_EQ_INT(-1, config.vm->callstack->current);
-    ASSERT_TRUE(find_item(config.itemroot, "__sys_compile_tmp__") == NULL);
-    char tmpname[64];
-    snprintf(tmpname, sizeof(tmpname), "__sys_compile_tmp__%d", i + 1);
-    ASSERT_TRUE(find_item(config.itemroot, tmpname) == NULL);
+    assert_only_temp_item_named(collision_name);
   }
 
   teardown_runtime();

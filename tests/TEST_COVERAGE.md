@@ -163,6 +163,10 @@ This document maps major subsystems to concrete test entry points so reviewers c
 - **Compiler/runtime integration for system libcall execution**
   - `tests/compiler/test_sys_compile_libcall.c`
     - `test_sys_compile_libcall_runtime`
+      - exact compiled `sys.log` output, scalar assignment, and parameterized code invocation
+      - compile diagnostics, runtime errors, handled errors, and prior-error clearing
+      - interrupted nested execution, frame unwinding, and temporary-item cleanup
+      - collision-safe temporary names preserve existing items and descendants
 - **Runtime performance guard (opt-in strict mode)**
   - `tests/interpreter/test_runtime_benchmark_optin.c`
     - `test_runtime_benchmark_optin`

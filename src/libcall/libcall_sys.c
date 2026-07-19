@@ -34,6 +34,39 @@ static void lc_sys_free_output(OUTPUT_t *out, bool free_bytecode) {
   free(out);
 }
 
+#define SYS_COMPILE_TMP_PREFIX "__sys_compile_tmp__"
+
+static uint64_t sys_compile_tmp_counter;
+
+static uint64_t next_sys_compile_tmp_counter(uint64_t counter) {
+  return counter == UINT64_MAX ? UINT64_C(0) : counter + 1u;
+}
+
+static bool next_sys_compile_tmp_name(ITEM_t *root, char *name,
+                                      size_t name_size) {
+  if (!root || !name || name_size == 0) return false;
+
+  sys_compile_tmp_counter =
+      next_sys_compile_tmp_counter(sys_compile_tmp_counter);
+  uint64_t first_candidate = sys_compile_tmp_counter;
+  do {
+    int written = snprintf(name, name_size, SYS_COMPILE_TMP_PREFIX "%llu",
+                           (unsigned long long)sys_compile_tmp_counter);
+    if (written < 0 || (size_t)written >= name_size) return false;
+    if (!find_item(root, name)) return true;
+    sys_compile_tmp_counter =
+        next_sys_compile_tmp_counter(sys_compile_tmp_counter);
+  } while (sys_compile_tmp_counter != first_candidate);
+
+  return false;
+}
+
+static bool sys_compile_error_is_nil(ITEM_t *root) {
+  ITEM_t *error = root ? find_item(root, "error") : NULL;
+  return !error ||
+      (error->type == ITEM_value && error->value.type == VALUE_nil);
+}
+
 static uint8_t *lc_sys_compile_fail(RuntimeContext *ctx, uint8_t *nextop,
                                     VALUE_t *source, OUTPUT_t *out,
                                     bool free_bytecode,
@@ -135,7 +168,6 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   compiler_diag_init(&diag);
   OUTPUT_t *out = NULL;
   char tmpname[MAX_ITEM_NAME];
-  static uint64_t tmpname_counter = 0;
 
   // Compile source -> bytecode
   int8_t result = compile_source_to_bytecode_diag(val.s, strlen(val.s), &out, &diag);
@@ -153,15 +185,6 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
   }
 
-  int namelen = snprintf(tmpname, sizeof(tmpname),
-      "__sys_compile_tmp__%llu", (unsigned long long)++tmpname_counter);
-  if (namelen < 0 || namelen >= (int)sizeof(tmpname)) {
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INTERNAL,
-        "Sys.compile temporary item name generation failed.",
-        ctx ? ctx->current_item : NULL);
-    return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
-  }
-
   ptrdiff_t raw_len = out->nextbyte - out->bytecode;
   if (raw_len < 0 || (uintmax_t)raw_len > UINT32_MAX) {
     set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
@@ -170,6 +193,16 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
   }
   uint32_t len = (uint32_t)raw_len;
+  clear_error_item(ctx ? ctx->itemroot : NULL);
+
+  if (!next_sys_compile_tmp_name(ctx ? ctx->itemroot : NULL, tmpname,
+                                 sizeof(tmpname))) {
+    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INTERNAL,
+        "Sys.compile temporary item name generation failed.",
+        ctx ? ctx->current_item : NULL);
+    return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
+  }
+
   ITEM_t *tmpitem = insert_code_item(ctx->itemroot, tmpname, len, out->bytecode);
 
   if (!tmpitem) {
@@ -190,13 +223,20 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   delete_item(ctx->itemroot, tmpname);
-  clear_error_item(ctx ? ctx->itemroot : NULL);
+  bool error_is_nil = sys_compile_error_is_nil(ctx->itemroot);
+  bool success = !ctx->interrupted && error_is_nil;
+  if (ctx->interrupted && error_is_nil) {
+    set_error_item(ctx->itemroot, ERR_RUNTIME_SIGUSR1, NULL,
+                   ctx->current_item);
+  } else if (success) {
+    clear_error_item(ctx->itemroot);
+  }
 
   lc_sys_free_output(out, false);
   value_free(&val);
   compiler_diag_reset(&diag);
 
-  return lc_sys_return(ctx, nextop, VALUE_TRUE);
+  return lc_sys_return(ctx, nextop, success ? VALUE_TRUE : VALUE_FALSE);
 }
 
 uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {

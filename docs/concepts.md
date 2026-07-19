@@ -175,9 +175,12 @@ The `sys` library does the sort of system-wide things that you might expect:
 `sys.abort` will abort the engine without saving the itemstore.  It takes no arguments.
 `sys.compile{<source>}` compiles and runs a string of Sinistra source code,
 returns `true` on successful compilation/execution, and returns `false` for
-invalid source input or compilation/setup failure. The temporary code item's
-result is discarded, but its item mutations remain in memory; the normal
-itemstore save at safe shutdown is what makes those mutations durable.
+invalid source input, compilation/setup failure, an unhandled runtime error, or
+interrupted execution. A compiled program can handle a runtime error by setting
+`error` back to `nil`; successful completion normalizes all `error` fields to
+`nil`. The temporary code item's result is discarded, but its item mutations
+remain in memory; the normal itemstore save at safe shutdown is what makes
+those mutations durable.
 `sys.exists{<name>}` reports whether a string-named item exists.
 `sys.delete{<name>}` deletes a string-named item when it exists.
 `sys.nthname{<name>, <index>}` and `sys.rootname{<index>}` return child or root item names by index.  Item order is not guaranteed.
