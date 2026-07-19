@@ -76,7 +76,6 @@ jobs:
       FUZZ_RUNS: 1000
       FUZZ_TIME: 30
       FUZZ_SEED: 1
-      FUZZ_ARTIFACT_DIR: ${{ runner.temp }}/sin-libfuzzer-artifacts
     steps:
       - uses: actions/checkout@v6.0.2
       - name: Install dependencies
@@ -85,9 +84,9 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             build-essential clang bison flex libuv1-dev pkg-config xxd
       - name: Prepare libFuzzer artifact directory
-        run: mkdir -p "$FUZZ_ARTIFACT_DIR"
+        run: mkdir -p "$RUNNER_TEMP/sin-libfuzzer-artifacts"
       - name: Run seeded fuzz smoke
-        run: make FUZZ_RUNS="$FUZZ_RUNS" FUZZ_TIME="$FUZZ_TIME" FUZZ_SEED="$FUZZ_SEED" FUZZ_ARTIFACT_DIR="$FUZZ_ARTIFACT_DIR" fuzz-smoke
+        run: make FUZZ_RUNS="$FUZZ_RUNS" FUZZ_TIME="$FUZZ_TIME" FUZZ_SEED="$FUZZ_SEED" FUZZ_ARTIFACT_DIR="$RUNNER_TEMP/sin-libfuzzer-artifacts" fuzz-smoke
       - name: Upload libFuzzer artifacts
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
