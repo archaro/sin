@@ -196,11 +196,16 @@ those mutations durable.
 `sys.thisitem` returns the fully qualified name of the currently executing code
 item. `sys.parentitem` returns that item's fully qualified namespace parent, or
 `nil` for a top-level item; this is the namespace parent, not the call-stack
+caller. `sys.calleritem` reports the immediate synchronous Sinistra caller, or
+`nil` for a direct boot, input, or task entry. A temporary item run by
+`sys.compile` treats the item that invoked `sys.compile` as its caller; an
+ordinary item invoked by that temporary item sees the temporary item as its
 caller. `sys.itemtype{<name>}` reports `"code"`, `"nil"`, `"bool"`, `"int"`,
-`"float"`, or `"string"`, and `sys.childcount{<name>}` reports the number of
-immediate children. Name arguments use the normal item-name rules, including
-relative names resolved from the executing item. Missing or invalid names
-return `nil`; non-string names set `ERR_RUNTIME_INVALIDARGS`.
+`"float"`, or `"string"`, `sys.paramcount{<name>}` reports a readable code
+item's declared parameter count, and `sys.childcount{<name>}` reports the
+number of immediate children. Name arguments use the normal item-name rules,
+including relative names resolved from the executing item. Missing or invalid
+names return `nil`; non-string names set `ERR_RUNTIME_INVALIDARGS`.
 `sys.nthname{<name>, <index>}` and `sys.rootname{<index>}` return child or root
 item names by index. `sys.rootcount` and `sys.childcount` bound those
 enumerations, but child ordering is not stable across runtime restarts.

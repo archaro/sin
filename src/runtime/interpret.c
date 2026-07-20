@@ -1132,11 +1132,15 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   RuntimeDecoder saved_decoder = ctx->decoder;
   ITEM_t *saved_current_item = ctx->current_item;
   ITEM_t *saved_pending_call_item = ctx->pending_call_item;
+  int saved_invocation_callstack_floor = ctx->invocation_callstack_floor;
+  ITEM_t *saved_invocation_caller_item = ctx->invocation_caller_item;
   int entry_callstack_depth = size_callstack(VM->callstack);
   int32_t entry_stack_current = VM->stack->current;
   int32_t entry_stack_base = VM->stack->base;
   uint8_t entry_stack_locals = VM->stack->locals;
   uint8_t entry_stack_params = VM->stack->params;
+  ctx->invocation_callstack_floor = entry_callstack_depth;
+  ctx->invocation_caller_item = saved_current_item;
   if (!ctx->initialized) {
     init_interpreter(ctx);
   }
@@ -1152,12 +1156,16 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   if (!verify_runtime_bytecode(ctx, ctx->current_item)) {
     ctx->current_item = saved_current_item;
     ctx->pending_call_item = saved_pending_call_item;
+    ctx->invocation_callstack_floor = saved_invocation_callstack_floor;
+    ctx->invocation_caller_item = saved_invocation_caller_item;
     ctx->decoder = saved_decoder;
     return VALUE_NIL;
   }
   if (consume_runtime_interrupt(ctx)) {
     ctx->current_item = saved_current_item;
     ctx->pending_call_item = saved_pending_call_item;
+    ctx->invocation_callstack_floor = saved_invocation_callstack_floor;
+    ctx->invocation_caller_item = saved_invocation_caller_item;
     ctx->decoder = saved_decoder;
     return VALUE_NIL;
   }
@@ -1191,6 +1199,8 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
         ctx->decoder = saved_decoder;
         ctx->current_item = saved_current_item;
         ctx->pending_call_item = saved_pending_call_item;
+        ctx->invocation_callstack_floor = saved_invocation_callstack_floor;
+        ctx->invocation_caller_item = saved_invocation_caller_item;
         return return_value;
       }
 
@@ -1237,6 +1247,8 @@ interpretation_failure:
       ctx->decoder = saved_decoder;
       ctx->current_item = saved_current_item;
       ctx->pending_call_item = saved_pending_call_item;
+      ctx->invocation_callstack_floor = saved_invocation_callstack_floor;
+      ctx->invocation_caller_item = saved_invocation_caller_item;
       return VALUE_NIL;
     }
     op = newop;

@@ -40,6 +40,8 @@ uint8_t *lc_sys_rootcount(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_version(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_now(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_monotime(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_calleritem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_paramcount(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 int64_t lc_sys_wall_milliseconds(int64_t seconds, int64_t microseconds);
 uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -429,6 +431,22 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_TRUE(libcall_init_registry());
   ASSERT_TRUE(libcall_validate_registry());
 
+  const char *previous_libname = NULL;
+  int previous_call_index = -1;
+  for (size_t i = 0; libcalls[i].libname != NULL; i++) {
+    if (previous_libname &&
+        strcmp(previous_libname, libcalls[i].libname) != 0) {
+      if (strcmp(previous_libname, "sys") != 0) {
+        ASSERT_TRUE(strcmp(previous_libname, libcalls[i].libname) < 0);
+      }
+      ASSERT_TRUE(strcmp(libcalls[i].libname, "sys") != 0);
+      previous_call_index = -1;
+    }
+    ASSERT_TRUE(libcalls[i].call_index > previous_call_index);
+    previous_libname = libcalls[i].libname;
+    previous_call_index = libcalls[i].call_index;
+  }
+
   uint8_t token = 0;
   uint8_t args = 0;
   ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
@@ -442,7 +460,7 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_TRUE(!libcall_token_arg_count(255, &args));
 
   ASSERT_TRUE(libcall_lookup_token("sys", "save", &token, &args));
-  ASSERT_EQ_INT(33, token);
+  ASSERT_EQ_INT(9, token);
   ASSERT_EQ_INT(0, args);
   ASSERT_TRUE(libcall_func_token(token) == lc_sys_save);
   ASSERT_EQ_INT(1, libcalls[token].lib_index);
@@ -457,14 +475,16 @@ void test_libcall_registry_roundtrip(void) {
     uint8_t arity;
     OP_t handler;
   } sys_introspection_calls[] = {
-    {"thisitem", 34, 10, 0, lc_sys_thisitem},
-    {"parentitem", 35, 11, 0, lc_sys_parentitem},
-    {"itemtype", 36, 12, 1, lc_sys_itemtype},
-    {"childcount", 37, 13, 1, lc_sys_childcount},
-    {"rootcount", 38, 14, 0, lc_sys_rootcount},
-    {"version", 39, 15, 0, lc_sys_version},
-    {"now", 40, 16, 0, lc_sys_now},
-    {"monotime", 41, 17, 0, lc_sys_monotime},
+    {"thisitem", 10, 10, 0, lc_sys_thisitem},
+    {"parentitem", 11, 11, 0, lc_sys_parentitem},
+    {"itemtype", 12, 12, 1, lc_sys_itemtype},
+    {"childcount", 13, 13, 1, lc_sys_childcount},
+    {"rootcount", 14, 14, 0, lc_sys_rootcount},
+    {"version", 15, 15, 0, lc_sys_version},
+    {"now", 16, 16, 0, lc_sys_now},
+    {"monotime", 17, 17, 0, lc_sys_monotime},
+    {"calleritem", 18, 18, 0, lc_sys_calleritem},
+    {"paramcount", 19, 19, 1, lc_sys_paramcount},
   };
   for (size_t i = 0; i < sizeof(sys_introspection_calls) /
                               sizeof(sys_introspection_calls[0]); i++) {
@@ -506,7 +526,7 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_EQ_INT(2, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
   ASSERT_TRUE(libcall_lookup_token("net", "flush", &token, &args));
-  ASSERT_EQ_INT(32, token);
+  ASSERT_EQ_INT(23, token);
   ASSERT_EQ_INT(1, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
 
@@ -1431,6 +1451,124 @@ void test_sys_wall_milliseconds_boundaries(void) {
                 lc_sys_wall_milliseconds(upper_second, INT64_C(808000)));
   ASSERT_EQ_INT(INT64_MAX,
                 lc_sys_wall_milliseconds(upper_second + INT64_C(1), 0));
+}
+
+void test_sys_caller_paramcount_libcalls(void) {
+  setup_libcall_runtime();
+
+  ITEM_t *caller_a = insert_halt_code(config.itemroot, "calls.a");
+  ITEM_t *caller_b = insert_halt_code(config.itemroot, "calls.b");
+  ITEM_t *callee_c = insert_halt_code(config.itemroot, "calls.c");
+  ITEM_t *direct_invoker = insert_halt_code(config.itemroot, "calls.invoker");
+  ITEM_t *param_context = insert_halt_code(config.itemroot,
+                                           "params.scope.runner");
+  ITEM_t *zero_params = insert_halt_code(config.itemroot,
+                                         "params.scope.runner.zero");
+  uint8_t *multiple_bytecode = malloc(3u);
+  ASSERT_NOT_NULL(multiple_bytecode);
+  multiple_bytecode[0] = 3;
+  multiple_bytecode[1] = 3;
+  multiple_bytecode[2] = (uint8_t)'h';
+  ITEM_t *multiple_params = insert_code_item(
+      config.itemroot, "params.scope.runner.multiple", 3u,
+      multiple_bytecode);
+  ASSERT_NOT_NULL(multiple_params);
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "params.value", VALUE_TRUE));
+  ITEM_t *missing_bytecode = insert_code_item(
+      config.itemroot, "params.missing_bytecode", 0, NULL);
+  ASSERT_NOT_NULL(missing_bytecode);
+  uint8_t *short_bytecode = malloc(1u);
+  ASSERT_NOT_NULL(short_bytecode);
+  short_bytecode[0] = 0;
+  ITEM_t *short_header = insert_code_item(
+      config.itemroot, "params.short_header", 1u, short_bytecode);
+  ASSERT_NOT_NULL(short_header);
+
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = config.itemroot;
+  ctx.current_item = callee_c;
+  ctx.invocation_callstack_floor = 0;
+
+  VALUE_t result = call_sys_noarg(lc_sys_calleritem, &ctx);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  uint8_t nextop_marker = 0;
+  ASSERT_TRUE(lc_sys_calleritem(NULL, &nextop_marker, NULL) ==
+              &nextop_marker);
+
+  set_error_item(config.itemroot, ERR_RUNTIME_NOSUCHITEM,
+                 "unrelated prior error", callee_c);
+  config.vm->callstack->current = 0;
+  config.vm->callstack->entry[0].item = caller_a;
+  VALUE_t owned_first = call_sys_noarg(lc_sys_calleritem, &ctx);
+  VALUE_t owned_second = call_sys_noarg(lc_sys_calleritem, &ctx);
+  ASSERT_EQ_INT(VALUE_str, owned_first.type);
+  ASSERT_EQ_INT(VALUE_str, owned_second.type);
+  ASSERT_NOT_NULL(owned_first.s);
+  ASSERT_NOT_NULL(owned_second.s);
+  ASSERT_TRUE(strcmp(owned_first.s, "calls.a") == 0);
+  ASSERT_TRUE(strcmp(owned_second.s, "calls.a") == 0);
+  ASSERT_TRUE(owned_first.s != owned_second.s);
+  ASSERT_TRUE(owned_first.s != caller_a->name);
+  value_free(&owned_first);
+  value_free(&owned_second);
+
+  config.vm->callstack->current = 1;
+  config.vm->callstack->entry[1].item = caller_b;
+  assert_string_return(call_sys_noarg(lc_sys_calleritem, &ctx), "calls.b");
+  config.vm->callstack->current = 0;
+  assert_string_return(call_sys_noarg(lc_sys_calleritem, &ctx), "calls.a");
+  ctx.invocation_caller_item = direct_invoker;
+  ctx.invocation_callstack_floor = 1;
+  assert_string_return(call_sys_noarg(lc_sys_calleritem, &ctx),
+                       "calls.invoker");
+  config.vm->callstack->current = -1;
+  ITEM_t *error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, error->value.i);
+
+  ctx.current_item = param_context;
+  result = call_sys_name(lc_sys_paramcount, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup(".zero")}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(0, result.i);
+  result = call_sys_name(lc_sys_paramcount, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup("params.scope.runner.multiple")}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(3, result.i);
+  ASSERT_EQ_INT(0, zero_params->bytecode[1]);
+
+  static const char *const nil_names[] = {
+    "invalid-name!", "params.missing", "params.value",
+    "params.missing_bytecode", "params.short_header"
+  };
+  for (size_t i = 0; i < sizeof(nil_names) / sizeof(nil_names[0]); i++) {
+    result = call_sys_name(lc_sys_paramcount, &ctx,
+        (VALUE_t){VALUE_str, {.s = strdup(nil_names[i])}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    error = find_item(config.itemroot, "error");
+    ASSERT_NOT_NULL(error);
+    ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, error->value.i);
+  }
+
+  result = call_sys_name(lc_sys_paramcount, &ctx,
+                         (VALUE_t){VALUE_int, {.i = 1}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, error->value.i);
+  ITEM_t *message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_EQ_INT(VALUE_str, message->value.type);
+  ASSERT_TRUE(strstr(message->value.s, "sys.paramcount") != NULL);
+  ITEM_t *provenance = find_item(config.itemroot, "error.item");
+  ASSERT_NOT_NULL(provenance);
+  ASSERT_EQ_INT(VALUE_str, provenance->value.type);
+  ASSERT_TRUE(strcmp(provenance->value.s, "params.scope.runner") == 0);
+
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  teardown_libcall_runtime();
 }
 
 

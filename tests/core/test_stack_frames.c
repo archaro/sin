@@ -255,6 +255,8 @@ void test_deferred_interrupt_unwinds_nested_call_frames(void) {
   runtime_context_init(&ctx, config.vm);
   ctx.itemroot = config.itemroot;
   ctx.current_item = preexisting;
+  ctx.invocation_callstack_floor = 17;
+  ctx.invocation_caller_item = preexisting;
   ctx.interrupt_pending = &interrupt_pending;
   ASSERT_TRUE(runtime_init(&ctx, config.vm));
   ctx.opcode[(uint8_t)'a'] = interrupt_in_callee;
@@ -272,6 +274,20 @@ void test_deferred_interrupt_unwinds_nested_call_frames(void) {
   ASSERT_TRUE(!caller->inuse);
   ASSERT_TRUE(!callee->inuse);
   ASSERT_TRUE(ctx.current_item == preexisting);
+  ASSERT_EQ_INT(17, ctx.invocation_callstack_floor);
+  ASSERT_TRUE(ctx.invocation_caller_item == preexisting);
+
+  ctx.invocation_callstack_floor = 23;
+  ctx.invocation_caller_item = caller;
+  interrupt_pending = 1;
+  result = interpret(&ctx, caller);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_TRUE(ctx.interrupted);
+  ASSERT_EQ_INT(0, interrupt_pending);
+  ASSERT_EQ_INT(1, size_callstack(config.vm->callstack));
+  ASSERT_TRUE(ctx.current_item == preexisting);
+  ASSERT_EQ_INT(23, ctx.invocation_callstack_floor);
+  ASSERT_TRUE(ctx.invocation_caller_item == caller);
 
   runtime_destroy(&ctx);
   config.vm->callstack->current = -1;

@@ -6,6 +6,7 @@
 
 // One source of truth for libcall metadata and handler symbols.
 // Columns: libname, callname, lib_index, call_index, args, handler
+// Keep sys first, then sort libraries by name and calls by call_index.
 #define LIBCALL_LIST(X) \
   X("sys",  "backup",      1,  0, 0, lc_sys_backup) \
   X("sys",  "log",         1,  1, 1, lc_sys_log) \
@@ -16,11 +17,21 @@
   X("sys",  "delete",      1,  6, 1, lc_sys_delete) \
   X("sys",  "nthname",     1,  7, 2, lc_sys_nthname) \
   X("sys",  "rootname",    1,  8, 1, lc_sys_rootname) \
-  X("task", "newgametask", 2,  0, 3, lc_task_newgametask) \
-  X("task", "killtask",    2,  1, 1, lc_task_killtask) \
+  X("sys",  "save",        1,  9, 0, lc_sys_save) \
+  X("sys",  "thisitem",    1, 10, 0, lc_sys_thisitem) \
+  X("sys",  "parentitem",  1, 11, 0, lc_sys_parentitem) \
+  X("sys",  "itemtype",    1, 12, 1, lc_sys_itemtype) \
+  X("sys",  "childcount",  1, 13, 1, lc_sys_childcount) \
+  X("sys",  "rootcount",   1, 14, 0, lc_sys_rootcount) \
+  X("sys",  "version",     1, 15, 0, lc_sys_version) \
+  X("sys",  "now",         1, 16, 0, lc_sys_now) \
+  X("sys",  "monotime",    1, 17, 0, lc_sys_monotime) \
+  X("sys",  "calleritem",  1, 18, 0, lc_sys_calleritem) \
+  X("sys",  "paramcount",  1, 19, 1, lc_sys_paramcount) \
   X("net",  "input",       3,  0, 0, lc_net_input) \
   X("net",  "write",       3,  1, 2, lc_net_write) \
   X("net",  "ditch",       3,  2, 1, lc_net_ditch) \
+  X("net",  "flush",       3,  3, 1, lc_net_flush) \
   X("str",  "capitalise",  4,  0, 1, lc_str_capitalise) \
   X("str",  "upper",       4,  1, 1, lc_str_upper) \
   X("str",  "lower",       4,  2, 1, lc_str_lower) \
@@ -39,13 +50,5 @@
   X("str",  "repeat",      4, 15, 2, lc_str_repeat) \
   X("str",  "padleft",     4, 16, 2, lc_str_padleft) \
   X("str",  "padright",    4, 17, 2, lc_str_padright) \
-  X("net",  "flush",       3,  3, 1, lc_net_flush) \
-  X("sys",  "save",        1,  9, 0, lc_sys_save) \
-  X("sys",  "thisitem",    1, 10, 0, lc_sys_thisitem) \
-  X("sys",  "parentitem",  1, 11, 0, lc_sys_parentitem) \
-  X("sys",  "itemtype",    1, 12, 1, lc_sys_itemtype) \
-  X("sys",  "childcount",  1, 13, 1, lc_sys_childcount) \
-  X("sys",  "rootcount",   1, 14, 0, lc_sys_rootcount) \
-  X("sys",  "version",     1, 15, 0, lc_sys_version) \
-  X("sys",  "now",         1, 16, 0, lc_sys_now) \
-  X("sys",  "monotime",    1, 17, 0, lc_sys_monotime)
+  X("task", "newgametask", 2,  0, 3, lc_task_newgametask) \
+  X("task", "killtask",    2,  1, 1, lc_task_killtask)

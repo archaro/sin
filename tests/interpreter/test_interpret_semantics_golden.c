@@ -363,8 +363,12 @@ void test_interpret_rejects_malformed_bytecode_before_execution(void) {
   ctx.itemroot = config.itemroot;
   ctx.strict_validation = config.strict_validation;
   ctx.strict_runtime_contracts = config.strict_runtime_contracts;
+  ctx.invocation_callstack_floor = 73;
+  ctx.invocation_caller_item = config.itemroot;
   VALUE_t result = interpret(&ctx, code);
   ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(73, ctx.invocation_callstack_floor);
+  ASSERT_TRUE(ctx.invocation_caller_item == config.itemroot);
   ITEM_t *err = find_item(config.itemroot, "error");
   ASSERT_NOT_NULL(err);
   ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, err->value.i);

@@ -269,6 +269,25 @@ uint8_t *lc_sys_parentitem(RuntimeContext *ctx, uint8_t *nextop,
   return lc_sys_return(ctx, nextop, lc_sys_string_copy(name));
 }
 
+uint8_t *lc_sys_calleritem(RuntimeContext *ctx, uint8_t *nextop,
+                           ITEM_t *item) {
+  (void)item;
+  if (!ctx || !ctx->vm || !ctx->vm->stack || !ctx->vm->callstack) {
+    return nextop;
+  }
+
+  ITEM_t *caller = ctx->invocation_caller_item;
+  if (size_callstack(ctx->vm->callstack) >
+      ctx->invocation_callstack_floor) {
+    caller = ctx->vm->callstack->entry[ctx->vm->callstack->current].item;
+  }
+  if (!caller) return lc_sys_return_nil(ctx, nextop);
+
+  char name[MAX_ITEM_NAME] = {0};
+  get_itemname(caller, name);
+  return lc_sys_return(ctx, nextop, lc_sys_string_copy(name));
+}
+
 uint8_t *lc_sys_itemtype(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   VALUE_t itemname = pop_stack(ctx->vm->stack);
@@ -307,6 +326,32 @@ uint8_t *lc_sys_childcount(RuntimeContext *ctx, uint8_t *nextop,
     if (target) {
       result = (VALUE_t){VALUE_int,
                          {.i = lc_sys_count_value(target->ordered_size)}};
+    }
+  }
+  value_free(&itemname);
+  return lc_sys_return(ctx, nextop, result);
+}
+
+uint8_t *lc_sys_paramcount(RuntimeContext *ctx, uint8_t *nextop,
+                           ITEM_t *item) {
+  (void)item;
+  if (!ctx || !ctx->vm || !ctx->vm->stack) return nextop;
+
+  VALUE_t itemname = pop_stack(ctx->vm->stack);
+  if (!lc_value_is_type(itemname, VALUE_str)) {
+    value_free(&itemname);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "sys.paramcount item name must be a string");
+  }
+
+  VALUE_t result = VALUE_NIL;
+  char fullname[MAX_ITEM_NAME];
+  if (ctx->itemroot && canonicalize_itemname(itemname.s, ctx->current_item,
+                                             fullname)) {
+    ITEM_t *target = find_item(ctx->itemroot, fullname);
+    if (target && target->type == ITEM_code && target->bytecode &&
+        target->bytecode_len >= 2u) {
+      result = (VALUE_t){VALUE_int, {.i = (int64_t)target->bytecode[1]}};
     }
   }
   value_free(&itemname);

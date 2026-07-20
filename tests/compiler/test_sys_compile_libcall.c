@@ -8,6 +8,7 @@
 #include "config.h"
 #include "error.h"
 #include "item.h"
+#include "interpret.h"
 #include "libcall.h"
 #include "memory.h"
 #include "test_assert.h"
@@ -265,6 +266,84 @@ void test_sys_compile_libcall_runtime(void) {
   ASSERT_NOT_NULL(introspection_time);
   ASSERT_EQ_INT(VALUE_int, introspection_time->value.type);
   ASSERT_TRUE(introspection_time->value.i >= 0);
+
+  assert_compile_success_bool(
+      "caller.results.direct = sys.calleritem;"
+      "caller.zero = code ( nil; );"
+      "caller.multiple = code {@a, @b, @c} ( nil; );"
+      "caller.c = code ("
+      " caller.results.c = sys.calleritem;"
+      ");"
+      "caller.b = code ("
+      " caller.results.b_before = sys.calleritem;"
+      " caller.c;"
+      " caller.results.b_after = sys.calleritem;"
+      ");"
+      "caller.a = code ("
+      " caller.results.a_before = sys.calleritem;"
+      " caller.b;"
+      " caller.results.a_after = sys.calleritem;"
+      ");"
+      "caller.compile_target = code ("
+      " caller.results.compile_target = sys.calleritem;"
+      ");"
+      "caller.compile_host = code ("
+      " caller.results.compile_host_before = sys.calleritem;"
+      " sys.compile{\"caller.results.compile_temp = sys.calleritem;"
+      " caller.compile_target;\"};"
+      " caller.results.compile_host_after = sys.calleritem;"
+      ");"
+      "caller.compile_outer = code ("
+      " caller.compile_host;"
+      " caller.results.compile_outer_after = sys.calleritem;"
+      ");"
+      "caller.results.zero_params = sys.paramcount{\"caller.zero\"};"
+      "caller.results.multiple_params = sys.paramcount{\"caller.multiple\"};"
+      "caller.a;"
+  );
+  assert_nil_item("caller.results.direct");
+  introspection_value = assert_string_item("caller.results.b_before", NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "caller.a") == 0);
+  introspection_value = assert_string_item("caller.results.c", NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "caller.b") == 0);
+  introspection_value = assert_string_item("caller.results.b_after", NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "caller.a") == 0);
+  introspection_value = assert_string_item("caller.results.a_before",
+                                            "__sys_compile_tmp__");
+  char first_temp_caller[MAX_ITEM_NAME];
+  int caller_written = snprintf(first_temp_caller, sizeof(first_temp_caller),
+                                "%s", introspection_value->value.s);
+  ASSERT_TRUE(caller_written > 0 &&
+              (size_t)caller_written < sizeof(first_temp_caller));
+  introspection_value = assert_string_item("caller.results.a_after", NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, first_temp_caller) == 0);
+  assert_int_item("caller.results.zero_params", 0);
+  assert_int_item("caller.results.multiple_params", 3);
+
+  ITEM_t *compile_outer = find_item(config.itemroot, "caller.compile_outer");
+  ASSERT_NOT_NULL(compile_outer);
+  RuntimeContext *caller_ctx = test_ctx();
+  caller_ctx->invocation_callstack_floor = 29;
+  caller_ctx->invocation_caller_item = foo;
+  VALUE_t caller_result = interpret(caller_ctx, compile_outer);
+  ASSERT_EQ_INT(VALUE_nil, caller_result.type);
+  ASSERT_EQ_INT(29, caller_ctx->invocation_callstack_floor);
+  ASSERT_TRUE(caller_ctx->invocation_caller_item == foo);
+  introspection_value = assert_string_item("caller.results.compile_host_before",
+                                            NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "caller.compile_outer") ==
+              0);
+  introspection_value = assert_string_item("caller.results.compile_temp",
+                                            NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "caller.compile_host") ==
+              0);
+  introspection_value = assert_string_item("caller.results.compile_target",
+                                            "__sys_compile_tmp__");
+  introspection_value = assert_string_item("caller.results.compile_host_after",
+                                            NULL);
+  ASSERT_TRUE(strcmp(introspection_value->value.s, "caller.compile_outer") ==
+              0);
+  assert_nil_item("caller.results.compile_outer_after");
 
   push_stack(config.vm->stack, vstr("sys.log{;"));
   (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);
