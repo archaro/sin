@@ -42,6 +42,7 @@ uint8_t *lc_sys_now(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_monotime(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_calleritem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_paramcount(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_source(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 int64_t lc_sys_wall_milliseconds(int64_t seconds, int64_t microseconds);
 uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -485,6 +486,7 @@ void test_libcall_registry_roundtrip(void) {
     {"monotime", 17, 17, 0, lc_sys_monotime},
     {"calleritem", 18, 18, 0, lc_sys_calleritem},
     {"paramcount", 19, 19, 1, lc_sys_paramcount},
+    {"source", 20, 20, 1, lc_sys_source},
   };
   for (size_t i = 0; i < sizeof(sys_introspection_calls) /
                               sizeof(sys_introspection_calls[0]); i++) {
@@ -526,7 +528,7 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_EQ_INT(2, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
   ASSERT_TRUE(libcall_lookup_token("net", "flush", &token, &args));
-  ASSERT_EQ_INT(23, token);
+  ASSERT_EQ_INT(24, token);
   ASSERT_EQ_INT(1, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
 
@@ -1568,6 +1570,194 @@ void test_sys_caller_paramcount_libcalls(void) {
 
   ASSERT_EQ_INT(-1, config.vm->stack->current);
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  teardown_libcall_runtime();
+}
+
+static void overwrite_source_file(const char *filename, const void *bytes,
+                                  size_t length) {
+  FILE *file = fopen(filename, "wb");
+  ASSERT_NOT_NULL(file);
+  ASSERT_EQ_INT(length, fwrite(bytes, 1, length, file));
+  ASSERT_EQ_INT(0, fclose(file));
+}
+
+void test_sys_source_libcall(void) {
+  setup_libcall_runtime();
+
+  char srcroot[] = "/tmp/sin-sys-source-XXXXXX";
+  ASSERT_NOT_NULL(mkdtemp(srcroot));
+  ITEM_t *runner = insert_halt_code(config.itemroot, "source.scope.runner");
+  ITEM_t *target = insert_halt_code(config.itemroot,
+                                    "source.scope.runner.target");
+  ITEM_t *empty = insert_halt_code(config.itemroot,
+                                   "source.scope.runner.empty");
+  insert_halt_code(config.itemroot, "source.scope.runner.missing");
+  ITEM_t *oversized = insert_halt_code(config.itemroot,
+                                       "source.scope.runner.oversized");
+  ITEM_t *embedded_nul = insert_halt_code(config.itemroot,
+                                          "source.scope.runner.nul");
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "source.value", VALUE_TRUE));
+
+  char exact_source[] = "target = code (\n  42;\n);\n";
+  ASSERT_TRUE(save_itemsource_in_srcroot(target, exact_source, srcroot));
+  char empty_source[] = "";
+  ASSERT_TRUE(save_itemsource_in_srcroot(empty, empty_source, srcroot));
+  char seed_source[] = "seed";
+  ASSERT_TRUE(save_itemsource_in_srcroot(oversized, seed_source, srcroot));
+  ASSERT_TRUE(save_itemsource_in_srcroot(embedded_nul, seed_source, srcroot));
+
+  char *target_filename = get_itemfilename_in_srcroot(target, srcroot);
+  char *empty_filename = get_itemfilename_in_srcroot(empty, srcroot);
+  char *oversized_filename = get_itemfilename_in_srcroot(oversized, srcroot);
+  char *nul_filename = get_itemfilename_in_srcroot(embedded_nul, srcroot);
+  ASSERT_NOT_NULL(target_filename);
+  ASSERT_NOT_NULL(empty_filename);
+  ASSERT_NOT_NULL(oversized_filename);
+  ASSERT_NOT_NULL(nul_filename);
+
+  char *too_large = malloc(SIN_MAX_STRING_BYTES + 1u);
+  ASSERT_NOT_NULL(too_large);
+  memset(too_large, 'x', SIN_MAX_STRING_BYTES + 1u);
+  overwrite_source_file(oversized_filename, too_large,
+                        SIN_MAX_STRING_BYTES + 1u);
+  free(too_large);
+  const unsigned char nul_bytes[] = {'a', 0, 'b'};
+  overwrite_source_file(nul_filename, nul_bytes, sizeof(nul_bytes));
+
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemroot = config.itemroot;
+  ctx.current_item = runner;
+  ctx.srcroot = srcroot;
+
+  set_error_item(config.itemroot, ERR_RUNTIME_NOSUCHITEM,
+                 "unrelated prior error", runner);
+  VALUE_t owned_first = call_sys_name(lc_sys_source, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup(".target")}});
+  VALUE_t owned_second = call_sys_name(lc_sys_source, &ctx,
+      (VALUE_t){VALUE_str,
+                {.s = strdup("source.scope.runner.target")}});
+  ASSERT_EQ_INT(VALUE_str, owned_first.type);
+  ASSERT_EQ_INT(VALUE_str, owned_second.type);
+  ASSERT_NOT_NULL(owned_first.s);
+  ASSERT_NOT_NULL(owned_second.s);
+  ASSERT_TRUE(strcmp(owned_first.s, exact_source) == 0);
+  ASSERT_TRUE(strcmp(owned_second.s, exact_source) == 0);
+  ASSERT_TRUE(owned_first.s != owned_second.s);
+  value_free(&owned_first);
+  value_free(&owned_second);
+
+  VALUE_t result = call_sys_name(lc_sys_source, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup(".empty")}});
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_NOT_NULL(result.s);
+  ASSERT_TRUE(result.s[0] == '\0');
+  value_free(&result);
+
+  static const char *const nil_names[] = {
+    "invalid-name!", "source.absent", "source.value"
+  };
+  for (size_t i = 0; i < sizeof(nil_names) / sizeof(nil_names[0]); i++) {
+    result = call_sys_name(lc_sys_source, &ctx,
+        (VALUE_t){VALUE_str, {.s = strdup(nil_names[i])}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+  }
+  ITEM_t *error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, error->value.i);
+
+  result = call_sys_name(lc_sys_source, &ctx,
+                         (VALUE_t){VALUE_int, {.i = 1}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, error->value.i);
+  ITEM_t *message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_EQ_INT(VALUE_str, message->value.type);
+  ASSERT_TRUE(strstr(message->value.s, "sys.source") != NULL);
+  ITEM_t *provenance = find_item(config.itemroot, "error.item");
+  ASSERT_NOT_NULL(provenance);
+  ASSERT_EQ_INT(VALUE_str, provenance->value.type);
+  ASSERT_TRUE(strcmp(provenance->value.s, "source.scope.runner") == 0);
+
+  result = call_sys_name(lc_sys_source, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup(".missing")}});
+  assert_string_return(result, "");
+  error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_SOURCE, error->value.i);
+  message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_TRUE(strstr(message->value.s, "sys.source") != NULL);
+  ASSERT_TRUE(strstr(message->value.s, "source.sin") != NULL);
+  provenance = find_item(config.itemroot, "error.item");
+  ASSERT_NOT_NULL(provenance);
+  ASSERT_TRUE(strcmp(provenance->value.s, "source.scope.runner") == 0);
+
+  ctx.srcroot = NULL;
+  result = call_sys_name(lc_sys_source, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup(".target")}});
+  assert_string_return(result, "");
+  error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_SOURCE, error->value.i);
+
+  ctx.srcroot = srcroot;
+  result = call_sys_name(lc_sys_source, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup(".oversized")}});
+  assert_string_return(result, "");
+  error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_SOURCE, error->value.i);
+  message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_TRUE(strstr(message->value.s, "exceeds") != NULL);
+
+  result = call_sys_name(lc_sys_source, &ctx,
+      (VALUE_t){VALUE_str, {.s = strdup(".nul")}});
+  assert_string_return(result, "");
+  error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_SOURCE, error->value.i);
+  message = find_item(config.itemroot, "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_TRUE(strstr(message->value.s, "NUL") != NULL);
+
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+
+  ASSERT_EQ_INT(0, unlink(target_filename));
+  ASSERT_EQ_INT(0, unlink(empty_filename));
+  ASSERT_EQ_INT(0, unlink(oversized_filename));
+  ASSERT_EQ_INT(0, unlink(nul_filename));
+  free(target_filename);
+  free(empty_filename);
+  free(oversized_filename);
+  free(nul_filename);
+  static const char *const leaf_dirs[] = {"target", "empty", "oversized",
+                                          "nul"};
+  char cleanup_path[512];
+  for (size_t i = 0; i < sizeof(leaf_dirs) / sizeof(leaf_dirs[0]); i++) {
+    int written = snprintf(cleanup_path, sizeof(cleanup_path),
+        "%s/source/scope/runner/%s", srcroot, leaf_dirs[i]);
+    ASSERT_TRUE(written > 0 && (size_t)written < sizeof(cleanup_path));
+    ASSERT_EQ_INT(0, rmdir(cleanup_path));
+  }
+  int written = snprintf(cleanup_path, sizeof(cleanup_path),
+                         "%s/source/scope/runner", srcroot);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(cleanup_path));
+  ASSERT_EQ_INT(0, rmdir(cleanup_path));
+  written = snprintf(cleanup_path, sizeof(cleanup_path), "%s/source/scope",
+                     srcroot);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(cleanup_path));
+  ASSERT_EQ_INT(0, rmdir(cleanup_path));
+  written = snprintf(cleanup_path, sizeof(cleanup_path), "%s/source",
+                     srcroot);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(cleanup_path));
+  ASSERT_EQ_INT(0, rmdir(cleanup_path));
+  ASSERT_EQ_INT(0, rmdir(srcroot));
+
   teardown_libcall_runtime();
 }
 

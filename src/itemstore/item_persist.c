@@ -167,6 +167,139 @@ bool save_itemsource(ITEM_t *item, char *source) {
   return save_itemsource_in_srcroot(item, source, NULL);
 }
 
+char *read_itemsource_in_srcroot(ITEM_t *item, const char *srcroot,
+                                 char *detail, size_t detail_size) {
+  char *filename = NULL;
+  FILE *file = NULL;
+  char *source = NULL;
+
+  if (detail && detail_size > 0) detail[0] = '\0';
+  if (!item) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size, "source item is unavailable");
+    }
+    return NULL;
+  }
+  if (!srcroot || srcroot[0] == '\0') {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size, "source root is unconfigured");
+    }
+    return NULL;
+  }
+
+  filename = get_itemfilename_in_srcroot(item, srcroot);
+  if (!filename) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "unable to allocate source file path");
+    }
+    return NULL;
+  }
+
+  file = fopen(filename, "rb");
+  if (!file) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "unable to open source file '%s': %s", filename,
+                     strerror(errno));
+    }
+    goto fail;
+  }
+  if (fseek(file, 0, SEEK_END) != 0) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "unable to seek source file '%s': %s", filename,
+                     strerror(errno));
+    }
+    goto fail;
+  }
+  long end = ftell(file);
+  if (end < 0) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "unable to measure source file '%s': %s", filename,
+                     strerror(errno));
+    }
+    goto fail;
+  }
+  if ((uintmax_t)end > (uintmax_t)SIN_MAX_STRING_BYTES) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "source file '%s' exceeds the %zu-byte string limit",
+                     filename, SIN_MAX_STRING_BYTES);
+    }
+    goto fail;
+  }
+  if (fseek(file, 0, SEEK_SET) != 0) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "unable to rewind source file '%s': %s", filename,
+                     strerror(errno));
+    }
+    goto fail;
+  }
+
+  size_t source_len = (size_t)end;
+  source = malloc(source_len + 1u);
+  if (!source) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "unable to allocate source result for '%s'", filename);
+    }
+    goto fail;
+  }
+  if (source_len > 0 && fread(source, 1, source_len, file) != source_len) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "unable to read source file '%s': %s", filename,
+                     ferror(file) ? strerror(errno) : "unexpected end of file");
+    }
+    goto fail;
+  }
+  int extra = fgetc(file);
+  if (extra != EOF) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "source file '%s' changed while being read", filename);
+    }
+    goto fail;
+  }
+  if (ferror(file)) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "unable to finish reading source file '%s': %s",
+                     filename, strerror(errno));
+    }
+    goto fail;
+  }
+  source[source_len] = '\0';
+  if (memchr(source, '\0', source_len) != NULL) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "source file '%s' contains an embedded NUL", filename);
+    }
+    goto fail;
+  }
+  if (fclose(file) != 0) {
+    file = NULL;
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "unable to close source file '%s': %s", filename,
+                     strerror(errno));
+    }
+    goto fail;
+  }
+  file = NULL;
+  free(filename);
+  return source;
+
+fail:
+  if (file) (void)fclose(file);
+  free(source);
+  free(filename);
+  return NULL;
+}
+
 /* The on-disk contract is documented in docs/itemstore-format.md. */
 #define ITEMSTORE_V1_MAGIC "SINITEM"
 #define ITEMSTORE_V1_MAGIC_SIZE ((uint32_t)sizeof(ITEMSTORE_V1_MAGIC))

@@ -107,6 +107,13 @@ char *get_itemfilename(ITEM_t *item);
 // of source or modify/free it.
 bool save_itemsource_in_srcroot(ITEM_t *item, char *source, const char *srcroot);
 bool save_itemsource(ITEM_t *item, char *source);
+// Returns a newly allocated, NUL-terminated copy of the source file, including
+// an allocated empty string for an empty file. The caller owns the result and
+// must free it. On failure, returns NULL and writes a best-effort diagnostic to
+// detail when detail is non-NULL and detail_size is non-zero. The item and
+// srcroot are borrowed; neither is modified or freed.
+char *read_itemsource_in_srcroot(ITEM_t *item, const char *srcroot,
+                                 char *detail, size_t detail_size);
 bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability);
 void itemstore_set_sync_hook_for_tests(ITEMSTORE_SYNC_HOOK_t hook);
 bool save_itemstore_with_options(const char *filename, ITEM_t *root, ITEMSTORE_DURABILITY_e durability);

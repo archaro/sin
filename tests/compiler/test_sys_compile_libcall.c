@@ -23,6 +23,7 @@ static RuntimeContext *test_ctx(void) {
   test_runtime_ctx.itemroot = config.itemroot;
   test_runtime_ctx.strict_validation = config.strict_validation;
   test_runtime_ctx.strict_runtime_contracts = config.strict_runtime_contracts;
+  test_runtime_ctx.srcroot = config.srcroot;
   return &test_runtime_ctx;
 }
 uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -344,6 +345,38 @@ void test_sys_compile_libcall_runtime(void) {
   ASSERT_TRUE(strcmp(introspection_value->value.s, "caller.compile_outer") ==
               0);
   assert_nil_item("caller.results.compile_outer_after");
+
+  char source_srcroot[] = "/tmp/sin-sys-source-compile-XXXXXX";
+  ASSERT_NOT_NULL(mkdtemp(source_srcroot));
+  config.srcroot = source_srcroot;
+  assert_compile_success_bool("source_runtime.target = code ( 7; );");
+  ITEM_t *source_target = find_item(config.itemroot, "source_runtime.target");
+  ASSERT_NOT_NULL(source_target);
+  char compiled_source[] = "source_runtime.target = code ( 7; );\n";
+  ASSERT_TRUE(save_itemsource_in_srcroot(source_target, compiled_source,
+                                         source_srcroot));
+  assert_compile_success_bool(
+      "source_runtime.result = sys.source{\"source_runtime.target\"};");
+  ITEM_t *source_result = assert_string_item("source_runtime.result", NULL);
+  ASSERT_TRUE(strcmp(source_result->value.s, compiled_source) == 0);
+  char *compiled_filename = get_itemfilename_in_srcroot(source_target,
+                                                        source_srcroot);
+  ASSERT_NOT_NULL(compiled_filename);
+  ASSERT_EQ_INT(0, unlink(compiled_filename));
+  free(compiled_filename);
+  char source_cleanup[512];
+  int source_written = snprintf(source_cleanup, sizeof(source_cleanup),
+      "%s/source_runtime/target", source_srcroot);
+  ASSERT_TRUE(source_written > 0 &&
+              (size_t)source_written < sizeof(source_cleanup));
+  ASSERT_EQ_INT(0, rmdir(source_cleanup));
+  source_written = snprintf(source_cleanup, sizeof(source_cleanup),
+                            "%s/source_runtime", source_srcroot);
+  ASSERT_TRUE(source_written > 0 &&
+              (size_t)source_written < sizeof(source_cleanup));
+  ASSERT_EQ_INT(0, rmdir(source_cleanup));
+  ASSERT_EQ_INT(0, rmdir(source_srcroot));
+  config.srcroot = NULL;
 
   push_stack(config.vm->stack, vstr("sys.log{;"));
   (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);

@@ -28,6 +28,7 @@
   X("sys",  "monotime",    1, 17, 0, lc_sys_monotime) \
   X("sys",  "calleritem",  1, 18, 0, lc_sys_calleritem) \
   X("sys",  "paramcount",  1, 19, 1, lc_sys_paramcount) \
+  X("sys",  "source",      1, 20, 1, lc_sys_source) \
   X("net",  "input",       3,  0, 0, lc_net_input) \
   X("net",  "write",       3,  1, 2, lc_net_write) \
   X("net",  "ditch",       3,  2, 1, lc_net_ditch) \

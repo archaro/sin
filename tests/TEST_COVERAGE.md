@@ -85,6 +85,9 @@ This document maps major subsystems to concrete test entry points so reviewers c
     - `test_sys_caller_paramcount_libcalls`
       - direct-entry nil, two- and three-level caller selection, return restoration, owned strings, defensive missing context, and prior-error preservation
       - zero/multiple declared parameters, absolute/relative names, malformed code headers, value/missing/invalid items, and invalid-argument provenance
+    - `test_sys_source_libcall`
+      - exact and empty nested source reads, absolute/relative names, independently owned results, and prior-error preservation
+      - invalid/missing/value nil outcomes, non-string provenance, missing/unconfigured source, oversized files, embedded NUL rejection, stack balance, and temporary-tree cleanup
   - `tests/core/test_stack_frames.c` and `tests/interpreter/test_interpret_semantics_golden.c`
     - invocation caller-boundary restoration on normal, verification-failure, pending-interrupt, and interpretation-failure exits
 - **Core value/float semantics**
@@ -196,6 +199,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
       - collision-safe temporary names preserve existing items and descendants
       - source-level execution of all introspection/version/time calls, including nested callee identity, namespace parents, and caller restoration
       - source-level immediate caller identity across two and three levels, temporary `sys.compile` caller behavior, and zero/multiple parameter counts
+      - source-level compilation and runtime dispatch of `sys.source` against the canonical itemstore source layout
 - **Runtime performance guard (opt-in strict mode)**
   - `tests/interpreter/test_runtime_benchmark_optin.c`
     - `test_runtime_benchmark_optin`

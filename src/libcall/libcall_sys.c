@@ -358,6 +358,46 @@ uint8_t *lc_sys_paramcount(RuntimeContext *ctx, uint8_t *nextop,
   return lc_sys_return(ctx, nextop, result);
 }
 
+uint8_t *lc_sys_source(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  if (!ctx || !ctx->vm || !ctx->vm->stack) return nextop;
+
+  VALUE_t itemname = pop_stack(ctx->vm->stack);
+  if (!lc_value_is_type(itemname, VALUE_str)) {
+    value_free(&itemname);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "sys.source item name must be a string");
+  }
+
+  char fullname[MAX_ITEM_NAME];
+  if (!ctx->itemroot ||
+      !canonicalize_itemname(itemname.s, ctx->current_item, fullname)) {
+    value_free(&itemname);
+    return lc_sys_return_nil(ctx, nextop);
+  }
+  ITEM_t *target = find_item(ctx->itemroot, fullname);
+  if (!target || target->type != ITEM_code) {
+    value_free(&itemname);
+    return lc_sys_return_nil(ctx, nextop);
+  }
+
+  char read_detail[512];
+  char *source = read_itemsource_in_srcroot(target, ctx->srcroot, read_detail,
+                                            sizeof(read_detail));
+  value_free(&itemname);
+  if (source) {
+    return lc_sys_return(ctx, nextop,
+                         (VALUE_t){VALUE_str, {.s = source}});
+  }
+
+  char error_detail[1024];
+  (void)snprintf(error_detail, sizeof(error_detail), "sys.source{%s}: %s",
+                 fullname, read_detail[0] ? read_detail : "source read failed");
+  set_error_item(ctx->itemroot, ERR_RUNTIME_SOURCE, error_detail,
+                 ctx->current_item);
+  return lc_sys_return(ctx, nextop, lc_sys_string_copy(""));
+}
+
 uint8_t *lc_sys_rootcount(RuntimeContext *ctx, uint8_t *nextop,
                           ITEM_t *item) {
   (void)item;
