@@ -6,11 +6,36 @@ These instructions apply to the entire repository rooted at this directory. If a
 
 The root agent is the orchestrator and final reviewer.
 
+## Worker context isolation
+
+When spawning any worker agent, including `luna_writer` and `terra_writer`:
+
+* Always set `fork_turns` to `"none"`.
+* Never omit `fork_turns`.
+* Do not fork, copy, or reproduce the root agent's conversation history.
+* Do not send raw context dumps, complete transcripts, accumulated tool output, or unrelated repository findings.
+* Provide a self-contained handover containing only the information necessary for the assigned task.
+
+The worker handover must include, as applicable:
+
+* the bounded task;
+* explicit acceptance criteria;
+* relevant constraints and architectural decisions;
+* relevant files, directories, symbols, or subsystems;
+* the current working-tree state when it affects the task;
+* specific commands and tests to run;
+* relevant failure output or review findings;
+* the required deliverable or response format.
+
+Summarize relevant prior work rather than forwarding the complete parent context. Workers may inspect the repository directly when additional detail is needed.
+
+## Initial implementation
+
 For non-trivial code changes:
 
 1. Analyze the request and inspect enough of the repository to produce a bounded implementation task.
 2. Define explicit acceptance criteria, relevant files or subsystems, constraints, and required tests.
-3. Delegate the first implementation attempt to the `luna_writer` custom agent.
+3. Delegate the first implementation attempt to the `luna_writer` custom agent using `fork_turns: "none"` and a focused, self-contained handover.
 4. Review Luna's changes yourself. Inspect the diff and run or verify the relevant tests rather than accepting the worker's summary uncritically.
 5. Accept the implementation only when all acceptance criteria are met.
 
@@ -19,39 +44,46 @@ For non-trivial code changes:
 Never send rejected Luna work back to `luna_writer` more than once.
 
 If Luna's work:
-- fails a test or check,
-- is incomplete,
-- violates an acceptance criterion,
-- requires substantial correction,
-- reports unresolved uncertainty,
-- or would otherwise be returned for a third implementation attempt, delegate the corrective attempt to `terra_writer` instead.
 
-Give Terra:
-- the original task,
-- all acceptance criteria,
-- Luna's result,
-- the current working-tree state,
-- concrete review findings,
-- failing command output where relevant,
-- and the exact reason Luna's attempt was rejected.
+* fails a test or check;
+* is incomplete;
+* violates an acceptance criterion;
+* requires substantial correction;
+* reports unresolved uncertainty; or
+* would otherwise be returned for a third implementation attempt,
+
+delegate the corrective attempt to `terra_writer`.
+
+Spawn Terra using `fork_turns: "none"`. Give Terra a focused handover containing:
+
+* the original bounded task;
+* all acceptance criteria;
+* a concise summary of Luna's approach and result;
+* the current working-tree state;
+* concrete review findings;
+* relevant failing command output; and
+* the exact reason Luna's attempt was rejected.
+
+Do not send Terra the complete root-agent conversation or Luna's complete context. Include Luna's raw output only when a specific excerpt is directly relevant to the correction.
 
 After Terra finishes, independently review and validate the result.
 
 ## Root-agent responsibilities
 
 The root agent retains responsibility for:
-- requirements analysis,
-- architectural decisions,
-- task decomposition,
-- acceptance criteria,
-- reviewing worker output,
-- running final validation,
-- and presenting the final answer.
+
+* requirements analysis;
+* architectural decisions;
+* task decomposition;
+* acceptance criteria;
+* constructing focused worker handovers;
+* reviewing worker output;
+* running final validation; and
+* presenting the final answer.
 
 Do not delegate the final acceptance decision.
 
-The root agent may make tiny mechanical edits itself, but substantive
-implementation should follow the Luna-first, Terra-on-rejection policy.
+The root agent may make tiny mechanical edits itself, but substantive implementation should follow the Luna-first, Terra-on-rejection policy.
 
 ## Project overview
 
