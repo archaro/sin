@@ -8,7 +8,7 @@ The root agent is the orchestrator and final reviewer.
 
 ## Worker context isolation
 
-When spawning any worker agent, including `luna_writer` and `terra_writer`:
+When spawning any worker agent:
 
 * Always set `fork_turns` to `"none"`.
 * Never omit `fork_turns`.
@@ -35,15 +35,15 @@ For non-trivial code changes:
 
 1. Analyze the request and inspect enough of the repository to produce a bounded implementation task.
 2. Define explicit acceptance criteria, relevant files or subsystems, constraints, and required tests.
-3. Delegate the first implementation attempt to the `luna_writer` custom agent using `fork_turns: "none"` and a focused, self-contained handover.
-4. Review Luna's changes yourself. Inspect the diff and run or verify the relevant tests rather than accepting the worker's summary uncritically.
+3. Delegate the first implementation attempt to the `deepseek-worker` custom agent using `fork_turns: "none"` and a focused, self-contained handover.
+4. Review DeepSeek's changes yourself. Inspect the diff and run or verify the relevant tests rather than accepting the worker's summary uncritically.
 5. Accept the implementation only when all acceptance criteria are met.
 
 ## Mandatory escalation rule
 
-Never send rejected Luna work back to `luna_writer` more than once.
+Never send rejected DeepSeek work back to `deepseek-worker` more than once.
 
-If Luna's work:
+If DeepSeek's work does any of the following twice in succession:
 
 * fails a test or check;
 * is incomplete;
@@ -58,13 +58,13 @@ Spawn Terra using `fork_turns: "none"`. Give Terra a focused handover containing
 
 * the original bounded task;
 * all acceptance criteria;
-* a concise summary of Luna's approach and result;
+* a concise summary of DeepSeek's approach and result;
 * the current working-tree state;
 * concrete review findings;
 * relevant failing command output; and
-* the exact reason Luna's attempt was rejected.
+* the exact reason DeepSeek's attempt was rejected.
 
-Do not send Terra the complete root-agent conversation or Luna's complete context. Include Luna's raw output only when a specific excerpt is directly relevant to the correction.
+Do not send Terra the complete root-agent conversation or DeepSeek's complete context. Include DeepSeek's raw output only when a specific excerpt is directly relevant to the correction.
 
 After Terra finishes, independently review and validate the result.
 
@@ -83,7 +83,7 @@ The root agent retains responsibility for:
 
 Do not delegate the final acceptance decision.
 
-The root agent may make tiny mechanical edits itself, but substantive implementation should follow the Luna-first, Terra-on-rejection policy.
+The root agent may make tiny mechanical edits itself, but substantive implementation should follow the DeepSeek-first, Terra-on-rejection policy.
 
 ## Project overview
 
