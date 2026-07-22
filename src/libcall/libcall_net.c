@@ -180,7 +180,7 @@ uint8_t *lc_net_echo(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   size_t line_index = *deps.lastconn;
   if (line_index < *deps.maxconns) {
     LINE_t *linep = &deps.lines[line_index];
-    if (linep->telnet != NULL) {
+    if (lc_net_line_can_write(linep)) {
       unsigned char command = value_is_truthy(&enabled) ? TELNET_WONT : TELNET_WILL;
       telnet_negotiate(linep->telnet, command, TELNET_TELOPT_ECHO);
     }

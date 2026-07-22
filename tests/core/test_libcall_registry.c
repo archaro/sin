@@ -1062,6 +1062,15 @@ void test_net_echo_ignores_unavailable_current_line(void) {
   ASSERT_EQ_INT(0, telnet_capture_len);
   ASSERT_EQ_INT(ERR_NETWORK_ERROR, error->value.i);
 
+  line[0].status = LINE_disconnecting;
+  line[0].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
+  ASSERT_NOT_NULL(line[0].telnet);
+  reset_telnet_capture();
+  ret = call_net_echo((VALUE_t){VALUE_bool, {.i = 1}});
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  ASSERT_EQ_INT(0, telnet_capture_len);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, error->value.i);
+
   teardown_libcall_runtime();
 }
 
