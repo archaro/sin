@@ -41,7 +41,7 @@ For non-trivial code changes:
 
 ## Mandatory escalation rule
 
-Never send rejected DeepSeek work back to `deepseek-worker` more than once.
+Never send rejected DeepSeek work back to `deepseek-worker` more than twice.
 
 If DeepSeek's work does any of the following twice in succession:
 
