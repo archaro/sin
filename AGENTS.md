@@ -1,302 +1,241 @@
 # AGENTS.md
 
-These instructions apply to the entire repository rooted at this directory. If a more deeply nested `AGENTS.md` is added later, follow that file for its subtree when it conflicts with this one. Direct instructions from the user, system, or developer messages take precedence over this file.
+These instructions apply to the repository rooted here. A deeper `AGENTS.md`
+overrides this file for its subtree. User, system, and developer instructions
+take precedence.
 
-# Multi-agent implementation policy
+## Project
 
-The root agent is the orchestrator and final reviewer.
+Sinistra is a C17 MUD engine with three executables:
 
-## Worker context isolation
+- `scomp` compiles Sinistra source to custom object/bytecode data.
+- `sin` loads object data, runs tasks, handles networking, and persists state.
+- `sdiss` disassembles object data and bytecode fixtures.
 
-When spawning any worker agent:
+The codebase intentionally mixes older and newer C styles. Make small,
+idiomatic changes that fit nearby code; avoid broad cleanup during feature work.
 
-* Always set `fork_turns` to `"none"`.
-* Never omit `fork_turns`.
-* Do not fork, copy, or reproduce the root agent's conversation history.
-* Do not send raw context dumps, complete transcripts, accumulated tool output, or unrelated repository findings.
-* Provide a self-contained handover containing only the information necessary for the assigned task.
+## Multi-agent implementation policy
 
-The worker handover must include, as applicable:
+The root agent owns requirements, architecture, task decomposition, acceptance
+criteria, final validation, and the final answer. It is always the final
+reviewer and must not accept a worker's summary without inspecting the diff and
+test evidence.
 
-* the bounded task;
-* explicit acceptance criteria;
-* relevant constraints and architectural decisions;
-* relevant files, directories, symbols, or subsystems;
-* the current working-tree state when it affects the task;
-* specific commands and tests to run;
-* relevant failure output or review findings;
-* the required deliverable or response format.
+### Isolated handoffs
 
-Summarize relevant prior work rather than forwarding the complete parent context. Workers may inspect the repository directly when additional detail is needed.
+For every implementation, correction, or review agent:
 
-## Initial implementation
+- Set `fork_turns: "none"`; never pass the root conversation history.
+- Send a focused, self-contained handoff rather than transcripts, raw context
+  dumps, or unrelated findings.
+- Include the bounded task, acceptance criteria, relevant decisions and files,
+  current tree state when relevant, tests to run, pertinent failures or review
+  findings, and the expected deliverable.
+- Summarize prior work. Include raw output only when a short excerpt is needed
+  to diagnose a specific failure.
+- Remind implementation agents that the workspace is shared and that they must
+  preserve unrelated changes. Never run two implementation agents concurrently
+  against the same working tree.
+
+### Implementation and escalation
 
 For non-trivial code changes:
 
-1. Analyze the request and inspect enough of the repository to produce a bounded implementation task.
-2. Define explicit acceptance criteria, relevant files or subsystems, constraints, and required tests.
-3. Delegate the first implementation attempt to the `deepseek-worker` custom agent using `fork_turns: "none"` and a focused, self-contained handover.
-4. Review DeepSeek's changes yourself. Inspect the diff and run or verify the relevant tests rather than accepting the worker's summary uncritically.
-5. Accept the implementation only when all acceptance criteria are met.
+1. Inspect enough of the repository to define a bounded task, explicit
+   acceptance criteria, affected subsystems, constraints, and tests.
+2. Give the first implementation attempt to `deepseek-pro-worker` using an
+   isolated handoff.
+3. Review its diff and test evidence yourself.
+4. If useful, give rejected DeepSeek work one focused corrective turn.
+5. If the second DeepSeek result still fails a check, is incomplete, violates
+   an acceptance criterion, requires substantial correction, or leaves
+   unresolved uncertainty, delegate the correction to `terra_writer`. Never
+   give DeepSeek a third implementation turn for the same bounded task.
+6. Give Terra the original task and criteria, current tree state, a concise
+   account of DeepSeek's approach, concrete review findings, relevant failure
+   output, and the exact reason for escalation. Then independently review and
+   validate Terra's result.
 
-## Mandatory escalation rule
+The root may make tiny mechanical edits. Substantive implementation follows
+the DeepSeek-first, Terra-on-second-rejection policy.
 
-Never send rejected DeepSeek work back to `deepseek-worker` more than twice.
+### Agent count and review scope
 
-If DeepSeek's work does any of the following twice in succession:
+Use the smallest workflow that satisfies the task:
 
-* fails a test or check;
-* is incomplete;
-* violates an acceptance criterion;
-* requires substantial correction;
-* reports unresolved uncertainty; or
-* would otherwise be returned for a third implementation attempt,
-
-delegate the corrective attempt to `terra_writer`.
-
-Spawn Terra using `fork_turns: "none"`. Give Terra a focused handover containing:
-
-* the original bounded task;
-* all acceptance criteria;
-* a concise summary of DeepSeek's approach and result;
-* the current working-tree state;
-* concrete review findings;
-* relevant failing command output; and
-* the exact reason DeepSeek's attempt was rejected.
-
-Do not send Terra the complete root-agent conversation or DeepSeek's complete context. Include DeepSeek's raw output only when a specific excerpt is directly relevant to the correction.
-
-After Terra finishes, independently review and validate the result.
-
-## Root-agent responsibilities
-
-The root agent retains responsibility for:
-
-* requirements analysis;
-* architectural decisions;
-* task decomposition;
-* acceptance criteria;
-* constructing focused worker handovers;
-* reviewing worker output;
-* running final validation; and
-* presenting the final answer.
-
-Do not delegate the final acceptance decision.
-
-The root agent may make tiny mechanical edits itself, but substantive implementation should follow the DeepSeek-first, Terra-on-rejection policy.
-
-## Project overview
-
-Sinistra is a C17 MUD engine made of two main parts:
-
-- `scomp`: a compiler that translates Sinistra source into custom bytecode/object data.
-- `sin`: a bytecode interpreter/runtime that can load object data, run tasks, and persist state.
-- `sdiss`: a disassembler for inspecting generated bytecode/object fixtures.
-
-The codebase intentionally contains a mixture of older and newer C styles. Prefer small, idiomatic changes that fit nearby code rather than broad style rewrites. When writing new code, prefer newer, clearer styles already present in the repository. When improving structure, do it in focused patches with tests.
+- A request to use a worker means the implementation worker above; it does not
+  by itself require `subagent-driven-development` or separate reviewer agents.
+- One bounded task normally needs one implementation worker plus root review
+  and validation. Do not automatically add both task and whole-branch reviewers.
+- Add one independent reviewer only for unusual risk, cross-subsystem work,
+  multiple independently implemented tasks, specialist needs, or an explicit
+  user request. For a single-task branch, that reviewer should cover both
+  specification compliance and integration quality.
+- Use multiple reviewers only when their scopes are materially different and
+  the plan records why the added cost is justified.
+- Reviewer agents are strictly read-only: prohibit file edits, commits, ref
+  changes, and destructive Git commands. Record `HEAD` before review and verify
+  `HEAD` and the working tree afterward.
+- Match reviewer model capability and reasoning effort to the concrete risk;
+  do not default to the strongest model for a small diff.
+- Higher-priority instructions or an explicitly requested skill may require a
+  different workflow; otherwise this policy governs.
 
 ## Repository map
 
-For module boundaries, ownership, dependency direction, and key entry points,
-see `docs/architecture.md`. Keep that architecture map current whenever files
-are added, deleted, or relocated.
+Use `docs/architecture.md` for module ownership, dependency direction, and key
+entry points. Update it whenever source files are added, deleted, or relocated.
 
-- `src/`: production C sources and headers. Top-level `src/scomp.c`, `src/sdiss.c`, and `src/sin.c` are CLI entry points; `src/config.h` and `src/version.h` are integration headers.
-  - `src/common/`: shared diagnostics, allocation wrappers, CLI helpers, numeric formatting, and small utilities.
-  - `src/bytecode/`: bytecode verification and disassembly helpers.
-  - `src/compiler/`: parser-facing compiler pipeline, AST/semantic analysis, IR lowering, diagnostics, and bytecode emission.
-  - `src/compiler/ir/`: opcode schema definitions shared by compiler and tests.
-  - `src/compiler/parser.y` and `src/compiler/lexer.l`: Bison/Flex grammar sources. Generated files belong under `obj/generated/` during normal builds.
-  - `src/runtime/`: runtime, VM, task, stack, value, and opcode execution paths.
-  - `src/itemstore/`: object/item persistence, registries, caches, and structured error-item helpers.
-  - `src/libcall/`: host library-call implementations and registry plumbing.
-  - `src/net/`: networking and Telnet support.
-- `tests/`: unit, integration, golden, network, benchmark, and fuzz tests.
-  - `tests/core/`: focused tests for low-level components.
-  - `tests/compiler/`: compiler, bytecode, parser, and disassembler tests.
-  - `tests/interpreter/`: runtime semantic and stress tests.
-  - `tests/network/`: network tests.
-  - `tests/shared/`: shared harness utilities and reusable compiler/pipeline cases.
-  - `tests/fixtures/`: golden inputs/outputs and fixture policy documentation.
-  - `tests/fuzz/`: libFuzzer harnesses and corpora.
-- `docs/`: design notes and user/developer documentation.
-- `examples/`: sample Sinistra source files used by examples and some corpus seeding.
-- `ci/`: local/CI gate scripts that compose Makefile targets.
-- `Makefile`: authoritative build, test, sanitizer, and fuzz entry points.
+- `src/common/`: shared diagnostics, allocation, CLI, formatting, and utilities.
+- `src/bytecode/`: bytecode verification and disassembly support.
+- `src/compiler/`: parser, AST, semantics, IR, lowering, diagnostics, and emission.
+- `src/runtime/`: VM, values, stack, tasks, decoding, and opcode execution.
+- `src/itemstore/`: persistence, registries, caches, and structured error items.
+- `src/libcall/`: host library calls and registry plumbing.
+- `src/net/`: libuv networking and Telnet support.
+- `tests/`: core, compiler, interpreter, network, fixture, benchmark, and fuzz tests.
+- `docs/`, `examples/`, and `ci/`: documentation, sample programs, and local/CI gates.
+- `Makefile`: authoritative build, test, sanitizer, and fuzz interface.
 
-## Toolchain expectations
+Parser sources are `src/compiler/parser.y` and `src/compiler/lexer.l`; generated
+files belong under `obj/generated/`, not in source control.
 
-The default build assumes a Unix-like environment with:
+## Build and toolchain
 
-- `make`
-- a C compiler (`gcc` by default; `clang` is commonly used for fuzzing)
-- `pkg-config`
-- `libuv` development files discoverable as the `libuv` pkg-config module or linkable with `-luv`
-- `bison`
-- `flex`
-- `ar`
-- `xxd` for seeding some fuzz corpora
+Use the Makefile rather than ad hoc compiler commands except for narrow
+diagnosis. The Unix-like build requires `make`, a C compiler, `pkg-config`,
+libuv development files, Bison, Flex, `ar`, and `xxd`. Do not vendor missing
+dependencies; report the exact failing command and error.
 
-Do not vendor dependencies into the repository. If a dependency is missing, report the exact command that failed and the relevant error.
+- `make`: debug builds of `scomp`, `sdiss`, and `sin`.
+- `make BUILD=release`: optimized build.
+- `make BUILD=sanitize`: ASan/UBSan build.
+- `make clean`: remove generated and built artifacts.
+- `make help`: list targets and tunable variables.
 
-## Build commands
+Keep C code compatible with C17. Useful variables include `CC`, `CSTD`,
+`STRICT_WARNINGS`, `BUILD`, `PKG_CONFIG`, and `LIBUV_PC`.
 
-Use the Makefile rather than ad hoc compiler invocations unless you are diagnosing a very specific issue.
+## Validation
 
-- `make`: build the default debug variants of `scomp`, `sdiss`, and `sin`.
-- `make BUILD=release`: build optimized release artifacts.
-- `make BUILD=sanitize`: build with AddressSanitizer and UndefinedBehaviorSanitizer flags.
-- `make clean`: remove generated objects, libraries, binaries, test binaries, fuzz binaries, and stale generated parser/lexer files.
-- `make help`: print supported targets and tunable variables.
+Run the narrowest meaningful checks while iterating, then broaden according to
+risk. Preferred gates are:
 
-Common Make variables:
+1. `make test`: standard harness and network tests.
+2. `make test-warnings`: strict-warning regressions.
+3. `make test-asan`: ASan/UBSan with leak checks disabled.
+4. `make test-lsan`: ASan/UBSan with leak checks enabled. Run this outside a
+   ptrace-restricted sandbox on the first attempt; LeakSanitizer cannot run
+   correctly under ptrace.
+5. `make test-release`: release behavior, especially compiler/interpreter work.
+6. `./ci/gate_sanitizers_fuzz.sh`: compiler, runtime, parser, bytecode,
+   itemstore loading, or fuzz-harness changes.
 
-- `CC=<compiler>` selects the compiler.
-- `CSTD=c17` selects the C standard; keep C code compatible with C17 unless asked otherwise.
-- `STRICT_WARNINGS=1` promotes selected warnings to errors.
-- `BUILD=debug|release|sanitize` selects the build flavor.
-- `PKG_CONFIG` and `LIBUV_PC` tune libuv discovery.
+Use `make test-strict` only when benchmark-budget enforcement is relevant;
+`make test` is the normal deterministic gate.
 
-## Test and verification commands
+Fuzz targets are `make fuzz-smoke`, `make fuzz-build`, `make fuzz-smoke-run`,
+and the individual `make fuzz-scomp`, `make fuzz-sdiss`, and
+`make fuzz-sin-object` targets. Tune smoke runs with `FUZZ_RUNS` and
+`FUZZ_TIME`; do not edit scripts for local iteration.
 
-Choose the narrowest test set that meaningfully covers your change, then run broader gates for risky code. Prefer commands in this order of escalation:
+Validation by change type:
 
-1. `make test` for the standard harness and network tests.
-2. `make test-warnings` for strict-warning regressions.
-3. `make test-asan` for ASan/UBSan coverage with leak checks disabled.
-4. `make test-lsan` for ASan/UBSan with leak checks enabled. Run this target
-   outside the restricted sandbox on the first attempt because LeakSanitizer
-   cannot run while the process is controlled through `ptrace`; do not first
-   attempt it in a ptrace-constrained environment.
-5. `make test-release` when changing compiler/interpreter/language paths.
-6. `./ci/gate_sanitizers_fuzz.sh` for changes touching compiler, runtime, parser, bytecode, itemstore loading, or fuzz harnesses.
+- Documentation only: inspect Markdown; no build unless examples are generated.
+- Build system: `make clean`, `make`, and `make test` when feasible.
+- Core C logic: `make test`; consider `make test-warnings`.
+- Compiler/parser/language: `make test`, `make test-release`, targeted golden
+  tests, and the sanitizer/fuzz gate.
+- Runtime/bytecode/itemstore: `make test`, applicable sanitizers, and relevant
+  fuzz smoke tests.
+- Fuzz harness: the specific harness plus a seeded run, or `make fuzz-smoke`.
 
-Fuzz commands:
+Every behavior change needs corresponding unit, integration, golden,
+benchmark, or fuzz coverage as appropriate. Never remove a failing test merely
+to make a suite pass.
 
-- `make fuzz-smoke`: build and run seeded smoke coverage for all fuzz harnesses.
-- `make fuzz-build`: build all fuzz harnesses and seed corpora.
-- `make fuzz-smoke-run`: run already-built fuzz harnesses.
-- `make fuzz-scomp`, `make fuzz-sdiss`, `make fuzz-sin-object`: build individual harnesses and print a suggested run command.
+## C conventions
 
-For quick local fuzz iterations, tune with environment variables instead of editing scripts, for example:
+- Follow nearby naming, indentation, error handling, and ownership patterns.
+  For new or substantially rewritten C, use indentation options
+  `-br -ce -slc -nut -i2 -brf -npcs -npsl`.
+- Avoid unrelated formatting and mechanical rewrites. Prefer focused functions
+  and explicit control flow over clever macros.
+- Treat warnings as defects. Avoid unchecked narrowing; the default build uses
+  `-Wconversion` and `-Wsign-conversion`.
+- Prefer `size_t` for object sizes and indices while respecting existing APIs.
+- Initialize structs deliberately and release resources on every error path.
+  Make ownership clear where allocations are introduced.
+- Do not commit generated parser/lexer files or build artifacts.
 
-```sh
-FUZZ_RUNS=5000 FUZZ_TIME=60 make fuzz-smoke
-```
+## Change-specific checks
 
-## Coding style and C conventions
+### Compiler, parser, and bytecode
 
-- Keep code C17-compatible.
-- Follow the style of the surrounding file for naming, error handling, and ownership conventions. For new or substantially rewritten C code, use the project indentation options `-br -ce -slc -nut -i2 -brf -npcs -npsl`.
-- Do not perform unrelated reformatting or mechanical rewrites.
-- Keep functions focused and prefer explicit control flow over clever macros.
-- Treat compiler warnings as important even when not promoted to errors.
-- Avoid unchecked narrowing conversions. The build uses `-Wconversion` and `-Wsign-conversion` by default.
-- Prefer `size_t` for sizes and indices that represent object sizes, but match existing APIs when necessary.
-- Initialize structs deliberately. If a file uses compound literals or zero-initializers, follow the local pattern.
-- Release resources on all error paths. When adding allocations, define ownership clearly at the call site and in cleanup paths.
-- Do not add `try`/`catch` style constructs around imports or includes; this is a C project and includes should remain straightforward. `#pragma once` is acceptable in headers when it fits nearby practice.
-- Do not check in generated parser/lexer output or build artifacts unless specifically requested.
+Keep language and bytecode changes coherent across the applicable stages:
 
-## Compiler, parser, and bytecode changes
+- grammar and lexer: `src/compiler/parser.y`, `src/compiler/lexer.l`
+- AST and semantics: `src/compiler/absyn.*`, `src/compiler/semant.*`
+- IR and lowering: `src/compiler/ir.*`, `src/compiler/ir/`, `src/compiler/lower.*`
+- emission and verification: `src/compiler/emitbc.*`,
+  `src/bytecode/bytecode_verify.*`
+- runtime and disassembly: `src/runtime/runtime_decode.*`,
+  `src/runtime/runtime_opcode.*`, `src/runtime/interpret.*`,
+  `src/bytecode/sdiss_core.*`
+- relevant documentation, positive/negative tests, fixtures, and golden output
 
-Language and bytecode changes must be kept coherent across the pipeline. When adding, removing, or changing language constructs or bytecode operations, check whether all of these need updates:
+New or changed language components need validator coverage, emitter/schema
+updates where applicable, and positive and negative tests.
 
-- grammar in `src/compiler/parser.y`
-- lexer rules in `src/compiler/lexer.l`
-- AST declarations and lifecycle code in `src/compiler/absyn.*`
-- semantic checks in `src/compiler/semant.*`
-- IR definitions and validation in `src/compiler/ir.*` and `src/compiler/ir/`
-- lowering in `src/compiler/lower.*`
-- bytecode emission in `src/compiler/emitbc.*`
-- bytecode verification in `src/bytecode/bytecode_verify.*`
-- runtime decoding and execution in `src/runtime/runtime_decode.*`, `src/runtime/runtime_opcode.*`, and `src/runtime/interpret.*`
-- disassembly in `src/bytecode/sdiss_core.*`
-- documentation in `docs/bytecode.md`, `docs/concepts.md`, or another relevant document
-- positive and negative tests in `tests/compiler/`, `tests/core/`, or `tests/interpreter/`
-- fixtures and golden output under `tests/fixtures/`
+### Runtime, itemstore, and persistence
 
-Any new or changed language component should include validator coverage, emitter mapping, opcode schema/spec updates where applicable, and positive/negative tests.
+- Preserve on-disk compatibility unless the task explicitly changes a format.
+- Format changes require documentation plus encoding, header, and verifier tests.
+- Validate untrusted object data before runtime use and add malformed/boundary
+  regression fixtures when changing decode or load paths.
+- Keep cache invalidation, registry ownership, and cleanup rules explicit.
 
-## Runtime, itemstore, and persistence changes
+### Library calls
 
-For runtime state, itemstore, and persistence work:
+- Use existing registry patterns.
+- Test argument validation, truthiness and value conversion, ownership, returns,
+  side effects, and error behavior as applicable.
+- Document user-visible behavior in `docs/libcalls.md`.
 
-- Preserve on-disk compatibility unless the task explicitly calls for a format change.
-- If a bytecode or itemstore format changes, update the related docs and encoding/header/verifier tests.
-- Validate untrusted object data defensively before runtime use.
-- Add regression fixtures for malformed or boundary-case inputs when changing decode/load paths.
-- Keep cache invalidation and registry ownership rules explicit.
+### Networking
 
-## Libcall changes
+- Avoid blocking event-loop paths unless an established API requires it.
+- Treat libuv handle, callback, buffer, and close ownership as explicit design
+  concerns.
+- Add or update network tests for behavior changes.
 
-- Register new libcalls through the existing registry patterns.
-- Add focused tests for argument validation, value conversion, and error behavior.
-- Document new or changed library-call behavior in `docs/libcalls.md` when it affects users.
+### Fixtures and documentation
 
-## Networking changes
+- Keep fixtures minimal, deterministic, and inspectable; follow
+  `tests/fixtures/README.md` for generation and update both input and expected
+  output when behavior intentionally changes.
+- Update documentation when public behavior, commands, formats, architecture,
+  or contributor workflow changes. Common targets are `README.md`,
+  `QUICKSTART.md`, `CONTRIBUTING.md`, and the relevant file under `docs/`.
+- Keep documentation concise and add examples only when they improve clarity.
 
-- Avoid blocking behavior in networking paths unless an existing API already requires it.
-- Be careful with libuv handle lifetimes and callbacks; document ownership when adding new asynchronous behavior.
-- Add or update network tests when behavior changes.
+## Git hygiene and reporting
 
-## Tests, fixtures, and golden data
+- Run `git status --short` before editing and before committing. Preserve
+  unrelated user changes and work around a dirty tree rather than reverting it.
+- Keep commits focused and descriptive. Use a body when motivation,
+  implementation details, or validation are not clear from the headline.
+- Never commit `obj/`, `lib/`, executables, test/fuzz binaries, generated
+  parser/lexer output, or temporary fixture files.
+- Use `rg`, `rg --files`, `find`, or targeted commands instead of `ls -R` or
+  `grep -R`.
+- Avoid broad cleanup unless cleanup is the task.
 
-- Keep fixtures minimal, deterministic, and easy to inspect.
-- Follow `tests/fixtures/README.md` when adding or regenerating fixtures.
-- For golden tests, update both the source fixture and expected output when behavior intentionally changes.
-- Do not remove a failing test to make a suite pass. Fix the behavior or explain why the test expectation is obsolete and update it deliberately.
-- If a benchmark-style test is noisy, run `make test` first and use `make test-strict` only when strict budget enforcement is relevant.
+For a PR or completed code change, report:
 
-## Documentation expectations
-
-Update documentation when behavior, commands, formats, or public development workflows change. Good documentation targets include:
-
-- `README.md` for high-level project information.
-- `QUICKSTART.md` for build/run walkthroughs.
-- `CONTRIBUTING.md` for contributor-facing workflows and gates.
-- `docs/bytecode.md` for bytecode format and opcode changes.
-- `docs/itemstore-format.md` for persistence format changes.
-- `docs/libcalls.md` for library-call behavior.
-- `docs/concepts.md` for language/runtime concepts.
-- `docs/architecture.md` for module boundaries, ownership, dependency direction, and key entry points. Update it whenever source files are added, deleted, or relocated.
-
-Keep docs accurate and concise. Prefer adding examples when they clarify a command or format.
-
-## Git and repository hygiene
-
-- Check `git status --short` before editing and before committing.
-- Do not overwrite or revert unrelated user changes.
-- Keep commits focused and descriptive. Commit headlines should be succinct, while commit bodies should explain motivation, notable implementation details, and validation when the headline is not enough.
-- Do not commit local build outputs such as `obj/`, `lib/`, `scomp`, `sdiss`, `sin`, test binaries, fuzz binaries, or generated parser/lexer files.
-- Do not use slow recursive commands such as `ls -R` or `grep -R`; use `rg`, `find`, or targeted commands instead.
-- Avoid broad cleanup changes unless the task is specifically cleanup-oriented.
-
-## Pull request guidance
-
-When preparing a PR or final summary, include:
-
-- a concise summary of what changed
-- tests/checks run, with exact commands
-- any tests not run and why
-- environment limitations, especially sanitizer, leak, or fuzz failures caused by missing tools or sandbox constraints
-- documentation or fixture updates called out explicitly
-
-## Suggested validation by change type
-
-- Documentation-only changes: inspect rendered Markdown if practical and run no build unless the docs include generated examples that need verification.
-- Build system changes: run `make clean`, `make`, and `make test` when feasible.
-- Core C logic changes: run `make test` and consider `make test-warnings`.
-- Compiler/parser/language changes: run `make test`, `./ci/gate_sanitizers_fuzz.sh`, and targeted fixture/golden tests if available.
-- Runtime/bytecode/itemstore changes: run `make test`, sanitizer tests where feasible, and relevant fuzz smoke tests.
-- Fuzz harness changes: run `make fuzz-smoke` or the specific harness target plus a seeded run.
-- Code changes: always ensure the test harness is updated to reflect the new code, including new or changed unit, golden, integration, benchmark, or fuzz coverage as appropriate.
-
-## Final response expectations for agents
-
-When reporting completed code changes:
-
-- Cite changed files with repository-relative file citations.
-- List every test or programmatic check that was run.
-- Prefix each check command with `✅` for passing checks, `⚠️` for environment-limited warnings, or `❌` for agent-caused failures.
-- Mention committed changes and PR creation only after both have actually happened.
+- a concise summary and repository-relative citations for changed files;
+- every test/check command run, prefixed with `✅`, `⚠️`, or `❌`;
+- tests not run and why, including sandbox or dependency limitations;
+- documentation and fixture changes; and
+- commits or PRs only after they actually exist.
