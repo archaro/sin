@@ -29,6 +29,7 @@ uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 LINE_t *add_line(uv_tcp_t *line_handle);
 uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_net_echo(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_save(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -468,6 +469,12 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_EQ_INT(9, libcalls[token].call_index);
   ASSERT_EQ_INT(0, libcalls[token].args);
   ASSERT_TRUE(libcalls[token].func == lc_sys_save);
+
+  ASSERT_TRUE(libcall_lookup_token("net", "echo", &token, &args));
+  ASSERT_EQ_INT(1, args);
+  ASSERT_EQ_INT(3, libcalls[token].lib_index);
+  ASSERT_EQ_INT(4, libcalls[token].call_index);
+  ASSERT_TRUE(libcalls[token].func == lc_net_echo);
 
   const struct {
     const char *name;
@@ -983,6 +990,77 @@ void test_net_ditch_invalid_line_returns_nil(void) {
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("net.ditch");
+
+  teardown_libcall_runtime();
+}
+
+static void assert_telnet_capture_bytes(const unsigned char *expected,
+                                        size_t expected_len) {
+  ASSERT_EQ_INT(expected_len, telnet_capture_len);
+  ASSERT_TRUE(memcmp(telnet_capture, expected, expected_len) == 0);
+}
+
+static VALUE_t call_net_echo(VALUE_t value) {
+  push_stack(config.vm->stack, value);
+  (void)lc_net_echo(test_ctx(), NULL, config.itemroot);
+  return pop_stack(config.vm->stack);
+}
+
+void test_net_echo_negotiates_current_line_and_consumes_values(void) {
+  static const unsigned char will_echo[] = {
+    TELNET_IAC, TELNET_WILL, TELNET_TELOPT_ECHO
+  };
+  static const unsigned char wont_echo[] = {
+    TELNET_IAC, TELNET_WONT, TELNET_TELOPT_ECHO
+  };
+  static const unsigned char peer_do_echo[] = {
+    TELNET_IAC, TELNET_DO, TELNET_TELOPT_ECHO
+  };
+
+  setup_libcall_runtime();
+  config.maxconns = 2;
+  config.lastconn = 1;
+  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+  line[0].status = LINE_idle;
+  line[1].status = LINE_idle;
+  line[1].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
+  ASSERT_NOT_NULL(line[1].telnet);
+
+  reset_telnet_capture();
+  VALUE_t ret = call_net_echo((VALUE_t){VALUE_int, {.i = 0}});
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_telnet_capture_bytes(will_echo, sizeof(will_echo));
+
+  telnet_recv(line[1].telnet, (const char *)peer_do_echo, sizeof(peer_do_echo));
+  reset_telnet_capture();
+  ret = call_net_echo((VALUE_t){VALUE_str, {.s = strdup("enabled")}});
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_telnet_capture_bytes(wont_echo, sizeof(wont_echo));
+
+  teardown_libcall_runtime();
+}
+
+void test_net_echo_ignores_unavailable_current_line(void) {
+  setup_libcall_runtime();
+  config.maxconns = 1;
+  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+  set_error_item(config.itemroot, ERR_NETWORK_ERROR, "prior error", NULL);
+
+  config.lastconn = 1;
+  VALUE_t ret = call_net_echo((VALUE_t){VALUE_str, {.s = strdup("value")}});
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  ITEM_t *error = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, error->value.i);
+
+  config.lastconn = 0;
+  reset_telnet_capture();
+  ret = call_net_echo((VALUE_t){VALUE_bool, {.i = 0}});
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  ASSERT_EQ_INT(0, telnet_capture_len);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, error->value.i);
 
   teardown_libcall_runtime();
 }

@@ -163,6 +163,8 @@ void test_net_ditch_disconnects_active_lines(void);
 void test_net_flush_reports_line_status(void);
 void test_net_ditch_reports_inactive_lines(void);
 void test_net_ditch_invalid_line_returns_nil(void);
+void test_net_echo_negotiates_current_line_and_consumes_values(void);
+void test_net_echo_ignores_unavailable_current_line(void);
 void test_sys_item_libcalls(void);
 void test_sys_persistence_libcalls(void);
 void test_sys_introspection_libcalls(void);
@@ -486,6 +488,8 @@ static const test_case_t runtime_tests[] = {
     {"test_net_flush_reports_line_status", test_net_flush_reports_line_status},
     {"test_net_ditch_reports_inactive_lines", test_net_ditch_reports_inactive_lines},
     {"test_net_ditch_invalid_line_returns_nil", test_net_ditch_invalid_line_returns_nil},
+    {"test_net_echo_negotiates_current_line_and_consumes_values", test_net_echo_negotiates_current_line_and_consumes_values},
+    {"test_net_echo_ignores_unavailable_current_line", test_net_echo_ignores_unavailable_current_line},
     {"test_sys_item_libcalls", test_sys_item_libcalls},
     {"test_sys_persistence_libcalls", test_sys_persistence_libcalls},
     {"test_sys_introspection_libcalls", test_sys_introspection_libcalls},
