@@ -2923,7 +2923,7 @@ void test_newgametask_child_callback_uses_own_identity(void) {
   creator_ctx->current_task_id = creator->id;
   push_stack(creator->vm->stack, (VALUE_t){VALUE_str, {.s = strdup("task.child")}});
   push_stack(creator->vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
-  push_stack(creator->vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  push_stack(creator->vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
   (void)lc_task_newgametask(creator_ctx, NULL, config.itemroot);
   VALUE_t result = pop_stack(creator->vm->stack);
   ASSERT_EQ_INT(VALUE_int, result.type);
@@ -2933,16 +2933,19 @@ void test_newgametask_child_callback_uses_own_identity(void) {
   ASSERT_NOT_NULL(child);
   (void)lc_task_thisid(&child->runtime_context, NULL, config.itemroot);
   result = pop_stack(child->vm->stack);
-  ASSERT_EQ_INT(VALUE_int, result.type);
-  ASSERT_EQ_INT((int64_t)child_id, result.i);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
 
-  (void)uv_run(&loop, UV_RUN_DEFAULT);
+  (void)uv_run(&loop, UV_RUN_ONCE);
   ITEM_t *observed = find_item(config.itemroot, "observed.child");
   ASSERT_NOT_NULL(observed);
   ASSERT_EQ_INT(VALUE_int, observed->value.type);
   ASSERT_EQ_INT((int64_t)child_id, observed->value.i);
-  ASSERT_TRUE(find_task_by_id(child_id) == NULL);
+  ASSERT_TRUE(find_task_by_id(child_id) == child);
+  (void)lc_task_thisid(&child->runtime_context, NULL, config.itemroot);
+  result = pop_stack(child->vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
 
+  ASSERT_TRUE(request_task_close(child));
   destroy_task(creator);
   finalise_tasks(&loop);
   ASSERT_EQ_INT(0, uv_loop_close(&loop));

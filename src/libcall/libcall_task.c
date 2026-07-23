@@ -49,6 +49,7 @@ void execute_task_cb(uv_timer_t *req) {
   } else {
     logerr("Cannot execute %s - not a code item.\n", task->itemname);
   }
+  task_ctx->current_task_id = 0;
   if (task->interval == 0) {
     (void)request_task_close(task);
   }
@@ -119,7 +120,7 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   newtask->itemroot = ctx->itemroot;
   newtask->loop = ctx->loop;
   newtask->runtime_context = *ctx;
-  newtask->runtime_context.current_task_id = newtask->id;
+  newtask->runtime_context.current_task_id = 0;
   newtask->runtime_context.libcalls = NULL;
   newtask->runtime_context.initialized = false;
   if (!runtime_init(&newtask->runtime_context, newtask->vm)) {
