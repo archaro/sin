@@ -88,17 +88,17 @@ For non-trivial code changes:
 3. Review its diff and test evidence yourself.
 4. If useful, give rejected DeepSeek work one focused corrective
    `codex exec` turn with a complete updated handoff.
-5. If the second DeepSeek result still fails a check, is incomplete, violates
+5. If the third DeepSeek result still fails a check, is incomplete, violates
    an acceptance criterion, requires substantial correction, or leaves
    unresolved uncertainty, delegate the correction to `terra_writer`. Never
    give DeepSeek a third implementation turn for the same bounded task.
-6. Give Terra the original task and criteria, current tree state, a concise
+6. Give Luna the original task and criteria, current tree state, a concise
    account of DeepSeek's approach, concrete review findings, relevant failure
    output, and the exact reason for escalation. Then independently review and
-   validate Terra's result.
+   validate Luna's result.
 
 The root may make tiny mechanical edits. Substantive implementation follows
-the DeepSeek-first, Terra-on-second-rejection policy.
+the DeepSeek-first, Luna-on-third-rejection policy.
 
 ### Agent count and review scope
 
