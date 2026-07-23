@@ -22,6 +22,7 @@ void execute_task_cb(uv_timer_t *req) {
   task_ctx->vm = task->vm;
   task_ctx->itemroot = task->itemroot;
   task_ctx->loop = task->loop;
+  task_ctx->current_task_id = task->id;
   ITEM_t *item = find_item(task->itemroot, task->itemname);
   if (item && item->type == ITEM_code) {
     VALUE_t ret = interpret(task_ctx, item);
@@ -118,6 +119,7 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   newtask->itemroot = ctx->itemroot;
   newtask->loop = ctx->loop;
   newtask->runtime_context = *ctx;
+  newtask->runtime_context.current_task_id = newtask->id;
   newtask->runtime_context.libcalls = NULL;
   newtask->runtime_context.initialized = false;
   if (!runtime_init(&newtask->runtime_context, newtask->vm)) {
@@ -173,5 +175,48 @@ uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     push_stack(ctx->vm->stack,
                request_task_close(task) ? VALUE_TRUE : VALUE_FALSE);
   }
+  return nextop;
+}
+
+uint8_t *lc_task_thisid(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  if (ctx->current_task_id == 0) {
+    push_stack(ctx->vm->stack, VALUE_NIL);
+  } else {
+    push_stack(ctx->vm->stack,
+               (VALUE_t){VALUE_int, {.i = ctx->current_task_id > INT64_MAX
+                   ? INT64_MAX : (int64_t)ctx->current_task_id}});
+  }
+  return nextop;
+}
+
+uint8_t *lc_task_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  VALUE_t arg = pop_stack(ctx->vm->stack);
+  if (!lc_value_is_type(arg, VALUE_int)) {
+    lc_cleanup_values(&arg, 1);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "task.exists expects an integer task id; floats and strings are invalid");
+  }
+  int64_t id = arg.i;
+  if (id < 0) {
+    push_stack(ctx->vm->stack, VALUE_FALSE);
+    return nextop;
+  }
+  TASK_t *task = find_task_by_id((uint64_t)id);
+  push_stack(ctx->vm->stack, task ? VALUE_TRUE : VALUE_FALSE);
+  return nextop;
+}
+
+uint8_t *lc_task_count(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  size_t count = task_list_count();
+  int64_t result;
+  if (count > (size_t)INT64_MAX) {
+    result = INT64_MAX;
+  } else {
+    result = (int64_t)count;
+  }
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_int, {.i = result}});
   return nextop;
 }

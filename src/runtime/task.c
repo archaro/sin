@@ -225,3 +225,13 @@ TASK_t *find_task_by_id(uint64_t id) {
   // Not found
   return NULL;
 }
+
+size_t task_list_count(void) {
+  size_t count = 0;
+  TASKNODE_t *tn = task_list;
+  while (tn != NULL) {
+    count++;
+    tn = tn->next;
+  }
+  return count;
+}

@@ -56,4 +56,7 @@
   X("str",  "padleft",     4, 16, 2, lc_str_padleft) \
   X("str",  "padright",    4, 17, 2, lc_str_padright) \
   X("task", "newgametask", 2,  0, 3, lc_task_newgametask) \
-  X("task", "killtask",    2,  1, 1, lc_task_killtask)
+  X("task", "killtask",    2,  1, 1, lc_task_killtask) \
+  X("task", "thisid",      2,  2, 0, lc_task_thisid) \
+  X("task", "exists",      2,  3, 1, lc_task_exists) \
+  X("task", "count",       2,  4, 0, lc_task_count)

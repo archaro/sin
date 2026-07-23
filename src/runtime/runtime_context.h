@@ -68,6 +68,9 @@ struct RuntimeContext {
   LibcallRegistry *libcalls;
   bool initialized;
   bool interrupted;
+  // Zero when the context is not inside a task callback, otherwise the
+  // positive integer id of the timer-backed task whose callback is active.
+  uint64_t current_task_id;
 };
 
 bool runtime_init(RuntimeContext *ctx, VM_t *vm);

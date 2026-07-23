@@ -46,3 +46,4 @@ bool request_task_close(TASK_t *task);
 void destroy_task(TASK_t *task);
 void destroy_task_by_id(uint64_t id);
 TASK_t *find_task_by_id(uint64_t id);
+size_t task_list_count(void);

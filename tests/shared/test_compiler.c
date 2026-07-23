@@ -177,6 +177,13 @@ void test_sys_wall_milliseconds_boundaries(void);
 void test_sys_caller_paramcount_libcalls(void);
 void test_sys_source_libcall(void);
 void test_libcall_float_integer_only_arguments_rejected(void);
+void test_task_introspection_thisid_ordinary_context_returns_nil(void);
+void test_task_introspection_exists_valid_and_invalid_ids(void);
+void test_task_exists_rejects_non_integer(void);
+void test_task_introspection_count_returns_zero_with_no_tasks(void);
+void test_task_introspection_count_and_exists_with_lifecycle(void);
+void test_task_thisid_in_callback_survives_self_close(void);
+void test_newgametask_child_callback_uses_own_identity(void);
 void test_libcall_output_formats_values(void);
 void test_str_libcalls_float_returns_invalidargs_nil(void);
 void test_str_len_returns_string_byte_length(void);
@@ -507,6 +514,13 @@ static const test_case_t runtime_tests[] = {
     {"test_sys_caller_paramcount_libcalls", test_sys_caller_paramcount_libcalls},
     {"test_sys_source_libcall", test_sys_source_libcall},
     {"test_libcall_float_integer_only_arguments_rejected", test_libcall_float_integer_only_arguments_rejected},
+    {"test_task_introspection_thisid_ordinary_context_returns_nil", test_task_introspection_thisid_ordinary_context_returns_nil},
+    {"test_task_introspection_exists_valid_and_invalid_ids", test_task_introspection_exists_valid_and_invalid_ids},
+    {"test_task_exists_rejects_non_integer", test_task_exists_rejects_non_integer},
+    {"test_task_introspection_count_returns_zero_with_no_tasks", test_task_introspection_count_returns_zero_with_no_tasks},
+    {"test_task_introspection_count_and_exists_with_lifecycle", test_task_introspection_count_and_exists_with_lifecycle},
+    {"test_task_thisid_in_callback_survives_self_close", test_task_thisid_in_callback_survives_self_close},
+    {"test_newgametask_child_callback_uses_own_identity", test_newgametask_child_callback_uses_own_identity},
     {"test_str_libcalls_float_returns_invalidargs_nil", test_str_libcalls_float_returns_invalidargs_nil},
     {"test_str_len_returns_string_byte_length", test_str_len_returns_string_byte_length},
     {"test_str_valtostr_converts_values_to_strings", test_str_valtostr_converts_values_to_strings},

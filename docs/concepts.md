@@ -163,6 +163,11 @@ interval keeps the task active until `task.killtask{id}` closes it. Intervals
 must be non-negative integers no greater than `INT64_MAX / 100`; a task also
 requires an initialized event loop and an existing item, and logs an error rather
 than executing when that item is not a code item.
+Within a timer task callback, `task.thisid` reports that task's id, including
+while synchronously called items execute and after the task asks to close itself.
+Outside such a callback it returns `nil`. `task.exists{id}` checks whether an id
+is currently scheduled, and `task.count` reports how many scheduled tasks remain;
+a close request makes both observations change immediately.
 
 ## Libraries ##
 
@@ -234,6 +239,9 @@ The `task` library is described in the task lifecycle above. `task.newgametask`
 returns an integer task id on success; a zero repeat interval makes the task
 one-shot, while a positive repeat interval keeps it active until killed.
 `task.killtask{<integer>}` takes one argument, which evaluates to the id of the task to be killed.  If the argument is not an integer, the libcall sets `ERR_RUNTIME_INVALIDARGS` and returns `nil`.  If the task does not exist or the id is negative, the libcall returns `false` without changing `error`.  Otherwise, the task is removed from the list of scheduled tasks and the libcall returns `true`.
+`task.exists{<integer>}` returns whether that task is currently scheduled, while
+`task.count` returns the number of scheduled tasks. `task.thisid` returns the
+currently executing timer task id or `nil` in ordinary runtime contexts.
 
 The `str` library contains libcalls which operate on or produce string values:  
 `str.capitalise{<expr>}` capitalises the first letter of the given string.  

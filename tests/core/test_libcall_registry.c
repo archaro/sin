@@ -7,6 +7,7 @@
 
 #include "libcall.h"
 #include "config.h"
+#include "compiler/compiler_pipeline.h"
 #include "error.h"
 #include "interpret.h"
 #include "item.h"
@@ -24,6 +25,10 @@
 
 uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_task_thisid(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_task_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_task_count(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+void execute_task_cb(uv_timer_t *req);
 uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 LINE_t *add_line(uv_tcp_t *line_handle);
@@ -214,6 +219,25 @@ static ITEM_t *insert_halt_code(ITEM_t *root, const char *name) {
   bytecode[2] = (uint8_t)'h';
   ITEM_t *item = insert_code_item(root, name, 3u, bytecode);
   ASSERT_NOT_NULL(item);
+  return item;
+}
+
+static ITEM_t *insert_compiled_code(ITEM_t *root, const char *name,
+                                    const char *source) {
+  OUTPUT_t *out = NULL;
+  char *errdetail = NULL;
+  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out,
+                                         &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(out);
+  size_t length = (size_t)(out->nextbyte - out->bytecode);
+  ASSERT_TRUE(length <= UINT32_MAX);
+  uint8_t *bytecode = out->bytecode;
+  out->bytecode = NULL;
+  ITEM_t *item = insert_code_item(root, name, (uint32_t)length, bytecode);
+  ASSERT_NOT_NULL(item);
+  free(out);
   return item;
 }
 
@@ -536,11 +560,35 @@ void test_libcall_registry_roundtrip(void) {
     ASSERT_TRUE(libcall_func_token(token) == sys_introspection_calls[i].handler);
   }
 
-  ASSERT_TRUE(libcall_lookup_token("task", "newgametask", &token, &args));
-  ASSERT_EQ_INT(3, args);
-  args = 0;
-  ASSERT_TRUE(libcall_token_arg_count(token, &args));
-  ASSERT_EQ_INT(3, args);
+  const struct {
+    const char *name;
+    uint8_t token;
+    int call_index;
+    uint8_t arity;
+    OP_t handler;
+  } task_calls[] = {
+    {"newgametask", 47, 0, 3, lc_task_newgametask},
+    {"killtask", 48, 1, 1, lc_task_killtask},
+    {"thisid", 49, 2, 0, lc_task_thisid},
+    {"exists", 50, 3, 1, lc_task_exists},
+    {"count", 51, 4, 0, lc_task_count},
+  };
+  for (size_t i = 0; i < sizeof(task_calls) / sizeof(task_calls[0]); i++) {
+    token = 0;
+    args = 255;
+    ASSERT_TRUE(libcall_lookup_token("task", task_calls[i].name, &token,
+                                     &args));
+    ASSERT_EQ_INT(task_calls[i].token, token);
+    ASSERT_EQ_INT(task_calls[i].arity, args);
+    ASSERT_EQ_INT(2, libcalls[token].lib_index);
+    ASSERT_EQ_INT(task_calls[i].call_index, libcalls[token].call_index);
+    ASSERT_EQ_INT(task_calls[i].arity, libcalls[token].args);
+    ASSERT_TRUE(libcalls[token].func == task_calls[i].handler);
+    ASSERT_TRUE(libcall_func_token(token) == task_calls[i].handler);
+    args = 255;
+    ASSERT_TRUE(libcall_token_arg_count(token, &args));
+    ASSERT_EQ_INT(task_calls[i].arity, args);
+  }
   ASSERT_TRUE(!libcall_lookup_token("missing", "missing", &token, &args));
 
   ASSERT_TRUE(libcall_lookup_token("str", "valtostr", &token, &args));
@@ -2677,5 +2725,226 @@ void test_libcall_output_formats_values(void) {
     assert_net_write_output(net_cases[i].value, net_cases[i].expected);
   }
 
+  teardown_libcall_runtime();
+}
+
+void test_task_introspection_thisid_ordinary_context_returns_nil(void) {
+  setup_libcall_runtime();
+
+  /* Set a pre-existing error item to verify it is preserved. */
+  set_error_item(config.itemroot, ERR_NETWORK_ERROR, "prior error", NULL);
+
+  (void)lc_task_thisid(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+
+  /* Verify the unrelated error was preserved. */
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(VALUE_int, err->value.type);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+
+  RuntimeContext *task_ctx = test_ctx();
+  task_ctx->current_task_id = 7;
+  (void)lc_task_thisid(task_ctx, NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(7, ret.i);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, find_item(config.itemroot, "error")->value.i);
+
+  teardown_libcall_runtime();
+}
+
+void test_task_introspection_exists_valid_and_invalid_ids(void) {
+  setup_libcall_runtime();
+
+  /* Set a pre-existing error to verify preservation. */
+  set_error_item(config.itemroot, ERR_RUNTIME_INVALIDARGS, "some prior error", NULL);
+
+  /* Negative id → false, error preserved. */
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
+  (void)lc_task_exists(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+
+  /* Unknown id → false, error preserved. */
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 99999}});
+  (void)lc_task_exists(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+
+  teardown_libcall_runtime();
+}
+
+void test_task_exists_rejects_non_integer(void) {
+  setup_libcall_runtime();
+
+  /* Float rejection: consumes + cleans up, sets ERR_RUNTIME_INVALIDARGS,
+   * returns nil, detail mentions task.exists. */
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 2.5}});
+  (void)lc_task_exists(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_float_detail_contains("task.exists");
+
+  /* Owned string rejection: consumes + cleans up, sets error. */
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("xyz")}});
+  (void)lc_task_exists(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("task.exists");
+
+  /* Bool rejection. */
+  push_stack(config.vm->stack, (VALUE_t){VALUE_bool, {.i = 1}});
+  (void)lc_task_exists(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("task.exists");
+
+  teardown_libcall_runtime();
+}
+
+void test_task_introspection_count_returns_zero_with_no_tasks(void) {
+  setup_libcall_runtime();
+
+  set_error_item(config.itemroot, ERR_RUNTIME_INVALIDARGS, "prior error", NULL);
+
+  (void)lc_task_count(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+
+  teardown_libcall_runtime();
+}
+
+void test_task_introspection_count_and_exists_with_lifecycle(void) {
+  uv_loop_t loop;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  setup_libcall_runtime();
+  config.loop = &loop;
+  init_tasks();
+  set_error_item(config.itemroot, ERR_RUNTIME_INVALIDARGS, "prior error", NULL);
+
+  (void)lc_task_count(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+
+  TASK_t *task = make_task("lifecycle.task", 1);
+  ASSERT_NOT_NULL(task);
+  uint64_t id = task->id;
+  ASSERT_TRUE(start_task_timer(task, &loop, execute_task_cb, 1000));
+
+  (void)lc_task_count(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(1, ret.i);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = (int64_t)id}});
+  (void)lc_task_exists(test_ctx(), NULL, config.itemroot);
+  assert_bool_return(pop_stack(config.vm->stack), 1);
+
+  ASSERT_TRUE(request_task_close(task));
+  (void)lc_task_count(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = (int64_t)id}});
+  (void)lc_task_exists(test_ctx(), NULL, config.itemroot);
+  assert_bool_return(pop_stack(config.vm->stack), 0);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, find_item(config.itemroot, "error")->value.i);
+
+  finalise_tasks(&loop);
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
+  teardown_libcall_runtime();
+}
+
+void test_task_thisid_in_callback_survives_self_close(void) {
+  uv_loop_t loop;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  setup_libcall_runtime();
+  config.loop = &loop;
+  init_tasks();
+  insert_compiled_code(config.itemroot, "callback.helper", "task.thisid;");
+  insert_compiled_code(config.itemroot, "task.callback",
+      "observed.before = callback.helper;"
+      "task.killtask{task.thisid};"
+      "observed.after = task.thisid;");
+  set_error_item(config.itemroot, ERR_NETWORK_ERROR, "prior error", NULL);
+
+  TASK_t *task = make_task("task.callback", 1);
+  ASSERT_NOT_NULL(task);
+  uint64_t id = task->id;
+  task->itemroot = config.itemroot;
+  ASSERT_TRUE(start_task_timer(task, &loop, execute_task_cb, 0));
+  (void)uv_run(&loop, UV_RUN_DEFAULT);
+
+  ITEM_t *before = find_item(config.itemroot, "observed.before");
+  ITEM_t *after = find_item(config.itemroot, "observed.after");
+  ASSERT_NOT_NULL(before);
+  ASSERT_NOT_NULL(after);
+  ASSERT_EQ_INT(VALUE_int, before->value.type);
+  ASSERT_EQ_INT(VALUE_int, after->value.type);
+  ASSERT_EQ_INT((int64_t)id, before->value.i);
+  ASSERT_EQ_INT((int64_t)id, after->value.i);
+  ASSERT_TRUE(find_task_by_id(id) == NULL);
+
+  finalise_tasks(&loop);
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
+  teardown_libcall_runtime();
+}
+
+void test_newgametask_child_callback_uses_own_identity(void) {
+  uv_loop_t loop;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  setup_libcall_runtime();
+  config.loop = &loop;
+  init_tasks();
+  insert_compiled_code(config.itemroot, "task.child",
+                       "observed.child = task.thisid;");
+
+  TASK_t *creator = make_task("task.creator", 1);
+  ASSERT_NOT_NULL(creator);
+  RuntimeContext *creator_ctx = &creator->runtime_context;
+  runtime_context_init(creator_ctx, creator->vm);
+  creator_ctx->itemroot = config.itemroot;
+  creator_ctx->loop = &loop;
+  creator_ctx->current_task_id = creator->id;
+  push_stack(creator->vm->stack, (VALUE_t){VALUE_str, {.s = strdup("task.child")}});
+  push_stack(creator->vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  push_stack(creator->vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  (void)lc_task_newgametask(creator_ctx, NULL, config.itemroot);
+  VALUE_t result = pop_stack(creator->vm->stack);
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  uint64_t child_id = (uint64_t)result.i;
+  ASSERT_TRUE(child_id != creator->id);
+  TASK_t *child = find_task_by_id(child_id);
+  ASSERT_NOT_NULL(child);
+  (void)lc_task_thisid(&child->runtime_context, NULL, config.itemroot);
+  result = pop_stack(child->vm->stack);
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT((int64_t)child_id, result.i);
+
+  (void)uv_run(&loop, UV_RUN_DEFAULT);
+  ITEM_t *observed = find_item(config.itemroot, "observed.child");
+  ASSERT_NOT_NULL(observed);
+  ASSERT_EQ_INT(VALUE_int, observed->value.type);
+  ASSERT_EQ_INT((int64_t)child_id, observed->value.i);
+  ASSERT_TRUE(find_task_by_id(child_id) == NULL);
+
+  destroy_task(creator);
+  finalise_tasks(&loop);
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
   teardown_libcall_runtime();
 }
