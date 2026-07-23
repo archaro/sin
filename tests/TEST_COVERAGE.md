@@ -6,7 +6,7 @@ This document maps major subsystems to concrete test entry points so reviewers c
 
 ### Covered entry points
 - **Harness and suite wiring**
-  - `tests/shared/test_compiler.c`
+  - `tests/shared/test_harness.c`
     - `main(...)`
     - `run_suite(...)`
     - Per-test and per-suite elapsed-time reporting

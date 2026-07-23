@@ -53,4 +53,4 @@ Example:
 {"echo_load_expected", "tests/fixtures/interpret/echo-load.expected.txt", "SOT: runtime output contract for echo-load | regen: ./scomp examples/echo-load.src tests/fixtures/interpret/echo-load.generated.obj && ./sin -o tests/fixtures/interpret/echo-load.generated.obj > tests/fixtures/interpret/echo-load.expected.txt"},
 ```
 
-The enforcement test (`tests/shared/test_fixture_policy.c`) is compiled into `tests/test-compiler` by the Makefile and validates declared fixture existence, metadata format, duplicate declarations, and pipeline golden paths. Run `make test` for the standard fixture checks; use `make fuzz-corpora` to seed fuzz inputs from checked-in `.hex` fixtures and `examples/*.src` files.
+The enforcement test (`tests/shared/test_fixture_policy.c`) is compiled into `tests/test-suite` by the Makefile and validates declared fixture existence, metadata format, duplicate declarations, and pipeline golden paths. Run `make test` for the standard fixture checks; use `make fuzz-corpora` to seed fuzz inputs from checked-in `.hex` fixtures and `examples/*.src` files.

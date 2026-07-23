@@ -68,7 +68,7 @@ LEX = flex
 
 # Test runner
 TEST_DIR := tests
-TEST_BIN := $(TEST_DIR)/test-compiler
+TEST_BIN := $(TEST_DIR)/test-suite
 NETWORK_TEST_BIN := $(TEST_DIR)/network/test-network
 CHAT_SMOKE_BIN := $(TEST_DIR)/network/test-chat-smoke
 TEST_BINS := $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN)
@@ -97,7 +97,7 @@ FUZZ_CFLAGS ?= $(CFLAGS) $(FUZZ_SANITIZE_FLAGS)
 FUZZ_LDFLAGS ?= $(LDFLAGS) $(FUZZ_SANITIZE_FLAGS)
 FUZZ_MAKE = $(MAKE) CC="$(FUZZ_CC)" CFLAGS="$(FUZZ_CFLAGS)" LDFLAGS="$(FUZZ_LDFLAGS)"
 TEST_SHARED_SOURCES := \
-	$(TEST_DIR)/shared/test_compiler.c \
+	$(TEST_DIR)/shared/test_harness.c \
 	$(TEST_DIR)/shared/test_helpers.c \
 	$(TEST_DIR)/shared/test_libcall_support.c \
 	$(TEST_DIR)/shared/test_fixture_policy.c \
@@ -211,11 +211,11 @@ help:
 		'  clean            Remove objects, binaries, libraries, tests, fuzz artifacts, and stale generated files' \
 		'' \
 		'Test targets:' \
-		'  test             Build debug artifacts and run network + standard suite' \
+		'  test             Build debug artifacts and run network + combined core/compiler/runtime suite' \
 		'  test-network     Build and run network tests only' \
 		'  test-chat-smoke  Run the real chat example through localhost' \
 		'  test-build-switch Verify build variants can be switched without cleaning' \
-		'  test-strict      Run standard suite with benchmark budgets enabled' \
+		'  test-strict      Run combined core/compiler/runtime suite with benchmark budgets enabled' \
 		'  test-release     Clean, rebuild, and test with BUILD=release and strict warnings' \
 		'  test-warnings    Clean, rebuild, and test with STRICT_WARNINGS=1' \
 		'  test-asan        Clean, rebuild, and test with BUILD=sanitize, leak checks off' \

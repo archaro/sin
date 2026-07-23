@@ -248,18 +248,6 @@ void test_value_comparison_float_ieee754_helpers(void);
 void test_value_comparison_string_helpers(void);
 void test_value_comparison_mismatched_type_equality_quirk(void);
 void test_value_comparison_unsupported_ordering_is_false(void);
-void test_runtime_decode_requires_frame_bounds(void);
-void test_interpreter_truncated_single_byte_operands(void);
-void test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error(void);
-void test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error(void);
-void test_strict_runtime_contracts_default_preserves_fetch_argument_drops(void);
-void test_strict_validation_alone_preserves_fetch_argument_drops(void);
-void test_strict_runtime_contracts_reports_too_many_item_arguments(void);
-void test_strict_runtime_contracts_reports_invalid_item_name_arguments(void);
-void test_strict_runtime_contracts_reports_missing_item_arguments(void);
-void test_strict_runtime_contracts_uses_context_itemroot(void);
-void test_strict_validation_runtime_opt_in(void);
-void test_strict_validation_rejects_null_bytecode(void);
 
 /* Compiler component tests. */
 void test_emitbc_header(void);
@@ -303,6 +291,18 @@ void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void);
 void test_interpret_stress(void);
 void test_runtime_benchmark_optin(void);
 
+void test_runtime_decode_requires_frame_bounds(void);
+void test_interpreter_truncated_single_byte_operands(void);
+void test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error(void);
+void test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error(void);
+void test_strict_runtime_contracts_default_preserves_fetch_argument_drops(void);
+void test_strict_validation_alone_preserves_fetch_argument_drops(void);
+void test_strict_runtime_contracts_reports_too_many_item_arguments(void);
+void test_strict_runtime_contracts_reports_invalid_item_name_arguments(void);
+void test_strict_runtime_contracts_reports_missing_item_arguments(void);
+void test_strict_runtime_contracts_uses_context_itemroot(void);
+void test_strict_validation_runtime_opt_in(void);
+void test_strict_validation_rejects_null_bytecode(void);
 static const test_case_t core_tests[] = {
     {"test_absyn_nested_binary_expressions", test_absyn_nested_binary_expressions},
     {"test_absyn_stmtlist_multiple_statements", test_absyn_stmtlist_multiple_statements},
@@ -422,20 +422,6 @@ static const test_case_t core_tests[] = {
     {"test_value_comparison_string_helpers", test_value_comparison_string_helpers},
     {"test_value_comparison_mismatched_type_equality_quirk", test_value_comparison_mismatched_type_equality_quirk},
     {"test_value_comparison_unsupported_ordering_is_false", test_value_comparison_unsupported_ordering_is_false},
-    {"test_runtime_decode_requires_frame_bounds", test_runtime_decode_requires_frame_bounds},
-    {"test_interpreter_truncated_single_byte_operands", test_interpreter_truncated_single_byte_operands},
-    {"test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error",
-     test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error},
-    {"test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error",
-     test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error},
-    {"test_strict_runtime_contracts_default_preserves_fetch_argument_drops", test_strict_runtime_contracts_default_preserves_fetch_argument_drops},
-    {"test_strict_validation_alone_preserves_fetch_argument_drops", test_strict_validation_alone_preserves_fetch_argument_drops},
-    {"test_strict_runtime_contracts_reports_too_many_item_arguments", test_strict_runtime_contracts_reports_too_many_item_arguments},
-    {"test_strict_runtime_contracts_reports_invalid_item_name_arguments", test_strict_runtime_contracts_reports_invalid_item_name_arguments},
-    {"test_strict_runtime_contracts_reports_missing_item_arguments", test_strict_runtime_contracts_reports_missing_item_arguments},
-    {"test_strict_runtime_contracts_uses_context_itemroot", test_strict_runtime_contracts_uses_context_itemroot},
-    {"test_strict_validation_runtime_opt_in", test_strict_validation_runtime_opt_in},
-    {"test_strict_validation_rejects_null_bytecode", test_strict_validation_rejects_null_bytecode},
 };
 
 static const test_case_t compiler_tests[] = {
@@ -473,6 +459,20 @@ static const test_case_t compiler_tests[] = {
 };
 
 static const test_case_t runtime_tests[] = {
+    {"test_runtime_decode_requires_frame_bounds", test_runtime_decode_requires_frame_bounds},
+    {"test_interpreter_truncated_single_byte_operands", test_interpreter_truncated_single_byte_operands},
+    {"test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error",
+     test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error},
+    {"test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error",
+     test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error},
+    {"test_strict_runtime_contracts_default_preserves_fetch_argument_drops", test_strict_runtime_contracts_default_preserves_fetch_argument_drops},
+    {"test_strict_validation_alone_preserves_fetch_argument_drops", test_strict_validation_alone_preserves_fetch_argument_drops},
+    {"test_strict_runtime_contracts_reports_too_many_item_arguments", test_strict_runtime_contracts_reports_too_many_item_arguments},
+    {"test_strict_runtime_contracts_reports_invalid_item_name_arguments", test_strict_runtime_contracts_reports_invalid_item_name_arguments},
+    {"test_strict_runtime_contracts_reports_missing_item_arguments", test_strict_runtime_contracts_reports_missing_item_arguments},
+    {"test_strict_runtime_contracts_uses_context_itemroot", test_strict_runtime_contracts_uses_context_itemroot},
+    {"test_strict_validation_runtime_opt_in", test_strict_validation_runtime_opt_in},
+    {"test_strict_validation_rejects_null_bytecode", test_strict_validation_rejects_null_bytecode},
     {"test_interpret_semantics_golden", test_interpret_semantics_golden},
     {"test_interpret_result_semantics", test_interpret_result_semantics},
     {"test_interpret_rejects_malformed_bytecode_before_execution", test_interpret_rejects_malformed_bytecode_before_execution},

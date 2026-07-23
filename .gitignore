@@ -7,7 +7,7 @@
 /scomp
 /sin
 /sdiss
-tests/test-compiler
+tests/test-suite
 tests/network/test-network
 tests/network/test-chat-smoke
 tests/fuzz/fuzz_scomp
