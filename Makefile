@@ -99,6 +99,7 @@ FUZZ_MAKE = $(MAKE) CC="$(FUZZ_CC)" CFLAGS="$(FUZZ_CFLAGS)" LDFLAGS="$(FUZZ_LDFL
 TEST_SHARED_SOURCES := \
 	$(TEST_DIR)/shared/test_compiler.c \
 	$(TEST_DIR)/shared/test_helpers.c \
+	$(TEST_DIR)/shared/test_libcall_support.c \
 	$(TEST_DIR)/shared/test_fixture_policy.c \
 	$(TEST_DIR)/shared/test_pipeline_cases.c
 TEST_CORE_SOURCES := \
@@ -113,6 +114,11 @@ TEST_CORE_SOURCES := \
 	$(TEST_DIR)/core/test_itemstore_io.c \
 	$(TEST_DIR)/core/test_itemstore_verifier.c \
 	$(TEST_DIR)/core/test_libcall_registry.c \
+	$(TEST_DIR)/core/test_libcall_sys.c \
+	$(TEST_DIR)/core/test_libcall_task.c \
+	$(TEST_DIR)/core/test_libcall_net.c \
+	$(TEST_DIR)/core/test_libcall_str.c \
+	$(TEST_DIR)/core/test_libcall_sys_compile.c \
 	$(TEST_DIR)/core/test_task_lifecycle.c \
 	$(TEST_DIR)/core/test_relative_item_leading_dot.c \
 	$(TEST_DIR)/core/test_stack_frames.c \
@@ -132,7 +138,7 @@ TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_sdiss_fixtures.c \
 	$(TEST_DIR)/compiler/test_compiler_context_failures.c \
 	$(TEST_DIR)/compiler/test_compiler_diag_pipeline.c \
-	$(TEST_DIR)/compiler/test_sys_compile_libcall.c
+
 TEST_INTERPRETER_SOURCES := \
 	$(TEST_DIR)/interpreter/test_interpret_semantics_golden.c \
 	$(TEST_DIR)/interpreter/test_interpret_stress.c \

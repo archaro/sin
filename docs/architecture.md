@@ -160,13 +160,17 @@ item data. Crossings between them should be explicit. Examples:
 - Keep leaf modules (`common`, bytecode helpers, itemstore primitives) free of
   tool and network dependencies.
 - Add new libcalls through `src/libcall/libcall_list.h`, implement the
-  handler, and add runtime coverage in `tests/core/test_libcall_registry.c`.
+  handler, and add runtime coverage in the matching `tests/core/test_libcall_*.c`
+  file: registry/generic contracts remain in `test_libcall_registry.c`, with
+  `sys`, `task`, `net`, and `str` handlers in their respective files.
 - Keep low-level, itemstore, task, stack, value, and libcall tests under
-  `tests/core/`; compiler and disassembler tests under `tests/compiler/`; and
+  `tests/core/` (including `test_libcall_sys_compile.c`, the runtime
+  integration coverage for `sys.compile`); compiler and disassembler tests under `tests/compiler/`; and
   interpreter semantic/stress/benchmark tests under `tests/interpreter/`.
 - The dedicated network harnesses live under `tests/network/`: one uses local
   libuv/libtelnet stubs and the other runs the chat example over localhost.
-  Shared harness and fixture-policy code lives under `tests/shared/`, golden
+  Shared harness and fixture-policy code lives under `tests/shared/`; the
+  private libcall runtime fixture support is `test_libcall_support.[ch]`. Golden
   inputs and outputs under `tests/fixtures/`, and fuzz harnesses/corpora under
   `tests/fuzz/`.
 - If moving files later, do it as behavior-preserving path/build/include updates
