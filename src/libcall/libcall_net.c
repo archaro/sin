@@ -90,6 +90,15 @@ uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *lc_net_maxlines(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Return the configured bound for zero-based connection-slot enumeration.
+  LibcallNetworkDeps deps = lc_net_deps(ctx);
+  (void)item;
+
+  lc_net_push_int(ctx, (int64_t)(*deps.maxconns));
+  return nextop;
+}
+
 uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Consume line and value, send value text to an active connection, and push
   // nil on success/no-op, false on output backpressure, or nil+invalidargs for

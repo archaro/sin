@@ -157,6 +157,7 @@ void test_task_repeating_execution_and_explicit_kill(void);
 void test_task_setup_failures_unwind(void);
 void test_task_id_reuse_is_exactly_once(void);
 void test_task_finalise_handles_active_and_closing(void);
+void test_net_maxlines_returns_configured_slot_bound(void);
 void test_net_write_ignores_non_writable_lines(void);
 void test_net_input_fair_queue_progresses_connect_data_disconnect(void);
 void test_net_ditch_disconnects_active_lines(void);
@@ -482,6 +483,7 @@ static const test_case_t runtime_tests[] = {
     {"test_task_setup_failures_unwind", test_task_setup_failures_unwind},
     {"test_task_id_reuse_is_exactly_once", test_task_id_reuse_is_exactly_once},
     {"test_task_finalise_handles_active_and_closing", test_task_finalise_handles_active_and_closing},
+    {"test_net_maxlines_returns_configured_slot_bound", test_net_maxlines_returns_configured_slot_bound},
     {"test_net_write_ignores_non_writable_lines", test_net_write_ignores_non_writable_lines},
     {"test_net_input_fair_queue_progresses_connect_data_disconnect", test_net_input_fair_queue_progresses_connect_data_disconnect},
     {"test_net_ditch_disconnects_active_lines", test_net_ditch_disconnects_active_lines},

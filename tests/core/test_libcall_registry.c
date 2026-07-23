@@ -30,6 +30,7 @@ LINE_t *add_line(uv_tcp_t *line_handle);
 uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_echo(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_net_maxlines(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_save(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -476,6 +477,13 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_EQ_INT(4, libcalls[token].call_index);
   ASSERT_TRUE(libcalls[token].func == lc_net_echo);
 
+  ASSERT_TRUE(libcall_lookup_token("net", "maxlines", &token, &args));
+  ASSERT_EQ_INT(26, token);
+  ASSERT_EQ_INT(0, args);
+  ASSERT_EQ_INT(3, libcalls[token].lib_index);
+  ASSERT_EQ_INT(5, libcalls[token].call_index);
+  ASSERT_TRUE(libcalls[token].func == lc_net_maxlines);
+
   const struct {
     const char *name;
     uint8_t token;
@@ -792,6 +800,33 @@ void test_newgametask_rejects_missing_event_loop_before_returning_task_id(void) 
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("task.newgametask requires an active event loop");
   ASSERT_TRUE(find_task_by_id(1) == NULL);
+
+  teardown_libcall_runtime();
+}
+
+void test_net_maxlines_returns_configured_slot_bound(void) {
+  setup_libcall_runtime();
+
+  set_error_item(config.itemroot, ERR_NETWORK_ERROR, "prior error", NULL);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  (void)lc_net_maxlines(test_ctx(), NULL, config.itemroot);
+  ASSERT_EQ_INT(1, size_stack(config.vm->stack));
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+
+  config.maxconns = 37;
+  (void)lc_net_maxlines(test_ctx(), NULL, config.itemroot);
+  ASSERT_EQ_INT(1, size_stack(config.vm->stack));
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(37, ret.i);
+  err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
 
   teardown_libcall_runtime();
 }
