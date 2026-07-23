@@ -262,3 +262,32 @@ uint8_t *lc_net_connected(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
              lc_net_line_can_write(linep) ? VALUE_TRUE : VALUE_FALSE);
   return nextop;
 }
+
+uint8_t *lc_net_address(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  LibcallNetworkDeps deps = lc_net_deps(ctx);
+  (void)item;
+
+  VALUE_t linenum = pop_stack(ctx->vm->stack);
+  if (!lc_value_is_type(linenum, VALUE_int) || linenum.i < 0 ||
+      (uint64_t)linenum.i > SIZE_MAX || (size_t)linenum.i >= *deps.maxconns) {
+    value_free(&linenum);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "net.address line must be a non-negative integer connection index within the configured range; floats are invalid");
+  }
+
+  size_t line_index = (size_t)linenum.i;
+  LINE_t *linep = &deps.lines[line_index];
+  value_free(&linenum);
+  if (!lc_net_line_can_write(linep) || !linep->address[0]) {
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+
+  char *address = strdup(linep->address);
+  if (!address) {
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = address}});
+  return nextop;
+}
