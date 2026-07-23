@@ -17,6 +17,6 @@ These instructions supplement the repository-root `AGENTS.md` for `src/net/`.
 Choose validation at the affected boundary:
 
 - `make test-network` for networking and protocol behavior.
-- The focused cases in `tests/core/test_libcall_registry.c` for `net.*` argument,
+- The focused cases in `tests/core/test_libcall_net.c` for `net.*` argument,
   state, and negotiation-byte behavior.
 - `make test-chat-smoke` for end-to-end client/server behavior.

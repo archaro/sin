@@ -222,7 +222,7 @@ integration, and an opt-in performance guard.
         stack balance, and temporary-tree cleanup
     - `test_sys_wall_milliseconds_boundaries`
     - `test_sys_item_libcalls`
-- **Task lifecycle and scheduling (`task.*` libcalls)**
+- **Task lifecycle, scheduling, and introspection (`task.*` libcalls)**
   - `tests/core/test_task_lifecycle.c`
     - `test_task_one_shot_auto_retires`
     - `test_task_repeating_execution_and_explicit_kill`
@@ -230,10 +230,10 @@ integration, and an opt-in performance guard.
     - `test_task_id_reuse_is_exactly_once`
     - `test_task_finalise_handles_active_and_closing`
   - `tests/core/test_libcall_task.c`
+    - lifecycle and scheduling contracts
     - `test_newgametask_rejects_invalid_intervals_before_timer_start`
     - `test_newgametask_rejects_missing_event_loop_before_returning_task_id`
-- **Task introspection (`task.thisid`, `task.exists`, `task.count`)**
-  - `tests/core/test_libcall_task.c`
+    - introspection contracts (`task.thisid`, `task.exists`, `task.count`)
     - `test_task_introspection_thisid_ordinary_context_returns_nil`
     - `test_task_introspection_exists_valid_and_invalid_ids`
     - `test_task_exists_rejects_non_integer`
@@ -368,8 +368,8 @@ unified `tests/test-suite` harness:
   flushes the quit message before disconnecting, and exits through
   `sys.shutdown`.
 
-These network-specific targets complement, but do not overlap with, the
-`net.*` libcall contract tests in `tests/core/test_libcall_net.c`:
+These network-specific targets complement, but do not perfectly overlap with,
+the `net.*` libcall contract tests in `tests/core/test_libcall_net.c`:
 
 - `tests/core/test_libcall_net.c` tests the language-visible `net.*`
   call contracts (argument validation, return-value semantics, error
