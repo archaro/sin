@@ -35,6 +35,7 @@
   X("net",  "flush",       3,  3, 1, lc_net_flush) \
   X("net",  "echo",        3,  4, 1, lc_net_echo) \
   X("net",  "maxlines",    3,  5, 0, lc_net_maxlines) \
+  X("net",  "connected",   3,  6, 1, lc_net_connected) \
   X("str",  "capitalise",  4,  0, 1, lc_str_capitalise) \
   X("str",  "upper",       4,  1, 1, lc_str_upper) \
   X("str",  "lower",       4,  2, 1, lc_str_lower) \

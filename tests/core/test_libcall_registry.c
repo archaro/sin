@@ -31,6 +31,7 @@ uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_echo(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_maxlines(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_net_connected(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_save(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -483,6 +484,13 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_EQ_INT(3, libcalls[token].lib_index);
   ASSERT_EQ_INT(5, libcalls[token].call_index);
   ASSERT_TRUE(libcalls[token].func == lc_net_maxlines);
+
+  ASSERT_TRUE(libcall_lookup_token("net", "connected", &token, &args));
+  ASSERT_EQ_INT(27, token);
+  ASSERT_EQ_INT(1, args);
+  ASSERT_EQ_INT(3, libcalls[token].lib_index);
+  ASSERT_EQ_INT(6, libcalls[token].call_index);
+  ASSERT_TRUE(libcalls[token].func == lc_net_connected);
 
   const struct {
     const char *name;
@@ -1108,6 +1116,110 @@ void test_net_echo_ignores_unavailable_current_line(void) {
 
   teardown_libcall_runtime();
 }
+
+void test_net_connected_reports_writable_telnet_states(void) {
+  setup_libcall_runtime();
+
+  config.maxconns = 6;
+  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+
+  line[0].status = LINE_connecting;
+  line[0].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
+  ASSERT_NOT_NULL(line[0].telnet);
+  line[1].status = LINE_idle;
+  line[1].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
+  ASSERT_NOT_NULL(line[1].telnet);
+  line[2].status = LINE_data;
+  line[2].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
+  ASSERT_NOT_NULL(line[2].telnet);
+  line[3].status = LINE_disconnecting;
+  line[3].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
+  ASSERT_NOT_NULL(line[3].telnet);
+  line[4].status = LINE_empty;
+  line[5].status = LINE_idle;
+
+  set_error_item(config.itemroot, ERR_NETWORK_ERROR, "prior error", NULL);
+  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_NOT_NULL(err);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(1, ret.i);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 2}});
+  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(1, ret.i);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 3}});
+  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 4}});
+  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 5}});
+  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+
+  teardown_libcall_runtime();
+}
+
+void test_net_connected_invalid_line_returns_nil(void) {
+  setup_libcall_runtime();
+
+  config.maxconns = 1;
+  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
+  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("net.connected");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
+  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("net.connected");
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("net.connected");
+
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_int, {.i = INT64_C(4294967296)}});
+  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  assert_invalid_args_detail_contains("net.connected");
+
+  teardown_libcall_runtime();
+}
+
 
 void test_sys_item_libcalls(void) {
   setup_libcall_runtime();
