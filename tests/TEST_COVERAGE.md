@@ -75,15 +75,6 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - Loaded itemstore mutation after persistence: root-level children, nested
       children, code items, deletion, reinsertion, and ordered name enumeration
       before and after a second save/load cycle.
-- **Libcall registry and generic cross-library contracts**
-  - `tests/core/test_libcall_registry.c`
-    - `test_libcall_registry_roundtrip`
-      - canonical `sys`-first library grouping, alphabetical remaining
-        libraries, ascending per-library call indices, and representative
-        token/arity/handler round trips.
-    - `test_libcall_invalid_arg_branches_return_contracts`
-    - `test_libcall_float_integer_only_arguments_rejected`
-    - `test_libcall_output_formats_values`
 - **Core value/float semantics**
   - `tests/core/test_value_behavior.c`
     - `test_value_push_float_interprets_binary64_payloads`
@@ -144,7 +135,8 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 ## runtime
 
-The runtime suite (84 tests) is the largest logical suite. Twelve tests come
+The runtime suite contains 84 tests registered in `runtime_tests[]`.
+Twelve tests come
 from `tests/core/test_value_behavior.c` and exercise the decoder, interpreter
 contracts, and strict-validation machinery directly. The remaining tests cover
 interpreter golden contracts, libcall registries, per-library call contracts,
@@ -183,6 +175,9 @@ integration, and an opt-in performance guard.
   - `tests/core/test_libcall_registry.c`
     - `test_libcall_registry_roundtrip`
       - `sys.save` package index, call index, arity, token, and handler mapping
+      - canonical `sys`-first library grouping, alphabetical remaining
+        libraries, ascending per-library call indices, and representative
+        token/arity/handler round trips.
     - `test_runtime_init_validates_libcalls_once`
     - `test_libcall_registry_init_failure_has_no_partial_state`
     - `test_libcall_registry_lifecycle_reinit_sequence`
@@ -190,6 +185,9 @@ integration, and an opt-in performance guard.
     - `test_default_libcall_wrappers_lazy_init_after_reset`
     - `test_missing_libcall_is_null_and_interpret_deterministic`
     - `test_libcall_registry_self_check_invalid_entries`
+    - `test_libcall_invalid_arg_branches_return_contracts`
+    - `test_libcall_float_integer_only_arguments_rejected`
+    - `test_libcall_output_formats_values`
 - **System introspection, persistence, version, and clocks (`sys.*` libcalls)**
   - `tests/core/test_libcall_sys.c`
     - `test_sys_introspection_libcalls`
@@ -316,9 +314,10 @@ integration, and an opt-in performance guard.
   - `tests/interpreter/test_runtime_benchmark_optin.c`
     - `test_runtime_benchmark_optin`
     - strict thresholds enabled with `SIN_STRICT_BENCH=1`
-- **Shared libcall fixture support (private, not directly tested)**
-  - `tests/shared/test_libcall_support.h`
-  - `tests/shared/test_libcall_support.c`
+- **Shared libcall fixture support**
+  - `tests/shared/test_libcall_support.[ch]` provides private fixtures and
+    helpers used by the split libcall test files. It has no standalone harness
+    registration.
 
 ### Known gaps
 - Runtime stress currently covers selected fixtures (`chat_boot`,
@@ -349,7 +348,7 @@ integration, and an opt-in performance guard.
 Two additional test targets exercise network behavior independently of the
 unified `tests/test-suite` harness:
 
-- **`make test-network` (libuv/libuvtelnet stubs)**
+- **`make test-network` (libuv and libtelnet stubs)**
   Builds and runs `tests/network/test_network.c`, which includes
   `src/net/network.c` with local libuv and libtelnet stubs. These tests
   validate low-level connection-management state, ownership, and buffer
