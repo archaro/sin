@@ -22,6 +22,8 @@ kept in sync with the source files named in each document.
 - [`history.md`](history.md): project background.
 - [`documentation-roadmap.md`](documentation-roadmap.md): remaining
   documentation improvements and longer-term reference work.
+- [`0.6.3-plan.md`](0.6.3-plan.md): bounded plan and stop gates for the final
+  0.6-series release.
 
 ## Maintenance
 
