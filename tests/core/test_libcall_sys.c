@@ -40,6 +40,7 @@ uint8_t *lc_net_connected(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_address(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+char *lc_sys_backup_name(const char *filename, const char *timestamp);
 uint8_t *lc_sys_save(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_thisitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_parentitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -307,8 +308,70 @@ void test_sys_persistence_libcalls(void) {
   ASSERT_NOT_NULL(loaded_checkpoint);
   ASSERT_EQ_INT(2, loaded_checkpoint->value.i);
   destroy_item(loaded);
-  ASSERT_EQ_INT(0, unlink(backups.gl_pathv[0]));
+  char *first_backup_path = strdup(backups.gl_pathv[0]);
+  ASSERT_NOT_NULL(first_backup_path);
+  char first_backup_snapshot[sizeof(store_path) + 32u];
+  written = snprintf(first_backup_snapshot, sizeof(first_backup_snapshot),
+                     "%s.snapshot", first_backup_path);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(first_backup_snapshot));
+  ASSERT_EQ_INT(0, link(first_backup_path, first_backup_snapshot));
   globfree(&backups);
+
+  /* Exercise suffix selection with a controlled timestamp and occupied base. */
+  char collision_base[256];
+  written = snprintf(collision_base, sizeof(collision_base),
+                     "%s_%s", store_path, "20000101-000000");
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(collision_base));
+  FILE *occupied = fopen(collision_base, "wb");
+  ASSERT_NOT_NULL(occupied);
+  ASSERT_EQ_INT(0, fclose(occupied));
+  char *collision_name = lc_sys_backup_name(store_path, "20000101-000000");
+  ASSERT_NOT_NULL(collision_name);
+  char expected_collision[sizeof(collision_base) + 3u];
+  written = snprintf(expected_collision, sizeof(expected_collision), "%s_1",
+                     collision_base);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(expected_collision));
+  ASSERT_TRUE(strcmp(collision_name, expected_collision) == 0);
+  free(collision_name);
+  ASSERT_EQ_INT(0, unlink(collision_base));
+
+  /* A second backup in the same timestamp window must not replace the first. */
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "backup.only",
+                              (VALUE_t){VALUE_int, {.i = 4}}));
+  (void)lc_sys_backup(&ctx, NULL, caller);
+  assert_bool_return(pop_stack(config.vm->stack), 1);
+  glob_t second_backups = {0};
+  ASSERT_EQ_INT(0, glob(backup_pattern, 0, NULL, &second_backups));
+  ASSERT_EQ_INT(3, second_backups.gl_pathc);
+  loaded = load_itemstore(first_backup_path);
+  ASSERT_NOT_NULL(loaded);
+  ITEM_t *old_backup_value = find_item(loaded, "backup.only");
+  ASSERT_NOT_NULL(old_backup_value);
+  ASSERT_EQ_INT(3, old_backup_value->value.i);
+  destroy_item(loaded);
+  bool found_new_backup = false;
+  for (size_t backup_index = 0; backup_index < second_backups.gl_pathc;
+       backup_index++) {
+    if (strcmp(second_backups.gl_pathv[backup_index], first_backup_path) == 0
+        || strcmp(second_backups.gl_pathv[backup_index],
+                  first_backup_snapshot) == 0)
+      continue;
+    loaded = load_itemstore(second_backups.gl_pathv[backup_index]);
+    ASSERT_NOT_NULL(loaded);
+    ITEM_t *new_backup_value = find_item(loaded, "backup.only");
+    ASSERT_NOT_NULL(new_backup_value);
+    ASSERT_EQ_INT(4, new_backup_value->value.i);
+    found_new_backup = true;
+    destroy_item(loaded);
+  }
+  ASSERT_TRUE(found_new_backup);
+  assert_file_bytes_equal(first_backup_snapshot, first_backup_path,
+                          "sys.backup preserves existing target bytes");
+  for (size_t backup_index = 0; backup_index < second_backups.gl_pathc;
+       backup_index++)
+    ASSERT_EQ_INT(0, unlink(second_backups.gl_pathv[backup_index]));
+  free(first_backup_path);
+  globfree(&second_backups);
 
   char missing_parent[128];
   ASSERT_EQ_INT(0, test_make_temp_path("sin-sys-save-missing",

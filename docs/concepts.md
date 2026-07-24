@@ -175,7 +175,10 @@ Libraries look like items, but they aren't, and they are read-only.  Don't try t
 
 The `sys` library does the sort of system-wide things that you might expect:  
 `sys.backup` synchronously creates a timestamped backup of the itemstore as it
-is currently held in memory and returns a boolean success result. This return
+is currently held in memory and returns a boolean success result. The filename
+uses the readable `YYYYMMDD-HHMMSS` suffix; when that target already exists,
+`_1`, `_2`, and so on are chosen deterministically so existing backups are never
+replaced. This return
 type is an intentional compatibility change from the previous `nil` result.
 `sys.save` synchronously checkpoints the current in-memory itemstore to the
 configured primary itemstore path and returns a boolean success result. Runtime

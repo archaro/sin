@@ -1,10 +1,13 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <limits.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 #include "compiler/compiler_pipeline.h"
 #include "error.h"
@@ -132,6 +135,40 @@ static uint8_t *lc_sys_compile_fail(RuntimeContext *ctx, uint8_t *nextop,
   return lc_sys_return_false(ctx, nextop);
 }
 
+/* Pick the first unused backup name, retaining the readable timestamp in the
+ * base name and adding a deterministic numeric suffix only on collision. */
+char *lc_sys_backup_name(const char *filename, const char *timestamp) {
+  int base_needed = snprintf(NULL, 0, "%s_%s", filename, timestamp);
+  if (base_needed < 0) return NULL;
+
+  for (uint64_t suffix = 0; suffix < UINT64_MAX; suffix++) {
+    int needed = suffix == 0
+                     ? base_needed
+                     : snprintf(NULL, 0, "%s_%s_%llu", filename, timestamp,
+                                (unsigned long long)suffix);
+    if (needed < 0) return NULL;
+    size_t size = (size_t)needed + 1u;
+    char *candidate = malloc(size);
+    if (!candidate) return NULL;
+    if (suffix == 0) {
+      (void)snprintf(candidate, size, "%s_%s", filename, timestamp);
+    } else {
+      (void)snprintf(candidate, size, "%s_%s_%llu", filename, timestamp,
+                     (unsigned long long)suffix);
+    }
+
+    errno = 0;
+    struct stat candidate_stat;
+    if (lstat(candidate, &candidate_stat) != 0) {
+      if (errno == ENOENT) return candidate;
+      free(candidate);
+      return NULL;
+    }
+    free(candidate);
+  }
+  return NULL;
+}
+
 uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Save a timestamped itemstore backup and report whether persistence was
   // fully confirmed.
@@ -154,22 +191,12 @@ uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     return lc_sys_persistence_return(ctx, nextop, false);
   }
 
-  int needed = snprintf(NULL, 0, "%s_%s", ctx->itemstore_filename,
-                        timestamp);
-  if (needed < 0) {
-    lc_sys_set_persistence_error(ctx, "sys.backup",
-                                 ctx->itemstore_filename);
-    return lc_sys_persistence_return(ctx, nextop, false);
-  }
-  size_t backupfile_size = (size_t)needed + 1u;
-  char *backupfile = malloc(backupfile_size);
+  char *backupfile = lc_sys_backup_name(ctx->itemstore_filename, timestamp);
   if (!backupfile) {
     lc_sys_set_persistence_error(ctx, "sys.backup",
                                  ctx->itemstore_filename);
     return lc_sys_persistence_return(ctx, nextop, false);
   }
-  (void)snprintf(backupfile, backupfile_size, "%s_%s",
-                 ctx->itemstore_filename, timestamp);
   uint8_t *result = lc_sys_persist(ctx, nextop, "sys.backup", backupfile);
   free(backupfile);
   return result;
