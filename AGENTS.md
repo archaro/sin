@@ -55,6 +55,17 @@ codex exec -C <repo-root> --sandbox workspace-write \
   upstream fix and a cross-provider spawn and follow-up probe confirms that the
   complete plaintext payload reaches DeepSeek.
 
+### Special instructions for OpenAI models
+- In Code Mode, within each bounded stage, run independent,
+  functions.exec-available tool calls concurrently in one functions.exec call.
+- Use await Promise.allSettled([...]) when partial results are useful, and
+  inspect every result; use await Promise.all([...]) only when any failure
+  should abort the batch.
+- Keep dependencies, waits/resumes, approvals, conflicting or interdependent
+  mutations, and adaptive investigations where each result may change the next
+  step sequential.
+- Do not split otherwise batchable inspections across outer tool calls.
+
 ### Isolated handoffs
 
 For every native implementation, correction, or review agent:
