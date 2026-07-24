@@ -38,6 +38,11 @@ typedef enum {
   ITEMSTORE_DURABLE_FULL = 0,
   ITEMSTORE_DURABLE_FAST = 1
 } ITEMSTORE_DURABILITY_e;
+typedef enum {
+  ITEMSTORE_SAVE_SUCCESS,
+  ITEMSTORE_SAVE_TARGET_EXISTS,
+  ITEMSTORE_SAVE_FAILURE
+} ITEMSTORE_SAVE_RESULT_e;
 typedef bool (*ITEMSTORE_SYNC_HOOK_t)(FILE *file, const char *path);
 
 struct Item {
@@ -116,8 +121,12 @@ char *read_itemsource_in_srcroot(ITEM_t *item, const char *srcroot,
                                  char *detail, size_t detail_size);
 bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability);
 void itemstore_set_sync_hook_for_tests(ITEMSTORE_SYNC_HOOK_t hook);
-bool save_itemstore_with_options(const char *filename, ITEM_t *root, ITEMSTORE_DURABILITY_e durability);
+bool save_itemstore_with_options(const char *filename, ITEM_t *root,
+                                 ITEMSTORE_DURABILITY_e durability);
+ITEMSTORE_SAVE_RESULT_e save_itemstore_no_replace(
+    const char *filename, ITEM_t *root, ITEMSTORE_DURABILITY_e durability);
 bool save_itemstore(const char *filename, ITEM_t *root);
+
 // Loads and returns a newly allocated item tree. The caller owns the returned
 // root and must destroy it with destroy_item(); NULL indicates failure and
 // transfers no ownership.

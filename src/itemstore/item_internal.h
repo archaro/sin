@@ -52,6 +52,7 @@ typedef int (*ITEMSTORE_SOURCE_WRITE_HOOK_t)(const char *source, FILE *file);
 typedef int (*ITEMSTORE_SOURCE_CLOSE_HOOK_t)(FILE *file);
 typedef bool (*ITEMSTORE_ITEM_CREATION_FAILURE_HOOK_t)(const char *name);
 typedef bool (*ITEMSTORE_DIRECTORY_SYNC_HOOK_t)(const char *path);
+typedef void (*ITEMSTORE_PRE_PUBLISH_HOOK_t)(const char *path);
 
 ITEMSTORE_CONTEXT_t *itemstore_default_context(void);
 void itemstore_bump_generation(void);
@@ -66,6 +67,8 @@ void itemstore_set_source_io_hooks_for_tests(
     ITEMSTORE_SOURCE_CLOSE_HOOK_t close_hook);
 void itemstore_set_directory_sync_hook_for_tests(
     ITEMSTORE_DIRECTORY_SYNC_HOOK_t hook);
+void itemstore_set_pre_publish_hook_for_tests(
+    ITEMSTORE_PRE_PUBLISH_HOOK_t hook);
 
 bool validate_item_name(const char *item_name, const char *func_name);
 bool validate_item_name_relative(const ITEM_t *base, const char *item_name,

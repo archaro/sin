@@ -20,6 +20,13 @@
 #include "stack.h"
 #include "version.h"
 
+/* Test hook for controlling the timestamp used by sys.backup. */
+static const char *lc_sys_backup_test_timestamp;
+
+void lc_sys_backup_set_timestamp_for_tests(const char *ts) {
+  lc_sys_backup_test_timestamp = ts;
+}
+
 static uint8_t *lc_sys_return(RuntimeContext *ctx, uint8_t *nextop,
                               VALUE_t ret) {
   push_stack(ctx->vm->stack, ret);
@@ -135,43 +142,34 @@ static uint8_t *lc_sys_compile_fail(RuntimeContext *ctx, uint8_t *nextop,
   return lc_sys_return_false(ctx, nextop);
 }
 
-/* Pick the first unused backup name, retaining the readable timestamp in the
- * base name and adding a deterministic numeric suffix only on collision. */
-char *lc_sys_backup_name(const char *filename, const char *timestamp) {
-  int base_needed = snprintf(NULL, 0, "%s_%s", filename, timestamp);
-  if (base_needed < 0) return NULL;
-
-  for (uint64_t suffix = 0; suffix < UINT64_MAX; suffix++) {
-    int needed = suffix == 0
-                     ? base_needed
-                     : snprintf(NULL, 0, "%s_%s_%llu", filename, timestamp,
-                                (unsigned long long)suffix);
-    if (needed < 0) return NULL;
-    size_t size = (size_t)needed + 1u;
-    char *candidate = malloc(size);
-    if (!candidate) return NULL;
-    if (suffix == 0) {
-      (void)snprintf(candidate, size, "%s_%s", filename, timestamp);
-    } else {
-      (void)snprintf(candidate, size, "%s_%s_%llu", filename, timestamp,
-                     (unsigned long long)suffix);
-    }
-
-    errno = 0;
-    struct stat candidate_stat;
-    if (lstat(candidate, &candidate_stat) != 0) {
-      if (errno == ENOENT) return candidate;
-      free(candidate);
-      return NULL;
-    }
-    free(candidate);
+static char *lc_sys_backup_candidate(const char *filename, const char *timestamp,
+                                     uint64_t suffix) {
+  int needed;
+  if (suffix == 0) {
+    needed = snprintf(NULL, 0, "%s_%s", filename, timestamp);
+  } else {
+    needed = snprintf(NULL, 0, "%s_%s_%llu", filename, timestamp,
+                      (unsigned long long)suffix);
   }
-  return NULL;
+  if (needed < 0) return NULL;
+  size_t size = (size_t)needed + 1u;
+  char *candidate = malloc(size);
+  if (!candidate) return NULL;
+  if (suffix == 0) {
+    (void)snprintf(candidate, size, "%s_%s", filename, timestamp);
+  } else {
+    (void)snprintf(candidate, size, "%s_%s_%llu", filename, timestamp,
+                   (unsigned long long)suffix);
+  }
+  return candidate;
 }
 
 uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Save a timestamped itemstore backup and report whether persistence was
-  // fully confirmed.
+  // fully confirmed.  Publication uses atomic link() so a competing actor
+  // cannot silently replace a target that appeared between the existence
+  // check and publication; collisions retry with the next deterministic
+  // suffix.
   (void)item;
 
   if (!lc_sys_persistence_runtime_ready(ctx) || !ctx->itemstore_filename ||
@@ -182,24 +180,69 @@ uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   char timestamp[64];
-  time_t now = time(NULL);
-  struct tm *tm_now = localtime(&now);
-  if (!tm_now || strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S",
-                          tm_now) == 0) {
-    lc_sys_set_persistence_error(ctx, "sys.backup",
-                                 ctx->itemstore_filename);
-    return lc_sys_persistence_return(ctx, nextop, false);
+  if (lc_sys_backup_test_timestamp) {
+    size_t ts_len = strlen(lc_sys_backup_test_timestamp);
+    if (ts_len >= sizeof(timestamp)) {
+      lc_sys_set_persistence_error(ctx, "sys.backup",
+                                   ctx->itemstore_filename);
+      return lc_sys_persistence_return(ctx, nextop, false);
+    }
+    memcpy(timestamp, lc_sys_backup_test_timestamp, ts_len + 1u);
+  } else {
+    time_t now = time(NULL);
+    struct tm *tm_now = localtime(&now);
+    if (!tm_now || strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S",
+                            tm_now) == 0) {
+      lc_sys_set_persistence_error(ctx, "sys.backup",
+                                   ctx->itemstore_filename);
+      return lc_sys_persistence_return(ctx, nextop, false);
+    }
   }
 
-  char *backupfile = lc_sys_backup_name(ctx->itemstore_filename, timestamp);
-  if (!backupfile) {
-    lc_sys_set_persistence_error(ctx, "sys.backup",
-                                 ctx->itemstore_filename);
-    return lc_sys_persistence_return(ctx, nextop, false);
+  for (uint64_t suffix = 0; suffix < UINT64_MAX; suffix++) {
+    char *backupfile = lc_sys_backup_candidate(ctx->itemstore_filename,
+                                                timestamp, suffix);
+    if (!backupfile) {
+      lc_sys_set_persistence_error(ctx, "sys.backup",
+                                   ctx->itemstore_filename);
+      return lc_sys_persistence_return(ctx, nextop, false);
+    }
+
+    /* Atomically probe existence: lstat for the fast path, then link() as
+     * the atomic guard.  If the target appeared between the two, link()
+     * fails with EEXIST and we retry the next suffix. */
+    errno = 0;
+    struct stat candidate_stat;
+    if (lstat(backupfile, &candidate_stat) == 0) {
+      /* Occupied: file, directory, or symlink (including dangling). */
+      free(backupfile);
+      continue;
+    }
+    if (errno != ENOENT) {
+      free(backupfile);
+      lc_sys_set_persistence_error(ctx, "sys.backup",
+                                   ctx->itemstore_filename);
+      return lc_sys_persistence_return(ctx, nextop, false);
+    }
+
+    ITEMSTORE_SAVE_RESULT_e result = save_itemstore_no_replace(
+        backupfile, ctx->itemroot, ctx->itemstore_durability);
+    if (result == ITEMSTORE_SAVE_SUCCESS) {
+      free(backupfile);
+      return lc_sys_persistence_return(ctx, nextop, true);
+    }
+    if (result != ITEMSTORE_SAVE_TARGET_EXISTS) {
+      lc_sys_set_persistence_error(ctx, "sys.backup", backupfile);
+      free(backupfile);
+      return lc_sys_persistence_return(ctx, nextop, false);
+    }
+    free(backupfile);
+    /* Collision: another actor created the target.  Retry next suffix. */
   }
-  uint8_t *result = lc_sys_persist(ctx, nextop, "sys.backup", backupfile);
-  free(backupfile);
-  return result;
+
+  lc_sys_set_persistence_error(ctx, "sys.backup",
+                               ctx->itemstore_filename);
+  return lc_sys_persistence_return(ctx, nextop, false);
 }
 
 uint8_t *lc_sys_save(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {

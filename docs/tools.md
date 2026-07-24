@@ -52,7 +52,7 @@ Options:
 | `--raw` | Include raw bytes for each disassembled instruction. |
 | `--no-header` | Skip the locals/parameters header output. |
 | `-q`, `--quiet` | Suppress progress/status messages. |
-| `-v`, `--verbose` | Print verbose progress and diagnostic trace messages. |
+| `-v`, `--verbose` | Accepted for parity but currently produces no additional trace output. |
 
 `sdiss` does not accept positional object-file arguments; use `-o` or
 `--object`. Disassembler progress messages are normal output and are suppressed

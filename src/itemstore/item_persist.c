@@ -114,6 +114,13 @@ void itemstore_set_directory_sync_hook_for_tests(
       : itemstore_default_directory_sync_hook;
 }
 
+static ITEMSTORE_PRE_PUBLISH_HOOK_t pre_publish_hook;
+
+void itemstore_set_pre_publish_hook_for_tests(
+    ITEMSTORE_PRE_PUBLISH_HOOK_t hook) {
+  pre_publish_hook = hook;
+}
+
 bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability) {
   return durability != ITEMSTORE_DURABLE_FAST;
 }
@@ -635,15 +642,47 @@ bool write_item(FILE *file, ITEM_t *item) {
   return true;
 }
 
-bool save_itemstore_with_options(const char *filename, ITEM_t *root,
-                                 ITEMSTORE_DURABILITY_e durability) {
+// Shared persistence publish core.  Writes a temp file, then publishes via
+// rename (replace mode) or link+unlink (no-replace mode).  Returns a result
+// enum that distinguishes success, collision, and failure.  Publication is
+// tracked separately so failures after publication are diagnosed accurately.
+typedef enum {
+  ITEMSTORE_PUBLISH_REPLACE,
+  ITEMSTORE_PUBLISH_NO_REPLACE
+} ITEMSTORE_PUBLISH_MODE_e;
+
+static bool remove_temp_itemstore(const char *temp_path) {
+  if (remove(temp_path) == 0 || errno == ENOENT) return true;
+  logerr("Failed to remove temporary itemstore %s: %s\n", temp_path,
+         strerror(errno));
+  if (remove(temp_path) == 0 || errno == ENOENT) return true;
+  logerr("Retry removal of temporary itemstore %s also failed: %s\n",
+         temp_path, strerror(errno));
+  return false;
+}
+
+static int link_itemstore_no_replace(const char *temp_path,
+                                     const char *filename) {
+#ifdef _WIN32
+  return _link(temp_path, filename);
+#else
+  return link(temp_path, filename);
+#endif
+}
+
+static ITEMSTORE_SAVE_RESULT_e itemstore_save_core(
+    const char *filename, ITEM_t *root,
+    ITEMSTORE_DURABILITY_e durability,
+    ITEMSTORE_PUBLISH_MODE_e mode) {
   FILE *file = NULL;
   char *temp_path = NULL;
-  bool success = false;
-  bool replaced = false;
+  ITEMSTORE_SAVE_RESULT_e result = ITEMSTORE_SAVE_FAILURE;
+  bool published = false;
+  bool temp_needs_cleanup = false;
 
   file = create_temp_itemstore(filename, &temp_path);
-  if (file == NULL) return false;
+  if (file == NULL) return ITEMSTORE_SAVE_FAILURE;
+  temp_needs_cleanup = true;
 
   if (!write_bytes(file, ITEMSTORE_V1_MAGIC, ITEMSTORE_V1_MAGIC_SIZE,
                    "file-header magic")
@@ -673,40 +712,83 @@ bool save_itemstore_with_options(const char *filename, ITEM_t *root,
   }
   file = NULL;
 
-  if (rename(temp_path, filename) != 0) {
-    logerr("Failed to replace itemstore %s with %s: %s\n", filename,
-           temp_path, strerror(errno));
-    goto cleanup;
+  if (mode == ITEMSTORE_PUBLISH_REPLACE) {
+    if (rename(temp_path, filename) != 0) {
+      logerr("Failed to replace itemstore %s with %s: %s\n", filename,
+             temp_path, strerror(errno));
+      goto cleanup;
+    }
+    published = true;
+    temp_needs_cleanup = false;
+  } else {
+    if (pre_publish_hook) pre_publish_hook(filename);
+    if (link_itemstore_no_replace(temp_path, filename) != 0) {
+      if (errno == EEXIST) {
+        result = ITEMSTORE_SAVE_TARGET_EXISTS;
+      } else {
+        logerr("Failed to link temporary itemstore %s to %s: %s\n",
+               temp_path, filename, strerror(errno));
+      }
+      goto cleanup;
+    }
+    published = true;
+    temp_needs_cleanup = false;
+    if (!remove_temp_itemstore(temp_path)) {
+      goto cleanup;
+    }
   }
-  replaced = true;
 
   if (itemstore_durability_requires_sync(durability)
       && !directory_sync_hook(filename)) {
-    logerr("Failed to sync the containing directory after replacing itemstore "
+    logerr("Failed to sync the containing directory after publishing itemstore "
            "%s.\n", filename);
     goto cleanup;
   }
 
-  success = true;
+  result = ITEMSTORE_SAVE_SUCCESS;
 
 cleanup:
   if (file != NULL && fclose(file) != 0) {
     logerr("Failed to close temporary itemstore %s during cleanup: %s\n",
            temp_path, strerror(errno));
   }
-  if (!success && !replaced) {
-    if (remove(temp_path) != 0 && errno != ENOENT) {
-      logerr("Failed to remove temporary itemstore %s: %s\n", temp_path,
-             strerror(errno));
-    }
-    logerr("Failed to save itemstore '%s'; existing data was not replaced.\n",
-           filename);
-  } else if (!success) {
-    logerr("Failed to save itemstore '%s'; replacement already happened, so "
-           "the destination may contain the new data.\n", filename);
+  if (temp_needs_cleanup && temp_path && !remove_temp_itemstore(temp_path)
+      && result == ITEMSTORE_SAVE_TARGET_EXISTS) {
+    result = ITEMSTORE_SAVE_FAILURE;
   }
+
+  switch (result) {
+    case ITEMSTORE_SAVE_FAILURE:
+      if (published) {
+        logerr("Failed to save itemstore '%s'; publication already happened, "
+               "so the destination may contain the new data.\n", filename);
+      } else {
+        logerr("Failed to save itemstore '%s'; existing data was not replaced.\n",
+               filename);
+      }
+      break;
+    case ITEMSTORE_SAVE_TARGET_EXISTS:
+      /* No message: the caller will handle the collision retry. */
+      break;
+    case ITEMSTORE_SAVE_SUCCESS:
+      break;
+  }
+
   free(temp_path);
-  return success;
+  return result;
+}
+
+bool save_itemstore_with_options(const char *filename, ITEM_t *root,
+                                 ITEMSTORE_DURABILITY_e durability) {
+  ITEMSTORE_SAVE_RESULT_e r = itemstore_save_core(filename, root, durability,
+                                                   ITEMSTORE_PUBLISH_REPLACE);
+  return r == ITEMSTORE_SAVE_SUCCESS;
+}
+
+ITEMSTORE_SAVE_RESULT_e save_itemstore_no_replace(
+    const char *filename, ITEM_t *root, ITEMSTORE_DURABILITY_e durability) {
+  return itemstore_save_core(filename, root, durability,
+                             ITEMSTORE_PUBLISH_NO_REPLACE);
 }
 
 static ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,

@@ -40,7 +40,7 @@ uint8_t *lc_net_connected(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_address(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
-char *lc_sys_backup_name(const char *filename, const char *timestamp);
+void lc_sys_backup_set_timestamp_for_tests(const char *ts);
 uint8_t *lc_sys_save(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_thisitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_parentitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -109,6 +109,21 @@ static ITEM_t *insert_halt_code(ITEM_t *root, const char *name) {
   ITEM_t *item = insert_code_item(root, name, 3u, bytecode);
   ASSERT_NOT_NULL(item);
   return item;
+}
+
+static bool race_pre_publish_hook_fired;
+static bool race_pre_publish_path_matches;
+static bool race_pre_publish_symlink_created;
+static char race_pre_publish_path[256];
+
+static void race_pre_publish_hook(const char *path) {
+  if (race_pre_publish_hook_fired) return;
+  race_pre_publish_hook_fired = true;
+  race_pre_publish_path_matches = strcmp(path, race_pre_publish_path) == 0;
+  if (race_pre_publish_path_matches) {
+    race_pre_publish_symlink_created =
+        symlink("/nonexistent_race_target", path) == 0;
+  }
 }
 
 static void assert_persistence_error(const char *operation,
@@ -308,72 +323,97 @@ void test_sys_persistence_libcalls(void) {
   ASSERT_NOT_NULL(loaded_checkpoint);
   ASSERT_EQ_INT(2, loaded_checkpoint->value.i);
   destroy_item(loaded);
-  char first_backup_path[sizeof(store_path) + 32u];
-  int path_written = snprintf(first_backup_path, sizeof(first_backup_path),
-                              "%s", backups.gl_pathv[0]);
-  ASSERT_TRUE(path_written > 0
-              && (size_t)path_written < sizeof(first_backup_path));
-  char first_backup_snapshot[sizeof(first_backup_path) + 16u];
-  written = snprintf(first_backup_snapshot, sizeof(first_backup_snapshot),
-                     "%s.snapshot", first_backup_path);
-  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(first_backup_snapshot));
-  ASSERT_EQ_INT(0, link(first_backup_path, first_backup_snapshot));
+  ASSERT_EQ_INT(0, unlink(backups.gl_pathv[0]));
   globfree(&backups);
 
-  /* Exercise suffix selection with a controlled timestamp and occupied base. */
-  char collision_base[256];
-  written = snprintf(collision_base, sizeof(collision_base),
-                     "%s_%s", store_path, "20000101-000000");
-  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(collision_base));
-  FILE *occupied = fopen(collision_base, "wb");
-  ASSERT_NOT_NULL(occupied);
-  ASSERT_EQ_INT(0, fclose(occupied));
-  char *collision_name = lc_sys_backup_name(store_path, "20000101-000000");
-  ASSERT_NOT_NULL(collision_name);
-  char expected_collision[sizeof(collision_base) + 3u];
-  written = snprintf(expected_collision, sizeof(expected_collision), "%s_1",
-                     collision_base);
-  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(expected_collision));
-  ASSERT_TRUE(strcmp(collision_name, expected_collision) == 0);
-  free(collision_name);
-  ASSERT_EQ_INT(0, unlink(collision_base));
+  lc_sys_backup_set_timestamp_for_tests("20000101-000000");
+  char base_backup[256];
+  written = snprintf(base_backup, sizeof(base_backup), "%s_%s", store_path,
+                     "20000101-000000");
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(base_backup));
+  FILE *base_file = fopen(base_backup, "wb");
+  ASSERT_NOT_NULL(base_file);
+  ASSERT_TRUE(fputs("occupied backup bytes", base_file) >= 0);
+  ASSERT_EQ_INT(0, fclose(base_file));
+  char base_snapshot[sizeof(base_backup) + 16u];
+  written = snprintf(base_snapshot, sizeof(base_snapshot), "%s.snapshot",
+                     base_backup);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(base_snapshot));
+  ASSERT_EQ_INT(0, link(base_backup, base_snapshot));
+  char backup_one[sizeof(base_backup) + 3u];
+  written = snprintf(backup_one, sizeof(backup_one), "%s_1", base_backup);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(backup_one));
 
-  /* A second backup in the same timestamp window must not replace the first. */
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "backup.only",
-                              (VALUE_t){VALUE_int, {.i = 4}}));
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "backup.e2e",
+                              (VALUE_t){VALUE_int, {.i = 42}}));
+  ctx.itemstore_durability = ITEMSTORE_DURABLE_FAST;
   (void)lc_sys_backup(&ctx, NULL, caller);
   assert_bool_return(pop_stack(config.vm->stack), 1);
-  glob_t second_backups = {0};
-  ASSERT_EQ_INT(0, glob(backup_pattern, 0, NULL, &second_backups));
-  ASSERT_EQ_INT(3, second_backups.gl_pathc);
-  loaded = load_itemstore(first_backup_path);
+  loaded = load_itemstore(backup_one);
   ASSERT_NOT_NULL(loaded);
-  ITEM_t *old_backup_value = find_item(loaded, "backup.only");
-  ASSERT_NOT_NULL(old_backup_value);
-  ASSERT_EQ_INT(3, old_backup_value->value.i);
+  ASSERT_NOT_NULL(find_item(loaded, "backup.e2e"));
   destroy_item(loaded);
-  bool found_new_backup = false;
-  for (size_t backup_index = 0; backup_index < second_backups.gl_pathc;
-       backup_index++) {
-    if (strcmp(second_backups.gl_pathv[backup_index], first_backup_path) == 0
-        || strcmp(second_backups.gl_pathv[backup_index],
-                  first_backup_snapshot) == 0)
-      continue;
-    loaded = load_itemstore(second_backups.gl_pathv[backup_index]);
-    ASSERT_NOT_NULL(loaded);
-    ITEM_t *new_backup_value = find_item(loaded, "backup.only");
-    ASSERT_NOT_NULL(new_backup_value);
-    ASSERT_EQ_INT(4, new_backup_value->value.i);
-    found_new_backup = true;
-    destroy_item(loaded);
-  }
-  ASSERT_TRUE(found_new_backup);
-  assert_file_bytes_equal(first_backup_snapshot, first_backup_path,
-                          "sys.backup preserves existing target bytes");
-  for (size_t backup_index = 0; backup_index < second_backups.gl_pathc;
-       backup_index++)
-    ASSERT_EQ_INT(0, unlink(second_backups.gl_pathv[backup_index]));
-  globfree(&second_backups);
+  char backup_one_snapshot[sizeof(backup_one) + 16u];
+  written = snprintf(backup_one_snapshot, sizeof(backup_one_snapshot),
+                     "%s.snapshot", backup_one);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(backup_one_snapshot));
+  ASSERT_EQ_INT(0, link(backup_one, backup_one_snapshot));
+
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "backup.e2e",
+                              (VALUE_t){VALUE_int, {.i = 99}}));
+  (void)lc_sys_backup(&ctx, NULL, caller);
+  assert_bool_return(pop_stack(config.vm->stack), 1);
+  char backup_two[sizeof(base_backup) + 3u];
+  written = snprintf(backup_two, sizeof(backup_two), "%s_2", base_backup);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(backup_two));
+  loaded = load_itemstore(backup_two);
+  ASSERT_NOT_NULL(loaded);
+  ITEM_t *backup_two_value = find_item(loaded, "backup.e2e");
+  ASSERT_NOT_NULL(backup_two_value);
+  ASSERT_EQ_INT(99, backup_two_value->value.i);
+  destroy_item(loaded);
+  assert_file_bytes_equal(base_snapshot, base_backup,
+                          "sys.backup preserves occupied target bytes");
+  assert_file_bytes_equal(backup_one_snapshot, backup_one,
+                          "sys.backup preserves prior backup bytes");
+  ASSERT_EQ_INT(0, unlink(backup_one_snapshot));
+  ASSERT_EQ_INT(0, unlink(base_snapshot));
+  ASSERT_EQ_INT(0, unlink(backup_two));
+  ASSERT_EQ_INT(0, unlink(backup_one));
+  ASSERT_EQ_INT(0, unlink(base_backup));
+
+  written = snprintf(race_pre_publish_path, sizeof(race_pre_publish_path),
+                     "%s_%s", store_path, "20000101-000000");
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(race_pre_publish_path));
+  race_pre_publish_hook_fired = false;
+  race_pre_publish_path_matches = false;
+  race_pre_publish_symlink_created = false;
+  itemstore_set_pre_publish_hook_for_tests(race_pre_publish_hook);
+  ASSERT_NOT_NULL(insert_item(config.itemroot, "backup.race",
+                              (VALUE_t){VALUE_int, {.i = 77}}));
+  (void)lc_sys_backup(&ctx, NULL, caller);
+  assert_bool_return(pop_stack(config.vm->stack), 1);
+  itemstore_set_pre_publish_hook_for_tests(NULL);
+  ASSERT_TRUE(race_pre_publish_hook_fired);
+  ASSERT_TRUE(race_pre_publish_path_matches);
+  ASSERT_TRUE(race_pre_publish_symlink_created);
+  char symlink_target[64];
+  ssize_t symlink_length = readlink(race_pre_publish_path, symlink_target,
+                                    sizeof(symlink_target) - 1u);
+  ASSERT_EQ_INT((int)strlen("/nonexistent_race_target"), (int)symlink_length);
+  symlink_target[symlink_length] = '\0';
+  ASSERT_TRUE(strcmp(symlink_target, "/nonexistent_race_target") == 0);
+  char race_backup[sizeof(race_pre_publish_path) + 3u];
+  written = snprintf(race_backup, sizeof(race_backup), "%s_1",
+                     race_pre_publish_path);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(race_backup));
+  loaded = load_itemstore(race_backup);
+  ASSERT_NOT_NULL(loaded);
+  ASSERT_NOT_NULL(find_item(loaded, "backup.race"));
+  destroy_item(loaded);
+  ASSERT_EQ_INT(0, unlink(race_backup));
+  ASSERT_EQ_INT(0, unlink(race_pre_publish_path));
+  lc_sys_backup_set_timestamp_for_tests(NULL);
 
   char missing_parent[128];
   ASSERT_EQ_INT(0, test_make_temp_path("sin-sys-save-missing",

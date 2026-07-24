@@ -33,10 +33,12 @@ when code needs to clear or preserve a diagnostic deliberately.
 
 ## Logging
 
-All three tools (`scomp`, `sdiss`, and `sin`) support normal, quiet (`-q`), and
-verbose (`-v`) logging. Normal output is written to standard output and errors
-to standard error; quiet mode suppresses progress/status output and verbose mode
-adds diagnostic trace output.
+`scomp` and `sin` support normal, quiet (`-q`), and verbose (`-v`) logging.
+`sdiss` accepts `-q` to suppress progress messages and `-v` for parity, but
+`-v` currently produces no additional trace output. Normal output is written
+to standard output and errors to standard error; quiet mode suppresses
+progress/status output and verbose mode adds diagnostic trace output for the
+tools that emit it.
 
 Only `sin` supports `-l`/`--log`, with an optional base name (default: `sin`).
 It appends normal standard-output messages to `<base>.log`, and error and
