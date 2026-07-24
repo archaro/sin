@@ -14,6 +14,8 @@ kept in sync with the source files named in each document.
   `src/libcall/libcall_list.h`.
 - [`tools.md`](tools.md): command-line reference for `sin`, `scomp`, and
   `sdiss`.
+- [`troubleshooting.md`](troubleshooting.md): compiler diagnostics, runtime
+  error items, logging, and safe local-state recovery.
 - [`bytecode.md`](bytecode.md): bytecode encoding reference derived from
   `src/compiler/ir/opcode_schema.def`.
 - [`runtime.md`](runtime.md): runtime ownership, interpreter, and libcall API

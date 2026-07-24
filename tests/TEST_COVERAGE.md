@@ -84,8 +84,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `test_value_comparison_float_ieee754_helpers`
 
 ### Known gaps
-- No property/fuzz-style parser robustness test in-tree (seeded random
-  corpus/replay).
+- Compiler fuzzing is available through `tests/fuzz/fuzz_scomp.c`,
+  `make fuzz-scomp`, and `FUZZ_SEED=1 make fuzz-smoke`; the remaining gap is
+  limited corpus and campaign diversity rather than the absence of a fuzz
+  harness.
 - Malformed-source cases are centralized in the compiler pipeline negative
   matrix rather than split between source-golden and negative tests.
 

@@ -221,8 +221,8 @@ returns an empty string where possible and sets `ERR_RUNTIME_SOURCE`.
 `sys.nthname{<name>, <index>}` and `sys.rootname{<index>}` return child or root
 item names by index. `sys.rootcount` and `sys.childcount` bound those
 enumerations, but child ordering is not stable across runtime restarts.
-`sys.version` returns a copy of the raw engine version string, currently
-`"0.6"`. `sys.now` returns signed Unix-epoch milliseconds. `sys.monotime`
+`sys.version` returns a copy of the raw engine version string; [`SINVERSION`](../src/version.h)
+is the source of truth. `sys.now` returns signed Unix-epoch milliseconds. `sys.monotime`
 returns signed monotonic milliseconds from an unspecified operating-system
 origin; only differences are meaningful, and readings do not decrease within
 a process run. These successful introspection and time calls do not clear an

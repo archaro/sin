@@ -29,13 +29,6 @@ runtime behaviour they demonstrate. Start with the existing echo and chat server
 examples, then add small single-purpose examples for language features as they
 stabilise.
 
-### Add a diagnostics and troubleshooting page
-
-Document common compiler and runtime failure modes, including how `error` and
-`error.msg` are set, where log output appears, how invalid libcall arguments are
-reported, and how to reset generated itemstore/source-root state during local
-experiments.
-
 ## Medium-term tasks
 
 ### Establish a language-reference skeleton
@@ -92,5 +85,4 @@ for syntax, bytecode, library calls, and itemstore/runtime behaviour.
 
 1. Split `docs/concepts.md` into focused concept pages without changing content
    semantics.
-2. Add a troubleshooting page for diagnostics, logs, and generated state.
-3. Add a provisional language-reference skeleton with stability notes.
+2. Add a provisional language-reference skeleton with stability notes.
