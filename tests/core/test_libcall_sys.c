@@ -308,9 +308,12 @@ void test_sys_persistence_libcalls(void) {
   ASSERT_NOT_NULL(loaded_checkpoint);
   ASSERT_EQ_INT(2, loaded_checkpoint->value.i);
   destroy_item(loaded);
-  char *first_backup_path = strdup(backups.gl_pathv[0]);
-  ASSERT_NOT_NULL(first_backup_path);
-  char first_backup_snapshot[sizeof(store_path) + 32u];
+  char first_backup_path[sizeof(store_path) + 32u];
+  int path_written = snprintf(first_backup_path, sizeof(first_backup_path),
+                              "%s", backups.gl_pathv[0]);
+  ASSERT_TRUE(path_written > 0
+              && (size_t)path_written < sizeof(first_backup_path));
+  char first_backup_snapshot[sizeof(first_backup_path) + 16u];
   written = snprintf(first_backup_snapshot, sizeof(first_backup_snapshot),
                      "%s.snapshot", first_backup_path);
   ASSERT_TRUE(written > 0 && (size_t)written < sizeof(first_backup_snapshot));
@@ -370,7 +373,6 @@ void test_sys_persistence_libcalls(void) {
   for (size_t backup_index = 0; backup_index < second_backups.gl_pathc;
        backup_index++)
     ASSERT_EQ_INT(0, unlink(second_backups.gl_pathv[backup_index]));
-  free(first_backup_path);
   globfree(&second_backups);
 
   char missing_parent[128];
