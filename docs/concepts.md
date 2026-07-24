@@ -186,8 +186,8 @@ state can continue changing after the call; those later mutations are not part
 of the completed checkpoint. Both persistence calls pause event-loop progress
 while writing. `false` means the configured durability level was not fully
 confirmed and sets `ERR_RUNTIME_PERSISTENCE`; if failure occurs after atomic
-replacement, the target may nevertheless contain the new snapshot. Successful
-persistence does not clear an unrelated existing `error`.
+publication or replacement, the target may nevertheless contain the new
+snapshot. Successful persistence does not clear an unrelated existing `error`.
 `sys.log{<expression>}` writes something to the system log: it takes an expression and will try to evaluate the expression and write something sensible in the log.  Do not abuse it.  
 `sys.shutdown` will perform an orderly shutdown of the engine, saving the itemstore.  It takes no arguments.  
 `sys.abort` will abort the engine without saving the itemstore.  It takes no arguments.
