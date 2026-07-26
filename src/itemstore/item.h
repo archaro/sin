@@ -30,6 +30,25 @@ typedef struct Itemstore ITEMSTORE_t;
 
 typedef enum {ITEM_value, ITEM_code} ITEM_e;
 typedef enum {
+  ITEM_MUTATION_CREATED,
+  ITEM_MUTATION_REPLACED,
+  ITEM_MUTATION_DELETED,
+  ITEM_MUTATION_NOT_FOUND,
+  ITEM_MUTATION_INVALID_ARGUMENT,
+  ITEM_MUTATION_INVALID_NAME,
+  ITEM_MUTATION_INVALID_PAYLOAD,
+  ITEM_MUTATION_IN_USE,
+  ITEM_MUTATION_ALLOCATION_FAILED
+} ITEM_MUTATION_STATUS_e;
+
+typedef struct {
+  ITEM_MUTATION_STATUS_e status;
+  ITEM_t *item;
+} ITEM_MUTATION_RESULT_t;
+
+// item_mutation_succeeded is true only for CREATED, REPLACED, and DELETED.
+bool item_mutation_succeeded(ITEM_MUTATION_RESULT_t result);
+typedef enum {
   ITEMSTORE_DURABLE_FULL = 0,
   ITEMSTORE_DURABLE_FAST = 1
 } ITEMSTORE_DURABILITY_e;
@@ -75,21 +94,16 @@ bool item_is_in_use(const ITEM_t *item);
 void item_enter_use(ITEM_t *item);
 void item_leave_use(ITEM_t *item);
 
-// insert_item creates or replaces a value item. On success, the itemstore takes
-// ownership of value, including any VALUE_str payload; callers must not free the
-// string after transfer. Existing value payloads or code bytecode are freed
-// before replacement. If validation, input-limit checks, or replacement fails
-// before the value is stored, the caller retains ownership of value. An
-// incompatible alias of an existing item payload is rejected without mutation;
-// that pointer is already owned by the item and must not be freed by the caller.
-ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value);
-// insert_code_item creates or replaces a code item. On success, the itemstore
-// takes ownership of bytecode and frees any previous code bytecode/value payload.
-// If validation or replacement fails before bytecode is stored, the caller
-// retains ownership of bytecode. An incompatible alias of an existing value
-// payload is rejected without mutation; that pointer is already item-owned.
-ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
-                                                        uint8_t *bytecode);
+// On CREATED or REPLACED, result.item is the borrowed resulting leaf and the
+// itemstore takes ownership of the supplied payload. DELETED always returns a
+// NULL result.item. Every failure returns a NULL result.item, leaves the tree
+// and revisions unchanged, and leaves the supplied payload caller-owned. The
+// exception is a rejected alias already owned by the target: it remains owned
+// by that target and must not be freed by the caller.
+ITEM_MUTATION_RESULT_t item_set_value(ITEM_t *root, const char *item_name,
+                                      VALUE_t value);
+ITEM_MUTATION_RESULT_t item_set_code(ITEM_t *root, const char *item_name,
+                                     uint32_t len, uint8_t *bytecode);
 ITEM_t *find_item(ITEM_t *root, const char *item_name);
 // Cached lookup validates item_name before touching the cache. Invalid names
 // return NULL, set found to false when supplied, and do not affect cache
@@ -97,14 +111,9 @@ ITEM_t *find_item(ITEM_t *root, const char *item_name);
 // pointers are borrowed and valid only for the current itemstore topology
 // revision. Payload replacement preserves pointer and cache validity.
 ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found);
-void delete_item(ITEM_t *root, const char *item_name);
-// set_item creates or replaces a value item. The itemstore takes ownership of
-// value, including any VALUE_str payload, whether updating an existing item or
-// inserting a new one. set_item always consumes value, including when
-// validation, input-limit checks, replacement, or path creation fails. The
-// exception is an incompatible alias of an existing code payload: it is
-// rejected without mutation because the pointer is already item-owned.
-void set_item(ITEM_t *root, const char *item_name, VALUE_t value);
+// DELETED returns a NULL item. Valid absent names return NOT_FOUND; malformed
+// names, null roots, and pinned subtrees return their corresponding failures.
+ITEM_MUTATION_RESULT_t item_delete(ITEM_t *root, const char *item_name);
 void get_itemname(ITEM_t *item, char *itemname);
 // Returns a newly allocated source filename string owned by the caller; free it
 // with free(). The item is borrowed and not modified.

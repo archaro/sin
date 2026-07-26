@@ -19,6 +19,19 @@
 #define REQUIRE_BYTES(nextop, n, opname) \
   do { if (!runtime_decode_status_ok(require_bytes(&ctx->decoder, (nextop), (n), (opname)))) return false; } while (0)
 
+static bool value_payload_owned_by_item(ITEM_t *root, const char *item_name,
+                                        VALUE_t value) {
+  if (!root || !item_name || value.type != VALUE_str || !value.s) return false;
+  ITEM_t *target = find_item(root, item_name);
+  if (!target) return false;
+  if (item_kind(target) == ITEM_value) {
+    const VALUE_t *stored = item_value(target);
+    return stored && stored->type == VALUE_str && stored->s == value.s;
+  }
+  return item_kind(target) == ITEM_code &&
+      item_bytecode(target) == (const uint8_t *)value.s;
+}
+
 void assignitem(ITEM_t *itemroot, VALUE_t *itemname, VALUE_t val) {
   // Given two values, use the first as the name of an item, and
   // the second as the value to assign to it.  The item name must be
@@ -29,10 +42,13 @@ void assignitem(ITEM_t *itemroot, VALUE_t *itemname, VALUE_t val) {
   // In other words, this is an end stage for values - they are either
   // used or discarded.  The interpreter no longer cares.
   if (itemname->type == VALUE_str) {
-    ITEM_t *i = insert_item(itemroot, itemname->s, val);
-    if (!i) {
+    ITEM_MUTATION_RESULT_t mutation =
+        item_set_value(itemroot, itemname->s, val);
+    if (!item_mutation_succeeded(mutation)) {
       logerr("Unable to create item '%s'.\n", itemname->s);
-      FREE_STR(val);
+      if (!value_payload_owned_by_item(itemroot, itemname->s, val)) {
+        FREE_STR(val);
+      }
     }
     logverbose("Saved value of type %d in item %s\n", val.type, itemname->s);
   } else {
@@ -123,8 +139,9 @@ int8_t compile_and_insert_codeitem(ITEM_t *itemroot, const VALUE_t *itemname, co
       rc = ERR_RUNTIME_INVALIDARGS;
     } else {
       uint32_t len = (uint32_t)raw_len;
-      ITEM_t *inserted = insert_code_item(itemroot, itemname->s, len, out->bytecode);
-      if (!inserted) rc = ERR_COMP_INUSE;
+      ITEM_MUTATION_RESULT_t mutation =
+          item_set_code(itemroot, itemname->s, len, out->bytecode);
+      if (!item_mutation_succeeded(mutation)) rc = ERR_COMP_INUSE;
     }
   }
   if (out) {

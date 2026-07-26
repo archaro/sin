@@ -616,14 +616,17 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
   }
 
-  ITEM_t *tmpitem = insert_code_item(itemstore_root(ctx->itemstore), tmpname, len, out->bytecode);
+  ITEM_MUTATION_RESULT_t mutation =
+      item_set_code(itemstore_root(ctx->itemstore), tmpname, len,
+                    out->bytecode);
 
-  if (!tmpitem) {
+  if (!item_mutation_succeeded(mutation)) {
     set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_INTERNAL,
         "Sys.compile temporary code item could not be created.",
         ctx ? ctx->current_item : NULL);
     return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
   }
+  ITEM_t *tmpitem = mutation.item;
 
   // Preserve the caller frame below the pre-call depth; discard only values
   // produced by the nested interpret() run.
@@ -635,7 +638,7 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     value_free(&dropped);
   }
 
-  delete_item(itemstore_root(ctx->itemstore), tmpname);
+  (void)item_delete(itemstore_root(ctx->itemstore), tmpname);
   bool error_is_nil = sys_compile_error_is_nil(itemstore_root(ctx->itemstore));
   bool success = !ctx->interrupted && error_is_nil;
   if (ctx->interrupted && error_is_nil) {
@@ -677,7 +680,7 @@ uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   char fullname[MAX_ITEM_NAME];
   if (canonicalize_itemname(itemname.s, item, fullname)) {
-    delete_item(itemstore_root(ctx->itemstore), fullname);
+    (void)item_delete(itemstore_root(ctx->itemstore), fullname);
   }
   value_free(&itemname);
   return lc_sys_return_nil(ctx, nextop);

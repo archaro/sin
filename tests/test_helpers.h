@@ -37,6 +37,22 @@ static inline bool test_save_itemstore(const char *filename, ITEM_t *root) {
 #define load_itemstore_with_options test_load_itemstore_with_options
 #define save_itemstore test_save_itemstore
 
+static inline ITEM_t *test_item_set_value(ITEM_t *root, const char *name,
+                                          VALUE_t value) {
+  ITEM_MUTATION_RESULT_t result = item_set_value(root, name, value);
+  return result.item;
+}
+
+static inline ITEM_t *test_item_set_code(ITEM_t *root, const char *name,
+                                         uint32_t len, uint8_t *bytecode) {
+  ITEM_MUTATION_RESULT_t result = item_set_code(root, name, len, bytecode);
+  return result.item;
+}
+
+static inline void test_item_delete(ITEM_t *root, const char *name) {
+  (void)item_delete(root, name);
+}
+
 AS_NODE *t_int(int64_t value);
 AS_NODE *t_local(const char *name);
 AS_NODE *t_node(ENUM_NODE nodetype, void *lhs, void *rhs);

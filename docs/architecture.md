@@ -100,7 +100,7 @@ verification for persisted code items, and value representation. It should not
 depend on compiler pipeline or networking.
 
 Key entry points are `itemstore_create()`, `itemstore_root()`,
-`itemstore_destroy()`, `find_item()`, and `insert_code_item()` for in-memory
+`itemstore_destroy()`, `find_item()`, and `item_set_code()` for in-memory
 ownership and lookup. Persistence uses `itemstore_save()` and
 `itemstore_load()`; roots are borrowed and remain valid only until their
 owning store is destroyed. Topology and payload revisions are store-local

@@ -237,10 +237,8 @@ void detach_item_and_destroy(ITEM_t *item) {
 }
 
 static ITEM_t *find_or_create_item(ITEM_t *root, const char *item_name,
-                                   const char *func_name,
                                    ITEM_t **created_root) {
   if (created_root) *created_root = NULL;
-  if (!validate_item_name_relative(root, item_name, func_name)) return NULL;
 
   ITEM_t *current_item = root;
   const char *current_pos = item_name;
@@ -285,17 +283,6 @@ static ITEM_t *find_or_create_item(ITEM_t *root, const char *item_name,
   return NULL;
 }
 
-// Cross-kind aliases are included only for failure cleanup: replacement
-// helpers reject them before either payload can be freed or adopted.
-static bool value_aliases_owned_payload(const ITEM_t *item,
-                                        const VALUE_t *value) {
-  return item && value && value->type == VALUE_str && value->s &&
-      ((item->type == ITEM_value && item->value.type == VALUE_str &&
-        item->value.s == value->s) ||
-       (item->type == ITEM_code &&
-        (uint8_t *)item->bytecode == (uint8_t *)value->s));
-}
-
 static bool value_aliases_code_payload(const ITEM_t *item,
                                        const VALUE_t *value) {
   return item && value && value->type == VALUE_str && value->s &&
@@ -326,11 +313,17 @@ static bool item_replacement_allowed(ITEM_t *item) {
   return false;
 }
 
-static bool replace_item_value(ITEM_t *item, VALUE_t value) {
-  if (!item_replacement_allowed(item)) return false;
+bool item_mutation_succeeded(ITEM_MUTATION_RESULT_t result) {
+  return result.status == ITEM_MUTATION_CREATED ||
+         result.status == ITEM_MUTATION_REPLACED ||
+         result.status == ITEM_MUTATION_DELETED;
+}
+
+static ITEM_MUTATION_STATUS_e replace_item_value(ITEM_t *item, VALUE_t value) {
+  if (!item_replacement_allowed(item)) return ITEM_MUTATION_IN_USE;
   if (value_aliases_code_payload(item, &value)) {
     log_incompatible_payload_alias(item);
-    return false;
+    return ITEM_MUTATION_INVALID_PAYLOAD;
   }
 
   if (!(value.type == VALUE_str && item->type == ITEM_value &&
@@ -345,14 +338,15 @@ static bool replace_item_value(ITEM_t *item, VALUE_t value) {
   item->bytecode_len = 0;
   item->type = ITEM_value;
   item->value = value;
-  return true;
+  return ITEM_MUTATION_REPLACED;
 }
 
-static bool replace_item_code(ITEM_t *item, uint32_t len, uint8_t *bytecode) {
-  if (!item_replacement_allowed(item)) return false;
+static ITEM_MUTATION_STATUS_e replace_item_code(ITEM_t *item, uint32_t len,
+                                                uint8_t *bytecode) {
+  if (!item_replacement_allowed(item)) return ITEM_MUTATION_IN_USE;
   if (bytecode_aliases_value_payload(item, bytecode)) {
     log_incompatible_payload_alias(item);
-    return false;
+    return ITEM_MUTATION_INVALID_PAYLOAD;
   }
 
   bool aliases_old_payload = item->type == ITEM_code &&
@@ -368,28 +362,40 @@ static bool replace_item_code(ITEM_t *item, uint32_t len, uint8_t *bytecode) {
   item->value = VALUE_NIL;
   item->bytecode_len = len;
   item->bytecode = bytecode;
-  return true;
+  return ITEM_MUTATION_REPLACED;
 }
 
-ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
-  ITEM_t *created_root = NULL;
-  ITEM_t *item = find_or_create_item(root, item_name, "insert_item",
-                                     &created_root);
-  if (!item) return NULL;
-  if (value_aliases_code_payload(item, &value)) {
-    log_incompatible_payload_alias(item);
-    detach_item_and_destroy(created_root);
-    return NULL;
+ITEM_MUTATION_RESULT_t item_set_value(ITEM_t *root, const char *item_name,
+                                      VALUE_t value) {
+  ITEM_MUTATION_RESULT_t result = {ITEM_MUTATION_INVALID_ARGUMENT, NULL};
+  if (!root) return result;
+  if (!validate_item_name_relative(root, item_name, "item_set_value")) {
+    result.status = ITEM_MUTATION_INVALID_NAME;
+    return result;
+  }
+  ITEM_t *existing = find_item_unchecked(root, item_name);
+  if (existing && value_aliases_code_payload(existing, &value)) {
+    log_incompatible_payload_alias(existing);
+    result.status = ITEM_MUTATION_INVALID_PAYLOAD;
+    return result;
   }
   if (!value_string_within_limit(&value)) {
-    logerr("insert_item called with string longer than maximum %zu bytes.\n",
+    logerr("item_set_value called with string longer than maximum %zu bytes.\n",
            SIN_MAX_STRING_BYTES);
-    detach_item_and_destroy(created_root);
-    return NULL;
+    result.status = ITEM_MUTATION_INVALID_PAYLOAD;
+    return result;
   }
-  if (!replace_item_value(item, value)) {
+  ITEM_t *created_root = NULL;
+  ITEM_t *item = find_or_create_item(root, item_name, &created_root);
+  if (!item) {
+    result.status = ITEM_MUTATION_ALLOCATION_FAILED;
+    return result;
+  }
+  ITEM_MUTATION_STATUS_e replacement = replace_item_value(item, value);
+  if (replacement != ITEM_MUTATION_REPLACED) {
     detach_item_and_destroy(created_root);
-    return NULL;
+    result.status = replacement;
+    return result;
   }
 
   if (created_root) {
@@ -397,23 +403,36 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
   } else {
     itemstore_bump_payload_revision_for(root);
   }
-  return item;
+  result.status = created_root ? ITEM_MUTATION_CREATED : ITEM_MUTATION_REPLACED;
+  result.item = item;
+  return result;
 }
 
-ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
-                                                      uint8_t *bytecode) {
-  ITEM_t *created_root = NULL;
-  ITEM_t *item = find_or_create_item(root, item_name, "insert_code_item",
-                                     &created_root);
-  if (!item) return NULL;
-  if (bytecode_aliases_value_payload(item, bytecode)) {
-    log_incompatible_payload_alias(item);
-    detach_item_and_destroy(created_root);
-    return NULL;
+ITEM_MUTATION_RESULT_t item_set_code(ITEM_t *root, const char *item_name,
+                                     uint32_t len, uint8_t *bytecode) {
+  ITEM_MUTATION_RESULT_t result = {ITEM_MUTATION_INVALID_ARGUMENT, NULL};
+  if (!root) return result;
+  if (!validate_item_name_relative(root, item_name, "item_set_code")) {
+    result.status = ITEM_MUTATION_INVALID_NAME;
+    return result;
   }
-  if (!replace_item_code(item, len, bytecode)) {
+  ITEM_t *existing = find_item_unchecked(root, item_name);
+  if (existing && bytecode_aliases_value_payload(existing, bytecode)) {
+    log_incompatible_payload_alias(existing);
+    result.status = ITEM_MUTATION_INVALID_PAYLOAD;
+    return result;
+  }
+  ITEM_t *created_root = NULL;
+  ITEM_t *item = find_or_create_item(root, item_name, &created_root);
+  if (!item) {
+    result.status = ITEM_MUTATION_ALLOCATION_FAILED;
+    return result;
+  }
+  ITEM_MUTATION_STATUS_e replacement = replace_item_code(item, len, bytecode);
+  if (replacement != ITEM_MUTATION_REPLACED) {
     detach_item_and_destroy(created_root);
-    return NULL;
+    result.status = replacement;
+    return result;
   }
 
   if (created_root) {
@@ -421,7 +440,9 @@ ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
   } else {
     itemstore_bump_payload_revision_for(root);
   }
-  return item;
+  result.status = created_root ? ITEM_MUTATION_CREATED : ITEM_MUTATION_REPLACED;
+  result.item = item;
+  return result;
 }
 
 static bool item_subtree_has_execution_pins(const ITEM_t *item) {
@@ -433,10 +454,13 @@ static bool item_subtree_has_execution_pins(const ITEM_t *item) {
   return false;
 }
 
-void delete_item(ITEM_t *root, const char *item_name) {
+ITEM_MUTATION_RESULT_t item_delete(ITEM_t *root, const char *item_name) {
+  ITEM_MUTATION_RESULT_t result = {ITEM_MUTATION_INVALID_ARGUMENT, NULL};
+  if (!root) return result;
   // Find an item and then delete it and all of its children.
-  if (!validate_item_name_relative(root, item_name, "delete_item")) {
-    return;
+  if (!validate_item_name_relative(root, item_name, "item_delete")) {
+    result.status = ITEM_MUTATION_INVALID_NAME;
+    return result;
   }
   ITEM_t *item = find_item_unchecked(root, item_name);
   if (item) {
@@ -446,48 +470,20 @@ void delete_item(ITEM_t *root, const char *item_name) {
       get_itemname(item, name);
       logerr("Cannot delete item %s: item or descendant currently in use.\n",
              name);
-      return;
+      result.status = ITEM_MUTATION_IN_USE;
+      return result;
     }
     // We don't care about items that don't exist, just silently ignore the
     // delete request.  It's not there anyway, so why the complaining?
     detach_item_and_destroy(item);
     itemstore_bump_topology_revision_for(root);
     logverbose("Item %s has been deleted, along with all of its children.\n",
-                                                                 item_name);
+               item_name);
+    result.status = ITEM_MUTATION_DELETED;
+    return result;
   }
-}
-
-void set_item(ITEM_t *root, const char *item_name, VALUE_t value) {
-  ITEM_t *created_root = NULL;
-  ITEM_t *item = find_or_create_item(root, item_name, "set_item",
-                                     &created_root);
-  if (!item) {
-    value_free(&value);
-    return;
-  }
-  if (value_aliases_code_payload(item, &value)) {
-    log_incompatible_payload_alias(item);
-    detach_item_and_destroy(created_root);
-    return;
-  }
-  if (!value_string_within_limit(&value)) {
-    logerr("set_item called with string longer than maximum %zu bytes.\n",
-           SIN_MAX_STRING_BYTES);
-    value_free(&value);
-    detach_item_and_destroy(created_root);
-    return;
-  }
-  if (!replace_item_value(item, value)) {
-    if (!value_aliases_owned_payload(item, &value)) value_free(&value);
-    detach_item_and_destroy(created_root);
-    return;
-  }
-
-  if (created_root) {
-    itemstore_bump_topology_revision_for(root);
-  } else {
-    itemstore_bump_payload_revision_for(root);
-  }
+  result.status = ITEM_MUTATION_NOT_FOUND;
+  return result;
 }
 
 static bool append_itemname(ITEM_t *item, char *itemname, size_t itemname_size) {

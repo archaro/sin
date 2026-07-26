@@ -459,9 +459,9 @@ void test_sys_compile_libcall_runtime(void) {
                      "%s.child", collision_name);
   ASSERT_TRUE(written > 0 &&
               (size_t)written < sizeof(collision_child_name));
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), collision_name,
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), collision_name,
                               (VALUE_t){VALUE_int, {.i = 777}}));
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), collision_child_name,
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), collision_child_name,
                               (VALUE_t){VALUE_int, {.i = 888}}));
 
   assert_compile_success_bool("collision_probe = true;");

@@ -10,6 +10,7 @@
 #include "config.h"
 #include "item.h"
 #include "item_internal.h"
+#include "runtime_item_ops.h"
 #define get_itemstore_topology_revision() itemstore_topology_revision(itemstore_owner(root))
 #define get_itemstore_payload_revision() itemstore_payload_revision(itemstore_owner(root))
 #include "string_limits.h"
@@ -62,7 +63,7 @@ void test_loaded_zero_child_item_can_gain_runtime_child(void) {
   ASSERT_EQ_INT(0, item_children_ordered_capacity(input->children));
   ASSERT_TRUE(item_child_at(input, 0) == NULL);
 
-  ITEM_t *line = insert_item(root, "input.line",
+  ITEM_t *line = test_item_set_value(root, "input.line",
                              (VALUE_t){.type = VALUE_int, .i = 7});
   ASSERT_NOT_NULL(line);
   ASSERT_EQ_INT(VALUE_int, line->value.type);
@@ -289,31 +290,31 @@ void test_itemstore_value_and_code_roundtrip(void) {
 
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  ASSERT_NOT_NULL(insert_item(root, "nil",
+  ASSERT_NOT_NULL(test_item_set_value(root, "nil",
                               (VALUE_t){.type = VALUE_nil, .i = 0}));
-  ASSERT_NOT_NULL(insert_item(root, "bool",
+  ASSERT_NOT_NULL(test_item_set_value(root, "bool",
                               (VALUE_t){.type = VALUE_bool, .i = 1}));
-  ASSERT_NOT_NULL(insert_item(root, "int",
+  ASSERT_NOT_NULL(test_item_set_value(root, "int",
                               (VALUE_t){.type = VALUE_int,
                                         .i = -123456789}));
-  ASSERT_NOT_NULL(insert_item(root, "float",
+  ASSERT_NOT_NULL(test_item_set_value(root, "float",
                               (VALUE_t){.type = VALUE_float,
                                         .f_bits = UINT64_C(0x8000000000000000)}));
-  ASSERT_NOT_NULL(insert_item(root, "transient",
+  ASSERT_NOT_NULL(test_item_set_value(root, "transient",
                               (VALUE_t){.type = VALUE_nil, .i = 0}));
   char *text = strdup("itemstore-v1");
   ASSERT_NOT_NULL(text);
-  ASSERT_NOT_NULL(insert_item(root, "string",
+  ASSERT_NOT_NULL(test_item_set_value(root, "string",
                               (VALUE_t){.type = VALUE_str, .s = text}));
 
   static const uint8_t expected_bytecode[] = {0x00, 0x00, 'h'};
   uint8_t *bytecode = malloc(sizeof(expected_bytecode));
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, expected_bytecode, sizeof(expected_bytecode));
-  ASSERT_NOT_NULL(insert_code_item(root, "code", sizeof(expected_bytecode),
+  ASSERT_NOT_NULL(test_item_set_code(root, "code", sizeof(expected_bytecode),
                                    bytecode));
   ASSERT_EQ_INT(7, item_child_count(root));
-  delete_item(root, "transient");
+  test_item_delete(root, "transient");
 
   static const char *expected_order[] = {
     "nil", "bool", "int", "float", "string", "code"
@@ -386,16 +387,16 @@ void test_loaded_itemstore_mutation_roundtrip(void) {
 
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  ASSERT_NOT_NULL(insert_item(root, "alpha",
+  ASSERT_NOT_NULL(test_item_set_value(root, "alpha",
                               (VALUE_t){.type = VALUE_int, .i = 1}));
-  ASSERT_NOT_NULL(insert_item(root, "branch.leaf",
+  ASSERT_NOT_NULL(test_item_set_value(root, "branch.leaf",
                               (VALUE_t){.type = VALUE_int, .i = 2}));
-  ASSERT_NOT_NULL(insert_item(root, "empty_parent",
+  ASSERT_NOT_NULL(test_item_set_value(root, "empty_parent",
                               (VALUE_t){.type = VALUE_nil, .i = 0}));
-  ASSERT_NOT_NULL(insert_code_item(root, "program", sizeof(program_v1),
+  ASSERT_NOT_NULL(test_item_set_code(root, "program", sizeof(program_v1),
                                    copy_bytecode(program_v1,
                                                  sizeof(program_v1))));
-  ASSERT_NOT_NULL(insert_code_item(root, "branch.code",
+  ASSERT_NOT_NULL(test_item_set_code(root, "branch.code",
                                    sizeof(branch_code),
                                    copy_bytecode(branch_code,
                                                  sizeof(branch_code))));
@@ -424,23 +425,23 @@ void test_loaded_itemstore_mutation_roundtrip(void) {
   assert_code_item(loaded, "program", program_v1, sizeof(program_v1));
   assert_code_item(loaded, "branch.code", branch_code, sizeof(branch_code));
 
-  ASSERT_NOT_NULL(insert_item(loaded, "new_root",
+  ASSERT_NOT_NULL(test_item_set_value(loaded, "new_root",
                               (VALUE_t){.type = VALUE_int, .i = 10}));
-  ASSERT_NOT_NULL(insert_item(loaded, "empty_parent.child",
+  ASSERT_NOT_NULL(test_item_set_value(loaded, "empty_parent.child",
                               (VALUE_t){.type = VALUE_int, .i = 11}));
-  ASSERT_NOT_NULL(insert_code_item(loaded, "new_code", sizeof(inserted_code),
+  ASSERT_NOT_NULL(test_item_set_code(loaded, "new_code", sizeof(inserted_code),
                                    copy_bytecode(inserted_code,
                                                  sizeof(inserted_code))));
-  ASSERT_NOT_NULL(insert_code_item(loaded, "program", sizeof(program_v2),
+  ASSERT_NOT_NULL(test_item_set_code(loaded, "program", sizeof(program_v2),
                                    copy_bytecode(program_v2,
                                                  sizeof(program_v2))));
-  delete_item(loaded, "alpha");
-  delete_item(loaded, "branch.leaf");
+  test_item_delete(loaded, "alpha");
+  test_item_delete(loaded, "branch.leaf");
   ASSERT_TRUE(find_item(loaded, "alpha") == NULL);
   ASSERT_TRUE(find_item(loaded, "branch.leaf") == NULL);
-  ASSERT_NOT_NULL(insert_item(loaded, "alpha",
+  ASSERT_NOT_NULL(test_item_set_value(loaded, "alpha",
                               (VALUE_t){.type = VALUE_int, .i = 20}));
-  ASSERT_NOT_NULL(insert_code_item(loaded, "branch.leaf",
+  ASSERT_NOT_NULL(test_item_set_code(loaded, "branch.leaf",
                                    sizeof(inserted_code),
                                    copy_bytecode(inserted_code,
                                                  sizeof(inserted_code))));
@@ -500,14 +501,17 @@ void test_loaded_itemstore_mutation_roundtrip(void) {
   ASSERT_EQ_INT(0, unlink(path));
 }
 
-void test_insert_code_item_rejects_inuse_replacement(void) {
+void test_item_set_code_rejects_inuse_replacement(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
 
   uint8_t *initial = malloc(1);
   ASSERT_NOT_NULL(initial);
   initial[0] = 'h';
-  ITEM_t *code = insert_code_item(root, "code", 1, initial);
+  ITEM_MUTATION_RESULT_t created = item_set_code(root, "code", 1, initial);
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, created.status);
+  ASSERT_TRUE(item_mutation_succeeded(created));
+  ITEM_t *code = created.item;
   ASSERT_NOT_NULL(code);
   item_enter_use(code);
   item_enter_use(code);
@@ -516,7 +520,10 @@ void test_insert_code_item_rejects_inuse_replacement(void) {
   ASSERT_NOT_NULL(replacement);
   replacement[0] = 0;
   replacement[1] = 'h';
-  ASSERT_TRUE(insert_code_item(root, "code", 2, replacement) == NULL);
+  ITEM_MUTATION_RESULT_t rejected = item_set_code(root, "code", 2, replacement);
+  ASSERT_EQ_INT(ITEM_MUTATION_IN_USE, rejected.status);
+  ASSERT_TRUE(rejected.item == NULL);
+  ASSERT_TRUE(!item_mutation_succeeded(rejected));
   ASSERT_EQ_INT(ITEM_code, item_kind(code));
   ASSERT_EQ_INT(1, code->bytecode_len);
   ASSERT_TRUE(code->bytecode == initial);
@@ -528,7 +535,9 @@ void test_insert_code_item_rejects_inuse_replacement(void) {
   ASSERT_NOT_NULL(still_rejected);
   still_rejected[0] = 0;
   still_rejected[1] = 'h';
-  ASSERT_TRUE(insert_code_item(root, "code", 2, still_rejected) == NULL);
+  rejected = item_set_code(root, "code", 2, still_rejected);
+  ASSERT_EQ_INT(ITEM_MUTATION_IN_USE, rejected.status);
+  ASSERT_TRUE(rejected.item == NULL);
   ASSERT_EQ_INT(1, code->bytecode_len);
   free(still_rejected);
 
@@ -538,10 +547,14 @@ void test_insert_code_item_rejects_inuse_replacement(void) {
   ASSERT_NOT_NULL(accepted);
   accepted[0] = 0;
   accepted[1] = 'h';
-  ASSERT_NOT_NULL(insert_code_item(root, "code", 2, accepted));
+  ITEM_MUTATION_RESULT_t replaced = item_set_code(root, "code", 2, accepted);
+  ASSERT_EQ_INT(ITEM_MUTATION_REPLACED, replaced.status);
+  ASSERT_TRUE(item_mutation_succeeded(replaced));
+  ASSERT_TRUE(replaced.item == code);
   ASSERT_EQ_INT(2, code->bytecode_len);
-  ASSERT_NOT_NULL(insert_item(root, "value",
-                              (VALUE_t){.type = VALUE_nil, .i = 0}));
+  created = item_set_value(root, "value", (VALUE_t){.type = VALUE_nil, .i = 0});
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, created.status);
+  ASSERT_TRUE(created.item != NULL);
   ITEM_t *value_item = find_item(root, "value");
   ASSERT_NOT_NULL(value_item);
   item_enter_use(value_item);
@@ -549,7 +562,9 @@ void test_insert_code_item_rejects_inuse_replacement(void) {
   uint8_t *new_code = malloc(1);
   ASSERT_NOT_NULL(new_code);
   new_code[0] = 'h';
-  ASSERT_TRUE(insert_code_item(root, "value", 1, new_code) == NULL);
+  rejected = item_set_code(root, "value", 1, new_code);
+  ASSERT_EQ_INT(ITEM_MUTATION_IN_USE, rejected.status);
+  ASSERT_TRUE(rejected.item == NULL);
   ASSERT_EQ_INT(ITEM_value, value_item->type);
   ASSERT_EQ_INT(VALUE_nil, value_item->value.type);
   free(new_code);
@@ -561,7 +576,7 @@ void test_insert_code_item_rejects_inuse_replacement(void) {
 void test_item_execution_pins_are_balanced_and_zero_safe(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  ITEM_t *item = insert_item(root, "target",
+  ITEM_t *item = test_item_set_value(root, "target",
                              (VALUE_t){.type = VALUE_nil, .i = 0});
   ASSERT_NOT_NULL(item);
   ASSERT_TRUE(!item_is_in_use(item));
@@ -577,13 +592,15 @@ void test_item_execution_pins_are_balanced_and_zero_safe(void) {
   destroy_item(root);
 }
 
-void test_delete_item_rejects_pinned_descendant(void) {
+void test_item_delete_rejects_pinned_descendant(void) {
   ITEMSTORE_t *store = itemstore_create("root");
   ASSERT_NOT_NULL(store);
   ITEM_t *root = itemstore_root(store);
   ASSERT_NOT_NULL(root);
-  ASSERT_NOT_NULL(insert_item(root, "branch.leaf",
-                              (VALUE_t){.type = VALUE_int, .i = 7}));
+  ITEM_MUTATION_RESULT_t created = item_set_value(
+      root, "branch.leaf", (VALUE_t){.type = VALUE_int, .i = 7});
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, created.status);
+  ASSERT_TRUE(created.item != NULL);
   ITEM_t *branch = find_item(root, "branch");
   ITEM_t *leaf = find_item(root, "branch.leaf");
   ASSERT_NOT_NULL(branch);
@@ -594,7 +611,9 @@ void test_delete_item_rejects_pinned_descendant(void) {
   uint64_t hits = itemstore_cache_hits(store);
   uint64_t misses = itemstore_cache_misses(store);
   item_enter_use(leaf);
-  delete_item(root, "branch");
+  ITEM_MUTATION_RESULT_t rejected = item_delete(root, "branch");
+  ASSERT_EQ_INT(ITEM_MUTATION_IN_USE, rejected.status);
+  ASSERT_TRUE(rejected.item == NULL);
   ASSERT_TRUE(find_item(root, "branch") == branch);
   ASSERT_TRUE(find_item(root, "branch.leaf") == leaf);
   ASSERT_EQ_INT(generation, itemstore_topology_revision(store));
@@ -604,11 +623,20 @@ void test_delete_item_rejects_pinned_descendant(void) {
   ASSERT_EQ_INT(misses, itemstore_cache_misses(store));
   ASSERT_EQ_INT(7, find_item(root, "branch.leaf")->value.i);
   item_leave_use(leaf);
-  delete_item(root, "branch");
+  ITEM_MUTATION_RESULT_t deleted = item_delete(root, "branch");
+  ASSERT_EQ_INT(ITEM_MUTATION_DELETED, deleted.status);
+  ASSERT_TRUE(item_mutation_succeeded(deleted));
+  ASSERT_TRUE(deleted.item == NULL);
   ASSERT_TRUE(find_item(root, "branch") == NULL);
   ASSERT_EQ_INT(generation + 1, itemstore_topology_revision(store));
   ASSERT_EQ_INT(payload_revision, itemstore_payload_revision(store));
   ASSERT_TRUE(find_item_cached(root, "branch.leaf", NULL) == NULL);
+  ITEM_MUTATION_RESULT_t missing = item_delete(root, "missing");
+  ASSERT_EQ_INT(ITEM_MUTATION_NOT_FOUND, missing.status);
+  ASSERT_TRUE(missing.item == NULL);
+  ITEM_MUTATION_RESULT_t malformed = item_delete(root, "branch..bad");
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_NAME, malformed.status);
+  ASSERT_TRUE(malformed.item == NULL);
   itemstore_destroy(store);
 }
 
@@ -616,15 +644,23 @@ void test_itemstore_payload_replacement_contracts(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
 
+  ITEM_MUTATION_RESULT_t mutation = item_set_value(NULL, "x", VALUE_NIL);
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_ARGUMENT, mutation.status);
+  ASSERT_TRUE(mutation.item == NULL);
+  ASSERT_TRUE(!item_mutation_succeeded(mutation));
+
   char *old_value = strdup("old value");
   ASSERT_NOT_NULL(old_value);
-  ASSERT_NOT_NULL(insert_item(root, "insert_target",
-                              (VALUE_t){.type = VALUE_str, .s = old_value}));
+  mutation = item_set_value(
+      root, "insert_target", (VALUE_t){.type = VALUE_str, .s = old_value});
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, mutation.status);
+  ASSERT_TRUE(mutation.item != NULL);
 
   uint8_t *first_code = copy_bytecode((const uint8_t *)"h", 1);
   uint64_t generation = get_itemstore_payload_revision();
-  ITEM_t *insert_target = insert_code_item(root, "insert_target", 1,
-                                           first_code);
+  mutation = item_set_code(root, "insert_target", 1, first_code);
+  ASSERT_EQ_INT(ITEM_MUTATION_REPLACED, mutation.status);
+  ITEM_t *insert_target = mutation.item;
   ASSERT_NOT_NULL(insert_target);
   ASSERT_EQ_INT(generation + 1, get_itemstore_payload_revision());
   ASSERT_EQ_INT(ITEM_code, insert_target->type);
@@ -634,9 +670,10 @@ void test_itemstore_payload_replacement_contracts(void) {
   char *inserted_value = strdup("new value");
   ASSERT_NOT_NULL(inserted_value);
   generation = get_itemstore_payload_revision();
-  ASSERT_NOT_NULL(insert_item(root, "insert_target",
-                              (VALUE_t){.type = VALUE_str,
-                                        .s = inserted_value}));
+  mutation = item_set_value(root, "insert_target",
+                            (VALUE_t){.type = VALUE_str, .s = inserted_value});
+  ASSERT_EQ_INT(ITEM_MUTATION_REPLACED, mutation.status);
+  ASSERT_TRUE(mutation.item == insert_target);
   ASSERT_EQ_INT(generation + 1, get_itemstore_payload_revision());
   ASSERT_EQ_INT(ITEM_value, insert_target->type);
   ASSERT_EQ_INT(VALUE_str, insert_target->value.type);
@@ -646,9 +683,10 @@ void test_itemstore_payload_replacement_contracts(void) {
 
   char *same_value = insert_target->value.s;
   generation = get_itemstore_payload_revision();
-  ASSERT_NOT_NULL(insert_item(root, "insert_target",
-                              (VALUE_t){.type = VALUE_str,
-                                        .s = same_value}));
+  mutation = item_set_value(root, "insert_target",
+                            (VALUE_t){.type = VALUE_str, .s = same_value});
+  ASSERT_EQ_INT(ITEM_MUTATION_REPLACED, mutation.status);
+  ASSERT_TRUE(mutation.item == insert_target);
   ASSERT_EQ_INT(generation + 1, get_itemstore_payload_revision());
   ASSERT_TRUE(insert_target->value.s == same_value);
 
@@ -657,22 +695,27 @@ void test_itemstore_payload_replacement_contracts(void) {
   uint8_t *value_as_code = (uint8_t *)same_value;
   generation = get_itemstore_payload_revision();
   uint64_t topology_before_reject = get_itemstore_topology_revision();
-  ASSERT_TRUE(insert_code_item(root, "insert_target", 1, value_as_code) ==
-              NULL);
+  mutation = item_set_code(root, "insert_target", 1, value_as_code);
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_PAYLOAD, mutation.status);
+  ASSERT_TRUE(mutation.item == NULL);
   ASSERT_EQ_INT(generation, get_itemstore_payload_revision());
   ASSERT_EQ_INT(topology_before_reject, get_itemstore_topology_revision());
   ASSERT_EQ_INT(ITEM_value, insert_target->type);
   ASSERT_TRUE(insert_target->value.s == same_value);
 
   uint8_t *set_code = copy_bytecode((const uint8_t *)"h", 1);
-  ITEM_t *set_target = insert_code_item(root, "set_target", 1, set_code);
+  mutation = item_set_code(root, "set_target", 1, set_code);
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, mutation.status);
+  ITEM_t *set_target = mutation.item;
   ASSERT_NOT_NULL(set_target);
   char *set_value = strdup("set value");
   ASSERT_NOT_NULL(set_value);
   generation = get_itemstore_payload_revision();
   uint64_t topology_before_set = get_itemstore_topology_revision();
-  set_item(root, "set_target",
-           (VALUE_t){.type = VALUE_str, .s = set_value});
+  mutation = item_set_value(root, "set_target",
+                            (VALUE_t){.type = VALUE_str, .s = set_value});
+  ASSERT_EQ_INT(ITEM_MUTATION_REPLACED, mutation.status);
+  ASSERT_TRUE(mutation.item == set_target);
   ASSERT_EQ_INT(generation + 1, get_itemstore_payload_revision());
   ASSERT_EQ_INT(topology_before_set, get_itemstore_topology_revision());
   ASSERT_EQ_INT(ITEM_value, set_target->type);
@@ -681,12 +724,16 @@ void test_itemstore_payload_replacement_contracts(void) {
   ASSERT_TRUE(set_target->bytecode == NULL);
   ASSERT_EQ_INT(0, set_target->bytecode_len);
 
-  ITEM_t *alias_code = insert_code_item(
-      root, "alias_code", 1, copy_bytecode((const uint8_t *)"h", 1));
+  mutation = item_set_code(root, "alias_code", 1,
+                           copy_bytecode((const uint8_t *)"h", 1));
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, mutation.status);
+  ITEM_t *alias_code = mutation.item;
   ASSERT_NOT_NULL(alias_code);
   uint8_t *same_code = alias_code->bytecode;
   generation = get_itemstore_payload_revision();
-  ASSERT_NOT_NULL(insert_code_item(root, "alias_code", 1, same_code));
+  mutation = item_set_code(root, "alias_code", 1, same_code);
+  ASSERT_EQ_INT(ITEM_MUTATION_REPLACED, mutation.status);
+  ASSERT_TRUE(mutation.item == alias_code);
   ASSERT_EQ_INT(generation + 1, get_itemstore_payload_revision());
   ASSERT_TRUE(alias_code->bytecode == same_code);
 
@@ -695,28 +742,35 @@ void test_itemstore_payload_replacement_contracts(void) {
   char *code_as_value = (char *)same_code;
   generation = get_itemstore_payload_revision();
   topology_before_reject = get_itemstore_topology_revision();
-  ASSERT_TRUE(insert_item(root, "alias_code",
-                          (VALUE_t){.type = VALUE_str, .s = code_as_value}) ==
-              NULL);
+  mutation = item_set_value(root, "alias_code",
+                            (VALUE_t){.type = VALUE_str, .s = code_as_value});
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_PAYLOAD, mutation.status);
+  ASSERT_TRUE(mutation.item == NULL);
   ASSERT_EQ_INT(generation, get_itemstore_payload_revision());
   ASSERT_EQ_INT(topology_before_reject, get_itemstore_topology_revision());
   ASSERT_EQ_INT(ITEM_code, alias_code->type);
   ASSERT_TRUE(alias_code->bytecode == same_code);
   generation = get_itemstore_payload_revision();
-  set_item(root, "alias_code",
-           (VALUE_t){.type = VALUE_str, .s = code_as_value});
+  mutation = item_set_value(root, "alias_code",
+                            (VALUE_t){.type = VALUE_str, .s = code_as_value});
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_PAYLOAD, mutation.status);
+  ASSERT_TRUE(mutation.item == NULL);
   ASSERT_EQ_INT(generation, get_itemstore_payload_revision());
   ASSERT_EQ_INT(ITEM_code, alias_code->type);
   ASSERT_TRUE(alias_code->bytecode == same_code);
 
-  ITEM_t *inuse = insert_code_item(root, "inuse", 1,
-                                   copy_bytecode((const uint8_t *)"h", 1));
+  mutation = item_set_code(root, "inuse", 1,
+                           copy_bytecode((const uint8_t *)"h", 1));
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, mutation.status);
+  ITEM_t *inuse = mutation.item;
   ASSERT_NOT_NULL(inuse);
   item_enter_use(inuse);
   uint8_t *rejected_code = copy_bytecode((const uint8_t *)"hh", 2);
   generation = get_itemstore_payload_revision();
   topology_before_reject = get_itemstore_topology_revision();
-  ASSERT_TRUE(insert_code_item(root, "inuse", 2, rejected_code) == NULL);
+  mutation = item_set_code(root, "inuse", 2, rejected_code);
+  ASSERT_EQ_INT(ITEM_MUTATION_IN_USE, mutation.status);
+  ASSERT_TRUE(mutation.item == NULL);
   ASSERT_EQ_INT(generation, get_itemstore_payload_revision());
   ASSERT_EQ_INT(topology_before_reject, get_itemstore_topology_revision());
   ASSERT_EQ_INT(1, inuse->bytecode_len);
@@ -725,35 +779,61 @@ void test_itemstore_payload_replacement_contracts(void) {
   char *rejected_value = strdup("rejected value");
   ASSERT_NOT_NULL(rejected_value);
   generation = get_itemstore_payload_revision();
-  set_item(root, "inuse",
-           (VALUE_t){.type = VALUE_str, .s = rejected_value});
+  mutation = item_set_value(root, "inuse",
+                            (VALUE_t){.type = VALUE_str, .s = rejected_value});
+  ASSERT_EQ_INT(ITEM_MUTATION_IN_USE, mutation.status);
+  ASSERT_TRUE(mutation.item == NULL);
   ASSERT_EQ_INT(generation, get_itemstore_payload_revision());
   ASSERT_EQ_INT(ITEM_code, inuse->type);
   ASSERT_EQ_INT(1, inuse->bytecode_len);
+  value_free(&(VALUE_t){.type = VALUE_str, .s = rejected_value});
   item_leave_use(inuse);
+
+  char *assigned_value = strdup("assigned value");
+  ASSERT_NOT_NULL(assigned_value);
+  mutation = item_set_value(root, "assign_target",
+                            (VALUE_t){.type = VALUE_str, .s = assigned_value});
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, mutation.status);
+  ITEM_t *assign_target = mutation.item;
+  ASSERT_NOT_NULL(assign_target);
+  item_enter_use(assign_target);
+  VALUE_t assigned_name = {.type = VALUE_str, .s = strdup("assign_target")};
+  ASSERT_NOT_NULL(assigned_name.s);
+  assignitem(root, &assigned_name,
+             (VALUE_t){.type = VALUE_str, .s = assigned_value});
+  ASSERT_TRUE(assign_target->value.s == assigned_value);
+  ASSERT_TRUE(strcmp(assign_target->value.s, "assigned value") == 0);
+  item_leave_use(assign_target);
 
   char *invalid = strdup("invalid");
   ASSERT_NOT_NULL(invalid);
   generation = get_itemstore_payload_revision();
-  ASSERT_TRUE(insert_item(root, "invalid..name",
-                          (VALUE_t){.type = VALUE_str, .s = invalid}) == NULL);
+  mutation = item_set_value(root, "invalid..name",
+                            (VALUE_t){.type = VALUE_str, .s = invalid});
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_NAME, mutation.status);
+  ASSERT_TRUE(mutation.item == NULL);
   ASSERT_EQ_INT(generation, get_itemstore_payload_revision());
   value_free(&(VALUE_t){.type = VALUE_str, .s = invalid});
 
   char *invalid_set = strdup("invalid set");
   ASSERT_NOT_NULL(invalid_set);
   generation = get_itemstore_payload_revision();
-  set_item(root, "invalid..set",
-           (VALUE_t){.type = VALUE_str, .s = invalid_set});
+  mutation = item_set_value(root, "invalid..set",
+                            (VALUE_t){.type = VALUE_str, .s = invalid_set});
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_NAME, mutation.status);
+  ASSERT_TRUE(mutation.item == NULL);
   ASSERT_EQ_INT(generation, get_itemstore_payload_revision());
+  value_free(&(VALUE_t){.type = VALUE_str, .s = invalid_set});
 
   char *oversized = malloc(SIN_MAX_STRING_BYTES + 2);
   ASSERT_NOT_NULL(oversized);
   memset(oversized, 'x', SIN_MAX_STRING_BYTES + 1);
   oversized[SIN_MAX_STRING_BYTES + 1] = '\0';
   generation = get_itemstore_payload_revision();
-  ASSERT_TRUE(insert_item(root, "oversized",
-                          (VALUE_t){.type = VALUE_str, .s = oversized}) == NULL);
+  mutation = item_set_value(root, "oversized",
+                            (VALUE_t){.type = VALUE_str, .s = oversized});
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_PAYLOAD, mutation.status);
+  ASSERT_TRUE(mutation.item == NULL);
   ASSERT_EQ_INT(generation, get_itemstore_payload_revision());
   value_free(&(VALUE_t){.type = VALUE_str, .s = oversized});
 
@@ -762,9 +842,12 @@ void test_itemstore_payload_replacement_contracts(void) {
   memset(oversized_set, 'y', SIN_MAX_STRING_BYTES + 1);
   oversized_set[SIN_MAX_STRING_BYTES + 1] = '\0';
   generation = get_itemstore_payload_revision();
-  set_item(root, "oversized_set",
-           (VALUE_t){.type = VALUE_str, .s = oversized_set});
+  mutation = item_set_value(root, "oversized_set",
+                            (VALUE_t){.type = VALUE_str, .s = oversized_set});
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_PAYLOAD, mutation.status);
+  ASSERT_TRUE(mutation.item == NULL);
   ASSERT_EQ_INT(generation, get_itemstore_payload_revision());
+  value_free(&(VALUE_t){.type = VALUE_str, .s = oversized_set});
 
   destroy_item(root);
 }
@@ -778,9 +861,11 @@ void test_itemstore_path_creation_rolls_back_on_failure(void) {
   ASSERT_NOT_NULL(insert_value);
   uint64_t generation = get_itemstore_payload_revision();
   uint64_t topology = get_itemstore_topology_revision();
-  ASSERT_TRUE(insert_item(root, "transaction.fail.leaf",
-                          (VALUE_t){.type = VALUE_str,
-                                    .s = insert_value}) == NULL);
+  ITEM_MUTATION_RESULT_t mutation = item_set_value(
+      root, "transaction.fail.leaf",
+      (VALUE_t){.type = VALUE_str, .s = insert_value});
+  ASSERT_EQ_INT(ITEM_MUTATION_ALLOCATION_FAILED, mutation.status);
+  ASSERT_TRUE(mutation.item == NULL);
   ASSERT_TRUE(find_item(root, "transaction") == NULL);
   ASSERT_EQ_INT(generation, get_itemstore_payload_revision());
   ASSERT_EQ_INT(topology, get_itemstore_topology_revision());
@@ -790,11 +875,14 @@ void test_itemstore_path_creation_rolls_back_on_failure(void) {
   ASSERT_NOT_NULL(set_value);
   generation = get_itemstore_payload_revision();
   topology = get_itemstore_topology_revision();
-  set_item(root, "transaction.fail.leaf",
-           (VALUE_t){.type = VALUE_str, .s = set_value});
+  mutation = item_set_value(root, "transaction.fail.leaf",
+                            (VALUE_t){.type = VALUE_str, .s = set_value});
+  ASSERT_EQ_INT(ITEM_MUTATION_ALLOCATION_FAILED, mutation.status);
+  ASSERT_TRUE(mutation.item == NULL);
   ASSERT_TRUE(find_item(root, "transaction") == NULL);
   ASSERT_EQ_INT(generation, get_itemstore_payload_revision());
   ASSERT_EQ_INT(topology, get_itemstore_topology_revision());
+  value_free(&(VALUE_t){.type = VALUE_str, .s = set_value});
 
   itemstore_set_item_creation_failure_hook_for_tests(NULL);
   destroy_item(root);
@@ -807,7 +895,7 @@ void test_itemstore_nested_depth_roundtrip(void) {
 
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  ASSERT_NOT_NULL(insert_item(root, "a.b.c.d.e.f.g.h",
+  ASSERT_NOT_NULL(test_item_set_value(root, "a.b.c.d.e.f.g.h",
                               (VALUE_t){.type = VALUE_int, .i = 8}));
   ASSERT_TRUE(save_itemstore(path, root));
 
@@ -830,18 +918,18 @@ void test_itemstore_item_name_contract_boundaries_roundtrip(void) {
 
   ITEM_t *root = make_root_item("root/name");
   ASSERT_NOT_NULL(root);
-  ASSERT_NOT_NULL(insert_item(root, "a",
+  ASSERT_NOT_NULL(test_item_set_value(root, "a",
                               (VALUE_t){.type = VALUE_int, .i = 1}));
 
   char max_layer[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
   memset(max_layer, 'b', ITEM_MAX_LAYER_NAME_LENGTH);
   max_layer[ITEM_MAX_LAYER_NAME_LENGTH] = '\0';
-  ASSERT_NOT_NULL(insert_item(root, max_layer,
+  ASSERT_NOT_NULL(test_item_set_value(root, max_layer,
                               (VALUE_t){.type = VALUE_int, .i = 32}));
 
   char max_path[MAX_ITEM_NAME];
   build_max_item_path(max_path);
-  ITEM_t *deepest = insert_item(root, max_path,
+  ITEM_t *deepest = test_item_set_value(root, max_path,
                                 (VALUE_t){.type = VALUE_int, .i = 263});
   ASSERT_NOT_NULL(deepest);
   char assembled[MAX_ITEM_NAME] = {0};
@@ -853,7 +941,7 @@ void test_itemstore_item_name_contract_boundaries_roundtrip(void) {
   bytecode[0] = 0;
   bytecode[1] = 0;
   bytecode[2] = 'h';
-  ASSERT_NOT_NULL(insert_code_item(root, "code_boundary_123456789012345678",
+  ASSERT_NOT_NULL(test_item_set_code(root, "code_boundary_123456789012345678",
                                    3, bytecode));
 
   ASSERT_TRUE(save_itemstore(path, root));
@@ -882,7 +970,7 @@ void test_itemstore_item_name_rejection_is_atomic(void) {
        i++) {
     uint64_t topology = get_itemstore_topology_revision();
     uint64_t payload = get_itemstore_payload_revision();
-    ASSERT_TRUE(insert_item(root, invalid_names[i],
+    ASSERT_TRUE(test_item_set_value(root, invalid_names[i],
                             (VALUE_t){.type = VALUE_int, .i = 1}) == NULL);
     ASSERT_EQ_INT(topology, get_itemstore_topology_revision());
     ASSERT_EQ_INT(payload, get_itemstore_payload_revision());
@@ -890,7 +978,7 @@ void test_itemstore_item_name_rejection_is_atomic(void) {
 
   uint64_t topology = get_itemstore_topology_revision();
   uint64_t payload = get_itemstore_payload_revision();
-  ASSERT_TRUE(insert_item(root, "a.b.c.d.e.f.g.h.i",
+  ASSERT_TRUE(test_item_set_value(root, "a.b.c.d.e.f.g.h.i",
                           (VALUE_t){.type = VALUE_int, .i = 1}) == NULL);
   ASSERT_EQ_INT(topology, get_itemstore_topology_revision());
   ASSERT_EQ_INT(payload, get_itemstore_payload_revision());
@@ -903,7 +991,7 @@ void test_itemstore_item_name_rejection_is_atomic(void) {
               < (int)sizeof too_long);
   topology = get_itemstore_topology_revision();
   payload = get_itemstore_payload_revision();
-  set_item(root, too_long, (VALUE_t){.type = VALUE_int, .i = 2});
+  test_item_set_value(root, too_long, (VALUE_t){.type = VALUE_int, .i = 2});
   ASSERT_EQ_INT(topology, get_itemstore_topology_revision());
   ASSERT_EQ_INT(payload, get_itemstore_payload_revision());
   ASSERT_TRUE(find_item(root, "a") == NULL);
@@ -914,24 +1002,24 @@ void test_itemstore_item_name_rejection_is_atomic(void) {
 void test_itemstore_item_name_relative_depth_contract(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  ITEM_t *parent = insert_item(root, "a.b.c.d.e.f.g",
+  ITEM_t *parent = test_item_set_value(root, "a.b.c.d.e.f.g",
                                (VALUE_t){.type = VALUE_nil, .i = 0});
   ASSERT_NOT_NULL(parent);
-  ASSERT_NOT_NULL(insert_item(parent, "h",
+  ASSERT_NOT_NULL(test_item_set_value(parent, "h",
                               (VALUE_t){.type = VALUE_int, .i = 8}));
   ITEM_t *deep_parent = find_item(parent, "h");
   ASSERT_NOT_NULL(deep_parent);
 
   uint64_t topology = get_itemstore_topology_revision();
   uint64_t payload = get_itemstore_payload_revision();
-  ASSERT_TRUE(insert_item(deep_parent, "i",
+  ASSERT_TRUE(test_item_set_value(deep_parent, "i",
                           (VALUE_t){.type = VALUE_int, .i = 9}) == NULL);
   ASSERT_EQ_INT(topology, get_itemstore_topology_revision());
   ASSERT_EQ_INT(payload, get_itemstore_payload_revision());
   ASSERT_TRUE(find_item(deep_parent, "i") == NULL);
   ASSERT_TRUE(find_item(root, "a.b.c.d.e.f.g.i") == NULL);
 
-  delete_item(parent, "h");
+  test_item_delete(parent, "h");
   ASSERT_TRUE(find_item(parent, "h") == NULL);
   destroy_item(root);
 }
@@ -1278,14 +1366,14 @@ void test_save_itemstore_preserves_existing_file_on_failure(void) {
 
   ITEM_t *original = make_root_item("root");
   ASSERT_NOT_NULL(original);
-  ASSERT_NOT_NULL(insert_item(original, "sentinel",
+  ASSERT_NOT_NULL(test_item_set_value(original, "sentinel",
                               (VALUE_t){.type = VALUE_int, .i = 42}));
   ASSERT_TRUE(save_itemstore(path, original));
   destroy_item(original);
 
   ITEM_t *invalid = make_root_item("root");
   ASSERT_NOT_NULL(invalid);
-  ASSERT_NOT_NULL(insert_code_item(invalid, "invalid_code", 1, NULL));
+  ASSERT_NOT_NULL(test_item_set_code(invalid, "invalid_code", 1, NULL));
   ASSERT_TRUE(!save_itemstore(path, invalid));
   destroy_item(invalid);
 
@@ -1294,7 +1382,7 @@ void test_save_itemstore_preserves_existing_file_on_failure(void) {
   for (int i = 0; i < 251; i++) {
     char name[16];
     ASSERT_TRUE(snprintf(name, sizeof(name), "child_%03d", i) > 0);
-    ASSERT_NOT_NULL(insert_item(
+    ASSERT_NOT_NULL(test_item_set_value(
         too_many_children, name, (VALUE_t){.type = VALUE_nil, .i = 0}));
   }
   ASSERT_TRUE(!save_itemstore(path, too_many_children));
@@ -1364,7 +1452,7 @@ void test_itemstore_durability_modes(void) {
   ASSERT_EQ_INT(0, fclose(file));
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  ASSERT_NOT_NULL(insert_item(root, "persisted",
+  ASSERT_NOT_NULL(test_item_set_value(root, "persisted",
                               (VALUE_t){.type = VALUE_int, .i = 1}));
 
   // This deliberately targets the old predictable PID-shaped name. It
@@ -1403,7 +1491,7 @@ void test_itemstore_durability_modes(void) {
   ASSERT_EQ_INT(0, fclose(unrelated_temp_file));
   ASSERT_EQ_INT(0, unlink(unrelated_temp_path));
 
-  ASSERT_NOT_NULL(insert_item(root, "not_persisted",
+  ASSERT_NOT_NULL(test_item_set_value(root, "not_persisted",
                               (VALUE_t){.type = VALUE_int, .i = 2}));
 
   config.itemstore_durability = ITEMSTORE_DURABLE_FULL;

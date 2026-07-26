@@ -100,8 +100,8 @@ may not contain an embedded NUL, but it is not subject to the non-root character
 set restriction.
 
 The in-memory item APIs use these same limits before changing a tree. A path
-passed to `insert_item`, `insert_code_item`, `set_item`, `find_item`,
-`find_item_cached`, or `delete_item` is relative to the supplied item pointer;
+passed to `item_set_value`, `item_set_code`, `find_item`,
+`find_item_cached`, or `item_delete` is relative to the supplied item pointer;
 the supplied item's ancestor depth counts toward the depth limit. Its complete
 non-root path must fit within 263 bytes including separators. Invalid paths are
 rejected without creating intermediate items, changing the itemstore

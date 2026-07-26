@@ -76,15 +76,21 @@ links are borrowed references within that tree; `destroy_item` recursively frees
 an item, its insertion-ordered child container and descendants, its owned
 bytecode buffer for a code item, and any owned string payload in a value item.
 
-Value items own their stored `VALUE_t` payload. When `make_item`, `insert_item`,
-or `set_item` stores a string `VALUE_t`, ownership of the string buffer transfers
-to the itemstore. Callers must not free or reuse that string after a successful
-store. Replacing a value item frees the previous owned payload.
+Value items own their stored `VALUE_t` payload. When `make_item` or
+`item_set_value` stores a string `VALUE_t`, ownership of the string buffer
+transfers to the itemstore. Callers must not free or reuse that string after a
+successful store. Replacing a value item frees the previous owned payload.
 
 Code items own their bytecode buffers. `make_item` takes ownership of the
-bytecode pointer for code items, and `insert_code_item` takes ownership of the
+bytecode pointer for code items, and `item_set_code` takes ownership of the
 bytecode pointer when it successfully installs it. Callers retain ownership on
 validation failure or other failure before installation.
+
+Mutation results distinguish creation, replacement, deletion, missing names,
+invalid input, pinned items, and allocation failure. Payload ownership transfers
+only for successful creation or replacement; every failure leaves caller-owned
+input unchanged (except aliases already owned by the target, which remain
+store-owned).
 
 `get_itemfilename` allocates and returns a path string for the caller to free.
 `save_itemsource` borrows both the item and source text only for the duration of

@@ -42,7 +42,7 @@ static ITEM_t *insert_frame_code(const char *name, const uint8_t *code,
   uint8_t *owned = malloc(length);
   ASSERT_NOT_NULL(owned);
   memcpy(owned, code, length);
-  ITEM_t *item = insert_code_item(itemstore_root(config.itemstore_ctx), name, (uint32_t)length,
+  ITEM_t *item = test_item_set_code(itemstore_root(config.itemstore_ctx), name, (uint32_t)length,
                                   owned);
   ASSERT_NOT_NULL(item);
   return item;

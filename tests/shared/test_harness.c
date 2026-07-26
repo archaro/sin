@@ -124,9 +124,9 @@ void test_loaded_zero_child_item_can_gain_runtime_child(void);
 void test_itemstore_value_and_code_roundtrip(void);
 void test_loaded_itemstore_mutation_roundtrip(void);
 void test_load_itemstore_handles_constructor_failure_with_children(void);
-void test_insert_code_item_rejects_inuse_replacement(void);
+void test_item_set_code_rejects_inuse_replacement(void);
 void test_item_execution_pins_are_balanced_and_zero_safe(void);
-void test_delete_item_rejects_pinned_descendant(void);
+void test_item_delete_rejects_pinned_descendant(void);
 void test_itemstore_payload_replacement_contracts(void);
 void test_itemstore_path_creation_rolls_back_on_failure(void);
 void test_itemstore_nested_depth_roundtrip(void);
@@ -360,9 +360,9 @@ static const test_case_t core_tests[] = {
     {"test_itemstore_value_and_code_roundtrip", test_itemstore_value_and_code_roundtrip},
     {"test_loaded_itemstore_mutation_roundtrip", test_loaded_itemstore_mutation_roundtrip},
     {"test_load_itemstore_handles_constructor_failure_with_children", test_load_itemstore_handles_constructor_failure_with_children},
-    {"test_insert_code_item_rejects_inuse_replacement", test_insert_code_item_rejects_inuse_replacement},
+    {"test_item_set_code_rejects_inuse_replacement", test_item_set_code_rejects_inuse_replacement},
     {"test_item_execution_pins_are_balanced_and_zero_safe", test_item_execution_pins_are_balanced_and_zero_safe},
-    {"test_delete_item_rejects_pinned_descendant", test_delete_item_rejects_pinned_descendant},
+    {"test_item_delete_rejects_pinned_descendant", test_item_delete_rejects_pinned_descendant},
     {"test_itemstore_payload_replacement_contracts", test_itemstore_payload_replacement_contracts},
     {"test_itemstore_path_creation_rolls_back_on_failure", test_itemstore_path_creation_rolls_back_on_failure},
     {"test_itemstore_nested_depth_roundtrip", test_itemstore_nested_depth_roundtrip},

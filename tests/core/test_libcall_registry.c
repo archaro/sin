@@ -402,7 +402,7 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, template_bytecode, sizeof(template_bytecode));
 
-  ITEM_t *code = insert_code_item(itemstore_root(config.itemstore_ctx), "test.missinglibcall",
+  ITEM_t *code = test_item_set_code(itemstore_root(config.itemstore_ctx), "test.missinglibcall",
                                   sizeof(template_bytecode), bytecode);
   ASSERT_NOT_NULL(code);
 

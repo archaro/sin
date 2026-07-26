@@ -23,8 +23,8 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   one store while another remains usable.
 - Execution lifetime is covered by
   `test_item_execution_pins_are_balanced_and_zero_safe`,
-  `test_insert_code_item_rejects_inuse_replacement`, and
-  `test_delete_item_rejects_pinned_descendant`: balanced frame pins protect
+  `test_item_set_code_rejects_inuse_replacement`, and
+  `test_item_delete_rejects_pinned_descendant`: balanced frame pins protect
   payloads, and ancestor deletion preserves topology/cache state until a
   pinned descendant leaves.
 - **Harness and suite wiring**

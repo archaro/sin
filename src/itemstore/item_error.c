@@ -32,7 +32,8 @@ static void set_string_error_field(ITEM_t *root, const char *name,
   VALUE_t v;
   v.type = VALUE_str;
   v.s = strdup(value ? value : "");
-  set_item(root, name, v);
+  ITEM_MUTATION_RESULT_t r = item_set_value(root, name, v);
+  if (!item_mutation_succeeded(r)) value_free(&v);
 }
 
 
@@ -41,21 +42,21 @@ static void set_int_error_field(ITEM_t *root, const char *name,
   VALUE_t v;
   v.type = VALUE_int;
   v.i = value;
-  set_item(root, name, v);
+  (void)item_set_value(root, name, v);
 }
 
 
 void clear_error_item(ITEM_t *root) {
   if (!root) return;
-  set_item(root, "error", VALUE_NIL);
-  set_item(root, "error.msg", VALUE_NIL);
-  set_item(root, "error.item", VALUE_NIL);
-  set_item(root, "error.code", VALUE_NIL);
-  set_item(root, "error.stage", VALUE_NIL);
-  set_item(root, "error.file", VALUE_NIL);
-  set_item(root, "error.line", VALUE_NIL);
-  set_item(root, "error.column", VALUE_NIL);
-  set_item(root, "error.excerpt", VALUE_NIL);
+  (void)item_set_value(root, "error", VALUE_NIL);
+  (void)item_set_value(root, "error.msg", VALUE_NIL);
+  (void)item_set_value(root, "error.item", VALUE_NIL);
+  (void)item_set_value(root, "error.code", VALUE_NIL);
+  (void)item_set_value(root, "error.stage", VALUE_NIL);
+  (void)item_set_value(root, "error.file", VALUE_NIL);
+  (void)item_set_value(root, "error.line", VALUE_NIL);
+  (void)item_set_value(root, "error.column", VALUE_NIL);
+  (void)item_set_value(root, "error.excerpt", VALUE_NIL);
 }
 
 void set_error_item(ITEM_t *root, const int errnum,
@@ -66,7 +67,7 @@ void set_error_item(ITEM_t *root, const int errnum,
   const char *base = safe_error_message(errnum);
   e.type = VALUE_int;
   e.i = errnum;
-  set_item(root, "error", e);
+  (void)item_set_value(root, "error", e);
   emsg.type = VALUE_str;
   if (errdetail) {
     // It's possible that there is an extended error message.
@@ -78,20 +79,21 @@ void set_error_item(ITEM_t *root, const int errnum,
   } else {
     emsg.s = strdup(base);
   }
-  set_item(root, "error.msg", emsg);
+  ITEM_MUTATION_RESULT_t msg_result = item_set_value(root, "error.msg", emsg);
+  if (!item_mutation_succeeded(msg_result)) value_free(&emsg);
   if (current_item) {
     char itemname[MAX_ITEM_NAME] = {0};
     get_itemname(current_item, itemname);
     set_string_error_field(root, "error.item", itemname);
   } else {
-    set_item(root, "error.item", VALUE_NIL);
+    (void)item_set_value(root, "error.item", VALUE_NIL);
   }
-  set_item(root, "error.code", VALUE_NIL);
-  set_item(root, "error.stage", VALUE_NIL);
-  set_item(root, "error.file", VALUE_NIL);
-  set_item(root, "error.line", VALUE_NIL);
-  set_item(root, "error.column", VALUE_NIL);
-  set_item(root, "error.excerpt", VALUE_NIL);
+  (void)item_set_value(root, "error.code", VALUE_NIL);
+  (void)item_set_value(root, "error.stage", VALUE_NIL);
+  (void)item_set_value(root, "error.file", VALUE_NIL);
+  (void)item_set_value(root, "error.line", VALUE_NIL);
+  (void)item_set_value(root, "error.column", VALUE_NIL);
+  (void)item_set_value(root, "error.excerpt", VALUE_NIL);
 }
 
 void set_compiler_error_item(ITEM_t *root, const CompilerDiagnostic *diag) {
@@ -114,7 +116,7 @@ void set_compiler_error_item(ITEM_t *root, const CompilerDiagnostic *diag) {
   VALUE_t e;
   e.type = VALUE_int;
   e.i = diag->code;
-  set_item(root, "error", e);
+  (void)item_set_value(root, "error", e);
 
   int needed = snprintf(NULL, 0,
       "%s stage=%s file=%s line=%d column=%d message=%s excerpt=%s",
@@ -130,8 +132,9 @@ void set_compiler_error_item(ITEM_t *root, const CompilerDiagnostic *diag) {
   snprintf(emsg.s, (size_t)needed + 1,
       "%s stage=%s file=%s line=%d column=%d message=%s excerpt=%s",
       stable_code, stage, file, line, column, message, excerpt);
-  set_item(root, "error.msg", emsg);
-  set_item(root, "error.item", VALUE_NIL);
+  ITEM_MUTATION_RESULT_t msg_result = item_set_value(root, "error.msg", emsg);
+  if (!item_mutation_succeeded(msg_result)) value_free(&emsg);
+  (void)item_set_value(root, "error.item", VALUE_NIL);
 
 
   set_string_error_field(root, "error.code", stable_code);

@@ -26,7 +26,7 @@ void test_itemstore_benchmarks(void) {
   for (int i = 0; i < 64; i++) {
     char name[32];
     ASSERT_TRUE(snprintf(name, sizeof(name), "sibling_%02d", i) > 0);
-    ASSERT_NOT_NULL(insert_item(root, name, (VALUE_t){.type = VALUE_int, .i = i}));
+    ASSERT_NOT_NULL(test_item_set_value(root, name, (VALUE_t){.type = VALUE_int, .i = i}));
   }
   char deep[ITEM_MAX_FULL_NAME_LENGTH + 1u];
   size_t deep_len = 0;
@@ -36,14 +36,14 @@ void test_itemstore_benchmarks(void) {
     deep_len += ITEM_MAX_LAYER_NAME_LENGTH;
   }
   deep[deep_len] = '\0';
-  ASSERT_NOT_NULL(insert_item(root, deep, (VALUE_t){.type = VALUE_int, .i = 7}));
+  ASSERT_NOT_NULL(test_item_set_value(root, deep, (VALUE_t){.type = VALUE_int, .i = 7}));
 
   ITEMSTORE_CONTEXT_t *ctx = itemstore_default_context();
   ITEM_t *small_root = make_root_item("small");
   ASSERT_NOT_NULL(small_root);
-  ASSERT_NOT_NULL(insert_item(
+  ASSERT_NOT_NULL(test_item_set_value(
       small_root, "only_a", (VALUE_t){.type = VALUE_int, .i = 1}));
-  ASSERT_NOT_NULL(insert_item(
+  ASSERT_NOT_NULL(test_item_set_value(
       small_root, "only_b", (VALUE_t){.type = VALUE_int, .i = 2}));
   uint64_t hits = ctx->fetchitem_cache_hits, misses = ctx->fetchitem_cache_misses;
   ASSERT_NOT_NULL(find_item_cached(root, "sibling_00", NULL));
@@ -57,7 +57,7 @@ void test_itemstore_benchmarks(void) {
   ITEM_t *replacement = find_item_cached(root, "sibling_01", NULL);
   ASSERT_NOT_NULL(replacement);
   uint64_t misses_before_replace = ctx->fetchitem_cache_misses;
-  ASSERT_TRUE(insert_item(
+  ASSERT_TRUE(test_item_set_value(
       root, "sibling_01",
       (VALUE_t){.type = VALUE_int, .i = 101}) == replacement);
   ASSERT_EQ_INT(101, find_item_cached(root, "sibling_01", NULL)->value.i);
@@ -65,7 +65,7 @@ void test_itemstore_benchmarks(void) {
 
   ASSERT_EQ_INT(0, item_child_at(root, 0)->value.i);
   ASSERT_EQ_INT(63, item_child_at(root, 63)->value.i);
-  delete_item(root, "sibling_00");
+  test_item_delete(root, "sibling_00");
   ASSERT_EQ_INT(64, item_child_count(root));
   ASSERT_EQ_INT(101, item_child_at(root, 0)->value.i);
 
@@ -131,7 +131,7 @@ void test_itemstore_benchmarks(void) {
   start = itemstore_bench_now_ns();
   for (int i = 0; i < iterations; i++) {
     (void)find_item_cached(root, shallow_name, NULL);
-    (void)insert_item(root, shallow_name, (VALUE_t){.type = VALUE_int, .i = i});
+    (void)test_item_set_value(root, shallow_name, (VALUE_t){.type = VALUE_int, .i = i});
   }
   uint64_t replacement_ns = itemstore_bench_now_ns() - start;
   uint64_t replacement_hits = ctx->fetchitem_cache_hits - hits_before;
@@ -142,7 +142,7 @@ void test_itemstore_benchmarks(void) {
   ITEM_t *mut = make_root_item("mut");
   start = itemstore_bench_now_ns();
   for (int i = 0; i < iterations; i++) {
-    (void)insert_item(
+    (void)test_item_set_value(
         mut, mutation_names[i], (VALUE_t){.type = VALUE_int, .i = i});
   }
   uint64_t insertion_ns = itemstore_bench_now_ns() - start;
@@ -152,7 +152,7 @@ void test_itemstore_benchmarks(void) {
                 find_item(mut, mutation_names[iterations - 1])->value.i);
   start = itemstore_bench_now_ns();
   for (int i = 0; i < iterations; i++) {
-    delete_item(mut, mutation_names[i]);
+    test_item_delete(mut, mutation_names[i]);
   }
   uint64_t deletion_ns = itemstore_bench_now_ns() - start;
   ASSERT_EQ_INT(0, item_child_count(mut));
@@ -204,7 +204,7 @@ void test_find_item_cached_hit_and_negative_cache(void) {
   ASSERT_NOT_NULL(root);
 
   VALUE_t value = {.type = VALUE_int, .i = 42};
-  ITEM_t *inserted = insert_item(root, "alpha.beta", value);
+  ITEM_t *inserted = test_item_set_value(root, "alpha.beta", value);
   ASSERT_NOT_NULL(inserted);
 
   ITEMSTORE_CONTEXT_t *ctx = itemstore_default_context();
@@ -243,7 +243,7 @@ void test_find_item_cached_rejects_invalid_names_without_counters(void) {
   ASSERT_NOT_NULL(root);
 
   ITEMSTORE_CONTEXT_t *ctx = itemstore_default_context();
-  ASSERT_NOT_NULL(insert_item(root, "valid",
+  ASSERT_NOT_NULL(test_item_set_value(root, "valid",
                               (VALUE_t){.type = VALUE_int, .i = 3}));
   bool found = false;
   ASSERT_NOT_NULL(find_item_cached(root, "valid", &found));
@@ -290,10 +290,10 @@ void test_find_item_cached_rejects_invalid_names_without_counters(void) {
 void test_find_item_cached_relative_invalid_name_preserves_counters(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  ITEM_t *parent = insert_item(root, "a.b.c.d.e.f.g",
+  ITEM_t *parent = test_item_set_value(root, "a.b.c.d.e.f.g",
                                (VALUE_t){.type = VALUE_nil, .i = 0});
   ASSERT_NOT_NULL(parent);
-  ASSERT_NOT_NULL(insert_item(parent, "h",
+  ASSERT_NOT_NULL(test_item_set_value(parent, "h",
                               (VALUE_t){.type = VALUE_int, .i = 8}));
   ASSERT_NOT_NULL(find_item_cached(parent, "h", NULL));
 
@@ -318,7 +318,7 @@ void test_find_item_cached_invalidation_on_delete_and_reinsert(void) {
   ASSERT_TRUE(missing == NULL);
   ASSERT_TRUE(!found);
 
-  ITEM_t *created = insert_item(
+  ITEM_t *created = test_item_set_value(
       root, "cache.created", (VALUE_t){.type = VALUE_int, .i = 55});
   ASSERT_NOT_NULL(created);
   ITEM_t *after_create = find_item_cached(root, "cache.created", &found);
@@ -327,7 +327,7 @@ void test_find_item_cached_invalidation_on_delete_and_reinsert(void) {
   ASSERT_EQ_INT(55, after_create->value.i);
 
   VALUE_t value = {.type = VALUE_int, .i = 7};
-  ITEM_t *first = insert_item(root, "cache.target", value);
+  ITEM_t *first = test_item_set_value(root, "cache.target", value);
   ASSERT_NOT_NULL(first);
 
   ITEM_t *cached_before = find_item_cached(root, "cache.target", NULL);
@@ -337,7 +337,7 @@ void test_find_item_cached_invalidation_on_delete_and_reinsert(void) {
   ITEMSTORE_t *store = itemstore_owner(root);
   uint64_t topology_before_delete = itemstore_topology_revision(store);
   uint64_t payload_before_delete = itemstore_payload_revision(store);
-  delete_item(root, "cache.target");
+  test_item_delete(root, "cache.target");
   ITEM_t *after_delete = find_item_cached(root, "cache.target", NULL);
   ASSERT_TRUE(after_delete == NULL);
 
@@ -347,7 +347,7 @@ void test_find_item_cached_invalidation_on_delete_and_reinsert(void) {
   uint64_t topology_before_reinsert = itemstore_topology_revision(store);
   uint64_t payload_before_reinsert = itemstore_payload_revision(store);
   VALUE_t value2 = {.type = VALUE_int, .i = 99};
-  ITEM_t *second = insert_item(root, "cache.target", value2);
+  ITEM_t *second = test_item_set_value(root, "cache.target", value2);
   ASSERT_NOT_NULL(second);
   ASSERT_EQ_INT(topology_before_reinsert + 1,
                itemstore_topology_revision(store));
@@ -367,9 +367,9 @@ void test_find_item_cached_distinguishes_roots(void) {
   ASSERT_NOT_NULL(first_root);
   ASSERT_NOT_NULL(second_root);
 
-  ITEM_t *first_item = insert_item(
+  ITEM_t *first_item = test_item_set_value(
       first_root, "shared.name", (VALUE_t){.type = VALUE_int, .i = 11});
-  ITEM_t *second_item = insert_item(
+  ITEM_t *second_item = test_item_set_value(
       second_root, "shared.name", (VALUE_t){.type = VALUE_int, .i = 22});
   ASSERT_NOT_NULL(first_item);
   ASSERT_NOT_NULL(second_item);
@@ -397,8 +397,8 @@ void test_itemstore_cache_state_is_store_local(void) {
   ASSERT_NOT_NULL(second);
   ITEM_t *first_root = itemstore_root(first);
   ITEM_t *second_root = itemstore_root(second);
-  ASSERT_NOT_NULL(insert_item(first_root, "shared", (VALUE_t){VALUE_int, {.i = 1}}));
-  ASSERT_NOT_NULL(insert_item(second_root, "shared", (VALUE_t){VALUE_int, {.i = 2}}));
+  ASSERT_NOT_NULL(test_item_set_value(first_root, "shared", (VALUE_t){VALUE_int, {.i = 1}}));
+  ASSERT_NOT_NULL(test_item_set_value(second_root, "shared", (VALUE_t){VALUE_int, {.i = 2}}));
   ASSERT_NOT_NULL(find_item_cached(first_root, "shared", NULL));
   ASSERT_NOT_NULL(find_item_cached(second_root, "shared", NULL));
   uint64_t first_payload = itemstore_payload_revision(first);
@@ -411,7 +411,7 @@ void test_itemstore_cache_state_is_store_local(void) {
   ASSERT_EQ_INT(second_hits + 1, itemstore_cache_hits(second));
   ASSERT_EQ_INT(second_misses, itemstore_cache_misses(second));
   uint64_t first_hits = itemstore_cache_hits(first);
-  insert_item(first_root, "shared", (VALUE_t){VALUE_int, {.i = 3}});
+  test_item_set_value(first_root, "shared", (VALUE_t){VALUE_int, {.i = 3}});
   ASSERT_EQ_INT(first_topology, itemstore_topology_revision(first));
   ASSERT_EQ_INT(first_payload + 1, itemstore_payload_revision(first));
   ASSERT_EQ_INT(second_topology, itemstore_topology_revision(second));
@@ -429,7 +429,7 @@ void test_itemstore_cache_state_is_store_local(void) {
 void test_find_item_cached_root_lifecycle_invalidates_entries(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  ITEM_t *old_item = insert_item(
+  ITEM_t *old_item = test_item_set_value(
       root, "lifecycle.item", (VALUE_t){.type = VALUE_int, .i = 1});
   ASSERT_NOT_NULL(old_item);
   ASSERT_TRUE(find_item_cached(root, "lifecycle.item", NULL) == old_item);
@@ -438,7 +438,7 @@ void test_find_item_cached_root_lifecycle_invalidates_entries(void) {
 
   ITEM_t *replacement = make_root_item("root");
   ASSERT_NOT_NULL(replacement);
-  ITEM_t *new_item = insert_item(
+  ITEM_t *new_item = test_item_set_value(
       replacement, "lifecycle.item", (VALUE_t){.type = VALUE_int, .i = 2});
   ASSERT_NOT_NULL(new_item);
 
@@ -459,17 +459,17 @@ void test_item_hashtable_resize_preserves_entries_and_count(void) {
   ASSERT_EQ_INT(10, item_children_ordered_capacity(root->children));
 
   enum { SIBLING_COUNT = 40, COLLISION_COUNT = 2, DELETE_COUNT = 10 };
-  ITEM_t *first_child = insert_item(
+  ITEM_t *first_child = test_item_set_value(
       root, "aa", (VALUE_t){.type = VALUE_int, .i = 100});
   ASSERT_NOT_NULL(first_child);
   ASSERT_EQ_INT(16, item_children_bucket_count(first_child->children));
   ASSERT_EQ_INT(10, item_children_ordered_capacity(first_child->children));
-  ASSERT_NOT_NULL(insert_item(root, "qc",
+  ASSERT_NOT_NULL(test_item_set_value(root, "qc",
                               (VALUE_t){.type = VALUE_int, .i = 101}));
   for (int i = 0; i < SIBLING_COUNT; i++) {
     char name[32];
     ASSERT_TRUE(snprintf(name, sizeof(name), "sibling_%02d", i) > 0);
-    ITEM_t *item = insert_item(root, name,
+    ITEM_t *item = test_item_set_value(root, name,
                                (VALUE_t){.type = VALUE_int, .i = i});
     ASSERT_NOT_NULL(item);
   }
@@ -503,7 +503,7 @@ void test_item_hashtable_resize_preserves_entries_and_count(void) {
   for (int i = 0; i < DELETE_COUNT; i++) {
     char name[32];
     ASSERT_TRUE(snprintf(name, sizeof(name), "sibling_%02d", i) > 0);
-    delete_item(root, name);
+    test_item_delete(root, name);
     ASSERT_TRUE(find_item(root, name) == NULL);
   }
 

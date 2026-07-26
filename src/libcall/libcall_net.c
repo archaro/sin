@@ -27,7 +27,7 @@ static void lc_net_set_input_line(RuntimeContext *ctx,
                                   const LibcallNetworkDeps *net,
                                   size_t line_index) {
   VALUE_t val = {VALUE_int, {.i = (int64_t)line_index}};
-  set_item(itemstore_root(ctx->itemstore), net->inputline_name, val);
+  (void)item_set_value(itemstore_root(ctx->itemstore), net->inputline_name, val);
 }
 
 static bool lc_net_line_can_write(const LINE_t *linep) {
@@ -78,7 +78,10 @@ uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         lc_net_set_input_line(ctx, &deps, line_index);
         VALUE_t str = {VALUE_str, {0}};
         str.s = get_input(linep);
-        set_item(itemstore_root(ctx->itemstore), deps.inputtext_name, str);
+        ITEM_MUTATION_RESULT_t mutation =
+            item_set_value(itemstore_root(ctx->itemstore),
+                           deps.inputtext_name, str);
+        if (!item_mutation_succeeded(mutation)) value_free(&str);
         lc_net_push_int(ctx, 3);
         return nextop;
       }

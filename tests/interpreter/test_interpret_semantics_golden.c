@@ -245,7 +245,7 @@ static ITEM_t *compile_result_semantics_item(const char *label, const char *sour
   char item_name[32];
   int n = snprintf(item_name, sizeof(item_name), "result.t%u", next_item_id++);
   ASSERT_TRUE(n > 0 && (size_t)n < sizeof(item_name));
-  ITEM_t *item = insert_code_item(itemstore_root(config.itemstore_ctx), item_name, (uint32_t)bytecode_len, bytecode);
+  ITEM_t *item = test_item_set_code(itemstore_root(config.itemstore_ctx), item_name, (uint32_t)bytecode_len, bytecode);
   ASSERT_NOT_NULL(item);
 
   free(out);
@@ -327,7 +327,7 @@ void test_interpret_result_semantics(void) {
   ASSERT_EQ_INT(VALUE_int, item_value(compiled_discard)->type);
   ASSERT_EQ_INT(23, (int)item_value(compiled_discard)->i);
 
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "result.save.marker",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "result.save.marker",
                               (VALUE_t){VALUE_int, {.i = 44}}));
   assert_result_bool("result.final_sys_save", "sys.save;", true);
   ITEM_t *saved = load_itemstore(save_path);
@@ -356,7 +356,7 @@ void test_interpret_rejects_malformed_bytecode_before_execution(void) {
   uint8_t *owned = malloc(sizeof(bytecode));
   ASSERT_NOT_NULL(owned);
   memcpy(owned, bytecode, sizeof(bytecode));
-  ITEM_t *code = insert_code_item(itemstore_root(config.itemstore_ctx), "malformed", sizeof(bytecode), owned);
+  ITEM_t *code = test_item_set_code(itemstore_root(config.itemstore_ctx), "malformed", sizeof(bytecode), owned);
   ASSERT_NOT_NULL(code);
 
   RuntimeContext ctx;
@@ -420,7 +420,7 @@ void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void) {
         ASSERT_NOT_NULL(owned);
         memcpy(owned, cases[i].bytes, cases[i].len);
       }
-      ITEM_t *code = insert_code_item(itemstore_root(config.itemstore_ctx), cases[i].name,
+      ITEM_t *code = test_item_set_code(itemstore_root(config.itemstore_ctx), cases[i].name,
                                       (uint32_t)cases[i].len, owned);
       ASSERT_NOT_NULL(code);
       RuntimeContext ctx;

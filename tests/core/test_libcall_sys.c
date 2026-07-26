@@ -111,7 +111,7 @@ static ITEM_t *insert_halt_code(ITEM_t *root, const char *name) {
   bytecode[0] = 0;
   bytecode[1] = 0;
   bytecode[2] = (uint8_t)'h';
-  ITEM_t *item = insert_code_item(root, name, 3u, bytecode);
+  ITEM_t *item = test_item_set_code(root, name, 3u, bytecode);
   ASSERT_NOT_NULL(item);
   return item;
 }
@@ -171,11 +171,11 @@ static bool count_persistence_directory_sync(const char *path) {
 void test_sys_item_libcalls(void) {
   setup_libcall_runtime();
 
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "parent.first",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "parent.first",
                               (VALUE_t){VALUE_int, {.i = 1}}));
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "parent.second",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "parent.second",
                               (VALUE_t){VALUE_int, {.i = 2}}));
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "victim",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "victim",
                               (VALUE_t){VALUE_bool, {.i = 1}}));
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("victim")}});
@@ -226,10 +226,10 @@ void test_sys_persistence_libcalls(void) {
   char store_path[128];
   ASSERT_EQ_INT(0, test_make_temp_path("sin-sys-save", store_path,
                                       sizeof(store_path)));
-  ITEM_t *caller = insert_item(itemstore_root(config.itemstore_ctx), "persistence.caller",
+  ITEM_t *caller = test_item_set_value(itemstore_root(config.itemstore_ctx), "persistence.caller",
                                (VALUE_t){VALUE_bool, {.i = 1}});
   ASSERT_NOT_NULL(caller);
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "checkpoint.value",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "checkpoint.value",
                               (VALUE_t){VALUE_int, {.i = 1}}));
 
   RuntimeContext ctx;
@@ -267,7 +267,7 @@ void test_sys_persistence_libcalls(void) {
   ASSERT_TRUE(strcmp(item_value(prior_message)->s, prior_message_text) == 0);
   free(prior_message_text);
 
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "checkpoint.value",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "checkpoint.value",
                               (VALUE_t){VALUE_int, {.i = 2}}));
   ITEM_t *loaded = load_itemstore(store_path);
   ASSERT_NOT_NULL(loaded);
@@ -286,7 +286,7 @@ void test_sys_persistence_libcalls(void) {
   ASSERT_EQ_INT(1, persistence_sync_calls);
   ASSERT_EQ_INT(1, persistence_directory_sync_calls);
 
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "backup.only",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "backup.only",
                               (VALUE_t){VALUE_int, {.i = 3}}));
   set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
                  "backup prior error", caller);
@@ -349,7 +349,7 @@ void test_sys_persistence_libcalls(void) {
   written = snprintf(backup_one, sizeof(backup_one), "%s_1", base_backup);
   ASSERT_TRUE(written > 0 && (size_t)written < sizeof(backup_one));
 
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "backup.e2e",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "backup.e2e",
                               (VALUE_t){VALUE_int, {.i = 42}}));
   ctx.itemstore_durability = ITEMSTORE_DURABLE_FAST;
   (void)lc_sys_backup(&ctx, NULL, caller);
@@ -364,7 +364,7 @@ void test_sys_persistence_libcalls(void) {
   ASSERT_TRUE(written > 0 && (size_t)written < sizeof(backup_one_snapshot));
   ASSERT_EQ_INT(0, link(backup_one, backup_one_snapshot));
 
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "backup.e2e",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "backup.e2e",
                               (VALUE_t){VALUE_int, {.i = 99}}));
   (void)lc_sys_backup(&ctx, NULL, caller);
   assert_bool_return(pop_stack(config.vm->stack), 1);
@@ -394,7 +394,7 @@ void test_sys_persistence_libcalls(void) {
   race_pre_publish_path_matches = false;
   race_pre_publish_symlink_created = false;
   itemstore_set_pre_publish_hook_for_tests(race_pre_publish_hook);
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "backup.race",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "backup.race",
                               (VALUE_t){VALUE_int, {.i = 77}}));
   (void)lc_sys_backup(&ctx, NULL, caller);
   assert_bool_return(pop_stack(config.vm->stack), 1);
@@ -506,17 +506,17 @@ void test_sys_introspection_libcalls(void) {
 
   ITEM_t *top = insert_halt_code(itemstore_root(config.itemstore_ctx), "topcode");
   ITEM_t *nested = insert_halt_code(itemstore_root(config.itemstore_ctx), "scope.runner");
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "scope.runner.relative",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "scope.runner.relative",
                               (VALUE_t){VALUE_bool, {.i = 1}}));
   insert_halt_code(itemstore_root(config.itemstore_ctx), "types.code");
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "types.nil", VALUE_NIL));
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "types.bool",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "types.nil", VALUE_NIL));
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "types.bool",
                               (VALUE_t){VALUE_bool, {.i = 1}}));
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "types.int",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "types.int",
                               (VALUE_t){VALUE_int, {.i = 42}}));
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "types.float",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "types.float",
                               (VALUE_t){VALUE_float, {.f = 1.25}}));
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "types.string",
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "types.string",
                               (VALUE_t){VALUE_str, {.s = strdup("value")}}));
 
   RuntimeContext ctx;
@@ -740,18 +740,18 @@ void test_sys_caller_paramcount_libcalls(void) {
   multiple_bytecode[0] = 3;
   multiple_bytecode[1] = 3;
   multiple_bytecode[2] = (uint8_t)'h';
-  ITEM_t *multiple_params = insert_code_item(
+  ITEM_t *multiple_params = test_item_set_code(
       itemstore_root(config.itemstore_ctx), "params.scope.runner.multiple", 3u,
       multiple_bytecode);
   ASSERT_NOT_NULL(multiple_params);
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "params.value", VALUE_TRUE));
-  ITEM_t *missing_bytecode = insert_code_item(
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "params.value", VALUE_TRUE));
+  ITEM_t *missing_bytecode = test_item_set_code(
       itemstore_root(config.itemstore_ctx), "params.missing_bytecode", 0, NULL);
   ASSERT_NOT_NULL(missing_bytecode);
   uint8_t *short_bytecode = malloc(1u);
   ASSERT_NOT_NULL(short_bytecode);
   short_bytecode[0] = 0;
-  ITEM_t *short_header = insert_code_item(
+  ITEM_t *short_header = test_item_set_code(
       itemstore_root(config.itemstore_ctx), "params.short_header", 1u, short_bytecode);
   ASSERT_NOT_NULL(short_header);
 
@@ -865,7 +865,7 @@ void test_sys_source_libcall(void) {
                                        "source.scope.runner.oversized");
   ITEM_t *embedded_nul = insert_halt_code(itemstore_root(config.itemstore_ctx),
                                           "source.scope.runner.nul");
-  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "source.value", VALUE_TRUE));
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "source.value", VALUE_TRUE));
 
   char exact_source[] = "target = code (\n  42;\n);\n";
   ASSERT_TRUE(save_itemsource_in_srcroot(target, exact_source, srcroot));

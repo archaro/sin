@@ -95,7 +95,7 @@ static ITEM_t *insert_compiled_code(ITEM_t *root, const char *name,
   ASSERT_TRUE(length <= UINT32_MAX);
   uint8_t *bytecode = out->bytecode;
   out->bytecode = NULL;
-  ITEM_t *item = insert_code_item(root, name, (uint32_t)length, bytecode);
+  ITEM_t *item = test_item_set_code(root, name, (uint32_t)length, bytecode);
   ASSERT_NOT_NULL(item);
   free(out);
   return item;
@@ -110,7 +110,7 @@ static void assert_newgametask_invalid_interval_returns_nil(int64_t start_value,
   uint8_t *bytecode = malloc(1);
   ASSERT_NOT_NULL(bytecode);
   bytecode[0] = 'h';
-  ITEM_t *task_item = insert_code_item(itemstore_root(config.itemstore_ctx), task_name, 1, bytecode);
+  ITEM_t *task_item = test_item_set_code(itemstore_root(config.itemstore_ctx), task_name, 1, bytecode);
   ASSERT_NOT_NULL(task_item);
 
   RuntimeContext *ctx = test_ctx();
@@ -148,7 +148,7 @@ void test_newgametask_rejects_missing_event_loop_before_returning_task_id(void) 
   uint8_t *bytecode = malloc(1);
   ASSERT_NOT_NULL(bytecode);
   bytecode[0] = 'h';
-  ASSERT_NOT_NULL(insert_code_item(itemstore_root(config.itemstore_ctx), "valid.loopless.task", 1, bytecode));
+  ASSERT_NOT_NULL(test_item_set_code(itemstore_root(config.itemstore_ctx), "valid.loopless.task", 1, bytecode));
 
   RuntimeContext *ctx = test_ctx();
   ctx->loop = NULL;

@@ -54,7 +54,7 @@ static VALUE_t compile_and_run(const char *name, const char *source) {
   uint8_t *bytecode = malloc(len);
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, out->bytecode, len);
-  ITEM_t *code = insert_code_item(itemstore_root(config.itemstore_ctx), name, len, bytecode);
+  ITEM_t *code = test_item_set_code(itemstore_root(config.itemstore_ctx), name, len, bytecode);
   ASSERT_NOT_NULL(code);
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);

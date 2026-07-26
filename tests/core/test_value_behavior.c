@@ -71,7 +71,7 @@ static VALUE_t run_code(const char *name, const uint8_t *template_code, size_t l
   uint8_t *bytecode = malloc(len);
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, template_code, len);
-  ITEM_t *code = insert_code_item(itemstore_root(config.itemstore_ctx), name, (uint32_t)len, bytecode);
+  ITEM_t *code = test_item_set_code(itemstore_root(config.itemstore_ctx), name, (uint32_t)len, bytecode);
   ASSERT_NOT_NULL(code);
   return run_interpret(code);
 }
@@ -805,7 +805,7 @@ void test_value_string_boundaries_enforce_string_limit(void) {
   memset(too_long, 'x', SIN_MAX_STRING_BYTES + 1);
   too_long[SIN_MAX_STRING_BYTES + 1] = '\0';
   VALUE_t stored = {VALUE_str, {.s = too_long}};
-  ASSERT_TRUE(insert_item(itemstore_root(config.itemstore_ctx), "oversized.value", stored) == NULL);
+  ASSERT_TRUE(test_item_set_value(itemstore_root(config.itemstore_ctx), "oversized.value", stored) == NULL);
   ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "oversized.value") == NULL);
   value_free(&stored);
   teardown_runtime();
@@ -911,7 +911,7 @@ void test_value_float_item_fetch_preserves_bits(void) {
     char item_name[32];
     snprintf(item_name, sizeof(item_name), "float.fetch.%c", (char)('a' + i));
     VALUE_t original = {VALUE_float, {.f = value_float_from_bits(expected_bits[i])}};
-    ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), item_name, original));
+    ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), item_name, original));
 
     uint8_t code[64] = {0};
     size_t pos = 0;
@@ -1097,7 +1097,7 @@ void test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_er
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
   ctx.itemstore = config.itemstore_ctx;
-  ITEM_t *current = insert_item(itemstore_root(config.itemstore_ctx), "test.assigncode_bad_source",
+  ITEM_t *current = test_item_set_value(itemstore_root(config.itemstore_ctx), "test.assigncode_bad_source",
                                 VALUE_NIL);
   ASSERT_NOT_NULL(current);
   ctx.current_item = current;
@@ -1197,7 +1197,7 @@ void test_strict_runtime_contracts_reports_too_many_item_arguments(void) {
   uint8_t *target = malloc(sizeof(target_code));
   ASSERT_NOT_NULL(target);
   memcpy(target, target_code, sizeof(target_code));
-  ASSERT_NOT_NULL(insert_code_item(itemstore_root(config.itemstore_ctx), "strict_runtime.target", sizeof(target_code), target));
+  ASSERT_NOT_NULL(test_item_set_code(itemstore_root(config.itemstore_ctx), "strict_runtime.target", sizeof(target_code), target));
   config.strict_runtime_contracts = true;
   VALUE_t name = {VALUE_str, {.s = "strict_runtime.target"}};
   VALUE_t result = run_fetch_with_one_int_arg("strict_runtime.too_many_runner", name);
@@ -1245,7 +1245,7 @@ void test_strict_runtime_contracts_uses_context_itemroot(void) {
   uint8_t *bytecode = malloc(pos);
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, code, pos);
-  ITEM_t *runner = insert_code_item(root, "strict_runtime.context_runner",
+  ITEM_t *runner = test_item_set_code(root, "strict_runtime.context_runner",
                                     (uint32_t)pos, bytecode);
   ASSERT_NOT_NULL(runner);
 
@@ -1275,7 +1275,7 @@ void test_strict_validation_runtime_opt_in(void) {
   uint8_t *bytecode = malloc(sizeof(code));
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, code, sizeof(code));
-  ITEM_t *item = insert_code_item(itemstore_root(config.itemstore_ctx), "test.strict_invalid_local", sizeof(code), bytecode);
+  ITEM_t *item = test_item_set_code(itemstore_root(config.itemstore_ctx), "test.strict_invalid_local", sizeof(code), bytecode);
   ASSERT_NOT_NULL(item);
 
   config.strict_validation = false;
@@ -1290,7 +1290,7 @@ void test_strict_validation_runtime_opt_in(void) {
   bytecode = malloc(sizeof(code));
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, code, sizeof(code));
-  item = insert_code_item(itemstore_root(config.itemstore_ctx), "test.strict_invalid_local", sizeof(code), bytecode);
+  item = test_item_set_code(itemstore_root(config.itemstore_ctx), "test.strict_invalid_local", sizeof(code), bytecode);
   ASSERT_NOT_NULL(item);
   config.strict_validation = true;
   int32_t before_current = config.vm->stack->current;
@@ -1321,7 +1321,7 @@ void test_strict_validation_runtime_opt_in(void) {
 
 void test_strict_validation_rejects_null_bytecode(void) {
   setup_runtime();
-  ITEM_t *item = insert_code_item(itemstore_root(config.itemstore_ctx), "nullcode", 0, NULL);
+  ITEM_t *item = test_item_set_code(itemstore_root(config.itemstore_ctx), "nullcode", 0, NULL);
   ASSERT_NOT_NULL(item);
   config.strict_validation = true;
   VALUE_t result = run_interpret(item);
