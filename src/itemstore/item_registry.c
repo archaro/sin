@@ -108,9 +108,18 @@ size_t item_child_count(const ITEM_t *item) { return item ? item->ordered_size :
 ITEM_t *item_child_at(const ITEM_t *item, size_t index) {
   return item && index < item->ordered_size ? item->ordered_array[index] : NULL;
 }
-bool item_is_in_use(const ITEM_t *item) { return item && item->inuse; }
-void item_enter_use(ITEM_t *item) { if (item) item->inuse = true; }
-void item_leave_use(ITEM_t *item) { if (item) item->inuse = false; }
+bool item_is_in_use(const ITEM_t *item) {
+  return item && item->execution_pins != 0;
+}
+void item_enter_use(ITEM_t *item) {
+  if (item && item->execution_pins != UINT32_MAX) item->execution_pins++;
+}
+void item_leave_use(ITEM_t *item) {
+  // UINT32_MAX is a permanent saturated state: an additional enter cannot
+  // be represented, so releases must not undercount outstanding pins.
+  if (item && item->execution_pins != 0 &&
+      item->execution_pins != UINT32_MAX) item->execution_pins--;
+}
 
 static ITEMSTORE_CONTEXT_t *context_for_root(const ITEM_t *root) {
   ITEMSTORE_t *store = root ? root->store : NULL;

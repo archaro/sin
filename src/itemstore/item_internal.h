@@ -17,8 +17,7 @@ struct Item {
   ITEM_e type;
   uint32_t bytecode_len;
   char name[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
-  bool inuse;
-  uint8_t pad[7];
+  uint32_t execution_pins;
   ITEM_t *parent;
   HASHTABLE_t *children;
   uint8_t *bytecode;

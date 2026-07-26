@@ -1175,6 +1175,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
 
   // Enter initial frame.
   item_enter_use(ctx->current_item);
+  bool current_frame_pinned = true;
   const uint8_t *current_code = item_bytecode(ctx->current_item);
   uint32_t current_code_len = item_bytecode_length(ctx->current_item);
   VM->stack->current += current_code[0] - current_code[1];
@@ -1196,6 +1197,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
     if (*op == 'h') {
       VALUE_t return_value = pop_frame_result(VM->stack);
       item_leave_use(ctx->current_item);
+      current_frame_pinned = false;
 
       if (size_callstack(VM->callstack) == entry_callstack_depth) {
         reset_stack_to(VM->stack, entry_stack_current);
@@ -1215,7 +1217,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
       // - pop_callstack restored caller stack/base/locals/params.
       // - caller continuation state tells us exactly where to resume.
       ctx->current_item = prev_frame->item;
-      item_enter_use(ctx->current_item);
+      current_frame_pinned = true;
       op = prev_frame->nextop;
       runtime_decoder_init(&ctx->decoder, prev_frame->bytecode_start, prev_frame->bytecode_end);
       push_stack(VM->stack, return_value);
@@ -1228,10 +1230,12 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
       if (ctx->pending_call_item) {
         ctx->current_item = ctx->pending_call_item;
         ctx->pending_call_item = NULL;
+        current_frame_pinned = false;
         if (!verify_runtime_bytecode(ctx, ctx->current_item)) {
           goto interpretation_failure;
         }
         item_enter_use(ctx->current_item);
+        current_frame_pinned = true;
         current_code = item_bytecode(ctx->current_item);
         current_code_len = item_bytecode_length(ctx->current_item);
         VM->stack->current += current_code[0] - current_code[1];
@@ -1242,7 +1246,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
         continue;
       }
 interpretation_failure:
-      item_leave_use(ctx->current_item);
+      if (current_frame_pinned) item_leave_use(ctx->current_item);
       while (size_callstack(VM->callstack) > entry_callstack_depth) {
         FRAME_t *abandoned_frame = pop_callstack(VM);
         if (!abandoned_frame) break;

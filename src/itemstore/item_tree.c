@@ -172,7 +172,7 @@ static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
   if (!item) return NULL;
   item->parent = parent;
   item->store = parent ? parent->store : NULL;
-  item->inuse = false;
+  item->execution_pins = 0;
   item->type = type;
   item->bytecode = NULL;
   item->bytecode_len = 0;
@@ -371,7 +371,7 @@ static void log_incompatible_payload_alias(const ITEM_t *item) {
 }
 
 static bool item_replacement_allowed(ITEM_t *item) {
-  if (!item->inuse) return true;
+  if (item->execution_pins == 0) return true;
 
   char name[MAX_ITEM_NAME];
   get_itemname(item, name);
@@ -478,6 +478,14 @@ ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index) {
   return parent->ordered_array[index];
 }
 
+static bool item_subtree_has_execution_pins(const ITEM_t *item) {
+  if (item->execution_pins != 0) return true;
+  for (size_t i = 0; i < item->ordered_size; i++) {
+    if (item_subtree_has_execution_pins(item->ordered_array[i])) return true;
+  }
+  return false;
+}
+
 void delete_item(ITEM_t *root, const char *item_name) {
   // Find an item and then delete it and all of its children.
   if (!validate_item_name_relative(root, item_name, "delete_item")) {
@@ -485,10 +493,12 @@ void delete_item(ITEM_t *root, const char *item_name) {
   }
   ITEM_t *item = find_item_unchecked(root, item_name);
   if (item) {
-    if (item->inuse) {
+    bool subtree_in_use = item_subtree_has_execution_pins(item);
+    if (subtree_in_use) {
       char name[MAX_ITEM_NAME];
       get_itemname(item, name);
-      logerr("Cannot delete item %s: currently in use.\n", name);
+      logerr("Cannot delete item %s: item or descendant currently in use.\n",
+             name);
       return;
     }
     // We don't care about items that don't exist, just silently ignore the

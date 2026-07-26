@@ -17,9 +17,9 @@ void init_interpreter(RuntimeContext *ctx);
 // executing. The top-level return value is popped from the stack before it is
 // returned.
 //
-// The executing ITEM_t has its inuse flag set while its frame is active and
-// cleared when that frame exits or aborts; the flag protects running code from
-// deletion/replacement and does not transfer item ownership. Nested calls using
+// The executing ITEM_t holds one transient execution pin while its frame is
+// active; the pin protects running code from deletion/replacement and does not
+// transfer item ownership. Nested calls using
 // the same RuntimeContext are supported: decoder/current-item state is saved and
 // restored around the call, but the VM stack and callstack remain shared and are
 // therefore intentionally affected by nested execution.

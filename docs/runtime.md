@@ -29,11 +29,12 @@ call stack, pushes and pops values while executing, and returns the top-level
 return value after popping it from the stack. It does not create an isolated VM
 stack for the call.
 
-During execution, the interpreter sets the executing code item's `inuse` flag to
-`true` and clears it when that top-level frame exits or aborts. Internal calls
-between code items update `inuse` as frames are entered and returned. The flag is
-used to prevent deletion or replacement of running code; it is not an ownership
-claim on the item.
+During execution, each active interpreter frame owns one transient execution pin
+on its code item. A suspended caller remains pinned while a callee runs; return
+releases only the callee pin, while abort releases the current frame and all
+caller frames created by that invocation. Any nonzero pin prevents replacement,
+and deletion checks the entire target subtree before detaching anything. Pins
+are not serialized and are not an ownership claim on the item.
 
 Nested calls to `interpret` with the same `RuntimeContext` are supported for
 runtime code paths that need to execute temporary or secondary code: the

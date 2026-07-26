@@ -508,7 +508,8 @@ void test_insert_code_item_rejects_inuse_replacement(void) {
   initial[0] = 'h';
   ITEM_t *code = insert_code_item(root, "code", 1, initial);
   ASSERT_NOT_NULL(code);
-  code->inuse = true;
+  item_enter_use(code);
+  item_enter_use(code);
 
   uint8_t *replacement = malloc(2);
   ASSERT_NOT_NULL(replacement);
@@ -520,12 +521,29 @@ void test_insert_code_item_rejects_inuse_replacement(void) {
   ASSERT_TRUE(code->bytecode == initial);
   free(replacement);
 
-  code->inuse = false;
+  item_leave_use(code);
+  ASSERT_TRUE(item_is_in_use(code));
+  uint8_t *still_rejected = malloc(2);
+  ASSERT_NOT_NULL(still_rejected);
+  still_rejected[0] = 0;
+  still_rejected[1] = 'h';
+  ASSERT_TRUE(insert_code_item(root, "code", 2, still_rejected) == NULL);
+  ASSERT_EQ_INT(1, code->bytecode_len);
+  free(still_rejected);
+
+  item_leave_use(code);
+  ASSERT_TRUE(!item_is_in_use(code));
+  uint8_t *accepted = malloc(2);
+  ASSERT_NOT_NULL(accepted);
+  accepted[0] = 0;
+  accepted[1] = 'h';
+  ASSERT_NOT_NULL(insert_code_item(root, "code", 2, accepted));
+  ASSERT_EQ_INT(2, code->bytecode_len);
   ASSERT_NOT_NULL(insert_item(root, "value",
                               (VALUE_t){.type = VALUE_nil, .i = 0}));
   ITEM_t *value_item = find_item(root, "value");
   ASSERT_NOT_NULL(value_item);
-  value_item->inuse = true;
+  item_enter_use(value_item);
 
   uint8_t *new_code = malloc(1);
   ASSERT_NOT_NULL(new_code);
@@ -535,8 +553,59 @@ void test_insert_code_item_rejects_inuse_replacement(void) {
   ASSERT_EQ_INT(VALUE_nil, value_item->value.type);
   free(new_code);
 
-  value_item->inuse = false;
+  item_leave_use(value_item);
   destroy_item(root);
+}
+
+void test_item_execution_pins_are_balanced_and_zero_safe(void) {
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  ITEM_t *item = insert_item(root, "target",
+                             (VALUE_t){.type = VALUE_nil, .i = 0});
+  ASSERT_NOT_NULL(item);
+  ASSERT_TRUE(!item_is_in_use(item));
+  item_enter_use(item);
+  item_enter_use(item);
+  ASSERT_TRUE(item_is_in_use(item));
+  item_leave_use(item);
+  ASSERT_TRUE(item_is_in_use(item));
+  item_leave_use(item);
+  ASSERT_TRUE(!item_is_in_use(item));
+  item_leave_use(item);
+  ASSERT_TRUE(!item_is_in_use(item));
+  destroy_item(root);
+}
+
+void test_delete_item_rejects_pinned_descendant(void) {
+  ITEMSTORE_t *store = itemstore_create("root");
+  ASSERT_NOT_NULL(store);
+  ITEM_t *root = itemstore_root(store);
+  ASSERT_NOT_NULL(root);
+  ASSERT_NOT_NULL(insert_item(root, "branch.leaf",
+                              (VALUE_t){.type = VALUE_int, .i = 7}));
+  ITEM_t *branch = find_item(root, "branch");
+  ITEM_t *leaf = find_item(root, "branch.leaf");
+  ASSERT_NOT_NULL(branch);
+  ASSERT_NOT_NULL(leaf);
+  ASSERT_TRUE(find_item_cached(root, "branch.leaf", NULL) == leaf);
+  uint64_t generation = itemstore_generation(store);
+  uint64_t hits = itemstore_cache_hits(store);
+  uint64_t misses = itemstore_cache_misses(store);
+  item_enter_use(leaf);
+  delete_item(root, "branch");
+  ASSERT_TRUE(find_item(root, "branch") == branch);
+  ASSERT_TRUE(find_item(root, "branch.leaf") == leaf);
+  ASSERT_EQ_INT(generation, itemstore_generation(store));
+  ASSERT_TRUE(find_item_cached(root, "branch.leaf", NULL) == leaf);
+  ASSERT_TRUE(itemstore_cache_hits(store) > hits);
+  ASSERT_EQ_INT(misses, itemstore_cache_misses(store));
+  ASSERT_EQ_INT(7, find_item(root, "branch.leaf")->value.i);
+  item_leave_use(leaf);
+  delete_item(root, "branch");
+  ASSERT_TRUE(find_item(root, "branch") == NULL);
+  ASSERT_TRUE(itemstore_generation(store) > generation);
+  ASSERT_TRUE(find_item_cached(root, "branch.leaf", NULL) == NULL);
+  itemstore_destroy(store);
 }
 
 void test_itemstore_payload_replacement_contracts(void) {
@@ -633,7 +702,7 @@ void test_itemstore_payload_replacement_contracts(void) {
   ITEM_t *inuse = insert_code_item(root, "inuse", 1,
                                    copy_bytecode((const uint8_t *)"h", 1));
   ASSERT_NOT_NULL(inuse);
-  inuse->inuse = true;
+  item_enter_use(inuse);
   uint8_t *rejected_code = copy_bytecode((const uint8_t *)"hh", 2);
   generation = get_itemstore_generation();
   ASSERT_TRUE(insert_code_item(root, "inuse", 2, rejected_code) == NULL);
@@ -649,7 +718,7 @@ void test_itemstore_payload_replacement_contracts(void) {
   ASSERT_EQ_INT(generation, get_itemstore_generation());
   ASSERT_EQ_INT(ITEM_code, inuse->type);
   ASSERT_EQ_INT(1, inuse->bytecode_len);
-  inuse->inuse = false;
+  item_leave_use(inuse);
 
   char *invalid = strdup("invalid");
   ASSERT_NOT_NULL(invalid);
