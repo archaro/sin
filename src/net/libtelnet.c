@@ -138,6 +138,10 @@ static const size_t _buffer_sizes_count = sizeof(_buffer_sizes) /
 /* error generation function */
 static telnet_error_t _error(telnet_t *telnet, unsigned line,
 		const char* func, telnet_error_t err, int fatal, const char *fmt,
+		...) TELNET_GNU_PRINTF(6, 7);
+
+static telnet_error_t _error(telnet_t *telnet, unsigned line,
+		const char* func, telnet_error_t err, int fatal, const char *fmt,
 		...) {
 	telnet_event_t ev;
 	char buffer[512];

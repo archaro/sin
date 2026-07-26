@@ -528,7 +528,8 @@ extern int telnet_printf(telnet_t *telnet, const char *fmt, ...)
  *
  * See telnet_printf().
  */
-extern int telnet_vprintf(telnet_t *telnet, const char *fmt, va_list va);
+extern int telnet_vprintf(telnet_t *telnet, const char *fmt, va_list va)
+		TELNET_GNU_PRINTF(2, 0);
 
 /*!
  * \brief Send formatted data (no newline escaping).
@@ -549,7 +550,8 @@ extern int telnet_raw_printf(telnet_t *telnet, const char *fmt, ...)
  *
  * See telnet_raw_printf().
  */
-extern int telnet_raw_vprintf(telnet_t *telnet, const char *fmt, va_list va);
+extern int telnet_raw_vprintf(telnet_t *telnet, const char *fmt, va_list va)
+		TELNET_GNU_PRINTF(2, 0);
 
 /*!
  * \brief Begin a new set of NEW-ENVIRON values to request or send.
