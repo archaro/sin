@@ -485,3 +485,24 @@ void test_item_hashtable_resize_preserves_entries_and_count(void) {
 
   destroy_item(root);
 }
+
+void test_murmur3_32_alignment_and_vectors(void) {
+  static const uint8_t empty[] = {0};
+  static const uint8_t abc[] = {'a', 'b', 'c'};
+  static const uint8_t abcd[] = {'a', 'b', 'c', 'd'};
+  static const uint8_t hello[] = {'h', 'e', 'l', 'l', 'o'};
+  _Alignas(uint32_t) static const uint8_t blocks[] =
+      {0, 1, 2, 3, 4, 5, 6, 7};
+  static const uint8_t seeded[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g'};
+  ASSERT_EQ_INT(0, murmur3_32((const char *)empty, 0, 0));
+  ASSERT_EQ_INT(0xb3dd93fa, murmur3_32((const char *)abc, 3, 0));
+  ASSERT_EQ_INT(0x43ed676a, murmur3_32((const char *)abcd, 4, 0));
+  ASSERT_EQ_INT(0x248bfa47, murmur3_32((const char *)hello, 5, 0));
+  ASSERT_EQ_INT(0xd161d673, murmur3_32((const char *)blocks, 8, 0));
+  ASSERT_EQ_INT(0x42576ab7, murmur3_32((const char *)seeded, 7, 1234));
+
+  _Alignas(uint32_t) uint8_t storage[sizeof blocks + 1u];
+  memcpy(storage + 1u, blocks, sizeof blocks);
+  ASSERT_EQ_INT(murmur3_32((const char *)blocks, sizeof blocks, 0),
+                murmur3_32((const char *)(storage + 1u), sizeof blocks, 0));
+}

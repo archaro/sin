@@ -224,17 +224,19 @@ uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
   uint32_t n = 0xe6546b64;
   uint32_t hash = seed;
   const size_t nblocks = len / 4;
-  const uint32_t* blocks = (const uint32_t*)key;
+  const uint8_t *bytes = (const uint8_t *)key;
   size_t i;
   for (i = 0; i < nblocks; i++) {
-    uint32_t k = blocks[i];
+    const uint8_t *block = bytes + i * 4u;
+    uint32_t k = (uint32_t)block[0] | ((uint32_t)block[1] << 8) |
+                 ((uint32_t)block[2] << 16) | ((uint32_t)block[3] << 24);
     k *= c1;
     k = (k << r1) | (k >> (32 - r1));
     k *= c2;
     hash ^= k;
     hash = ((hash << r2) | (hash >> (32 - r2))) * m + n;
   }
-  const uint8_t *tail = (const uint8_t*)(key + nblocks * 4u);
+  const uint8_t *tail = bytes + nblocks * 4u;
   uint32_t k1 = 0;
   switch (len & 3) {
     case 3:

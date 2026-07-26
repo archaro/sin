@@ -8,10 +8,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
-| core      |   111 | `tests/core/`           |
+| core      |   112 | `tests/core/`           |
 | compiler  |    31 | `tests/compiler/`       |
 | runtime   |    83 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**225**|                         |
+| **Total** |**226**|                         |
 
 ## core
 
@@ -22,7 +22,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `run_suite(...)`
     - Per-test and per-suite elapsed-time reporting
     - Assertion-failure suite/test context via `tests/test_assert.h`
-    - Core suite registration (`core_tests[]` with 111 entries)
+    - Core suite registration (`core_tests[]` with 112 entries)
     - Suite registration validation rejects null/duplicate test entries
       before execution.
 - **Fixture contract integrity / regeneration policy**
@@ -54,6 +54,9 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
       coverage)
   - `tests/core/test_opcode_schema.c`
   - `tests/core/test_item_cache.c`
+    - `test_murmur3_32_alignment_and_vectors` (deterministic MurmurHash3
+      vectors, including complete blocks, tails, a non-zero seed, and an
+      unaligned input address)
     - `test_find_item_cached_rejects_invalid_names_without_counters`
     - `test_find_item_cached_relative_invalid_name_preserves_counters`
     - `test_itemstore_benchmarks` (cached/uncached and negative lookups,
