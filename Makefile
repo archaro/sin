@@ -34,8 +34,7 @@ SANITIZE_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sani
 STRICT_WARNING_FLAGS := -Werror -Wshadow -Wformat=2 \
 	-Wno-error=unused-parameter -Wno-error=sign-compare \
 	-Wno-error=implicit-fallthrough -Wno-error=missing-field-initializers \
-	-Wno-error=pedantic -Wno-error=shadow -Wno-error=type-limits \
-	-Wno-error=format-nonliteral -Wno-error=conversion -Wno-error=sign-conversion
+	-Wno-error=shadow -Wno-error=type-limits
 GENERATED_WARNING_FLAGS := -Wno-conversion -Wno-sign-conversion -Wno-pedantic \
 	-Wno-unused-but-set-variable
 
