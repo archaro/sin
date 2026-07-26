@@ -106,7 +106,7 @@ void test_parser_scanner_setup_allocation_failures(void) {
 
 void test_parser_cleanup_allocation_failures(void) {
   const char source[] =
-      "1 + 2; if 3 then 4; elsif 0 then 5; else 6; endif; while 1 do 7; endwhile;";
+      "1 + 2; if 3 then 4; elsif 0 then 5; else 6; endif; while 1 do 7; endwhile; do 8; while 1;";
   ParseInput input = {source, sizeof(source) - 1, "parser-failure.src"};
 
   for (long fail_at = 0; fail_at < 96; ++fail_at) {

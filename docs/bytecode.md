@@ -124,7 +124,8 @@ Only a final top-level expression statement is left as the code item's result.
 Earlier expression statements are evaluated for side effects and then compiled
 with `DISCARD`, so `1; 2;` returns `2`, not `1`. Assignments, `if` statements,
 and `while` statements do not themselves produce a result, so `@x = 7;`,
-`if true then 7; endif;`, and `while ... do 7; endwhile;` all return `nil`
+`if true then 7; endif;`, `while ... do 7; endwhile;`, and `do 7; while true;`
+all return `nil`
 unless followed by a final top-level expression statement. Expression statements
 inside `if` branches and loop bodies are discarded as part of those statements;
 they do not become the enclosing code item's result.

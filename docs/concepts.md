@@ -100,6 +100,11 @@ Comments begin with `/*` and end with `*/`, and may include anything, including 
 `IF condition THEN statements; ELSIF condition THEN statements; ELSE statements; ENDIF;`
 
 `WHILE condition DO statements; ENDWHILE;`
+`DO statements; WHILE condition;`
+
+`DO` loops execute their body at least once, then repeat while the condition is
+truthy. For example, `@a = 0; DO sys.log{@a}; @a++; WHILE @a < 5;` logs a
+counter from zero through four. The loop itself has no result value.
 
 `RETURN` can be used at any point to halt execution of the item.  It takes no parameter; when execution ends, the value of the item is whatever result value is on top of the current code frame, or `nil` if no result value has been produced.
 

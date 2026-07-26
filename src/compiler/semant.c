@@ -254,6 +254,12 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       sem_walk_if(ctx, (AS_IF *)node->lhs);
       return;
     }
+    case N_DOWHILESTMT:
+      /* Body executes at least once, so assignments there define locals
+       * before the condition is evaluated. */
+      sem_walk(ctx, (AS_NODE *)node->rhs);
+      sem_walk(ctx, (AS_NODE *)node->lhs);
+      return;
     case N_CODE: {
       SEM_CTX *embedded = sem_create_ctx();
       if (!embedded) {

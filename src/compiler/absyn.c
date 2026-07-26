@@ -247,6 +247,7 @@ void as_delete(AS_NODE *root) {
     case N_RETURN:
     case N_STMT:
     case N_WHILESTMT:
+    case N_DOWHILESTMT:
     {
       if (root->lhs) {
         as_delete((AS_NODE*)root->lhs);
@@ -266,7 +267,7 @@ void as_delete(AS_NODE *root) {
 // Keep this in sync with ENUM_VALUE!
 const char *valname[] = { "V_INT", "V_FLOAT", "V_STR", "V_LOCAL", "V_LAYER", "V_BOOLTRUE", "V_BOOLFALSE" };
 // And keep this in sync with ENUM_NODE!
-const char *nodename[] = { "N_VALUE", "N_ADD", "N_SUB", "N_MUL", "N_DIV", "N_INC", "N_DEC", "N_EQUAL", "N_NOTEQ", "N_OR", "N_AND", "N_LT", "N_LTEQ", "N_GT", "N_GTEQ", "N_DEREF", "N_ITEM", "N_RELITEM", "N_NOT", "N_LIBCALL", "N_ARGLIST", "N_CODE", "N_CALL", "N_ASSITEM", "N_ASSLOCAL", "N_EXPRSTMT", "N_RETURN", "N_STMTLIST", "N_STMT", "N_WHILESTMT", "N_IFSTMT" };
+const char *nodename[] = { "N_VALUE", "N_ADD", "N_SUB", "N_MUL", "N_DIV", "N_INC", "N_DEC", "N_EQUAL", "N_NOTEQ", "N_OR", "N_AND", "N_LT", "N_LTEQ", "N_GT", "N_GTEQ", "N_DEREF", "N_ITEM", "N_RELITEM", "N_NOT", "N_LIBCALL", "N_ARGLIST", "N_CODE", "N_CALL", "N_ASSITEM", "N_ASSLOCAL", "N_EXPRSTMT", "N_RETURN", "N_STMTLIST", "N_STMT", "N_WHILESTMT", "N_IFSTMT", "N_DOWHILESTMT" };
 
 void as_pretty_print(int tree_depth) {
   // Indent to make everything look all neat and professional
@@ -418,6 +419,16 @@ static void as_walk_internal(AS_NODE *root, int tree_depth) {
       as_pretty_print(tree_depth + 1);
       logverbose("Execute while true:\n");
       as_walk_internal((AS_NODE*)root->rhs, tree_depth + 2);
+      return;
+    }
+    case N_DOWHILESTMT: {
+      logverbose("Node type: %s\n", nodename[root->nodetype]);
+      as_pretty_print(tree_depth + 1);
+      logverbose("Execute body:\n");
+      as_walk_internal((AS_NODE*)root->rhs, tree_depth + 2);
+      as_pretty_print(tree_depth + 1);
+      logverbose("Condition:\n");
+      as_walk_internal((AS_NODE*)root->lhs, tree_depth + 2);
       return;
     }
     case N_NOT:

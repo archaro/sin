@@ -426,6 +426,10 @@ stmt:   TWHILE expr TDO stmtlist TENDWHILE {
           $$ = parser_new_node(state, N_WHILESTMT, $2, $4, true, true);
           if (!$$) YYERROR;
         }
+        | TDO stmtlist TWHILE expr {
+          $$ = parser_new_node(state, N_DOWHILESTMT, $4, $2, true, true);
+          if (!$$) YYERROR;
+        }
         | TIF expr TTHEN stmtlist elsif_else_opt TENDIF {
           $$ = parser_new_if_node(state, $2, $4, $5);
           if (!$$) YYERROR;

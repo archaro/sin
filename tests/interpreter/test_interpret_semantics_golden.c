@@ -308,6 +308,12 @@ void test_interpret_result_semantics(void) {
                     "@i = 0; while @i < 1 do @i++; 44; endwhile;");
   assert_result_int("result.while_statement_before_final_expression",
                     "@i = 0; while @i < 3 do @i++; @i; endwhile; @i;", 3);
+  assert_result_int("result.do_while_once_when_false",
+                    "@i = 0; do @i++; while false; @i;", 1);
+  assert_result_int("result.do_while_repeats_to_five",
+                    "@i = 0; do @i++; while @i < 5; @i;", 5);
+  assert_result_nil("result.do_while_statement_discards_body_value",
+                    "@i = 0; do @i++; 44; while false;");
 
   assert_result_bool("result.final_libcall", "sys.exists{\"result.missing\"};", false);
   assert_result_int("result.nonfinal_libcall_discard",

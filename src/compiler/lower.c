@@ -539,6 +539,27 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result) {
       return;
     }
 
+    case N_DOWHILESTMT: {
+      int32_t start_label = -1;
+      int32_t end_label = -1;
+      if (!lower_new_label(ctx, &start_label)) return;
+      if (!lower_new_label(ctx, &end_label)) return;
+
+      if (!lower_bind_label(ctx, start_label)) return;
+      if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = start_label})) return;
+
+      lower_stmtlist(ctx, (AS_NODE *)node->rhs, false);
+      if (ctx->errnum != ERR_NOERROR) return;
+      lower_expr(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = end_label})) return;
+      if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP, .a = start_label})) return;
+
+      if (!lower_bind_label(ctx, end_label)) return;
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = end_label});
+      return;
+    }
+
     default:
       lower_set_unsupported(ctx, node, "node type unsupported");
       return;

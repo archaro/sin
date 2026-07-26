@@ -48,6 +48,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   - `tests/core/test_absyn_lifecycle.c`
   - `tests/core/test_semant.c`
   - `tests/core/test_parser_input_api.c`
+    - parser allocation-failure cleanup includes post-test `DO..WHILE` trees
   - `tests/core/test_parser_float_literals.c`
     - `test_parser_float_literals_decimal_forms`
     - `test_parser_float_literals_integer_still_int`
@@ -133,10 +134,12 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `test_pipeline_golden`
     - `test_pipeline_large_local_lookup_duplicate`
   - `tests/compiler/test_pipeline_source_golden.c`
-    - `test_pipeline_source_golden`
+    - `test_pipeline_source_golden` (includes post-test `DO..WHILE` control
+      flow)
   - `tests/compiler/test_pipeline_negative_matrix.c`
     - `test_pipeline_negative_matrix` (centralized parser and semantic failure
-      checks plus boolean/truthiness source nonregressions)
+      checks, including malformed `DO..WHILE` syntax and body-defined
+      condition locals, plus boolean/truthiness source nonregressions)
 - **Compiler context/diagnostics and tool parity**
   - `tests/compiler/test_compiler_context_failures.c`
     - `test_compiler_context_failures`
@@ -184,6 +187,8 @@ integration, and an opt-in performance guard.
       mixed int/float promotion, NaN/signed-zero comparisons, float
       truthiness, and float formatting)
     - `test_interpret_result_semantics`
+      - post-test `DO..WHILE` executes once before a false condition, repeats
+        while true, and discards body expression values
       - source compilation and runtime execution of `sys.save` with a loadable
         checkpoint
     - `test_interpret_rejects_malformed_bytecode_before_execution`

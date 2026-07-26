@@ -55,13 +55,13 @@ expression statement as the code item result. Expression statements before the
 final top-level statement are compiled with `DISCARD`, so their values are
 evaluated and then removed from the stack.
 
-Statement forms such as assignment, `if`, and `while` do not themselves produce
-a result value, and local variables do not leak out as implicit results.
-Expression statements inside `if` branches or `while` bodies are also
-discarded; they do not become the enclosing code item's result merely because
-the branch or loop is the last top-level statement. To return a value after a
-branch or loop, place the desired expression in the following final top-level
-expression statement.
+Statement forms such as assignment, `if`, `while`, and `do ... while` do not
+themselves produce a result value, and local variables do not leak out as
+implicit results. Expression statements inside `if` branches or
+`while`/`do ... while` bodies are also discarded; they do not become the
+enclosing code item's result merely because the branch or loop is the last
+top-level statement. To return a value after a branch or loop, place the
+desired expression in the following final top-level expression statement.
 
 Libcalls and item calls follow the same expression-statement rule as other
 expressions. If a libcall such as `sys.exists{"name"}` or `sys.compile{source}`

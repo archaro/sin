@@ -59,6 +59,7 @@ void test_pipeline_negative_matrix(void) {
       {"parser_unterminated_string", CASE_SOURCE, "\"unterminated;", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "EOF in string.", 1},
       {"parser_bad_if_endif_pairing", CASE_SOURCE, "endif;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
       {"parser_return_keyword_edge", CASE_SOURCE, "return @l == false;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
+      {"parser_do_while_missing_condition", CASE_SOURCE, "do 1; while ;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 3},
       {"semantic_use_before_def", CASE_SOURCE, "@x;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @x", 1},
       {"semantic_invalid_increment_target", CASE_SOURCE, "@x = 1; @y++;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @y", 1},
 
@@ -69,6 +70,7 @@ void test_pipeline_negative_matrix(void) {
       {"semantic_boolean_if_clause", CASE_SOURCE, "@l = false; if @l == false then sys.log{\"False\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL, 1},
       {"semantic_truthiness_int_unchanged", CASE_SOURCE, "if 1 then sys.log{\"t\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL, 1},
       {"semantic_truthiness_empty_string_unchanged", CASE_SOURCE, "if \"\" then sys.log{\"t\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL, 1},
+      {"semantic_do_while_body_defines_condition_local", CASE_SOURCE, "do @x = 1; while @x < 2; @x;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL, 1},
 
       {"semantic_compile_param_count_guard", CASE_BUILDER, NULL, run_compile_case_too_many_params, ERR_COMP_TOOMANYLOCALS, STAGE_SEMANTIC, "", 1},
   };

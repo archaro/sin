@@ -23,7 +23,7 @@ typedef enum { N_VALUE, N_ADD, N_SUB, N_MUL, N_DIV, N_INC, N_DEC,
                N_DEREF, N_ITEM, N_RELITEM, N_NOT, N_LIBCALL, N_ARGLIST,
                N_CODE, N_CALL, N_ASSITEM,
                N_ASSLOCAL, N_EXPRSTMT, N_RETURN, N_STMTLIST, N_STMT,
-               N_WHILESTMT, N_IFSTMT
+               N_WHILESTMT, N_IFSTMT, N_DOWHILESTMT
              } ENUM_NODE;
 struct AS_NODE_s {
   ENUM_NODE nodetype;

@@ -23,7 +23,7 @@ The new loop:
 - uses the existing truthiness rules;
 - permits an empty body, consistently with the existing empty `WHILE` body;
 - permits nesting with `IF`, `WHILE`, and other `DO..WHILE` statements;
-- exits immediately on `RETURN`, without evaluating another condition;
+- follows the existing control-flow lowering rules for `RETURN`;
 - is a statement and does not produce a result;
 - discards expression-statement values inside its body;
 - makes locals assigned in its guaranteed first body execution available to
