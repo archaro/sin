@@ -71,20 +71,21 @@ effects have occurred.
 
 ## Itemstore ownership
 
-The item tree owns all `ITEM_t` nodes reachable from the root. Parent and child
-links are borrowed references within that tree; `destroy_item` recursively frees
-an item, its insertion-ordered child container and descendants, its owned
-bytecode buffer for a code item, and any owned string payload in a value item.
+Create a store with `itemstore_create()` (or load one with `itemstore_load()`),
+then borrow its root with `itemstore_root()`. The store owns the complete item
+tree, including child links, value payloads, and code-item bytecode. Root and
+other `ITEM_t` pointers are borrowed: the root remains valid until
+`itemstore_destroy()`, while a non-root pointer is also invalidated if that item
+or one of its ancestors is deleted. The `VALUE_t` field pointer returned by
+`item_value()` remains valid while its item does, although its contents can
+change; any referenced string storage and the buffer returned by
+`item_bytecode()` may be invalidated when that payload is replaced.
 
-Value items own their stored `VALUE_t` payload. When `make_item` or
-`item_set_value` stores a string `VALUE_t`, ownership of the string buffer
-transfers to the itemstore. Callers must not free or reuse that string after a
-successful store. Replacing a value item frees the previous owned payload.
-
-Code items own their bytecode buffers. `make_item` takes ownership of the
-bytecode pointer for code items, and `item_set_code` takes ownership of the
-bytecode pointer when it successfully installs it. Callers retain ownership on
-validation failure or other failure before installation.
+Mutate the borrowed tree with the public item APIs such as `item_set_value()`
+and `item_set_code()`. On successful creation or replacement, supplied payload
+ownership transfers to the store; on validation or allocation failure, the
+caller retains ownership. Persist changes with `itemstore_save()`; its boolean
+result reports whether replacement and required durability steps completed.
 
 Mutation results distinguish creation, replacement, deletion, missing names,
 invalid input, pinned items, and allocation failure. Payload ownership transfers
@@ -94,8 +95,9 @@ store-owned).
 
 `get_itemfilename` allocates and returns a path string for the caller to free.
 `save_itemsource` borrows both the item and source text only for the duration of
-the call. `load_itemstore` returns a newly allocated item tree on success; the
-caller owns that root and must release it with `destroy_item`.
+the call. A failed `itemstore_load()` returns `NULL` after discarding any
+partially loaded data; a successful load returns a store whose root remains
+borrowed until the store is destroyed.
 
 ## Runtime diagnostics options
 

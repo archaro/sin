@@ -107,12 +107,14 @@ non-root path must fit within 263 bytes including separators. Invalid paths are
 rejected without creating intermediate items, changing the itemstore
 topology/payload revisions, or updating cache hit/miss counters.
 
-The loader aborts the entire load on any validation, allocation, truncation, or
-I/O failure. A partially constructed tree is destroyed and `load_itemstore`
-returns `NULL`.
+`itemstore_load()` (or `itemstore_load_with_options()` when strict bytecode
+validation is requested) aborts the entire load on any validation, allocation,
+truncation, or I/O failure and returns `NULL`. A partially constructed store is
+discarded; callers own a successfully returned `ITEMSTORE_t` and release it
+with `itemstore_destroy()`.
 
 Mutations through the in-memory item APIs take effect immediately in the loaded
-tree, but are not durable until `save_itemstore` completes. Normal safe
+tree, but are not durable until `itemstore_save()` completes. Normal safe
 shutdown, including `sin --loadonly`, saves the itemstore; `sys.abort` skips that
 save. A failed save reports failure and does not claim durability. A code-item
 source copy written under `srcroot` is a separate best-effort file write and is
@@ -120,7 +122,7 @@ not covered by the itemstore durability mode.
 
 ## Save and replacement behavior
 
-`save_itemstore` creates an exclusive, collision-resistant temporary file
+`itemstore_save()` creates an exclusive, collision-resistant temporary file
 beside the destination, writes the v1 stream to it, flushes and closes it, and
 then renames it over the destination. A pre-existing temporary file is never
 opened with truncation or replaced. The `--itemstore-durability` startup option
@@ -143,12 +145,12 @@ directory `fsync` durability. Other platforms should be treated similarly
 unless their build supplies equivalent synchronization semantics.
 
 In either mode, serialization, temporary-file creation, flush, file sync,
-close, rename, or any required directory sync failure returns `false`. A
-failure before rename removes the temporary file where possible and leaves the
-existing destination in place. A directory-sync failure occurs after rename:
-the function still returns `false`, but the destination may already contain the
-new data. The function returns `true` only after replacement and all required
-durability steps succeed.
+close, rename, or any required directory sync failure makes `itemstore_save()`
+return `false`. A failure before rename removes the temporary file where
+possible and leaves the existing destination in place. A directory-sync failure
+occurs after rename: the function still returns `false`, but the destination may
+already contain the new data. The function returns `true` only after replacement
+and all required durability steps succeed.
 
 ## Versioning
 
