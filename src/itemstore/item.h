@@ -62,7 +62,8 @@ bool itemstore_save(const char *filename, ITEMSTORE_t *store);
 ITEMSTORE_SAVE_RESULT_e itemstore_save_no_replace(
     const char *filename, ITEMSTORE_t *store,
     ITEMSTORE_DURABILITY_e durability);
-uint64_t itemstore_generation(const ITEMSTORE_t *store);
+uint64_t itemstore_topology_revision(const ITEMSTORE_t *store);
+uint64_t itemstore_payload_revision(const ITEMSTORE_t *store);
 uint64_t itemstore_cache_hits(const ITEMSTORE_t *store);
 uint64_t itemstore_cache_misses(const ITEMSTORE_t *store);
 ITEMSTORE_t *itemstore_owner(const ITEM_t *item);
@@ -97,7 +98,8 @@ ITEM_t *find_item(ITEM_t *root, const char *item_name);
 // Cached lookup validates item_name before touching the cache. Invalid names
 // return NULL, set found to false when supplied, and do not affect cache
 // counters. Valid lookups cache both found and not-found results; cached item
-// pointers are borrowed and valid only for the current itemstore generation.
+// pointers are borrowed and valid only for the current itemstore topology
+// revision. Payload replacement preserves pointer and cache validity.
 ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found);
 ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index);
 void delete_item(ITEM_t *root, const char *item_name);

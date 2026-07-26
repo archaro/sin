@@ -10,7 +10,8 @@
 #include "item.h"
 #include "item_internal.h"
 #define itemstore_default_context() (&itemstore_owner(root)->context)
-#define get_itemstore_generation() itemstore_generation(itemstore_owner(root))
+#define get_itemstore_topology_revision() itemstore_topology_revision(itemstore_owner(root))
+#define get_itemstore_payload_revision() itemstore_payload_revision(itemstore_owner(root))
 #include "test_assert.h"
 
 static uint64_t itemstore_bench_now_ns(void) {
@@ -60,7 +61,7 @@ void test_itemstore_benchmarks(void) {
       root, "sibling_01",
       (VALUE_t){.type = VALUE_int, .i = 101}) == replacement);
   ASSERT_EQ_INT(101, find_item_cached(root, "sibling_01", NULL)->value.i);
-  ASSERT_EQ_INT(misses_before_replace + 1, ctx->fetchitem_cache_misses);
+  ASSERT_EQ_INT(misses_before_replace, ctx->fetchitem_cache_misses);
 
   ASSERT_EQ_INT(0, find_item_by_index(root, 0)->value.i);
   ASSERT_EQ_INT(63, find_item_by_index(root, 63)->value.i);
@@ -125,6 +126,9 @@ void test_itemstore_benchmarks(void) {
   }
   uint64_t hits_before = ctx->fetchitem_cache_hits;
   uint64_t misses_before = ctx->fetchitem_cache_misses;
+  ASSERT_NOT_NULL(find_item_cached(root, shallow_name, NULL));
+  hits_before = ctx->fetchitem_cache_hits;
+  misses_before = ctx->fetchitem_cache_misses;
   start = itemstore_bench_now_ns();
   for (int i = 0; i < iterations; i++) {
     (void)find_item_cached(root, shallow_name, NULL);
@@ -134,8 +138,8 @@ void test_itemstore_benchmarks(void) {
   uint64_t replacement_hits = ctx->fetchitem_cache_hits - hits_before;
   uint64_t replacement_misses = ctx->fetchitem_cache_misses - misses_before;
   ASSERT_EQ_INT(4999, find_item(root, shallow_name)->value.i);
-  ASSERT_EQ_INT(1, replacement_hits);
-  ASSERT_EQ_INT(iterations - 1, replacement_misses);
+  ASSERT_EQ_INT(iterations, replacement_hits);
+  ASSERT_EQ_INT(0, replacement_misses);
   ITEM_t *mut = make_root_item("mut");
   start = itemstore_bench_now_ns();
   for (int i = 0; i < iterations; i++) {
@@ -249,7 +253,8 @@ void test_find_item_cached_rejects_invalid_names_without_counters(void) {
   ASSERT_TRUE(found);
   uint64_t hits_before = ctx->fetchitem_cache_hits;
   uint64_t misses_before = ctx->fetchitem_cache_misses;
-  uint64_t generation_before = ctx->generation;
+  uint64_t topology_before = ctx->topology_revision;
+  uint64_t payload_before = ctx->payload_revision;
 
   char long_name[34];
   memset(long_name, 'x', sizeof(long_name) - 1);
@@ -273,7 +278,8 @@ void test_find_item_cached_rejects_invalid_names_without_counters(void) {
 
   ASSERT_EQ_INT(hits_before, ctx->fetchitem_cache_hits);
   ASSERT_EQ_INT(misses_before, ctx->fetchitem_cache_misses);
-  ASSERT_EQ_INT(generation_before, ctx->generation);
+  ASSERT_EQ_INT(topology_before, ctx->topology_revision);
+  ASSERT_EQ_INT(payload_before, ctx->payload_revision);
 
   found = false;
   ASSERT_NOT_NULL(find_item_cached(root, "valid", &found));
@@ -331,15 +337,24 @@ void test_find_item_cached_invalidation_on_delete_and_reinsert(void) {
   ASSERT_NOT_NULL(cached_before);
   ASSERT_TRUE(cached_before == first);
 
+  ITEMSTORE_t *store = itemstore_owner(root);
+  uint64_t topology_before_delete = itemstore_topology_revision(store);
+  uint64_t payload_before_delete = itemstore_payload_revision(store);
   delete_item(root, "cache.target");
   ITEM_t *after_delete = find_item_cached(root, "cache.target", NULL);
   ASSERT_TRUE(after_delete == NULL);
 
-  uint64_t gen_after_delete = get_itemstore_generation();
+  ASSERT_EQ_INT(topology_before_delete + 1,
+               itemstore_topology_revision(store));
+  ASSERT_EQ_INT(payload_before_delete, itemstore_payload_revision(store));
+  uint64_t topology_before_reinsert = itemstore_topology_revision(store);
+  uint64_t payload_before_reinsert = itemstore_payload_revision(store);
   VALUE_t value2 = {.type = VALUE_int, .i = 99};
   ITEM_t *second = insert_item(root, "cache.target", value2);
   ASSERT_NOT_NULL(second);
-  ASSERT_TRUE(get_itemstore_generation() > gen_after_delete);
+  ASSERT_EQ_INT(topology_before_reinsert + 1,
+               itemstore_topology_revision(store));
+  ASSERT_EQ_INT(payload_before_reinsert, itemstore_payload_revision(store));
 
   ITEM_t *after_reinsert = find_item_cached(root, "cache.target", NULL);
   ASSERT_NOT_NULL(after_reinsert);
@@ -389,18 +404,27 @@ void test_itemstore_cache_state_is_store_local(void) {
   ASSERT_NOT_NULL(insert_item(second_root, "shared", (VALUE_t){VALUE_int, {.i = 2}}));
   ASSERT_NOT_NULL(find_item_cached(first_root, "shared", NULL));
   ASSERT_NOT_NULL(find_item_cached(second_root, "shared", NULL));
-  uint64_t first_generation = itemstore_generation(first);
-  uint64_t second_generation = itemstore_generation(second);
+  uint64_t first_payload = itemstore_payload_revision(first);
+  uint64_t first_topology = itemstore_topology_revision(first);
+  uint64_t second_topology = itemstore_topology_revision(second);
+  uint64_t second_payload = itemstore_payload_revision(second);
   uint64_t second_hits = itemstore_cache_hits(second);
   uint64_t second_misses = itemstore_cache_misses(second);
   ASSERT_NOT_NULL(find_item_cached(second_root, "shared", NULL));
   ASSERT_EQ_INT(second_hits + 1, itemstore_cache_hits(second));
   ASSERT_EQ_INT(second_misses, itemstore_cache_misses(second));
+  uint64_t first_hits = itemstore_cache_hits(first);
   insert_item(first_root, "shared", (VALUE_t){VALUE_int, {.i = 3}});
-  ASSERT_TRUE(itemstore_generation(first) > first_generation);
-  ASSERT_EQ_INT(second_generation, itemstore_generation(second));
+  ASSERT_EQ_INT(first_topology, itemstore_topology_revision(first));
+  ASSERT_EQ_INT(first_payload + 1, itemstore_payload_revision(first));
+  ASSERT_EQ_INT(second_topology, itemstore_topology_revision(second));
+  ASSERT_EQ_INT(second_payload, itemstore_payload_revision(second));
+  ASSERT_EQ_INT(3, item_value(find_item_cached(first_root, "shared", NULL))->i);
+  ASSERT_EQ_INT(first_hits + 1, itemstore_cache_hits(first));
   ASSERT_EQ_INT(2, item_value(find_item_cached(second_root, "shared", NULL))->i);
   itemstore_destroy(first);
+  ASSERT_EQ_INT(second_topology, itemstore_topology_revision(second));
+  ASSERT_EQ_INT(second_payload, itemstore_payload_revision(second));
   ASSERT_EQ_INT(2, item_value(find_item_cached(second_root, "shared", NULL))->i);
   itemstore_destroy(second);
 }

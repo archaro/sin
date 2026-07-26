@@ -18,14 +18,14 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 ### Covered entry points
 
 - Itemstore lifecycle and cache isolation are covered by
-  `test_itemstore_cache_state_is_store_local`, including independent
-  generations, hit/miss counters, mutation invalidation, and destruction of
+  `test_itemstore_cache_state_is_store_local`, including independent topology
+  and payload revisions, hit/miss counters, mutation invalidation, and destruction of
   one store while another remains usable.
 - Execution lifetime is covered by
   `test_item_execution_pins_are_balanced_and_zero_safe`,
   `test_insert_code_item_rejects_inuse_replacement`, and
   `test_delete_item_rejects_pinned_descendant`: balanced frame pins protect
-  payloads, and ancestor deletion preserves generation/cache state until a
+  payloads, and ancestor deletion preserves topology/cache state until a
   pinned descendant leaves.
 - **Harness and suite wiring**
   - `tests/shared/test_harness.c`

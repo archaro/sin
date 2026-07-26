@@ -172,7 +172,11 @@ Network slots move through a small logical lifecycle:
 Runtime contexts borrow an explicit `ITEMSTORE_t *` for execution. The store
 owns its complete tree and cache context; `itemstore_root()` returns a borrowed
 root for relative lookup operations. Runtime item pointers are non-owning and
-must not outlive the store. `itemstore_generation()`, `itemstore_cache_hits()`,
-and `itemstore_cache_misses()` expose allocation-free diagnostics for tests and
-benchmarks. Destroying one store invalidates only that store's borrowed items
-and cache entries; other stores remain usable.
+must not outlive the store. `itemstore_topology_revision()` and
+`itemstore_payload_revision()`, together with `itemstore_cache_hits()` and
+`itemstore_cache_misses()`, expose allocation-free diagnostics for tests and
+benchmarks. Topology revisions advance on item creation/deletion and invalidate
+positive and negative lookup-cache entries; payload revisions advance on
+successful value/code replacement and leave cached pointers valid to observe
+the new payload. Destroying one store invalidates only that store's borrowed
+items and cache entries; other stores remain usable.

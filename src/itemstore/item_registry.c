@@ -17,7 +17,8 @@ static void assign_store(ITEM_t *item, ITEMSTORE_t *store) {
 ITEMSTORE_t *itemstore_create(const char *name) {
   ITEMSTORE_t *store = calloc(1, sizeof(*store));
   if (!store) return NULL;
-  store->context.generation = 1;
+  store->context.topology_revision = 1;
+  store->context.payload_revision = 1;
   store->context.sync_hook = itemstore_default_sync_hook;
   store->root = make_root_item(name);
   if (!store->root) { free(store); return NULL; }
@@ -37,7 +38,8 @@ ITEMSTORE_t *itemstore_create_boot(const char *name, uint8_t *bytecode,
     if (!owned_bytecode) { free(store); return NULL; }
     memcpy(owned_bytecode, bytecode, bytecode_len);
   }
-  store->context.generation = 1;
+  store->context.topology_revision = 1;
+  store->context.payload_revision = 1;
   store->context.sync_hook = itemstore_default_sync_hook;
   store->root = make_item(name, NULL, ITEM_code, VALUE_NIL, owned_bytecode,
                           (int)bytecode_len);
@@ -63,7 +65,8 @@ ITEMSTORE_t *itemstore_load_with_options(const char *filename, bool strict_valid
   if (!root) return NULL;
   ITEMSTORE_t *store = calloc(1, sizeof(*store));
   if (!store) { destroy_item(root); return NULL; }
-  store->context.generation = 1;
+  store->context.topology_revision = 1;
+  store->context.payload_revision = 1;
   store->context.sync_hook = itemstore_default_sync_hook;
   store->root = root;
   assign_store(root, store);
@@ -75,7 +78,8 @@ ITEMSTORE_t *itemstore_load(const char *filename) {
   if (!root) return NULL;
   ITEMSTORE_t *store = calloc(1, sizeof(*store));
   if (!store) { destroy_item(root); return NULL; }
-  store->context.generation = 1;
+  store->context.topology_revision = 1;
+  store->context.payload_revision = 1;
   store->context.sync_hook = itemstore_default_sync_hook;
   store->root = root;
   assign_store(root, store);
@@ -126,19 +130,28 @@ static ITEMSTORE_CONTEXT_t *context_for_root(const ITEM_t *root) {
   return store ? &store->context : NULL;
 }
 
-void itemstore_bump_generation_for(const ITEM_t *item) {
+void itemstore_bump_topology_revision_for(const ITEM_t *item) {
   ITEMSTORE_CONTEXT_t *ctx = context_for_root(item);
   if (!ctx) return;
-  ctx->generation++;
+  ctx->topology_revision++;
   memset(ctx->fetchitem_cache, 0, sizeof(ctx->fetchitem_cache));
 }
 
-void itemstore_invalidate_cache_for(const ITEM_t *item) {
-  itemstore_bump_generation_for(item);
+void itemstore_bump_payload_revision_for(const ITEM_t *item) {
+  ITEMSTORE_CONTEXT_t *ctx = context_for_root(item);
+  if (!ctx) return;
+  ctx->payload_revision++;
 }
 
-uint64_t itemstore_generation(const ITEMSTORE_t *store) {
-  return store ? store->context.generation : 0;
+void itemstore_invalidate_cache_for(const ITEM_t *item) {
+  itemstore_bump_topology_revision_for(item);
+}
+
+uint64_t itemstore_topology_revision(const ITEMSTORE_t *store) {
+  return store ? store->context.topology_revision : 0;
+}
+uint64_t itemstore_payload_revision(const ITEMSTORE_t *store) {
+  return store ? store->context.payload_revision : 0;
 }
 uint64_t itemstore_cache_hits(const ITEMSTORE_t *store) {
   return store ? store->context.fetchitem_cache_hits : 0;
@@ -165,7 +178,7 @@ ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
       fetchitem_cache_hash(item_name) & (FETCHITEM_CACHE_SIZE - 1u);
   FETCHITEM_CACHE_ENTRY_t *entry = &ctx->fetchitem_cache[index];
 
-  if (entry->valid && entry->generation == ctx->generation
+  if (entry->valid && entry->topology_revision == ctx->topology_revision
       && entry->root == root
       && strcmp(entry->key, item_name) == 0) {
     ctx->fetchitem_cache_hits++;
@@ -179,7 +192,7 @@ ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
   ctx->fetchitem_cache_misses++;
   ITEM_t *item = find_item_unchecked(root, item_name);
   entry->valid = true;
-  entry->generation = ctx->generation;
+  entry->topology_revision = ctx->topology_revision;
   entry->root = root;
   entry->item = item;
   entry->found = (item != NULL);

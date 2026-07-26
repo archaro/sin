@@ -445,7 +445,11 @@ ITEM_t *insert_item(ITEM_t *root, const char *item_name, VALUE_t value) {
     return NULL;
   }
 
-  itemstore_bump_generation_for(root);
+  if (created_root) {
+    itemstore_bump_topology_revision_for(root);
+  } else {
+    itemstore_bump_payload_revision_for(root);
+  }
   return item;
 }
 
@@ -465,7 +469,11 @@ ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
     return NULL;
   }
 
-  itemstore_bump_generation_for(root);
+  if (created_root) {
+    itemstore_bump_topology_revision_for(root);
+  } else {
+    itemstore_bump_payload_revision_for(root);
+  }
   return item;
 }
 
@@ -504,7 +512,7 @@ void delete_item(ITEM_t *root, const char *item_name) {
     // We don't care about items that don't exist, just silently ignore the
     // delete request.  It's not there anyway, so why the complaining?
     detach_item_and_destroy(item);
-    itemstore_bump_generation_for(root);
+    itemstore_bump_topology_revision_for(root);
     logverbose("Item %s has been deleted, along with all of its children.\n",
                                                                  item_name);
   }
@@ -536,7 +544,11 @@ void set_item(ITEM_t *root, const char *item_name, VALUE_t value) {
     return;
   }
 
-  itemstore_bump_generation_for(root);
+  if (created_root) {
+    itemstore_bump_topology_revision_for(root);
+  } else {
+    itemstore_bump_payload_revision_for(root);
+  }
 }
 
 static bool append_itemname(ITEM_t *item, char *itemname, size_t itemname_size) {

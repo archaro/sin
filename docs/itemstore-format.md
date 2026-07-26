@@ -105,7 +105,7 @@ passed to `insert_item`, `insert_code_item`, `set_item`, `find_item`,
 the supplied item's ancestor depth counts toward the depth limit. Its complete
 non-root path must fit within 263 bytes including separators. Invalid paths are
 rejected without creating intermediate items, changing the itemstore
-generation, or updating cache hit/miss counters.
+topology/payload revisions, or updating cache hit/miss counters.
 
 The loader aborts the entire load on any validation, allocation, truncation, or
 I/O failure. A partially constructed tree is destroyed and `load_itemstore`

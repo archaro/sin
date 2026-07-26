@@ -100,8 +100,11 @@ Key entry points are `itemstore_create()`, `itemstore_root()`,
 `itemstore_destroy()`, `find_item()`, and `insert_code_item()` for in-memory
 ownership and lookup. Persistence uses `itemstore_save()` and
 `itemstore_load()`; roots are borrowed and remain valid only until their
-owning store is destroyed. Cache generations and hit/miss statistics are
-store-local.
+owning store is destroyed. Topology and payload revisions are store-local
+transient metadata: topology revisions invalidate lookup-cache entries when
+names or tree shape change, while payload revisions track successful
+value/code replacements without invalidating cached pointers. Hit/miss
+statistics are cumulative per store.
 
 ### Libcalls
 

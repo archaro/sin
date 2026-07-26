@@ -43,12 +43,12 @@ struct HashTable {
 };
 
 typedef struct FetchItemCacheEntry {
-  // These pointers are borrowed from the item tree.  An entry is usable only
-  // while its generation matches the context generation.
+  // These pointers are borrowed from the item tree. An entry is usable only
+  // while its topology revision matches the context topology revision.
   bool valid;
   bool found;
   char key[MAX_ITEM_NAME];
-  uint64_t generation;
+  uint64_t topology_revision;
   ITEM_t *root;
   ITEM_t *item;
 } FETCHITEM_CACHE_ENTRY_t;
@@ -58,7 +58,8 @@ _Static_assert((FETCHITEM_CACHE_SIZE & (FETCHITEM_CACHE_SIZE - 1u)) == 0,
                "fetch-item cache size must be a power of two");
 
 typedef struct ItemstoreContext {
-  uint64_t generation;
+  uint64_t topology_revision;
+  uint64_t payload_revision;
   FETCHITEM_CACHE_ENTRY_t fetchitem_cache[FETCHITEM_CACHE_SIZE];
   uint64_t fetchitem_cache_hits;
   uint64_t fetchitem_cache_misses;
@@ -77,7 +78,8 @@ typedef bool (*ITEMSTORE_ITEM_CREATION_FAILURE_HOOK_t)(const char *name);
 typedef bool (*ITEMSTORE_DIRECTORY_SYNC_HOOK_t)(const char *path);
 typedef void (*ITEMSTORE_PRE_PUBLISH_HOOK_t)(const char *path);
 
-void itemstore_bump_generation_for(const ITEM_t *item);
+void itemstore_bump_topology_revision_for(const ITEM_t *item);
+void itemstore_bump_payload_revision_for(const ITEM_t *item);
 void itemstore_invalidate_cache_for(const ITEM_t *item);
 bool itemstore_default_sync_hook(FILE *file, const char *path);
 void itemstore_set_load_constructor_failure_hook_for_tests(
