@@ -56,6 +56,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   - `tests/core/test_item_cache.c`
     - `test_find_item_cached_rejects_invalid_names_without_counters`
     - `test_find_item_cached_relative_invalid_name_preserves_counters`
+    - `test_itemstore_benchmarks` (cached/uncached and negative lookups,
+      shallow/max-depth paths, sibling cardinalities, payload replacement
+      cache effects, insertion/deletion/ordered iteration, and loaded versus
+      runtime-constructed stores; observational timings only)
   - `tests/core/test_itemstore_io.c`
     - `test_itemstore_value_and_code_roundtrip`
     - `test_loaded_itemstore_mutation_roundtrip`

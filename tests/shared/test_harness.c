@@ -115,6 +115,7 @@ void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
 void test_find_item_cached_distinguishes_roots(void);
 void test_find_item_cached_root_lifecycle_invalidates_entries(void);
 void test_item_hashtable_resize_preserves_entries_and_count(void);
+void test_itemstore_benchmarks(void);
 void test_get_itemname_root_item(void);
 void test_loaded_zero_child_item_can_gain_runtime_child(void);
 void test_itemstore_value_and_code_roundtrip(void);
@@ -346,6 +347,7 @@ static const test_case_t core_tests[] = {
     {"test_find_item_cached_distinguishes_roots", test_find_item_cached_distinguishes_roots},
     {"test_find_item_cached_root_lifecycle_invalidates_entries", test_find_item_cached_root_lifecycle_invalidates_entries},
     {"test_item_hashtable_resize_preserves_entries_and_count", test_item_hashtable_resize_preserves_entries_and_count},
+    {"test_itemstore_benchmarks", test_itemstore_benchmarks},
     {"test_get_itemname_root_item", test_get_itemname_root_item},
     {"test_loaded_zero_child_item_can_gain_runtime_child", test_loaded_zero_child_item_can_gain_runtime_child},
     {"test_itemstore_value_and_code_roundtrip", test_itemstore_value_and_code_roundtrip},

@@ -1,10 +1,199 @@
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "item.h"
 #include "item_internal.h"
 #include "test_assert.h"
+
+static uint64_t itemstore_bench_now_ns(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+void test_itemstore_benchmarks(void) {
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  for (int i = 0; i < 64; i++) {
+    char name[32];
+    ASSERT_TRUE(snprintf(name, sizeof(name), "sibling_%02d", i) > 0);
+    ASSERT_NOT_NULL(insert_item(root, name, (VALUE_t){.type = VALUE_int, .i = i}));
+  }
+  char deep[ITEM_MAX_FULL_NAME_LENGTH + 1u];
+  size_t deep_len = 0;
+  for (size_t i = 0; i < ITEM_MAX_DEPTH; i++) {
+    if (i > 0) deep[deep_len++] = '.';
+    memset(deep + deep_len, 'd', ITEM_MAX_LAYER_NAME_LENGTH);
+    deep_len += ITEM_MAX_LAYER_NAME_LENGTH;
+  }
+  deep[deep_len] = '\0';
+  ASSERT_NOT_NULL(insert_item(root, deep, (VALUE_t){.type = VALUE_int, .i = 7}));
+
+  ITEMSTORE_CONTEXT_t *ctx = itemstore_default_context();
+  ITEM_t *small_root = make_root_item("small");
+  ASSERT_NOT_NULL(small_root);
+  ASSERT_NOT_NULL(insert_item(
+      small_root, "only_a", (VALUE_t){.type = VALUE_int, .i = 1}));
+  ASSERT_NOT_NULL(insert_item(
+      small_root, "only_b", (VALUE_t){.type = VALUE_int, .i = 2}));
+  uint64_t hits = ctx->fetchitem_cache_hits, misses = ctx->fetchitem_cache_misses;
+  ASSERT_NOT_NULL(find_item_cached(root, "sibling_00", NULL));
+  ASSERT_NOT_NULL(find_item_cached(root, "sibling_00", NULL));
+  ASSERT_TRUE(find_item_cached(root, "missing", NULL) == NULL);
+  ASSERT_TRUE(find_item_cached(root, "missing", NULL) == NULL);
+  ASSERT_EQ_INT(hits + 2, ctx->fetchitem_cache_hits);
+  ASSERT_EQ_INT(misses + 2, ctx->fetchitem_cache_misses);
+  ASSERT_NOT_NULL(find_item_cached(root, deep, NULL));
+
+  ITEM_t *replacement = find_item_cached(root, "sibling_01", NULL);
+  ASSERT_NOT_NULL(replacement);
+  uint64_t misses_before_replace = ctx->fetchitem_cache_misses;
+  ASSERT_TRUE(insert_item(
+      root, "sibling_01",
+      (VALUE_t){.type = VALUE_int, .i = 101}) == replacement);
+  ASSERT_EQ_INT(101, find_item_cached(root, "sibling_01", NULL)->value.i);
+  ASSERT_EQ_INT(misses_before_replace + 1, ctx->fetchitem_cache_misses);
+
+  ASSERT_EQ_INT(0, find_item_by_index(root, 0)->value.i);
+  ASSERT_EQ_INT(63, find_item_by_index(root, 63)->value.i);
+  delete_item(root, "sibling_00");
+  ASSERT_EQ_INT(64, root->ordered_size);
+  ASSERT_EQ_INT(101, find_item_by_index(root, 0)->value.i);
+
+  char path[] = "/tmp/sin-itemstore-bench-XXXXXX";
+  int fd = mkstemp(path);
+  ASSERT_TRUE(fd >= 0);
+  ASSERT_EQ_INT(0, close(fd));
+  ASSERT_TRUE(save_itemstore(path, root));
+  ITEM_t *loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  ASSERT_EQ_INT(root->ordered_size, loaded->ordered_size);
+  ASSERT_EQ_INT(root->children->entry_count, loaded->children->entry_count);
+  ASSERT_EQ_INT(7, find_item(loaded, deep)->value.i);
+  ASSERT_EQ_INT(101, find_item(loaded, "sibling_01")->value.i);
+  unlink(path);
+
+  volatile int sink = 0;
+  const int iterations = 5000;
+  const char *shallow_name = "sibling_01";
+  const char *large_name = "sibling_63";
+  const char *missing_name = "never_present";
+  uint64_t start = itemstore_bench_now_ns();
+  for (int i = 0; i < iterations; i++) {
+    sink ^= find_item_cached(root, shallow_name, NULL) != NULL;
+  }
+  uint64_t cached_positive_ns = itemstore_bench_now_ns() - start;
+  start = itemstore_bench_now_ns();
+  for (int i = 0; i < iterations; i++) {
+    sink ^= find_item_cached(root, missing_name, NULL) == NULL;
+  }
+  uint64_t cached_negative_ns = itemstore_bench_now_ns() - start;
+  start = itemstore_bench_now_ns();
+  for (int i = 0; i < iterations; i++) {
+    sink ^= find_item(root, shallow_name) != NULL;
+  }
+  uint64_t uncached_shallow_ns = itemstore_bench_now_ns() - start;
+  start = itemstore_bench_now_ns();
+  for (int i = 0; i < iterations; i++) {
+    sink ^= find_item(root, deep) != NULL;
+  }
+  uint64_t uncached_deep_ns = itemstore_bench_now_ns() - start;
+  start = itemstore_bench_now_ns();
+  for (int i = 0; i < iterations; i++) {
+    sink ^= find_item(small_root, "only_a") != NULL;
+  }
+  uint64_t small_sibling_ns = itemstore_bench_now_ns() - start;
+  start = itemstore_bench_now_ns();
+  for (int i = 0; i < iterations; i++) {
+    sink ^= find_item(root, large_name) != NULL;
+  }
+  uint64_t large_sibling_ns = itemstore_bench_now_ns() - start;
+  start = itemstore_bench_now_ns();
+  for (int i = 0; i < iterations; i++) sink ^= find_item(loaded, deep) != NULL;
+  uint64_t loaded_deep_ns = itemstore_bench_now_ns() - start;
+  char mutation_names[iterations][16];
+  for (int i = 0; i < iterations; i++) {
+    snprintf(mutation_names[i], sizeof mutation_names[i], "i%d", i);
+  }
+  uint64_t hits_before = ctx->fetchitem_cache_hits;
+  uint64_t misses_before = ctx->fetchitem_cache_misses;
+  start = itemstore_bench_now_ns();
+  for (int i = 0; i < iterations; i++) {
+    (void)find_item_cached(root, shallow_name, NULL);
+    (void)insert_item(root, shallow_name, (VALUE_t){.type = VALUE_int, .i = i});
+  }
+  uint64_t replacement_ns = itemstore_bench_now_ns() - start;
+  uint64_t replacement_hits = ctx->fetchitem_cache_hits - hits_before;
+  uint64_t replacement_misses = ctx->fetchitem_cache_misses - misses_before;
+  ASSERT_EQ_INT(4999, find_item(root, shallow_name)->value.i);
+  ASSERT_EQ_INT(1, replacement_hits);
+  ASSERT_EQ_INT(iterations - 1, replacement_misses);
+  ITEM_t *mut = make_root_item("mut");
+  start = itemstore_bench_now_ns();
+  for (int i = 0; i < iterations; i++) {
+    (void)insert_item(
+        mut, mutation_names[i], (VALUE_t){.type = VALUE_int, .i = i});
+  }
+  uint64_t insertion_ns = itemstore_bench_now_ns() - start;
+  ASSERT_EQ_INT(iterations, mut->ordered_size);
+  ASSERT_EQ_INT(iterations, mut->children->entry_count);
+  ASSERT_EQ_INT(0, find_item(mut, mutation_names[0])->value.i);
+  ASSERT_EQ_INT(iterations - 1,
+                find_item(mut, mutation_names[iterations - 1])->value.i);
+  start = itemstore_bench_now_ns();
+  for (int i = 0; i < iterations; i++) {
+    delete_item(mut, mutation_names[i]);
+  }
+  uint64_t deletion_ns = itemstore_bench_now_ns() - start;
+  ASSERT_EQ_INT(0, mut->ordered_size);
+  ASSERT_EQ_INT(0, mut->children->entry_count);
+
+  for (size_t i = 0; i < 63u; i++) {
+    char expected_name[32];
+    ASSERT_TRUE(snprintf(expected_name, sizeof expected_name, "sibling_%02zu",
+                         i + 1u) > 0);
+    ASSERT_TRUE(strcmp(expected_name, find_item_by_index(root, i)->name) == 0);
+  }
+  char first_deep_layer[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
+  memcpy(first_deep_layer, deep, ITEM_MAX_LAYER_NAME_LENGTH);
+  first_deep_layer[ITEM_MAX_LAYER_NAME_LENGTH] = '\0';
+  ASSERT_TRUE(find_item_by_index(root, 63u) ==
+              find_item(root, first_deep_layer));
+  start = itemstore_bench_now_ns();
+  for (int i = 0; i < iterations; i++) {
+    ITEM_t *child =
+        find_item_by_index(root, (size_t)(i % (int)root->ordered_size));
+    sink ^= (int)child->value.i;
+  }
+  uint64_t iteration_ns = itemstore_bench_now_ns() - start;
+  destroy_item(mut);
+  printf("[bench] itemstore total-ns iters=%d cached+%llu cached-%llu "
+         "uncached-shallow=%llu uncached-deep=%llu sibling-small=%llu "
+         "sibling-large=%llu loaded-deep=%llu replacement=%llu "
+         "insertion=%llu deletion=%llu iteration=%llu "
+         "cache-delta=%llu/%llu\n",
+         iterations, (unsigned long long)cached_positive_ns,
+         (unsigned long long)cached_negative_ns,
+         (unsigned long long)uncached_shallow_ns,
+         (unsigned long long)uncached_deep_ns,
+         (unsigned long long)small_sibling_ns,
+         (unsigned long long)large_sibling_ns,
+         (unsigned long long)loaded_deep_ns,
+         (unsigned long long)replacement_ns,
+         (unsigned long long)insertion_ns,
+         (unsigned long long)deletion_ns,
+         (unsigned long long)iteration_ns,
+         (unsigned long long)replacement_hits,
+         (unsigned long long)replacement_misses);
+  destroy_item(loaded);
+  destroy_item(small_root);
+  destroy_item(root);
+}
 
 void test_find_item_cached_hit_and_negative_cache(void) {
   ITEM_t *root = make_root_item("root");
