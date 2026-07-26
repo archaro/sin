@@ -8,10 +8,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
-| core      |   110 | `tests/core/`           |
+| core      |   111 | `tests/core/`           |
 | compiler  |    31 | `tests/compiler/`       |
 | runtime   |    83 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**224**|                         |
+| **Total** |**225**|                         |
 
 ## core
 
@@ -22,7 +22,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `run_suite(...)`
     - Per-test and per-suite elapsed-time reporting
     - Assertion-failure suite/test context via `tests/test_assert.h`
-    - Core suite registration (`core_tests[]` with 110 entries)
+    - Core suite registration (`core_tests[]` with 111 entries)
     - Suite registration validation rejects null/duplicate test entries
       before execution.
 - **Fixture contract integrity / regeneration policy**
