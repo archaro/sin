@@ -138,32 +138,6 @@ bool validate_item_name(const char *item_name, const char *func_name) {
 }
 
 
-static bool create_ordered_array_with_capacity(ITEM_t *item,
-                                               size_t capacity) {
-  item->ordered_size = 0;
-  item->ordered_capacity = capacity;
-  item->ordered_array = capacity > 0
-      ? (ITEM_t **)malloc(sizeof(ITEM_t *) * capacity)
-      : NULL;
-  if (capacity > 0 && !item->ordered_array) {
-    item->ordered_capacity = 0;
-    return false;
-  }
-  return true;
-}
-
-bool create_ordered_array(ITEM_t *item) {
-  // This must be called after a new hashtable has been created,
-  // but must not be called when a hashtable is resized, or memory
-  // will leak like a very leaky thing.
-  return create_ordered_array_with_capacity(item, ITEM_ARRAY_INIT_CAPACITY);
-}
-
-static uint32_t hashtable_buckets_for_entries(uint32_t entry_count) {
-  if (entry_count == 0) return 1;
-  return (uint32_t)(((uint64_t)entry_count * 4u + 2u) / 3u);
-}
-
 static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
                               VALUE_t value, uint8_t *bytecode, int len,
                               uint32_t expected_children,
@@ -192,16 +166,10 @@ static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
     deallocate_item(item);
     return NULL;
   }
-  uint32_t bucket_count = presize_children
-      ? hashtable_buckets_for_entries(expected_children)
-      : 16u;
-  size_t ordered_capacity = presize_children
-      ? expected_children
-      : ITEM_ARRAY_INIT_CAPACITY;
-  item->children = create_hashtable((int)bucket_count);
-  if (!item->children ||
-      !create_ordered_array_with_capacity(item, ordered_capacity)) {
-    free_hashtable(item->children);
+  item->children = presize_children
+      ? item_children_create_loaded(expected_children)
+      : item_children_create_runtime();
+  if (!item->children) {
     if (type == ITEM_value) value_free(&item->value);
     else free(item->bytecode);
     deallocate_item(item);
@@ -209,22 +177,10 @@ static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
   }
 
   if (parent != NULL) {
-    if (!insert_hashtable(parent->children, name, item)) {
+    if (!item_children_append(parent->children, name, item)) {
       destroy_item(item);
       return NULL;
     }
-    parent->children = maybe_resize_hashtable(parent->children);
-    if (!resize_ordered_array(parent)) {
-      delete_hashtable(parent->children, name);
-      destroy_item(item);
-      return NULL;
-    }
-    if (!parent->ordered_array || parent->ordered_size >= parent->ordered_capacity) {
-      delete_hashtable(parent->children, name);
-      destroy_item(item);
-      return NULL;
-    }
-    parent->ordered_array[parent->ordered_size++] = item;
   }
   return item;
 }
@@ -260,8 +216,7 @@ void destroy_item(ITEM_t *item) {
     value_free(&item->value);
   }
   // Free the item's innards
-  free_hashtable(item->children);
-  free(item->ordered_array);
+  item_children_destroy(item->children);
   // Then free the item
   deallocate_item(item);
 }
@@ -276,15 +231,7 @@ void detach_item_and_destroy(ITEM_t *item) {
 
   ITEM_t *parent = item->parent;
   if (parent) {
-    delete_hashtable(parent->children, item->name);
-    for (size_t i = 0; i < parent->ordered_size; i++) {
-      if (parent->ordered_array[i] != item) continue;
-      for (size_t j = i; j + 1 < parent->ordered_size; j++) {
-        parent->ordered_array[j] = parent->ordered_array[j + 1];
-      }
-      parent->ordered_size--;
-      break;
-    }
+    (void)item_children_detach(parent->children, item->name);
   }
   destroy_item(item);
 }
@@ -306,7 +253,7 @@ static ITEM_t *find_or_create_item(ITEM_t *root, const char *item_name,
     memcpy(layer, current_pos, layer_len);
     layer[layer_len] = '\0';
 
-    ITEM_t *child_item = search_hashtable(current_item->children, layer);
+    ITEM_t *child_item = item_children_lookup(current_item->children, layer);
     if (child_item == NULL) {
       if (item_creation_failure_hook && item_creation_failure_hook(layer)) {
         logerr("Unable to create item '%s': failed to create layer '%s'.\n",
@@ -477,19 +424,11 @@ ITEM_t *insert_code_item(ITEM_t *root, const char *item_name, uint32_t len,
   return item;
 }
 
-ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index) {
-  // Given the parent item, return the indexed child.
-  if (index >= parent->ordered_size) {
-    // No item at that index.
-    return NULL;
-  }
-  return parent->ordered_array[index];
-}
-
 static bool item_subtree_has_execution_pins(const ITEM_t *item) {
   if (item->execution_pins != 0) return true;
-  for (size_t i = 0; i < item->ordered_size; i++) {
-    if (item_subtree_has_execution_pins(item->ordered_array[i])) return true;
+  for (size_t i = 0; i < item_children_count(item->children); i++) {
+    if (item_subtree_has_execution_pins(
+            item_children_at(item->children, i))) return true;
   }
   return false;
 }

@@ -63,11 +63,11 @@ void test_itemstore_benchmarks(void) {
   ASSERT_EQ_INT(101, find_item_cached(root, "sibling_01", NULL)->value.i);
   ASSERT_EQ_INT(misses_before_replace, ctx->fetchitem_cache_misses);
 
-  ASSERT_EQ_INT(0, find_item_by_index(root, 0)->value.i);
-  ASSERT_EQ_INT(63, find_item_by_index(root, 63)->value.i);
+  ASSERT_EQ_INT(0, item_child_at(root, 0)->value.i);
+  ASSERT_EQ_INT(63, item_child_at(root, 63)->value.i);
   delete_item(root, "sibling_00");
-  ASSERT_EQ_INT(64, root->ordered_size);
-  ASSERT_EQ_INT(101, find_item_by_index(root, 0)->value.i);
+  ASSERT_EQ_INT(64, item_child_count(root));
+  ASSERT_EQ_INT(101, item_child_at(root, 0)->value.i);
 
   char path[] = "/tmp/sin-itemstore-bench-XXXXXX";
   int fd = mkstemp(path);
@@ -76,8 +76,7 @@ void test_itemstore_benchmarks(void) {
   ASSERT_TRUE(save_itemstore(path, root));
   ITEM_t *loaded = load_itemstore(path);
   ASSERT_NOT_NULL(loaded);
-  ASSERT_EQ_INT(root->ordered_size, loaded->ordered_size);
-  ASSERT_EQ_INT(root->children->entry_count, loaded->children->entry_count);
+  ASSERT_EQ_INT(item_child_count(root), item_child_count(loaded));
   ASSERT_EQ_INT(7, find_item(loaded, deep)->value.i);
   ASSERT_EQ_INT(101, find_item(loaded, "sibling_01")->value.i);
   unlink(path);
@@ -147,8 +146,7 @@ void test_itemstore_benchmarks(void) {
         mut, mutation_names[i], (VALUE_t){.type = VALUE_int, .i = i});
   }
   uint64_t insertion_ns = itemstore_bench_now_ns() - start;
-  ASSERT_EQ_INT(iterations, mut->ordered_size);
-  ASSERT_EQ_INT(iterations, mut->children->entry_count);
+  ASSERT_EQ_INT(iterations, item_child_count(mut));
   ASSERT_EQ_INT(0, find_item(mut, mutation_names[0])->value.i);
   ASSERT_EQ_INT(iterations - 1,
                 find_item(mut, mutation_names[iterations - 1])->value.i);
@@ -157,24 +155,23 @@ void test_itemstore_benchmarks(void) {
     delete_item(mut, mutation_names[i]);
   }
   uint64_t deletion_ns = itemstore_bench_now_ns() - start;
-  ASSERT_EQ_INT(0, mut->ordered_size);
-  ASSERT_EQ_INT(0, mut->children->entry_count);
+  ASSERT_EQ_INT(0, item_child_count(mut));
 
   for (size_t i = 0; i < 63u; i++) {
     char expected_name[32];
     ASSERT_TRUE(snprintf(expected_name, sizeof expected_name, "sibling_%02zu",
                          i + 1u) > 0);
-    ASSERT_TRUE(strcmp(expected_name, find_item_by_index(root, i)->name) == 0);
+    ASSERT_TRUE(strcmp(expected_name, item_child_at(root, i)->name) == 0);
   }
   char first_deep_layer[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
   memcpy(first_deep_layer, deep, ITEM_MAX_LAYER_NAME_LENGTH);
   first_deep_layer[ITEM_MAX_LAYER_NAME_LENGTH] = '\0';
-  ASSERT_TRUE(find_item_by_index(root, 63u) ==
+  ASSERT_TRUE(item_child_at(root, 63u) ==
               find_item(root, first_deep_layer));
   start = itemstore_bench_now_ns();
   for (int i = 0; i < iterations; i++) {
     ITEM_t *child =
-        find_item_by_index(root, (size_t)(i % (int)root->ordered_size));
+        item_child_at(root, (size_t)(i % (int)item_child_count(root)));
     sink ^= (int)child->value.i;
   }
   uint64_t iteration_ns = itemstore_bench_now_ns() - start;
@@ -458,15 +455,15 @@ void test_find_item_cached_root_lifecycle_invalidates_entries(void) {
 void test_item_hashtable_resize_preserves_entries_and_count(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  ASSERT_EQ_INT(16, root->children->size);
-  ASSERT_EQ_INT(ITEM_ARRAY_INIT_CAPACITY, root->ordered_capacity);
+  ASSERT_EQ_INT(16, item_children_bucket_count(root->children));
+  ASSERT_EQ_INT(10, item_children_ordered_capacity(root->children));
 
   enum { SIBLING_COUNT = 40, COLLISION_COUNT = 2, DELETE_COUNT = 10 };
   ITEM_t *first_child = insert_item(
       root, "aa", (VALUE_t){.type = VALUE_int, .i = 100});
   ASSERT_NOT_NULL(first_child);
-  ASSERT_EQ_INT(16, first_child->children->size);
-  ASSERT_EQ_INT(ITEM_ARRAY_INIT_CAPACITY, first_child->ordered_capacity);
+  ASSERT_EQ_INT(16, item_children_bucket_count(first_child->children));
+  ASSERT_EQ_INT(10, item_children_ordered_capacity(first_child->children));
   ASSERT_NOT_NULL(insert_item(root, "qc",
                               (VALUE_t){.type = VALUE_int, .i = 101}));
   for (int i = 0; i < SIBLING_COUNT; i++) {
@@ -477,12 +474,11 @@ void test_item_hashtable_resize_preserves_entries_and_count(void) {
     ASSERT_NOT_NULL(item);
   }
 
-  ASSERT_TRUE(root->children->size > 16);
-  ASSERT_EQ_INT(SIBLING_COUNT + COLLISION_COUNT,
-                root->children->entry_count);
-  ASSERT_EQ_INT(SIBLING_COUNT + COLLISION_COUNT, root->ordered_size);
-  ASSERT_TRUE(root->ordered_capacity >= root->ordered_size);
-  ASSERT_EQ_INT(80, root->ordered_capacity);
+  ASSERT_TRUE(item_children_bucket_count(root->children) > 16);
+  ASSERT_EQ_INT(SIBLING_COUNT + COLLISION_COUNT, item_child_count(root));
+  ASSERT_TRUE(item_children_ordered_capacity(root->children) >=
+              item_child_count(root));
+  ASSERT_EQ_INT(80, item_children_ordered_capacity(root->children));
   ITEM_t *collision_a = find_item(root, "aa");
   ITEM_t *collision_b = find_item(root, "qc");
   ASSERT_NOT_NULL(collision_a);
@@ -496,10 +492,10 @@ void test_item_hashtable_resize_preserves_entries_and_count(void) {
     ASSERT_NOT_NULL(item);
     ASSERT_EQ_INT(i, item->value.i);
   }
-  ASSERT_TRUE(find_item_by_index(root, 0) == collision_a);
-  ASSERT_TRUE(find_item_by_index(root, 1) == collision_b);
+  ASSERT_TRUE(item_child_at(root, 0) == collision_a);
+  ASSERT_TRUE(item_child_at(root, 1) == collision_b);
   for (int i = 0; i < SIBLING_COUNT; i++) {
-    ITEM_t *item = find_item_by_index(root, (size_t)i + COLLISION_COUNT);
+    ITEM_t *item = item_child_at(root, (size_t)i + COLLISION_COUNT);
     ASSERT_NOT_NULL(item);
     ASSERT_EQ_INT(i, item->value.i);
   }
@@ -512,9 +508,7 @@ void test_item_hashtable_resize_preserves_entries_and_count(void) {
   }
 
   ASSERT_EQ_INT(SIBLING_COUNT + COLLISION_COUNT - DELETE_COUNT,
-                root->children->entry_count);
-  ASSERT_EQ_INT(SIBLING_COUNT + COLLISION_COUNT - DELETE_COUNT,
-                root->ordered_size);
+                item_child_count(root));
   collision_a = find_item(root, "aa");
   collision_b = find_item(root, "qc");
   ASSERT_NOT_NULL(collision_a);

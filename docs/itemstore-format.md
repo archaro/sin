@@ -46,7 +46,7 @@ Every item, including the root, uses this recursive structure:
 | 6 | variable | Exactly `child count` consecutive item records |
 
 Children appear recursively and are associated with the immediately enclosing
-record. The writer emits children in the item model's ordered-array order, and
+record. The writer emits children in the item model's insertion order, and
 the loader reconstructs that order. No offsets, alignment padding, or record
 terminators are stored.
 

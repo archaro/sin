@@ -90,6 +90,9 @@ is no `item.c`; the public API lives in `item.h`, while the implementation is
 intentionally split by concern. Binary itemstore encoding, loading, durability,
 and publication live in `item_persist.c`; source-sidecar text I/O and its test
 hooks live in `item_source_persist.c`.
+Child lookup and insertion-order storage are encapsulated by the opaque
+container implemented in `item_hash.c`; other itemstore modules use its
+internal operations rather than accessing representation fields.
 
 Ownership: item tree data model, persistence, lookup/cache behavior, and
 structured error items. Itemstore code may depend on common support, bytecode

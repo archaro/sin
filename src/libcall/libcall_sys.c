@@ -699,7 +699,7 @@ uint8_t *lc_sys_nthname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (canonicalize_itemname(itemname.s, item, fullname)) {
     ITEM_t *parent = find_item(itemstore_root(ctx->itemstore), fullname);
     if (parent) {
-      ITEM_t *child = find_item_by_index(parent, (size_t)index.i);
+      ITEM_t *child = item_child_at(parent, (size_t)index.i);
       if (child) {
         result.type = VALUE_str;
         result.s = strdup(item_layer_name(child));
@@ -724,7 +724,7 @@ uint8_t *lc_sys_rootname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   VALUE_t result = VALUE_NIL;
-  ITEM_t *child = find_item_by_index(itemstore_root(ctx->itemstore), (size_t)index.i);
+  ITEM_t *child = item_child_at(itemstore_root(ctx->itemstore), (size_t)index.i);
   if (child) {
     result.type = VALUE_str;
     result.s = strdup(item_layer_name(child));

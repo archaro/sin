@@ -434,7 +434,7 @@ bool write_item(FILE *file, ITEM_t *item) {
                      "bytecode payload")) return false;
   }
 
-  size_t numchildren = item->ordered_size;
+  size_t numchildren = item_children_count(item->children);
   if (numchildren > ITEMSTORE_MAX_CHILDREN_PER_ITEM) {
     logerr("Failed to write itemstore item '%s': child count %zu exceeds "
            "maximum %u.\n", item->name, numchildren,
@@ -443,8 +443,8 @@ bool write_item(FILE *file, ITEM_t *item) {
   }
   if (!write_u32_le(file, (uint32_t)numchildren, "child count")) return false;
 
-  for (size_t i = 0; i < item->ordered_size; i++) {
-    if (!write_item(file, item->ordered_array[i])) return false;
+  for (size_t i = 0; i < numchildren; i++) {
+    if (!write_item(file, item_children_at(item->children, i))) return false;
   }
   return true;
 }
@@ -661,7 +661,7 @@ static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
            "%zu.\n", ctx->filename, name, ctx->depth);
     return NULL;
   }
-  if (parent != NULL && search_hashtable(parent->children, name) != NULL) {
+  if (parent != NULL && item_children_lookup(parent->children, name) != NULL) {
     logerr("Corrupt itemstore '%s': duplicate child name '%s' at depth %zu.\n",
            ctx->filename, name, ctx->depth);
     return NULL;
@@ -946,7 +946,7 @@ void dump_item(ITEM_t *item, char *item_name, bool isroot) {
       logverbose("Item: %s, Value: (unknown)\n", currentpath);
     }
   }
-  for (size_t i = 0; i < item->ordered_size; i++) {
-    dump_item(item->ordered_array[i], currentpath, false);
+  for (size_t i = 0; i < item_children_count(item->children); i++) {
+    dump_item(item_children_at(item->children, i), currentpath, false);
   }
 }

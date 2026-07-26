@@ -2,300 +2,286 @@
 
 // Licensed under the MIT License - see LICENSE file for details.
 
-#include <stdio.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
-#include <libgen.h>
-#include <errno.h>
-#include <limits.h>
-#ifdef _WIN32
-#include <process.h>
-#else
-#include <unistd.h>
-#endif
 
-#include "config.h"
-#include "error.h"
-#include "util.h"
-#include "memory.h"
-#include "log.h"
 #include "item_internal.h"
+#include "log.h"
+#include "memory.h"
 
-HASHTABLE_t *create_hashtable(int size) {
-  // Create a hashtable with the given number of buckets
-  if (size <= 0) size = 1;
-  HASHTABLE_t *hashtable = allocate_hashtable();
-  if (!hashtable) return NULL;
-  hashtable->size = (uint32_t)size;
-  hashtable->entry_count = 0;
-  hashtable->table = calloc((size_t)size, sizeof *hashtable->table);
-  if (!hashtable->table) {
-    deallocate_hashtable(hashtable);
-    return NULL;
-  }
-  return hashtable;
-}
+#define ITEM_CHILDREN_INITIAL_BUCKETS 16u
+#define ITEM_CHILDREN_INITIAL_CAPACITY 10u
 
-uint32_t simple_hash(const char *key, size_t len) {
-  // It is pointless to create a 4-byte hash for a key of 4 bytes or less
-  uint32_t hash = 0;
-  memcpy(&hash, key, len);
-  return hash;
-}
+typedef struct ItemEntry ItemEntry_t;
 
-HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize) {
-  // Create a new hash table with the new size
-  HASHTABLE_t *newhashtable = create_hashtable(newsize);
-  if (!newhashtable) return oldhashtable;
-  newhashtable->entry_count = oldhashtable->entry_count;
-  // Rehash all the existing entries
-  for (uint32_t i = 0; i < (oldhashtable)->size; i++) {
-    ENTRY_t *current_entry = (oldhashtable)->table[i];
-    while (current_entry != NULL) {
-      // Save the next entry before we move this one
-      ENTRY_t *nextEntry = current_entry->next;
-      // Recalculate the hash index for the current entry's key
-      size_t keylen = strlen(current_entry->key);
-      uint32_t newhashindex;
-      if (keylen <= 4) {
-        newhashindex = simple_hash(current_entry->key, keylen);
-      } else {
-        newhashindex = murmur3_32(current_entry->key, keylen, 0);
-      }
-      newhashindex %= newhashtable->size;
-      // Move the existing entry to the head of the new collision chain.
-      current_entry->next = newhashtable->table[newhashindex];
-      newhashtable->table[newhashindex] = current_entry;
-      // Move to the next entry
-      current_entry = nextEntry;
-    }
-  }
-  // Free the old table's array of pointers
-  // - but not the entries themselves as we reused them
-  free((oldhashtable)->table);
-  // Free the old hash table struct
-  deallocate_hashtable(oldhashtable);
-  return newhashtable;
-}
+struct ItemEntry {
+  char *key;
+  ITEM_t *child;
+  ItemEntry_t *next;
+};
 
-bool resize_ordered_array(ITEM_t *item) {
-  if (item->ordered_size < item->ordered_capacity) return true;
-
-  size_t required = item->ordered_size + 1;
-  size_t new_capacity = item->ordered_capacity;
-  if (required < ITEM_ARRAY_INIT_CAPACITY) required = ITEM_ARRAY_INIT_CAPACITY;
-  if (!alloc_grow_array_capacity((void **)&item->ordered_array, &new_capacity,
-                                 required, sizeof *item->ordered_array)) {
-    logerr("Cannot grow ordered item array beyond %zu entries.\n",
-           item->ordered_capacity);
-    return false;
-  }
-  item->ordered_capacity = new_capacity;
-  return true;
-}
-
-float calculate_load_factor(HASHTABLE_t *hashtable) {
-  return (float)hashtable->entry_count / (float)hashtable->size;
-}
-
-HASHTABLE_t *maybe_resize_hashtable(HASHTABLE_t *hashtable) {
-  float loadfactor = calculate_load_factor(hashtable);
-  const float maxloadfactor = 0.75; // Tweak for performance as needed
-  if (loadfactor > maxloadfactor) {
-    // Double the size - maybe tweak for performance
-    uint32_t grown_size = (hashtable->size * 2u) + 1u;
-    int newsize = grown_size > (uint32_t)INT_MAX ? INT_MAX : (int)grown_size;
-    return resize_hashtable(hashtable, newsize);
-  }
-  // hashtable has not changed.
-  return hashtable;
-}
-
-bool insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child) {
-  if (!hashtable || !hashtable->table || !key) return false;
-  size_t keylen = strlen(key);
-  uint32_t hashindex;
-  // Compute the hash - use the key itself if 4 bytes or less
-  if (keylen <= 4) {
-    // Use the key itself for the hash value
-    hashindex = simple_hash(key, keylen);
-  } else {
-    // Use the MurmurHash function for longer keys.
-    hashindex = murmur3_32(key, keylen, 0);
-  }
-  hashindex %= hashtable->size;
-  // Create a new entry
-  ENTRY_t *newEntry = allocate_entry();
-  if (!newEntry) return false;
-  newEntry->key = strdup(key);
-  if (!newEntry->key) {
-    deallocate_entry(newEntry);
-    return false;
-  }
-  newEntry->child = child;
-  newEntry->next = hashtable->table[hashindex];
-  hashtable->table[hashindex] = newEntry;
-  hashtable->entry_count++;
-  return true;
-}
-
-ITEM_t *search_hashtable(HASHTABLE_t *hashtable, const char *key) {
-  if (!hashtable || !hashtable->table || !key) return NULL;
-  size_t keylen = strlen(key);
-  uint32_t hashindex;
-  // Check if the key is less than or equal to 4 characters.
-  if (keylen <= 4) {
-    // Use the key itself for the hash value.
-    hashindex = simple_hash(key, keylen);
-  } else {
-    // Use the MurmurHash function for longer keys.
-    hashindex = murmur3_32(key, keylen, 0);
-  }
-  hashindex %= hashtable->size;
-  ENTRY_t *current = hashtable->table[hashindex];
-
-  while (current) {
-    if (strcmp(current->key, key) == 0) {
-      return current->child;
-    }
-    current = current->next;
-  }
-  return NULL;
-}
-
-void delete_hashtable(HASHTABLE_t *hashtable, const char *key) {
-  if (!hashtable || !hashtable->table || !key) return;
-  size_t keylen = strlen(key);
-  uint32_t hashindex;
-
-  // Check if the key is less than or equal to 4 characters.
-  if (keylen <= 4) {
-    // Use the key itself for the hash value.
-    hashindex = simple_hash(key, keylen);
-  } else {
-    // Use the MurmurHash function for longer keys.
-    hashindex = murmur3_32(key, keylen, 0);
-  }
-  hashindex %= hashtable->size;
-  ENTRY_t *current = hashtable->table[hashindex];
-  ENTRY_t *previous = NULL;
-  while (current) {
-    if (strcmp(current->key, key) == 0) {
-      if (previous == NULL) {
-        // Remove the first entry in the chain
-        hashtable->table[hashindex] = current->next;
-      } else {
-        // Remove the entry from the chain
-        previous->next = current->next;
-      }
-      free(current->key);
-      deallocate_entry(current);
-      hashtable->entry_count--;
-      return;
-    }
-    previous = current;
-    current = current->next;
-  }
-}
-
-void free_hashtable(HASHTABLE_t* hashtable) {
-  if (!hashtable) return;
-  for (uint32_t i = 0; i < hashtable->size; i++) {
-    ENTRY_t *current = hashtable->table[i];
-    while (current) {
-      ENTRY_t *temp = current;
-      current = current->next;
-      destroy_item(temp->child);
-      free(temp->key);
-      deallocate_entry(temp);
-    }
-  }
-  free(hashtable->table);
-  deallocate_hashtable(hashtable);
-}
+struct ItemChildren {
+  uint32_t size;
+  uint32_t entry_count;
+  ItemEntry_t **table;
+  size_t ordered_size;
+  size_t ordered_capacity;
+  ITEM_t **ordered_array;
+};
 
 uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
-  // This is an implementation of MurmurHash3
-  uint32_t c1 = 0xcc9e2d51;
-  uint32_t c2 = 0x1b873593;
-  uint32_t r1 = 15;
-  uint32_t r2 = 13;
-  uint32_t m = 5;
-  uint32_t n = 0xe6546b64;
-  uint32_t hash = seed;
-  const size_t nblocks = len / 4;
+  const uint32_t c1 = 0xcc9e2d51u;
+  const uint32_t c2 = 0x1b873593u;
+  const size_t nblocks = len / 4u;
   const uint8_t *bytes = (const uint8_t *)key;
-  size_t i;
-  for (i = 0; i < nblocks; i++) {
+  uint32_t hash = seed;
+
+  for (size_t i = 0; i < nblocks; i++) {
     const uint8_t *block = bytes + i * 4u;
     uint32_t k = (uint32_t)block[0] | ((uint32_t)block[1] << 8) |
                  ((uint32_t)block[2] << 16) | ((uint32_t)block[3] << 24);
     k *= c1;
-    k = (k << r1) | (k >> (32 - r1));
+    k = (k << 15) | (k >> 17);
     k *= c2;
     hash ^= k;
-    hash = ((hash << r2) | (hash >> (32 - r2))) * m + n;
+    hash = ((hash << 13) | (hash >> 19)) * 5u + 0xe6546b64u;
   }
+
   const uint8_t *tail = bytes + nblocks * 4u;
   uint32_t k1 = 0;
-  switch (len & 3) {
+  switch (len & 3u) {
     case 3:
-      k1 ^= ((uint32_t)tail[2]) << 16;
+      k1 ^= (uint32_t)tail[2] << 16;
       __attribute__((fallthrough));
     case 2:
-      k1 ^= ((uint32_t)tail[1]) << 8;
+      k1 ^= (uint32_t)tail[1] << 8;
       __attribute__((fallthrough));
     case 1:
       k1 ^= tail[0];
       k1 *= c1;
-      k1 = (k1 << r1) | (k1 >> (32 - r1));
+      k1 = (k1 << 15) | (k1 >> 17);
       k1 *= c2;
       hash ^= k1;
+      break;
   }
+
   hash ^= (uint32_t)len;
-  hash ^= (hash >> 16);
-  hash *= 0x85ebca6b;
-  hash ^= (hash >> 13);
-  hash *= 0xc2b2ae35;
-  hash ^= (hash >> 16);
+  hash ^= hash >> 16;
+  hash *= 0x85ebca6bu;
+  hash ^= hash >> 13;
+  hash *= 0xc2b2ae35u;
+  hash ^= hash >> 16;
   return hash;
 }
 
-char *substr(const char *str, size_t begin, size_t len) {
-  // Helper function to create a substring
-  if (str == NULL || strlen(str) == 0 || strlen(str) < (begin + len))  {
-    return NULL;
-  } else {
-    return strndup(str + begin, len);
+static uint32_t hash_key(const char *key) {
+  size_t len = strlen(key);
+  if (len <= 4u) {
+    uint32_t hash = 0;
+    memcpy(&hash, key, len);
+    return hash;
   }
+  return murmur3_32(key, len, 0);
 }
 
-ENTRY_t *allocate_entry(void) {
-  // Allocator API: Gimme a new ENTRY_t
-  return malloc(sizeof(ENTRY_t));
+static ITEM_CHILDREN_t *create_children(uint32_t bucket_count,
+                                        size_t ordered_capacity) {
+  ITEM_CHILDREN_t *children = calloc(1, sizeof *children);
+  if (!children) return NULL;
+
+  children->size = bucket_count > 0 ? bucket_count : 1u;
+  children->ordered_capacity = ordered_capacity;
+  children->table = calloc(children->size, sizeof *children->table);
+  if (!children->table) {
+    free(children);
+    return NULL;
+  }
+
+  if (ordered_capacity > 0) {
+    children->ordered_array = malloc(ordered_capacity *
+                                     sizeof *children->ordered_array);
+    if (!children->ordered_array) {
+      free(children->table);
+      free(children);
+      return NULL;
+    }
+  }
+  return children;
 }
 
-HASHTABLE_t *allocate_hashtable(void) {
-  // Allocator API: Gimme a new HASHTABLE_t
-  return malloc(sizeof(HASHTABLE_t));
+ITEM_CHILDREN_t *item_children_create_runtime(void) {
+  return create_children(ITEM_CHILDREN_INITIAL_BUCKETS,
+                          ITEM_CHILDREN_INITIAL_CAPACITY);
+}
+
+ITEM_CHILDREN_t *item_children_create_loaded(uint32_t expected_children) {
+  uint32_t buckets = expected_children == 0
+      ? 1u
+      : (uint32_t)(((uint64_t)expected_children * 4u + 2u) / 3u);
+  return create_children(buckets, expected_children);
+}
+
+static bool resize_children(ITEM_CHILDREN_t *children, uint32_t new_size) {
+  ItemEntry_t **table = calloc(new_size, sizeof *table);
+  if (!table) return false;
+
+  for (uint32_t i = 0; i < children->size; i++) {
+    ItemEntry_t *entry = children->table[i];
+    while (entry) {
+      ItemEntry_t *next = entry->next;
+      uint32_t index = hash_key(entry->key) % new_size;
+      entry->next = table[index];
+      table[index] = entry;
+      entry = next;
+    }
+  }
+  free(children->table);
+  children->table = table;
+  children->size = new_size;
+  return true;
+}
+
+static bool grow_ordered_array(ITEM_CHILDREN_t *children) {
+  if (children->ordered_size < children->ordered_capacity) return true;
+
+  size_t required = children->ordered_size + 1u;
+  size_t capacity = children->ordered_capacity;
+  if (required < ITEM_CHILDREN_INITIAL_CAPACITY) {
+    required = ITEM_CHILDREN_INITIAL_CAPACITY;
+  }
+  if (!alloc_grow_array_capacity((void **)&children->ordered_array, &capacity,
+                                 required,
+                                 sizeof *children->ordered_array)) {
+    logerr("Cannot grow ordered item array beyond %zu entries.\n",
+           children->ordered_capacity);
+    return false;
+  }
+  children->ordered_capacity = capacity;
+  return true;
+}
+
+ITEM_t *item_children_lookup(const ITEM_CHILDREN_t *children,
+                             const char *name) {
+  if (!children || !name) return NULL;
+  uint32_t index = hash_key(name) % children->size;
+  for (ItemEntry_t *entry = children->table[index]; entry;
+       entry = entry->next) {
+    if (strcmp(entry->key, name) == 0) return entry->child;
+  }
+  return NULL;
+}
+
+bool item_children_append(ITEM_CHILDREN_t *children, const char *name,
+                          ITEM_t *child) {
+  if (!children || !name || !child || item_children_lookup(children, name)) {
+    return false;
+  }
+
+  ItemEntry_t *entry = malloc(sizeof *entry);
+  if (!entry) return false;
+  entry->key = strdup(name);
+  if (!entry->key) {
+    free(entry);
+    return false;
+  }
+  if (!grow_ordered_array(children)) {
+    free(entry->key);
+    free(entry);
+    return false;
+  }
+
+  uint32_t index = hash_key(name) % children->size;
+  entry->child = child;
+  entry->next = children->table[index];
+  children->table[index] = entry;
+  children->entry_count++;
+  children->ordered_array[children->ordered_size++] = child;
+
+  if ((float)children->entry_count / (float)children->size > 0.75f) {
+    uint32_t grown_size = children->size * 2u + 1u;
+    int new_size = grown_size > (uint32_t)INT_MAX ? INT_MAX
+                                                  : (int)grown_size;
+    (void)resize_children(children, (uint32_t)new_size);
+  }
+  return true;
+}
+
+ITEM_t *item_children_detach(ITEM_CHILDREN_t *children, const char *name) {
+  if (!children || !name) return NULL;
+
+  uint32_t bucket = hash_key(name) % children->size;
+  ItemEntry_t *entry = children->table[bucket];
+  ItemEntry_t *previous = NULL;
+  while (entry && strcmp(entry->key, name) != 0) {
+    previous = entry;
+    entry = entry->next;
+  }
+  if (!entry) return NULL;
+
+  size_t ordered_index = children->ordered_size;
+  for (size_t i = 0; i < children->ordered_size; i++) {
+    if (children->ordered_array[i] == entry->child) {
+      ordered_index = i;
+      break;
+    }
+  }
+  if (ordered_index == children->ordered_size) return NULL;
+
+  if (previous) previous->next = entry->next;
+  else children->table[bucket] = entry->next;
+  ITEM_t *child = entry->child;
+  free(entry->key);
+  free(entry);
+  for (size_t i = ordered_index; i + 1u < children->ordered_size; i++) {
+    children->ordered_array[i] = children->ordered_array[i + 1u];
+  }
+  children->ordered_size--;
+  children->entry_count--;
+  return child;
+}
+
+void item_children_destroy(ITEM_CHILDREN_t *children) {
+  if (!children) return;
+  for (size_t i = 0; i < children->ordered_size; i++) {
+    destroy_item(children->ordered_array[i]);
+  }
+  for (uint32_t i = 0; i < children->size; i++) {
+    ItemEntry_t *entry = children->table[i];
+    while (entry) {
+      ItemEntry_t *next = entry->next;
+      free(entry->key);
+      free(entry);
+      entry = next;
+    }
+  }
+  free(children->table);
+  free(children->ordered_array);
+  free(children);
+}
+
+size_t item_children_count(const ITEM_CHILDREN_t *children) {
+  return children ? children->ordered_size : 0;
+}
+
+ITEM_t *item_children_at(const ITEM_CHILDREN_t *children, size_t index) {
+  return children && index < children->ordered_size
+      ? children->ordered_array[index]
+      : NULL;
+}
+
+uint32_t item_children_bucket_count(const ITEM_CHILDREN_t *children) {
+  return children ? children->size : 0;
+}
+
+size_t item_children_ordered_capacity(const ITEM_CHILDREN_t *children) {
+  return children ? children->ordered_capacity : 0;
 }
 
 ITEM_t *allocate_item(void) {
-  // Allocator API: Gimme a new Item
   return malloc(sizeof(ITEM_t));
 }
 
-void deallocate_entry(ENTRY_t *entry) {
-  // Allocator API: Take this ENTRY_t back.
-  free(entry);
-}
-
-void deallocate_hashtable(HASHTABLE_t *hashtable) {
-  // Allocator API: Take this HashTable back.
-  free(hashtable);
-}
-
 void deallocate_item(ITEM_t *item) {
-  // Allocator API: Take this Item back.
   free(item);
 }

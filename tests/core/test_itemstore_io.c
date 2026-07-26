@@ -58,19 +58,19 @@ void test_loaded_zero_child_item_can_gain_runtime_child(void) {
                                    (VALUE_t){.type = VALUE_nil, .i = 0},
                                    bytecode, 3, 0);
   ASSERT_NOT_NULL(input);
-  ASSERT_EQ_INT(0, input->ordered_size);
-  ASSERT_EQ_INT(0, input->ordered_capacity);
-  ASSERT_TRUE(input->ordered_array == NULL);
+  ASSERT_EQ_INT(0, item_child_count(input));
+  ASSERT_EQ_INT(0, item_children_ordered_capacity(input->children));
+  ASSERT_TRUE(item_child_at(input, 0) == NULL);
 
   ITEM_t *line = insert_item(root, "input.line",
                              (VALUE_t){.type = VALUE_int, .i = 7});
   ASSERT_NOT_NULL(line);
   ASSERT_EQ_INT(VALUE_int, line->value.type);
   ASSERT_EQ_INT(7, line->value.i);
-  ASSERT_EQ_INT(1, input->ordered_size);
-  ASSERT_TRUE(input->ordered_capacity >= input->ordered_size);
-  ASSERT_NOT_NULL(input->ordered_array);
-  ASSERT_TRUE(input->ordered_array[0] == line);
+  ASSERT_EQ_INT(1, item_child_count(input));
+  ASSERT_TRUE(item_children_ordered_capacity(input->children) >=
+              item_child_count(input));
+  ASSERT_TRUE(item_child_at(input, 0) == line);
 
   destroy_item(root);
 }
@@ -257,9 +257,9 @@ static uint8_t *copy_bytecode(const uint8_t *bytecode, size_t bytecode_len) {
 
 static void assert_child_order(ITEM_t *parent, const char *const *names,
                                size_t count) {
-  ASSERT_EQ_INT(count, parent->ordered_size);
+  ASSERT_EQ_INT(count, item_child_count(parent));
   for (size_t i = 0; i < count; i++) {
-    ITEM_t *child = find_item_by_index(parent, i);
+    ITEM_t *child = item_child_at(parent, i);
     ASSERT_NOT_NULL(child);
     ASSERT_TRUE(strcmp(names[i], child->name) == 0);
   }
@@ -312,23 +312,23 @@ void test_itemstore_value_and_code_roundtrip(void) {
   memcpy(bytecode, expected_bytecode, sizeof(expected_bytecode));
   ASSERT_NOT_NULL(insert_code_item(root, "code", sizeof(expected_bytecode),
                                    bytecode));
-  ASSERT_EQ_INT(7, root->ordered_size);
+  ASSERT_EQ_INT(7, item_child_count(root));
   delete_item(root, "transient");
 
   static const char *expected_order[] = {
     "nil", "bool", "int", "float", "string", "code"
   };
   ASSERT_EQ_INT(sizeof(expected_order) / sizeof(expected_order[0]),
-                root->ordered_size);
+                item_child_count(root));
 
   ASSERT_TRUE(save_itemstore(path, root));
   ITEM_t *loaded = load_itemstore(path);
   ASSERT_NOT_NULL(loaded);
   ASSERT_EQ_INT(sizeof(expected_order) / sizeof(expected_order[0]),
-                loaded->ordered_size);
+                item_child_count(loaded));
   for (size_t i = 0; i < sizeof(expected_order) / sizeof(expected_order[0]);
        i++) {
-    ITEM_t *ordered = find_item_by_index(loaded, i);
+    ITEM_t *ordered = item_child_at(loaded, i);
     ASSERT_NOT_NULL(ordered);
     ASSERT_TRUE(strcmp(expected_order[i], ordered->name) == 0);
   }
@@ -417,8 +417,8 @@ void test_loaded_itemstore_mutation_roundtrip(void) {
                          sizeof(loaded_branch_order[0]));
   ITEM_t *empty_parent = find_item(loaded, "empty_parent");
   ASSERT_NOT_NULL(empty_parent);
-  ASSERT_EQ_INT(0, empty_parent->ordered_size);
-  ASSERT_EQ_INT(0, empty_parent->ordered_capacity);
+  ASSERT_EQ_INT(0, item_child_count(empty_parent));
+  ASSERT_EQ_INT(0, item_children_ordered_capacity(empty_parent->children));
   assert_int_item(loaded, "alpha", 1);
   assert_int_item(loaded, "branch.leaf", 2);
   assert_code_item(loaded, "program", program_v1, sizeof(program_v1));
@@ -1447,12 +1447,11 @@ void test_itemstore_large_load_presizes_child_storage(void) {
 
   ITEM_t *loaded = load_itemstore(path);
   ASSERT_NOT_NULL(loaded);
-  ASSERT_EQ_INT(CHILD_COUNT, loaded->children->entry_count);
-  ASSERT_EQ_INT(CHILD_COUNT, loaded->ordered_size);
-  ASSERT_EQ_INT(CHILD_COUNT, loaded->ordered_capacity);
-  ASSERT_EQ_INT(267, loaded->children->size);
+  ASSERT_EQ_INT(CHILD_COUNT, item_child_count(loaded));
+  ASSERT_EQ_INT(CHILD_COUNT, item_children_ordered_capacity(loaded->children));
+  ASSERT_EQ_INT(267, item_children_bucket_count(loaded->children));
   for (int i = 0; i < CHILD_COUNT; i++) {
-    ITEM_t *child = find_item_by_index(loaded, (size_t)i);
+    ITEM_t *child = item_child_at(loaded, (size_t)i);
     ASSERT_NOT_NULL(child);
     char expected[16];
     ASSERT_TRUE(snprintf(expected, sizeof(expected), "child_%03d", i) > 0);

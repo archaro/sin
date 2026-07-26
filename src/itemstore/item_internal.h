@@ -10,8 +10,7 @@
 
 #include "item.h"
 
-typedef struct Entry ENTRY_t;
-typedef struct HashTable HASHTABLE_t;
+typedef struct ItemChildren ITEM_CHILDREN_t;
 
 struct Item {
   ITEM_e type;
@@ -19,27 +18,10 @@ struct Item {
   char name[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
   uint32_t execution_pins;
   ITEM_t *parent;
-  HASHTABLE_t *children;
+  ITEM_CHILDREN_t *children;
   uint8_t *bytecode;
   VALUE_t value;
-  size_t ordered_size;
-  size_t ordered_capacity;
-  ITEM_t **ordered_array;
   ITEMSTORE_t *store;
-};
-
-// Define the hash table entry.
-struct Entry {
-  char *key;
-  ITEM_t *child;
-  ENTRY_t *next;
-};
-
-// This hashtable contains pointers to all the children of this Item.
-struct HashTable {
-  uint32_t size;
-  uint32_t entry_count;
-  ENTRY_t **table; // An array of pointers to ENTRY_t
 };
 
 typedef struct FetchItemCacheEntry {
@@ -100,8 +82,6 @@ bool validate_item_name_relative(const ITEM_t *base, const char *item_name,
 bool item_layer_char_is_allowed(unsigned char character);
 // Internal lookup for callers that have already validated item_name.
 ITEM_t *find_item_unchecked(ITEM_t *root, const char *item_name);
-bool create_ordered_array(ITEM_t *item);
-bool resize_ordered_array(ITEM_t *item);
 ITEM_t *make_loaded_item(const char *name, ITEM_t *parent, ITEM_e type,
                          VALUE_t value, uint8_t *bytecode, int len,
                          uint32_t expected_children);
@@ -119,27 +99,24 @@ bool save_itemstore(const char *filename, ITEM_t *root);
 ITEM_t *load_itemstore_with_options(const char *filename, bool strict_validation);
 ITEM_t *load_itemstore(const char *filename);
 
-// Hash table internals.
-HASHTABLE_t *create_hashtable(int size);
-uint32_t simple_hash(const char *key, size_t len);
-HASHTABLE_t *resize_hashtable(HASHTABLE_t *oldhashtable, int newsize);
-float calculate_load_factor(HASHTABLE_t *hashTable);
-HASHTABLE_t *maybe_resize_hashtable(HASHTABLE_t *hashtable);
-bool insert_hashtable(HASHTABLE_t *hashtable, const char *key, ITEM_t *child);
-ITEM_t *search_hashtable(HASHTABLE_t *hashtable, const char *key);
-void delete_hashtable(HASHTABLE_t *hashtable, const char *key);
-void free_hashtable(HASHTABLE_t *hashtable);
+// Child-container internals.
+ITEM_CHILDREN_t *item_children_create_runtime(void);
+ITEM_CHILDREN_t *item_children_create_loaded(uint32_t expected_children);
+void item_children_destroy(ITEM_CHILDREN_t *children);
+ITEM_t *item_children_lookup(const ITEM_CHILDREN_t *children, const char *name);
+bool item_children_append(ITEM_CHILDREN_t *children, const char *name,
+                          ITEM_t *child);
+ITEM_t *item_children_detach(ITEM_CHILDREN_t *children, const char *name);
+size_t item_children_count(const ITEM_CHILDREN_t *children);
+ITEM_t *item_children_at(const ITEM_CHILDREN_t *children, size_t index);
+uint32_t item_children_bucket_count(const ITEM_CHILDREN_t *children);
+size_t item_children_ordered_capacity(const ITEM_CHILDREN_t *children);
 uint32_t murmur3_32(const char *key, size_t len, uint32_t seed);
-char *substr(const char *str, size_t begin, size_t len);
 
 // Persistence internals.
 bool write_item(FILE *file, ITEM_t *item);
 ITEM_t *read_item(FILE *file, ITEM_t *parent);
 
 // Allocator API.
-ENTRY_t *allocate_entry(void);
-HASHTABLE_t *allocate_hashtable(void);
 ITEM_t *allocate_item(void);
-void deallocate_entry(ENTRY_t *entry);
-void deallocate_hashtable(HASHTABLE_t *hashtable);
 void deallocate_item(ITEM_t *item);

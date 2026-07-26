@@ -25,10 +25,6 @@
   (ITEM_MAX_LAYER_NAME_LENGTH * ITEM_MAX_DEPTH + (ITEM_MAX_DEPTH - 1u))
 #define MAX_ITEM_NAME (ITEM_MAX_FULL_NAME_LENGTH + 1u)
 
-// Item children are also stored in an indexable array for iteration
-// performance.  This value controls the size of that array.
-#define ITEM_ARRAY_INIT_CAPACITY  10
-
 typedef struct Item ITEM_t;
 typedef struct Itemstore ITEMSTORE_t;
 
@@ -101,7 +97,6 @@ ITEM_t *find_item(ITEM_t *root, const char *item_name);
 // pointers are borrowed and valid only for the current itemstore topology
 // revision. Payload replacement preserves pointer and cache validity.
 ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found);
-ITEM_t *find_item_by_index(ITEM_t *parent, const size_t index);
 void delete_item(ITEM_t *root, const char *item_name);
 // set_item creates or replaces a value item. The itemstore takes ownership of
 // value, including any VALUE_str payload, whether updating an existing item or

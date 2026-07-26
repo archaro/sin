@@ -11,7 +11,9 @@
 static void assign_store(ITEM_t *item, ITEMSTORE_t *store) {
   if (!item) return;
   item->store = store;
-  for (size_t i = 0; i < item->ordered_size; i++) assign_store(item->ordered_array[i], store);
+  for (size_t i = 0; i < item_children_count(item->children); i++) {
+    assign_store(item_children_at(item->children, i), store);
+  }
 }
 
 ITEMSTORE_t *itemstore_create(const char *name) {
@@ -108,9 +110,11 @@ ITEM_t *item_parent(const ITEM_t *item) { return item ? item->parent : NULL; }
 const VALUE_t *item_value(const ITEM_t *item) { return item ? &item->value : NULL; }
 const uint8_t *item_bytecode(const ITEM_t *item) { return item ? item->bytecode : NULL; }
 uint32_t item_bytecode_length(const ITEM_t *item) { return item ? item->bytecode_len : 0; }
-size_t item_child_count(const ITEM_t *item) { return item ? item->ordered_size : 0; }
+size_t item_child_count(const ITEM_t *item) {
+  return item ? item_children_count(item->children) : 0;
+}
 ITEM_t *item_child_at(const ITEM_t *item, size_t index) {
-  return item && index < item->ordered_size ? item->ordered_array[index] : NULL;
+  return item ? item_children_at(item->children, index) : NULL;
 }
 bool item_is_in_use(const ITEM_t *item) {
   return item && item->execution_pins != 0;
@@ -218,7 +222,7 @@ ITEM_t *find_item_unchecked(ITEM_t *root, const char *item_name) {
     memcpy(layer, current_pos, layer_len);
     layer[layer_len] = '\0'; // Null-terminate the layer string
     // Move to the next layer of the item
-    current_item = search_hashtable(current_item->children, layer);
+    current_item = item_children_lookup(current_item->children, layer);
     // If there's no next dot, we've reached the last layer
     if (next_dot == NULL) {
       break;

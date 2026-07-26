@@ -73,8 +73,8 @@ effects have occurred.
 
 The item tree owns all `ITEM_t` nodes reachable from the root. Parent and child
 links are borrowed references within that tree; `destroy_item` recursively frees
-an item, its children, its child hash table, its ordered child-pointer array, its
-owned code bytecode buffer, and any owned string payload in a value item.
+an item, its insertion-ordered child container and descendants, its owned
+bytecode buffer for a code item, and any owned string payload in a value item.
 
 Value items own their stored `VALUE_t` payload. When `make_item`, `insert_item`,
 or `set_item` stores a string `VALUE_t`, ownership of the string buffer transfers
