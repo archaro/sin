@@ -132,7 +132,7 @@ void test_net_write_ignores_non_writable_lines(void) {
   config.maxconns = 3;
   line = calloc((size_t)config.maxconns, sizeof(LINE_t));
   ASSERT_NOT_NULL(line);
-  const int statuses[] = {
+  const LINE_STATUS_t statuses[] = {
     LINE_empty, LINE_connecting, LINE_disconnecting
   };
   for (size_t i = 0; i < sizeof(statuses) / sizeof(statuses[0]); i++) {

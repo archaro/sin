@@ -24,6 +24,13 @@ static void write_bytes(SDissState *state, const char *data, size_t len) {
   if (state->write_fn) state->write_fn(state->write_ctx, data, len);
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+static void outln(SDissState *state, const char *fmt, ...)
+    __attribute__((format(printf, 2, 3)));
+#else
+static void outln(SDissState *state, const char *fmt, ...);
+#endif
+
 static void outln(SDissState *state, const char *fmt, ...) {
   char buffer[512];
   va_list args;

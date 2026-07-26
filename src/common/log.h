@@ -22,6 +22,13 @@ LogLevel log_get_level(void);
 bool log_is_verbose(void);
 bool log_to_file(const char *logfile);
 void close_log(void);
-void logmsg(const char *msg, ...);
-void logverbose(const char *msg, ...);
-void logerr(const char *msg, ...);
+#if defined(__GNUC__) || defined(__clang__)
+#define SIN_LOG_PRINTF_FORMAT(format_index, argument_index) \
+  __attribute__((format(printf, format_index, argument_index)))
+#else
+#define SIN_LOG_PRINTF_FORMAT(format_index, argument_index)
+#endif
+void logmsg(const char *msg, ...) SIN_LOG_PRINTF_FORMAT(1, 2);
+void logverbose(const char *msg, ...) SIN_LOG_PRINTF_FORMAT(1, 2);
+void logerr(const char *msg, ...) SIN_LOG_PRINTF_FORMAT(1, 2);
+#undef SIN_LOG_PRINTF_FORMAT

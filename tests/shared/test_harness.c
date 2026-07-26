@@ -543,6 +543,13 @@ static const test_case_t runtime_tests[] = {
     {"test_runtime_benchmark_optin", test_runtime_benchmark_optin},
 };
 
+#if defined(__GNUC__) || defined(__clang__)
+static void harness_printf(const char *fmt, ...)
+    __attribute__((format(printf, 1, 2)));
+#else
+static void harness_printf(const char *fmt, ...);
+#endif
+
 static void harness_printf(const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);

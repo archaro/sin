@@ -198,6 +198,15 @@ void ir_dump(FILE* out, IR_Unit* unit) {
   }
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag,
+                                int8_t errnum, const char *fmt, ...)
+    __attribute__((format(printf, 4, 5)));
+#else
+static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag,
+                                int8_t errnum, const char *fmt, ...);
+#endif
+
 static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag, int8_t errnum, const char *fmt, ...) {
   va_list args;
   int needed;
@@ -285,7 +294,7 @@ int8_t ir_validate_diag(IR_Unit* unit, uint32_t local_count, char **errdetail, C
         if (inst->a < 0) {
           return ir_validate_error(errdetail, diag, ERR_COMP_TOOMANYARGS,
                                    "Instruction %zu (CALL) has negative arity %d.",
-                                   i, ir_op_name(inst->op), inst->a);
+                                   i, inst->a);
         }
         break;
       }

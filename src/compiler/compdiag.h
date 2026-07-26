@@ -36,13 +36,22 @@ bool compdiag_set_once_diag(int8_t *current_errnum, char **errdetail,
                             CompilerDiagnostic *diag, int8_t new_errnum,
                             DiagPhase diag_phase, const char *phase,
                             const char *detail);
+#if defined(__GNUC__) || defined(__clang__)
+#define SIN_COMPD_PRINTF_FORMAT(format_index, argument_index) \
+  __attribute__((format(printf, format_index, argument_index)))
+#else
+#define SIN_COMPD_PRINTF_FORMAT(format_index, argument_index)
+#endif
 bool compdiag_setf_once(int8_t *current_errnum, char **errdetail,
                         int8_t new_errnum, const char *phase,
-                        const char *fmt, ...);
+                        const char *fmt, ...)
+    SIN_COMPD_PRINTF_FORMAT(5, 6);
 bool compdiag_setf_once_diag(int8_t *current_errnum, char **errdetail,
                              CompilerDiagnostic *diag, int8_t new_errnum,
                              DiagPhase diag_phase, const char *phase,
-                             const char *fmt, ...);
+                             const char *fmt, ...)
+    SIN_COMPD_PRINTF_FORMAT(7, 8);
+#undef SIN_COMPD_PRINTF_FORMAT
 char *compdiag_copy_detail(const char *errdetail);
 void compdiag_reset_detail(char **errdetail);
 

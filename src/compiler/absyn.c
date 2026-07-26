@@ -1,6 +1,7 @@
 // Abstract syntax tree
 
 // Licensed under the MIT License - see LICENSE file for details.
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -278,7 +279,7 @@ void as_reconstruct_value(AS_NODE *node) {
   AS_VALUE *val = (AS_VALUE*)node->lhs;
   logverbose("%s: ", valname[val->valtype]);
   if (val->valtype == V_INT || val->valtype == V_BOOLTRUE || val->valtype == V_BOOLFALSE) {
-    logverbose("%lld", val->value.i);
+    logverbose("%" PRId64, val->value.i);
   } else if (val->valtype == V_FLOAT) {
     double f = 0.0;
     memcpy(&f, &val->value.f_bits, sizeof(f));
@@ -305,7 +306,7 @@ void as_reconstruct_item(AS_NODE *root) {
   if (node->nodetype == N_VALUE) {
     AS_VALUE *val = (AS_VALUE*)node->lhs;
     if (val->valtype == V_INT || val->valtype == V_BOOLTRUE || val->valtype == V_BOOLFALSE) {
-      logverbose("%lld", val->value.i);
+      logverbose("%" PRId64, val->value.i);
     } else if (val->valtype == V_FLOAT) {
       double f = 0.0;
       memcpy(&f, &val->value.f_bits, sizeof(f));

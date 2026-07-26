@@ -9,6 +9,7 @@
 #include "config.h"
 #include "libtelnet.h"
 #include "item.h"
+#include "log.h"
 #include "value.h"
 #include "test_assert.h"
 #include "runtime_context.h"

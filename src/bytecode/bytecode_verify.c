@@ -344,6 +344,10 @@ static int bc_validate_local_index(BC_Decoder *d, const uint8_t *p,
   return bc_fail(d, p, opcode, msg);
 }
 
+static uint16_t bc_read_u16_le(const uint8_t *p) {
+  return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
+}
+
 static int bc_record_jump(BC_Decoder *d, const uint8_t *operand_start,
                           uint8_t opcode) {
   if (!d->options.validate_control_flow) return 1;
@@ -356,7 +360,7 @@ static int bc_record_jump(BC_Decoder *d, const uint8_t *operand_start,
     }
     d->jump_capacity = (uint32_t)new_capacity;
   }
-  uint16_t raw = (uint16_t)operand_start[0] | ((uint16_t)operand_start[1] << 8);
+  uint16_t raw = bc_read_u16_le(operand_start);
   d->jumps[d->jump_count++] = (BC_JumpRef){
       .offset = bc_offset(d, operand_start),
       .relative = (int16_t)raw,
@@ -618,14 +622,14 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
     }
     case IR_OP_CALL:
       if (!bc_need(d, *cursor, 2, op, schema->name)) return 0;
-      operand_u16 = (uint16_t)(*cursor)[0] | ((uint16_t)(*cursor)[1] << 8);
+      operand_u16 = bc_read_u16_le(*cursor);
       operand.kind = BC_OPERAND_U16; operand.offset = bc_offset(d, *cursor); operand.width = 2; operand.value.u16 = operand_u16;
       *cursor += 2;
       break;
     case IR_OP_JUMP: case IR_OP_JUMP_IF_FALSE: {
       if (!bc_need(d, *cursor, 2, op, schema->name)) return 0;
       const uint8_t *operand_start = *cursor;
-      operand_u16 = (uint16_t)(*cursor)[0] | ((uint16_t)(*cursor)[1] << 8);
+      operand_u16 = bc_read_u16_le(*cursor);
       operand.kind = BC_OPERAND_I16; operand.offset = bc_offset(d, *cursor); operand.width = 2; operand.value.i16 = (int16_t)operand_u16;
       if (ctx == BC_CTX_STMT && !bc_record_jump(d, operand_start, op)) return 0;
       *cursor += 2;
@@ -642,8 +646,7 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
       return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     case IR_OP_PUSH_STRING: {
       if (!bc_need(d, *cursor, 2, op, "length")) return 0;
-      uint16_t len = (uint16_t)(*cursor)[0] |
-                     ((uint16_t)(*cursor)[1] << 8);
+      uint16_t len = bc_read_u16_le(*cursor);
       const uint8_t *data_start = *cursor + 2;
       *cursor += 2;
       if (!bc_need(d, *cursor, len, op, schema->name)) return 0;
@@ -661,8 +664,7 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
         while (1) {
           if (!bc_need(d, *cursor, 2, op,
                        "embedded parameter length")) return 0;
-          uint16_t param_len = (uint16_t)(*cursor)[0] |
-                               ((uint16_t)(*cursor)[1] << 8);
+          uint16_t param_len = bc_read_u16_le(*cursor);
           *cursor += 2;
           if (param_len == 0) break;
           if (param_count >= BC_MAX_ASSIGNCODE_PARAMS) {
@@ -681,8 +683,7 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
         }
       }
       if (!bc_need(d, *cursor, 2, op, "embedded source length")) return 0;
-      uint16_t len = (uint16_t)(*cursor)[0] |
-                     ((uint16_t)(*cursor)[1] << 8);
+      uint16_t len = bc_read_u16_le(*cursor);
       *cursor += 2;
       const uint8_t *data_start = *cursor;
       if (!bc_need(d, *cursor, len, op, "embedded source")) return 0;

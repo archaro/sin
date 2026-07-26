@@ -5,9 +5,9 @@ const char *test_harness_current_test(void);
 void test_harness_failf(const char *file, int line, const char *fmt, ...)
     __attribute__((format(printf, 3, 4)));
 
-#define TEST_FAILF(fmt, ...) \
+#define TEST_FAILF(...) \
   do { \
-    test_harness_failf(__FILE__, __LINE__, fmt, ##__VA_ARGS__); \
+    test_harness_failf(__FILE__, __LINE__, __VA_ARGS__); \
   } while (0)
 
 #define ASSERT_TRUE(cond) \

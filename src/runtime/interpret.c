@@ -469,7 +469,7 @@ uint8_t *op_getlocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (!v) return NULL;
   switch (v->type) {
     case VALUE_int:
-      logverbose("OP_GETLOCAL: index %d value %d.\n", index, v->i);
+      logverbose("OP_GETLOCAL: index %d value %" PRId64 ".\n", index, v->i);
       break;
     case VALUE_str:
       logverbose("OP_GETLOCAL: index %d value '%s'.\n", index, v->s);
