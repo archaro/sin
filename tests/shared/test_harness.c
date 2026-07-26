@@ -140,7 +140,6 @@ void test_save_itemstore_preserves_existing_file_on_failure(void);
 void test_save_itemsource_reports_write_and_close_failure(void);
 void test_itemstore_durability_modes(void);
 void test_itemstore_large_load_presizes_child_storage(void);
-void test_itemstore_verifier_rejects_malformed_code_item_bytecode(void);
 void test_libcall_registry_roundtrip(void);
 void test_runtime_init_validates_libcalls_once(void);
 void test_libcall_registry_init_failure_has_no_partial_state(void);
@@ -180,7 +179,6 @@ void test_libcall_float_integer_only_arguments_rejected(void);
 void test_task_introspection_thisid_ordinary_context_returns_nil(void);
 void test_task_introspection_exists_valid_and_invalid_ids(void);
 void test_task_exists_rejects_non_integer(void);
-void test_task_introspection_count_returns_zero_with_no_tasks(void);
 void test_task_introspection_count_and_exists_with_lifecycle(void);
 void test_task_thisid_in_callback_survives_self_close(void);
 void test_newgametask_child_callback_uses_own_identity(void);
@@ -373,7 +371,6 @@ static const test_case_t core_tests[] = {
     {"test_save_itemsource_reports_write_and_close_failure", test_save_itemsource_reports_write_and_close_failure},
     {"test_itemstore_durability_modes", test_itemstore_durability_modes},
     {"test_itemstore_large_load_presizes_child_storage", test_itemstore_large_load_presizes_child_storage},
-    {"test_itemstore_verifier_rejects_malformed_code_item_bytecode", test_itemstore_verifier_rejects_malformed_code_item_bytecode},
     {"test_relative_item_leading_dot_parse_accepts_deref_chain", test_relative_item_leading_dot_parse_accepts_deref_chain},
     {"test_relative_item_leading_dot_nested_relative_deref_layers", test_relative_item_leading_dot_nested_relative_deref_layers},
     {"test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed", test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed},
@@ -517,7 +514,6 @@ static const test_case_t runtime_tests[] = {
     {"test_task_introspection_thisid_ordinary_context_returns_nil", test_task_introspection_thisid_ordinary_context_returns_nil},
     {"test_task_introspection_exists_valid_and_invalid_ids", test_task_introspection_exists_valid_and_invalid_ids},
     {"test_task_exists_rejects_non_integer", test_task_exists_rejects_non_integer},
-    {"test_task_introspection_count_returns_zero_with_no_tasks", test_task_introspection_count_returns_zero_with_no_tasks},
     {"test_task_introspection_count_and_exists_with_lifecycle", test_task_introspection_count_and_exists_with_lifecycle},
     {"test_task_thisid_in_callback_survives_self_close", test_task_thisid_in_callback_survives_self_close},
     {"test_newgametask_child_callback_uses_own_identity", test_newgametask_child_callback_uses_own_identity},

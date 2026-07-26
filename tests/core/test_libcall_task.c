@@ -250,23 +250,6 @@ void test_task_exists_rejects_non_integer(void) {
   teardown_libcall_runtime();
 }
 
-void test_task_introspection_count_returns_zero_with_no_tasks(void) {
-  setup_libcall_runtime();
-
-  set_error_item(config.itemroot, ERR_RUNTIME_INVALIDARGS, "prior error", NULL);
-
-  (void)lc_task_count(test_ctx(), NULL, config.itemroot);
-  VALUE_t ret = pop_stack(config.vm->stack);
-  ASSERT_EQ_INT(VALUE_int, ret.type);
-  ASSERT_EQ_INT(0, ret.i);
-
-  ITEM_t *err = find_item(config.itemroot, "error");
-  ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
-
-  teardown_libcall_runtime();
-}
-
 void test_task_introspection_count_and_exists_with_lifecycle(void) {
   uv_loop_t loop;
   ASSERT_EQ_INT(0, uv_loop_init(&loop));

@@ -8,10 +8,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
-| core      |   111 | `tests/core/`           |
+| core      |   110 | `tests/core/`           |
 | compiler  |    31 | `tests/compiler/`       |
-| runtime   |    84 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**226**|                         |
+| runtime   |    83 | `tests/core/`, `tests/interpreter/` |
+| **Total** |**224**|                         |
 
 ## core
 
@@ -22,7 +22,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `run_suite(...)`
     - Per-test and per-suite elapsed-time reporting
     - Assertion-failure suite/test context via `tests/test_assert.h`
-    - Core suite registration (`core_tests[]` with 111 entries)
+    - Core suite registration (`core_tests[]` with 110 entries)
     - Suite registration validation rejects null/duplicate test entries
       before execution.
 - **Fixture contract integrity / regeneration policy**
@@ -137,7 +137,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 ## runtime
 
-The runtime suite contains 84 tests registered in `runtime_tests[]`.
+The runtime suite contains 83 tests registered in `runtime_tests[]`.
 Twelve tests come
 from `tests/core/test_value_behavior.c` and exercise the decoder, interpreter
 contracts, and strict-validation machinery directly. The remaining tests cover
@@ -239,7 +239,6 @@ integration, and an opt-in performance guard.
     - `test_task_introspection_thisid_ordinary_context_returns_nil`
     - `test_task_introspection_exists_valid_and_invalid_ids`
     - `test_task_exists_rejects_non_integer`
-    - `test_task_introspection_count_returns_zero_with_no_tasks`
     - `test_task_introspection_count_and_exists_with_lifecycle`
     - `test_task_thisid_in_callback_survives_self_close`
     - `test_newgametask_child_callback_uses_own_identity`

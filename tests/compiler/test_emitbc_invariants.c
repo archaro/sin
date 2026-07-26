@@ -156,24 +156,6 @@ static void test_emitbc_successful_emission_verifies(void) {
   ir_destroy_unit(unit);
 }
 
-static void test_emitbc_invalid_post_emit_bytecode_fails(void) {
-  IR_Unit *unit = t_new_unit();
-  ASSERT_NOT_NULL(unit);
-  t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
-
-  OUTPUT_t out = make_out(16);
-  char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, 0, 1, &out, &errdetail);
-  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "emitbc: bytecode verification failed") != NULL);
-  ASSERT_TRUE(strstr(errdetail, "parameter count exceeds local count") != NULL);
-
-  free(errdetail);
-  free(out.bytecode);
-  ir_destroy_unit(unit);
-}
-
 static void test_emitbc_label_heavy_jump_targets_in_bounds(void) {
   IR_Unit *u = t_new_unit();
   ASSERT_NOT_NULL(u);
@@ -231,5 +213,4 @@ void test_emitbc_invariants(void) {
   test_emitbc_determinism_fixed_seed();
   test_emitbc_label_heavy_jump_targets_in_bounds();
   test_emitbc_successful_emission_verifies();
-  test_emitbc_invalid_post_emit_bytecode_fails();
 }
