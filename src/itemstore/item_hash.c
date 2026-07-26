@@ -16,7 +16,6 @@
 typedef struct ItemEntry ItemEntry_t;
 
 struct ItemEntry {
-  char *key;
   ITEM_t *child;
   ItemEntry_t *next;
 };
@@ -75,14 +74,17 @@ uint32_t murmur3_32(const char *key, size_t len, uint32_t seed) {
   return hash;
 }
 
-static uint32_t hash_key(const char *key) {
-  size_t len = strlen(key);
+static uint32_t hash_key_span(const char *key, size_t len) {
   if (len <= 4u) {
     uint32_t hash = 0;
     memcpy(&hash, key, len);
     return hash;
   }
   return murmur3_32(key, len, 0);
+}
+
+static uint32_t hash_key(const char *key) {
+  return hash_key_span(key, strlen(key));
 }
 
 static ITEM_CHILDREN_t *create_children(uint32_t bucket_count,
@@ -130,7 +132,7 @@ static bool resize_children(ITEM_CHILDREN_t *children, uint32_t new_size) {
     ItemEntry_t *entry = children->table[i];
     while (entry) {
       ItemEntry_t *next = entry->next;
-      uint32_t index = hash_key(entry->key) % new_size;
+      uint32_t index = hash_key(entry->child->name) % new_size;
       entry->next = table[index];
       table[index] = entry;
       entry = next;
@@ -164,34 +166,40 @@ static bool grow_ordered_array(ITEM_CHILDREN_t *children) {
 ITEM_t *item_children_lookup(const ITEM_CHILDREN_t *children,
                              const char *name) {
   if (!children || !name) return NULL;
-  uint32_t index = hash_key(name) % children->size;
+  return item_children_lookup_span(children, name, strlen(name));
+}
+
+ITEM_t *item_children_lookup_span(const ITEM_CHILDREN_t *children,
+                                  const char *name, size_t name_len) {
+  if (!children || !name || name_len > ITEM_MAX_LAYER_NAME_LENGTH) {
+    return NULL;
+  }
+  uint32_t index = hash_key_span(name, name_len) % children->size;
   for (ItemEntry_t *entry = children->table[index]; entry;
        entry = entry->next) {
-    if (strcmp(entry->key, name) == 0) return entry->child;
+    if (memcmp(entry->child->name, name, name_len) == 0 &&
+        entry->child->name[name_len] == '\0') {
+      return entry->child;
+    }
   }
   return NULL;
 }
 
 bool item_children_append(ITEM_CHILDREN_t *children, const char *name,
                           ITEM_t *child) {
-  if (!children || !name || !child || item_children_lookup(children, name)) {
+  if (!children || !name || !child || strcmp(name, child->name) != 0 ||
+      item_children_lookup(children, name)) {
     return false;
   }
 
   ItemEntry_t *entry = malloc(sizeof *entry);
   if (!entry) return false;
-  entry->key = strdup(name);
-  if (!entry->key) {
-    free(entry);
-    return false;
-  }
   if (!grow_ordered_array(children)) {
-    free(entry->key);
     free(entry);
     return false;
   }
 
-  uint32_t index = hash_key(name) % children->size;
+  uint32_t index = hash_key(child->name) % children->size;
   entry->child = child;
   entry->next = children->table[index];
   children->table[index] = entry;
@@ -213,7 +221,7 @@ ITEM_t *item_children_detach(ITEM_CHILDREN_t *children, const char *name) {
   uint32_t bucket = hash_key(name) % children->size;
   ItemEntry_t *entry = children->table[bucket];
   ItemEntry_t *previous = NULL;
-  while (entry && strcmp(entry->key, name) != 0) {
+  while (entry && strcmp(entry->child->name, name) != 0) {
     previous = entry;
     entry = entry->next;
   }
@@ -231,7 +239,6 @@ ITEM_t *item_children_detach(ITEM_CHILDREN_t *children, const char *name) {
   if (previous) previous->next = entry->next;
   else children->table[bucket] = entry->next;
   ITEM_t *child = entry->child;
-  free(entry->key);
   free(entry);
   for (size_t i = ordered_index; i + 1u < children->ordered_size; i++) {
     children->ordered_array[i] = children->ordered_array[i + 1u];
@@ -250,7 +257,6 @@ void item_children_destroy(ITEM_CHILDREN_t *children) {
     ItemEntry_t *entry = children->table[i];
     while (entry) {
       ItemEntry_t *next = entry->next;
-      free(entry->key);
       free(entry);
       entry = next;
     }

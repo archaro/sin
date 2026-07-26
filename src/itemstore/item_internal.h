@@ -104,6 +104,8 @@ ITEM_CHILDREN_t *item_children_create_runtime(void);
 ITEM_CHILDREN_t *item_children_create_loaded(uint32_t expected_children);
 void item_children_destroy(ITEM_CHILDREN_t *children);
 ITEM_t *item_children_lookup(const ITEM_CHILDREN_t *children, const char *name);
+ITEM_t *item_children_lookup_span(const ITEM_CHILDREN_t *children,
+                                  const char *name, size_t name_len);
 bool item_children_append(ITEM_CHILDREN_t *children, const char *name,
                           ITEM_t *child);
 ITEM_t *item_children_detach(ITEM_CHILDREN_t *children, const char *name);

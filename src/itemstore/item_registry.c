@@ -211,18 +211,16 @@ ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
 ITEM_t *find_item_unchecked(ITEM_t *root, const char *item_name) {
   ITEM_t *current_item = root;
   const char *current_pos = item_name;
-  char layer[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
 
   while (current_item != NULL && *current_pos != '\0') {
     // Find the length of the next layer of the item
     const char *next_dot = strchr(current_pos, '.');
-    size_t layer_len = (next_dot != NULL) ? (size_t)(next_dot - current_pos) : strlen(current_pos);
-    // Since validation guarantees that layer_len fits the layer buffer,
-    // we don't need to check for overflow
-    memcpy(layer, current_pos, layer_len);
-    layer[layer_len] = '\0'; // Null-terminate the layer string
+    size_t layer_len = (next_dot != NULL)
+        ? (size_t)(next_dot - current_pos)
+        : strlen(current_pos);
     // Move to the next layer of the item
-    current_item = item_children_lookup(current_item->children, layer);
+    current_item = item_children_lookup_span(current_item->children,
+                                              current_pos, layer_len);
     // If there's no next dot, we've reached the last layer
     if (next_dot == NULL) {
       break;
