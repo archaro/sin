@@ -4,4 +4,5 @@
 63 00          # c: store local 0
 66 00          # f: inc local 0
 65 00          # e: load local 0
+77             # w: discard expression statement
 68             # h: halt

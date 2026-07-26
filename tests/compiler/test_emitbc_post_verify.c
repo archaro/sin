@@ -36,12 +36,12 @@ void test_emitbc_post_emission_verification(void) {
 
   unit = t_new_unit();
   t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 1});
-  assert_post_verify_failure(unit, 0, 0, "missing terminating HALT");
+  assert_post_verify_failure(unit, 0, 0, "final physical instruction must be HALT");
 
   unit = t_new_unit();
   t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
   t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 1});
-  assert_post_verify_failure(unit, 0, 0, "trailing bytes after HALT");
+  assert_post_verify_failure(unit, 0, 0, "final physical instruction must be HALT");
 
   unit = t_new_unit();
   t_emit(unit, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = 1});

@@ -27,30 +27,21 @@ void test_bytecode_verify_policy_profiles(void) {
   ASSERT_TRUE(strict.validate_local_indices);
   ASSERT_TRUE(strict.validate_control_flow);
   ASSERT_TRUE(strict.validate_stack_effects);
-  ASSERT_EQ_INT(BC_TRAILING_BYTES_ERROR, strict.trailing_bytes);
 
   BC_VerifyOptions runtime = bc_verify_runtime_options();
   ASSERT_TRUE(!runtime.validate_local_indices);
   ASSERT_TRUE(!runtime.validate_control_flow);
   ASSERT_TRUE(!runtime.validate_stack_effects);
-  ASSERT_EQ_INT(BC_TRAILING_BYTES_WARNING, runtime.trailing_bytes);
 
   BC_VerifyOptions disassembly = bc_verify_disassembly_options();
   ASSERT_TRUE(disassembly.validate_local_indices);
   ASSERT_TRUE(!disassembly.validate_control_flow);
   ASSERT_TRUE(!disassembly.validate_stack_effects);
-  ASSERT_EQ_INT(BC_TRAILING_BYTES_WARNING, disassembly.trailing_bytes);
 
   const uint8_t trailing[] = {0, 0, 'h', 'h'};
   BC_VerifyResult result = bc_verify_bytecode(
-      trailing, sizeof(trailing), "strict trailing", &strict);
-  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
-  result = bc_verify_bytecode(trailing, sizeof(trailing),
-                              "runtime trailing", &runtime);
-  ASSERT_EQ_INT(BC_VERIFY_WARNING, result.status);
-  result = bc_verify_bytecode(trailing, sizeof(trailing),
-                              "disassembly trailing", &disassembly);
-  ASSERT_EQ_INT(BC_VERIFY_WARNING, result.status);
+      trailing, sizeof(trailing), "multiple terminators", &strict);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
 
   const uint8_t invalid_jump[] = {0, 0, 'j', 4, 0, 'h'};
   result = bc_verify_bytecode(invalid_jump, sizeof(invalid_jump),
@@ -133,7 +124,7 @@ void test_bytecode_verify_minimal_and_header_errors(void) {
                        "parameter count exceeds local count");
 }
 
-void test_bytecode_verify_opcode_halt_and_trailing_bytes(void) {
+void test_bytecode_verify_opcode_terminators_and_complete_buffer(void) {
   const uint8_t invalid_opcode[] = {0, 0, 0x7F, 'h'};
   BC_VerifyResult invalid_result = bc_verify_bytecode(
       invalid_opcode, sizeof(invalid_opcode), "invalid_opcode", NULL);
@@ -145,12 +136,24 @@ void test_bytecode_verify_opcode_halt_and_trailing_bytes(void) {
 
   const uint8_t missing_halt[] = {0, 0, 'b', 1};
   assert_verify_status(missing_halt, sizeof(missing_halt), BC_VERIFY_ERROR,
-                       "missing_halt", "missing terminating HALT opcode");
+                       "missing_halt", "final physical instruction must be HALT");
 
-  const uint8_t trailing_after_halt[] = {0, 0, 'h', 'h'};
-  assert_verify_status(trailing_after_halt, sizeof(trailing_after_halt),
-                       BC_VERIFY_ERROR, "trailing_after_halt",
-                       "trailing bytes after HALT");
+  const uint8_t intermediate_terminators[] = {0, 0, 'h', 'Q', 'h'};
+  assert_verify_status(intermediate_terminators, sizeof(intermediate_terminators),
+                       BC_VERIFY_OK, "intermediate_terminators", NULL);
+
+  const uint8_t malformed_after_halt[] = {0, 0, 'h', 0x7F, 'h'};
+  assert_verify_status(malformed_after_halt, sizeof(malformed_after_halt),
+                       BC_VERIFY_ERROR, "malformed_after_halt", "invalid opcode");
+
+  const uint8_t return_underflow[] = {0, 0, 'Q', 'h'};
+  assert_verify_status(return_underflow, sizeof(return_underflow),
+                       BC_VERIFY_ERROR, "return_underflow", "stack underflow");
+
+  const uint8_t return_parameter[] = {1, 1, 'Q', 'h'};
+  assert_verify_status(return_parameter, sizeof(return_parameter),
+                       BC_VERIFY_ERROR, "return_parameter",
+                       "exactly one value above parameter baseline");
 }
 
 void test_bytecode_verify_truncated_operand_widths(void) {
@@ -291,6 +294,21 @@ void test_bytecode_verify_jumps_and_stack_flow(void) {
   const uint8_t valid_libcall[] = {0, 0, 'l', 1, 0, 'x', 'M', 1, 'h'};
   assert_verify_status(valid_libcall, sizeof(valid_libcall), BC_VERIFY_OK,
                        "valid_libcall", NULL);
+
+  /* The conditional jump targets a reachable RETURN after an earlier HALT. */
+  const uint8_t jump_after_terminator[] = {
+      0, 0, 'b', 1, 'k', 0x03, 0x00, 'h',
+      'p', 7, 0, 0, 0, 0, 0, 0, 0, 'Q', 'h'};
+  assert_verify_status(jump_after_terminator, sizeof(jump_after_terminator),
+                       BC_VERIFY_OK, "jump_after_terminator", NULL);
+
+  const uint8_t return_depth_mismatch[] = {
+      0, 0, 'b', 1, 'k', 0x0E, 0x00,
+      'p', 7, 0, 0, 0, 0, 0, 0, 0,
+      'j', 0x02, 0x00, 'Q', 'h'};
+  assert_verify_status(return_depth_mismatch, sizeof(return_depth_mismatch),
+                       BC_VERIFY_ERROR, "return_depth_mismatch",
+                       "conflicting stack depths");
 }
 
 void test_bytecode_verify_nesting_and_vm_stack_limits(void) {
@@ -367,14 +385,14 @@ void test_bytecode_verify_pipeline_fixture_bytecode(void) {
 
 void test_bytecode_verify_compiler_emitted_bytecode(void) {
   const char *sources[] = {
-      "42;",
-      "@x = 7; @x;",
-      "if 1 < 2 then 9; else 7; endif;",
-      "if 1 < 2 then 9; elsif 0 < 1 then 8; 7; else 6; endif; 5;",
-      "@x = 0; while @x < 2 do 9; @x++; endwhile; @x;",
-      "@x = 0; do @x++; while @x < 2; @x;",
+      "return 42;",
+      "@x = 7; return @x;",
+      "if 1 < 2 then return 9; else return 7; endif;",
+      "if 1 < 2 then return 9; elsif 0 < 1 then return 8; else return 6; endif;",
+      "@x = 0; while @x < 2 do @x++; endwhile; return @x;",
+      "@x = 0; do @x++; while @x < 2; return @x;",
       "foo.12;",
-      "add = code {@a, @b} ( @a + @b; );",
+      "add = code {@a, @b} ( return @a + @b; );",
   };
   for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
     OUTPUT_t *out = NULL;

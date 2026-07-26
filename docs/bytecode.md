@@ -81,7 +81,8 @@ arguments as described below.
 | `e` | `IR_OP_LOAD_LOCAL` | `u8 local_index` | Push a copy of the addressed local value. |
 | `f` | `IR_OP_INC_LOCAL` | `u8 local_index` | Increment an integer local; report an error for non-integers. |
 | `g` | `IR_OP_DEC_LOCAL` | `u8 local_index` | Decrement an integer local; report an error for non-integers. |
-| `h` | `IR_OP_HALT` | none | Stop the current code item. If returning from a call, resume the caller with the return value; otherwise terminate interpretation. |
+| `h` | `IR_OP_HALT` | none | Stop the current code item and return `nil`. |
+| `Q` | `IR_OP_RETURN` | none | Pop exactly one explicit value and stop the current code item, returning that value. |
 | `j` | `IR_OP_JUMP` | `i16 relative_offset` | Unconditionally jump by the signed relative offset. |
 | `k` | `IR_OP_JUMP_IF_FALSE` | `i16 relative_offset` | Pop the top value. Jump by the signed relative offset when it is falsey; otherwise continue with the next instruction. |
 | `l` | `IR_OP_PUSH_STRING` | `u16 length`, bytes | Push a string literal. |
@@ -114,28 +115,18 @@ arguments as described below.
 
 ## Code item result semantics
 
-At `IR_OP_HALT`, the interpreter returns the value above the current frame. If
-there is no value above the frame, the result is `nil`. For nested code-item
-calls, the callee result is pushed back onto the caller's stack; for top-level
-execution, it is returned by the interpreter.
+`IR_OP_HALT` terminates the current code item with `nil`, discarding any residual
+operand values. `IR_OP_RETURN` pops exactly one explicit result and terminates
+the current code item with that value. For nested calls the result is pushed onto
+the caller's stack; for top-level execution it is returned by the interpreter.
 
-The compiler makes result-producing source code explicit with `IR_OP_DISCARD`.
-Only a final top-level expression statement is left as the code item's result.
-Earlier expression statements are evaluated for side effects and then compiled
-with `DISCARD`, so `1; 2;` returns `2`, not `1`. Assignments, `if` statements,
-and `while` statements do not themselves produce a result, so `@x = 7;`,
-`if true then 7; endif;`, `while ... do 7; endwhile;`, and `do 7; while true;`
-all return `nil`
-unless followed by a final top-level expression statement. Expression statements
-inside `if` branches and loop bodies are discarded as part of those statements;
-they do not become the enclosing code item's result.
-
-Libcalls follow the same rule. A final libcall expression, such as
-`sys.exists{"foo"};`, returns the libcall result. A non-final libcall expression,
-such as `sys.exists{"foo"}; 5;`, still performs its side effects, but its return
-value is discarded and the code item returns `5`. `sys.compile{source}` also
-follows this rule: the compiled source can create or update items even when the
-`sys.compile` return value is discarded by a following expression statement.
+The compiler emits `IR_OP_DISCARD` after every expression statement. Therefore
+`1; 2;`, assignments, and control-flow statements fall through with `nil`.
+Code-item values are produced only by source `return expression;`, while
+`return;` and fallthrough compile to `HALT`. `RETURN` and `HALT` are control-flow
+terminators, not physical end markers: valid bytecode may contain later
+instructions and branch targets, but compiler-produced streams end in a final
+structural `HALT`.
 
 ## Numeric edge cases
 

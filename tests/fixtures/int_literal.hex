@@ -1,4 +1,5 @@
 00 00          # header: locals=0 params=0
 70             # p: push int
 2a 00 00 00 00 00 00 00  # int64 42 (LE)
+77             # w: discard expression statement
 68             # h: halt

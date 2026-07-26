@@ -59,7 +59,7 @@ To assign an item, use the assignment operator, `=`.  If the item does not exist
 
 The examples above are examples of immediate execution.  Once executed, the result is given and the steps to create it are forgotten.  However, let’s instead make bar a code item.  Code items are evaluated each time they are called.
 
-`bar = code ( 10 * wibble; );`  
+`bar = code ( return 10 * wibble; );`
 Now, bar is equal to `nil`, but if we define  
 `wibble = 7;`  
 then bar will be equal to 70.  If we redefine  
@@ -68,15 +68,15 @@ then bar will now return 30.
 
 Code items can contain local variables.  There is only one scope: the item.  Thus, a local variable is visible from the moment it is defined to the end of the item.  Local variables are defined by assignment.
 
-`dingdong = code ( @a = bar; @b = 100; @a + @b; );`
+`dingdong = code ( @a = bar; @b = 100; return @a + @b; );`
 
-When `dingdong` is executed, it assigns the value of `bar` to local variable `@a`, the value of `100` to local variable `@b`, adds `@a` and `@b` together, and returns the result.  Note that there is no `return` statement required.  The final top-level expression statement is the value of the item (in this case `@a + @b`). Earlier expression statements are evaluated and discarded. Assignment, `if`, and `while` statements do not themselves produce a result, and expression statements inside `if` branches or loop bodies are discarded as part of those statements.
+When `dingdong` is executed, it assigns the value of `bar` to local variable `@a`, the value of `100` to local variable `@b`, adds `@a` and `@b` together, and returns the result. `return expression;` evaluates its expression once and immediately exits the current code item; `return;` exits with `nil`. Every expression statement is evaluated and discarded, including the final one. Falling off the end of a code item returns `nil`.
 
 When compiling code, if the parser doesn't like the source which it is chewing on, it will bail out and set `error` to an error number, and `error.msg` to the appropriate error message.  Thus an easy way to check if the code has compiled is to test these items.  A successful compilation will set these items to `nil`.
 
 You can pass parameters to items, too.  If you pass arguments to an item which does not accept them, they are silently forgotten.  If you pass too many arguments, the extra ones are ignored.  If you pass too few, the missing ones have the value of `nil`.  Here is an item which takes two arguments:  
 ```
-add = code {@a, @b} ( @a + @b; );
+add = code {@a, @b} ( return @a + @b; );
 if error then
   sys.log{"Compilation failed:\n"};
   sys.log{error.msg};
@@ -106,7 +106,10 @@ Comments begin with `/*` and end with `*/`, and may include anything, including 
 truthy. For example, `@a = 0; DO sys.log{@a}; @a++; WHILE @a < 5;` logs a
 counter from zero through four. The loop itself has no result value.
 
-`RETURN` can be used at any point to halt execution of the item.  It takes no parameter; when execution ends, the value of the item is whatever result value is on top of the current code frame, or `nil` if no result value has been produced.
+`RETURN;` can be used at any point to halt execution of the item and return
+`nil`. `RETURN expression;` evaluates the expression once, halts immediately,
+and returns that value. Falling off the end also returns `nil`; expression
+statements never implicitly become an item's result.
 
 ## Values and operators ##
 

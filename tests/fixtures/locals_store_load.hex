@@ -3,4 +3,5 @@
 07 00 00 00 00 00 00 00  # int64 7
 63 00          # c: store local 0
 65 00          # e: load local 0
+77             # w: discard expression statement
 68             # h: halt

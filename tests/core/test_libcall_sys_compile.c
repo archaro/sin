@@ -175,7 +175,7 @@ void test_sys_compile_libcall_runtime(void) {
   assert_compile_success_bool("syscompile.observed = foo;");
   assert_int_item("syscompile.observed", 42);
 
-  assert_compile_success_bool("foo = code {@in} ( @in+10; );");
+  assert_compile_success_bool("foo = code {@in} ( return @in+10; );");
   foo = find_item(itemstore_root(config.itemstore_ctx), "foo");
   ASSERT_NOT_NULL(foo);
   ASSERT_EQ_INT(ITEM_code, item_kind(foo));

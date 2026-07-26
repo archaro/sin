@@ -113,19 +113,20 @@ void test_pipeline_large_local_lookup_duplicate(void) {
   ASSERT_TRUE(errdetail == NULL);
 
   size_t bytecode_len = (size_t)(out.nextbyte - out.bytecode);
-  ASSERT_TRUE(bytecode_len >= 17);
+  ASSERT_TRUE(bytecode_len >= 19);
   ASSERT_EQ_INT(120, (int)out.bytecode[0]);
   ASSERT_EQ_INT(0, (int)out.bytecode[1]);
 
   size_t halt = bytecode_len - 1;
-  ASSERT_EQ_INT(bc_opcode_byte(IR_OP_PUSH_INT), out.bytecode[halt - 16]);
-  ASSERT_EQ_INT(bc_opcode_byte(IR_OP_STORE_LOCAL), out.bytecode[halt - 7]);
-  ASSERT_EQ_INT(57, (int)out.bytecode[halt - 6]);
-  ASSERT_EQ_INT(bc_opcode_byte(IR_OP_LOAD_LOCAL), out.bytecode[halt - 5]);
-  ASSERT_EQ_INT(57, (int)out.bytecode[halt - 4]);
-  ASSERT_EQ_INT(bc_opcode_byte(IR_OP_DISCARD), out.bytecode[halt - 3]);
-  ASSERT_EQ_INT(bc_opcode_byte(IR_OP_LOAD_LOCAL), out.bytecode[halt - 2]);
-  ASSERT_EQ_INT(119, (int)out.bytecode[halt - 1]);
+  ASSERT_EQ_INT(bc_opcode_byte(IR_OP_PUSH_INT), out.bytecode[halt - 17]);
+  ASSERT_EQ_INT(bc_opcode_byte(IR_OP_STORE_LOCAL), out.bytecode[halt - 8]);
+  ASSERT_EQ_INT(57, (int)out.bytecode[halt - 7]);
+  ASSERT_EQ_INT(bc_opcode_byte(IR_OP_LOAD_LOCAL), out.bytecode[halt - 6]);
+  ASSERT_EQ_INT(57, (int)out.bytecode[halt - 5]);
+  ASSERT_EQ_INT(bc_opcode_byte(IR_OP_DISCARD), out.bytecode[halt - 4]);
+  ASSERT_EQ_INT(bc_opcode_byte(IR_OP_LOAD_LOCAL), out.bytecode[halt - 3]);
+  ASSERT_EQ_INT(119, (int)out.bytecode[halt - 2]);
+  ASSERT_EQ_INT(bc_opcode_byte(IR_OP_DISCARD), out.bytecode[halt - 1]);
   ASSERT_EQ_INT(bc_opcode_byte(IR_OP_HALT), out.bytecode[halt]);
 
   free(out.bytecode);

@@ -28,6 +28,10 @@ static void emit_case_inst(IR_Unit *unit, IR_Op op) {
     case IR_OP_PUSH_BOOL:
       t_emit(unit, (IR_Inst){.op = op, .a = 1});
       break;
+    case IR_OP_RETURN:
+      t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_BOOL, .a = 1});
+      t_emit(unit, (IR_Inst){.op = op});
+      break;
     case IR_OP_LOAD_LOCAL:
     case IR_OP_STORE_LOCAL:
     case IR_OP_INC_LOCAL:
@@ -87,6 +91,7 @@ void test_emitbc_opcode_map(void) {
   /* Keep this case list aligned with src/emitbc.c:map_opcode. */
   const OpcodeCase cases[] = {
       {"halt", IR_OP_HALT, 'h', 0},
+      {"return", IR_OP_RETURN, 'Q', 2},
       {"push_int", IR_OP_PUSH_INT, 'p', 0},
       {"push_float", IR_OP_PUSH_FLOAT, 'P', 0},
       {"push_bool", IR_OP_PUSH_BOOL, 'b', 0},

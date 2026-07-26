@@ -60,7 +60,10 @@ typedef enum {
 
   IR_OP_CALL,
   IR_OP_LIBCALL_TOKEN,
-  IR_OP_ITEM_SAVE_CODE
+  IR_OP_ITEM_SAVE_CODE,
+
+  /* Keep this appended to minimize compatibility churn. */
+  IR_OP_RETURN
 } IR_Op;
 
 typedef struct {

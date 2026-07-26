@@ -285,6 +285,14 @@ static void assert_result_nil(const char *name, const char *source) {
   value_free(&result);
 }
 
+static void assert_result_string(const char *name, const char *source,
+                                 const char *expected) {
+  VALUE_t result = run_result_semantics_source(name, source);
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, expected) == 0);
+  value_free(&result);
+}
+
 void test_interpret_result_semantics(void) {
   setup_result_semantics_runtime();
 
@@ -294,40 +302,51 @@ void test_interpret_result_semantics(void) {
   config.itemstore = save_path;
   config.itemstore_durability = ITEMSTORE_DURABLE_FAST;
 
-  assert_result_int("result.final_expression", "42;", 42);
-  assert_result_int("result.expression_statement_discard", "1; 2;", 2);
-  assert_result_int("result.middle_expression_discard", "@x = 7; @x; 8;", 8);
+  assert_result_nil("result.final_expression_is_discarded", "42;");
+  assert_result_nil("result.expression_statements_discard", "1; 2;");
+  assert_result_nil("result.middle_expression_discard", "@x = 7; @x; 8;");
+  assert_result_int("result.explicit_return", "return 42;", 42);
+  assert_result_nil("result.bare_return", "return;");
+  assert_result_int("result.early_return", "return 7; @x = 9;", 7);
+  assert_result_int("result.if_return", "if true then return 8; endif; return 9;", 8);
+  assert_result_int("result.while_return", "@i = 0; while true do @i++; return @i; endwhile;", 1);
+  assert_result_int("result.do_while_return", "do return 6; while true;", 6);
+  assert_result_string("result.owned_string_return", "return \"owned result\";", "owned result");
+  assert_result_int("result.embedded_code_return",
+                    "result.callee = code ( return 11; ); return result.callee;", 11);
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx),
+                                      "result.value_item",
+                                      (VALUE_t){VALUE_int, {.i = 13}}));
+  assert_result_int("result.value_item_unchanged", "return result.value_item;", 13);
   assert_result_nil("result.assignment_has_no_result", "@x = 7;");
 
   assert_result_nil("result.if_statement_discards_branch_value",
                     "if true then 7; else 8; endif;");
-  assert_result_int("result.if_statement_before_final_expression",
-                    "if false then 7; else 8; endif; 9;", 9);
+  assert_result_nil("result.if_statement_before_final_expression",
+                    "if false then 7; else 8; endif; 9;");
 
   assert_result_nil("result.while_statement_discards_body_value",
                     "@i = 0; while @i < 1 do @i++; 44; endwhile;");
-  assert_result_int("result.while_statement_before_final_expression",
-                    "@i = 0; while @i < 3 do @i++; @i; endwhile; @i;", 3);
-  assert_result_int("result.do_while_once_when_false",
-                    "@i = 0; do @i++; while false; @i;", 1);
-  assert_result_int("result.do_while_repeats_to_five",
-                    "@i = 0; do @i++; while @i < 5; @i;", 5);
+  assert_result_nil("result.while_statement_before_final_expression",
+                    "@i = 0; while @i < 3 do @i++; @i; endwhile; @i;");
+  assert_result_int("result.do_while_once_then_return",
+                    "@i = 0; do @i++; while false; return @i;", 1);
   assert_result_nil("result.do_while_statement_discards_body_value",
                     "@i = 0; do @i++; 44; while false;");
 
-  assert_result_bool("result.final_libcall", "sys.exists{\"result.missing\"};", false);
+  assert_result_bool("result.return_libcall", "return sys.exists{\"result.missing\"};", false);
   assert_result_int("result.nonfinal_libcall_discard",
-                    "sys.exists{\"result.missing\"}; 5;", 5);
+                    "sys.exists{\"result.missing\"}; return 5;", 5);
 
-  assert_result_bool("result.final_sys_compile",
-                     "sys.compile{\"result.compiled.value = 17;\"};", true);
+  assert_result_bool("result.return_sys_compile",
+                     "return sys.compile{\"result.compiled.value = 17;\"};", true);
   ITEM_t *compiled_value = find_item(itemstore_root(config.itemstore_ctx), "result.compiled.value");
   ASSERT_NOT_NULL(compiled_value);
   ASSERT_EQ_INT(VALUE_int, item_value(compiled_value)->type);
   ASSERT_EQ_INT(17, (int)item_value(compiled_value)->i);
 
   assert_result_int("result.nonfinal_sys_compile_discard",
-                    "sys.compile{\"result.compiled.discard = 23;\"}; 99;", 99);
+                    "sys.compile{\"result.compiled.discard = 23;\"}; return 99;", 99);
   ITEM_t *compiled_discard = find_item(itemstore_root(config.itemstore_ctx), "result.compiled.discard");
   ASSERT_NOT_NULL(compiled_discard);
   ASSERT_EQ_INT(VALUE_int, item_value(compiled_discard)->type);
@@ -335,7 +354,7 @@ void test_interpret_result_semantics(void) {
 
   ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "result.save.marker",
                               (VALUE_t){VALUE_int, {.i = 44}}));
-  assert_result_bool("result.final_sys_save", "sys.save;", true);
+  assert_result_bool("result.return_sys_save", "return sys.save;", true);
   ITEM_t *saved = load_itemstore(save_path);
   ASSERT_NOT_NULL(saved);
   ITEM_t *saved_marker = find_item(saved, "result.save.marker");
@@ -410,7 +429,7 @@ void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void) {
     {"truncated_operand", truncated_operand, sizeof(truncated_operand),
      "truncated LOAD_LOCAL"},
     {"missing_halt", missing_halt, sizeof(missing_halt),
-     "missing terminating HALT opcode"},
+     "final physical instruction must be HALT"},
     {"invalid_opcode", invalid_opcode, sizeof(invalid_opcode),
      "opcode 0x7F (.): invalid opcode; recompile from Sinistra source"},
     {"null_bytecode", NULL, 0, "null bytecode pointer"},

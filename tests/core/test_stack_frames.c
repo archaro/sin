@@ -73,6 +73,7 @@ static ITEM_t *insert_runner(const char *name, const char *target) {
   code[pos++] = 'F';
   code[pos++] = 0;
   code[pos++] = 0;
+  code[pos++] = 'Q';
   code[pos++] = 'h';
   return insert_frame_code(name, code, pos);
 }
@@ -93,6 +94,7 @@ static ITEM_t *insert_string_local_frame(const char *name,
   code[pos++] = 0;
   code[pos++] = 'e';
   code[pos++] = 0;
+  code[pos++] = 'Q';
   code[pos++] = 'h';
   return insert_frame_code(name, code, pos);
 }
@@ -114,6 +116,7 @@ static ITEM_t *insert_outer_string_frame(const char *name, const char *target) {
   code[pos++] = 'e';
   code[pos++] = 0;
   code[pos++] = 'a';
+  code[pos++] = 'Q';
   code[pos++] = 'h';
   return insert_frame_code(name, code, pos);
 }

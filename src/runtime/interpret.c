@@ -63,12 +63,15 @@ static bool runtime_registry_track(LibcallRegistry *registry) {
   return true;
 }
 
-static VALUE_t pop_frame_result(STACK_t *stack) {
+static VALUE_t pop_frame_result(STACK_t *stack, bool explicit_return) {
   int32_t frame_value_floor = stack->base + stack->locals - 1;
-  if (stack->current > frame_value_floor) {
-    return pop_stack(stack);
+  VALUE_t result = VALUE_NIL;
+  if (explicit_return && stack->current > frame_value_floor) result = pop_stack(stack);
+  while (stack->current > frame_value_floor) {
+    VALUE_t discarded = pop_stack(stack);
+    value_free(&discarded);
   }
-  return VALUE_NIL;
+  return result;
 }
 
 static void runtime_registry_untrack(LibcallRegistry *registry) {
@@ -1194,8 +1197,8 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
           "execution reached the bytecode frame boundary without HALT");
       goto interpretation_failure;
     }
-    if (*op == 'h') {
-      VALUE_t return_value = pop_frame_result(VM->stack);
+    if (*op == 'h' || *op == 'Q') {
+      VALUE_t return_value = pop_frame_result(VM->stack, *op == 'Q');
       item_leave_use(ctx->current_item);
       current_frame_pinned = false;
 

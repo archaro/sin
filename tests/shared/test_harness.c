@@ -267,7 +267,7 @@ void test_emitbc_post_emission_verification(void);
 void test_bytecode_verify_policy_profiles(void);
 void test_bytecode_verify_analysis_storage_is_profile_scoped(void);
 void test_bytecode_verify_minimal_and_header_errors(void);
-void test_bytecode_verify_opcode_halt_and_trailing_bytes(void);
+void test_bytecode_verify_opcode_terminators_and_complete_buffer(void);
 void test_bytecode_verify_truncated_operand_widths(void);
 void test_bytecode_verify_local_indexes_and_items(void);
 void test_bytecode_verify_jumps_and_stack_flow(void);
@@ -446,7 +446,7 @@ static const test_case_t compiler_tests[] = {
     {"test_bytecode_verify_policy_profiles", test_bytecode_verify_policy_profiles},
     {"test_bytecode_verify_analysis_storage_is_profile_scoped", test_bytecode_verify_analysis_storage_is_profile_scoped},
     {"test_bytecode_verify_minimal_and_header_errors", test_bytecode_verify_minimal_and_header_errors},
-    {"test_bytecode_verify_opcode_halt_and_trailing_bytes", test_bytecode_verify_opcode_halt_and_trailing_bytes},
+    {"test_bytecode_verify_opcode_terminators_and_complete_buffer", test_bytecode_verify_opcode_terminators_and_complete_buffer},
     {"test_bytecode_verify_truncated_operand_widths", test_bytecode_verify_truncated_operand_widths},
     {"test_bytecode_verify_local_indexes_and_items", test_bytecode_verify_local_indexes_and_items},
     {"test_bytecode_verify_jumps_and_stack_flow", test_bytecode_verify_jumps_and_stack_flow},

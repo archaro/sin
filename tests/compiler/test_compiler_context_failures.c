@@ -155,7 +155,7 @@ static void test_lower_propagates_ir_allocation_failures(void) {
   assert_lower_allocation_failures("while 1 do 2; endwhile;");
   assert_lower_allocation_failures("do 2; while 1;");
   assert_lower_allocation_failures("foo.bar = 1 + 2; sys.log{foo.bar};");
-  assert_lower_allocation_failures("add = code {@a, @b} ( @a + @b; );");
+  assert_lower_allocation_failures("add = code {@a, @b} ( return @a + @b; );");
 }
 
 void test_compiler_context_failures(void) {

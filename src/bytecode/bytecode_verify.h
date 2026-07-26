@@ -101,11 +101,6 @@ typedef struct {
   char message[192];
 } BC_VerifyError;
 
-typedef enum {
-  BC_TRAILING_BYTES_ERROR = 0,
-  BC_TRAILING_BYTES_WARNING = 1
-} BC_TrailingBytesPolicy;
-
 /* Verification behavior after a caller has chosen to invoke the verifier.
  * Executable-level policy, such as sin's --strict-validation gate, remains
  * the caller's responsibility. */
@@ -113,7 +108,6 @@ typedef struct {
   bool validate_local_indices;
   bool validate_control_flow;
   bool validate_stack_effects;
-  BC_TrailingBytesPolicy trailing_bytes;
 } BC_VerifyOptions;
 
 typedef struct {

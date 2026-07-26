@@ -2,4 +2,5 @@
 6c             # l: push string
 02 00          # uint16 length=2
 68 69          # "hi"
+77             # w: discard expression statement
 68             # h: halt

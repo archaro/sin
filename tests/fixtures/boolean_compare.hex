@@ -4,4 +4,5 @@
 70             # p: push int
 02 00 00 00 00 00 00 00  # 2
 72             # r: lt
+77             # w: discard expression statement
 68             # h: halt

@@ -6,4 +6,5 @@
 31 32          # "12"
 45             # E: item end
 46 00 00       # F: deref stack item target
+77             # w: discard expression statement
 68             # h: halt

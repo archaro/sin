@@ -4,4 +4,5 @@
 50             # P: push float
 00 00 00 00 00 00 e0 3f  # binary64 0.5 (LE)
 61             # a: add
+77             # w: discard expression statement
 68             # h: halt

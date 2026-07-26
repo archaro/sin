@@ -166,6 +166,7 @@ static VALUE_t run_float_unary(uint64_t bits, uint8_t op, const char *name) {
   code[pos++] = 0;
   code[pos++] = 'P'; emit_u64(code, &pos, bits);
   code[pos++] = op;
+  code[pos++] = 'Q';
   code[pos++] = 'h';
   return run_code(name, code, pos);
 }
@@ -178,6 +179,7 @@ static VALUE_t run_float_binary(uint64_t lhs, uint64_t rhs, uint8_t op, const ch
   code[pos++] = 'P'; emit_u64(code, &pos, lhs);
   code[pos++] = 'P'; emit_u64(code, &pos, rhs);
   code[pos++] = op;
+  code[pos++] = 'Q';
   code[pos++] = 'h';
   return run_code(name, code, pos);
 }
@@ -300,6 +302,7 @@ void test_value_integer_arithmetic_helpers(void) {
   code[pos++] = 'm';
   code[pos++] = 'p'; emit_i64(code, &pos, 5);
   code[pos++] = 'd';
+  code[pos++] = 'Q';
   code[pos++] = 'h';
 
   result = run_code("test.value_int_arithmetic", code, pos);
@@ -372,11 +375,22 @@ void test_value_push_int_interprets_i64_immediates(void) {
   code[pos++] = 0;
   code[pos++] = 'p';
   emit_i64(code, &pos, expected);
+  code[pos++] = 'Q';
   code[pos++] = 'h';
 
   VALUE_t result = run_code("test.value_push_int_i64", code, pos);
   ASSERT_EQ_INT(VALUE_int, result.type);
   ASSERT_TRUE(result.i == expected);
+  value_free(&result);
+
+  pos = 0;
+  code[pos++] = 0;
+  code[pos++] = 0;
+  code[pos++] = 'p';
+  emit_i64(code, &pos, expected);
+  code[pos++] = 'h';
+  result = run_code("test.value_push_int_halt_nil", code, pos);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
   value_free(&result);
   teardown_runtime();
 }
@@ -399,6 +413,7 @@ void test_value_push_float_interprets_binary64_payloads(void) {
     code[pos++] = 0;
     code[pos++] = 'P';
     emit_u64(code, &pos, expected_bits[i]);
+    code[pos++] = 'Q';
     code[pos++] = 'h';
 
     VALUE_t result = run_code("test.value_push_float_binary64", code, pos);
@@ -480,6 +495,7 @@ void test_value_float_arithmetic_interpreter_bytecode(void) {
   code[pos++] = 's';
   code[pos++] = 'P'; emit_u64(code, &pos, UINT64_C(0x0000000000000000)); /* +0.0 */
   code[pos++] = 'd';
+  code[pos++] = 'Q';
   code[pos++] = 'h';
 
   VALUE_t result = run_code("test.value_float_arithmetic_bytecode", code, pos);
@@ -492,6 +508,7 @@ void test_value_float_arithmetic_interpreter_bytecode(void) {
   code[pos++] = 0;
   code[pos++] = 'P'; emit_u64(code, &pos, UINT64_C(0x0000000000000000)); /* +0.0 */
   code[pos++] = 'n';
+  code[pos++] = 'Q';
   code[pos++] = 'h';
 
   result = run_code("test.value_float_neg_zero_bytecode", code, pos);
@@ -518,6 +535,7 @@ void test_value_float_arithmetic_interpreter_bytecode(void) {
   code[pos++] = 'P'; emit_u64(code, &pos, UINT64_C(0x8000000000000000)); /* -0.0 */
   code[pos++] = 'c'; code[pos++] = 0;
   code[pos++] = 'e'; code[pos++] = 0;
+  code[pos++] = 'Q';
   code[pos++] = 'h';
 
   result = run_code("test.float_store_neg0", code, pos);
@@ -569,6 +587,7 @@ void test_value_string_concat_helpers(void) {
   code[pos++] = 'l'; emit_str(code, &pos, "hello");
   code[pos++] = 'l'; emit_str(code, &pos, " world");
   code[pos++] = 'a';
+  code[pos++] = 'Q';
   code[pos++] = 'h';
 
   VALUE_t result = run_code("test.value_string_concat", code, pos);
@@ -919,6 +938,7 @@ void test_value_float_item_fetch_preserves_bits(void) {
     code[pos++] = 0;
     code[pos++] = 'l'; emit_str(code, &pos, item_name);
     code[pos++] = 'F'; code[pos++] = 0; code[pos++] = 0;
+    code[pos++] = 'Q';
     code[pos++] = 'h';
 
     char code_name[32];
@@ -943,6 +963,7 @@ void test_value_string_local_load_store_clones(void) {
   code[pos++] = 'e'; code[pos++] = 0;
   code[pos++] = 'l'; emit_str(code, &pos, "bar");
   code[pos++] = 'a';
+  code[pos++] = 'Q';
   code[pos++] = 'h';
 
   VALUE_t result = run_code("test.value_local_string_clone", code, pos);

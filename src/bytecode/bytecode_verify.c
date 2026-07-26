@@ -53,7 +53,6 @@ BC_VerifyOptions bc_verify_strict_options(void) {
       .validate_local_indices = true,
       .validate_control_flow = true,
       .validate_stack_effects = true,
-      .trailing_bytes = BC_TRAILING_BYTES_ERROR,
   };
 }
 
@@ -62,7 +61,6 @@ BC_VerifyOptions bc_verify_runtime_options(void) {
       .validate_local_indices = false,
       .validate_control_flow = false,
       .validate_stack_effects = false,
-      .trailing_bytes = BC_TRAILING_BYTES_WARNING,
   };
 }
 
@@ -71,7 +69,6 @@ BC_VerifyOptions bc_verify_disassembly_options(void) {
       .validate_local_indices = true,
       .validate_control_flow = false,
       .validate_stack_effects = false,
-      .trailing_bytes = BC_TRAILING_BYTES_WARNING,
   };
 }
 
@@ -101,18 +98,6 @@ static int bc_fail(BC_Decoder *d, const uint8_t *p, uint8_t opcode,
   return 0;
 }
 
-static void bc_warn(BC_Decoder *d, const uint8_t *p, uint8_t opcode,
-                    const char *reason) {
-  if (d->result.status == BC_VERIFY_OK) d->result.status = BC_VERIFY_WARNING;
-  d->result.warning_count++;
-  d->result.diagnostic.offset = bc_offset(d, p);
-  d->result.diagnostic.opcode = opcode;
-  snprintf(d->result.diagnostic.message, sizeof(d->result.diagnostic.message),
-           "%s: byte %05u opcode 0x%02X (%c): %s",
-           d->label ? d->label : "bytecode", d->result.diagnostic.offset,
-           opcode, (opcode >= 32 && opcode <= 126) ? opcode : '.', reason);
-}
-
 static int bc_need(BC_Decoder *d, const uint8_t *p, size_t n,
                    uint8_t opcode, const char *what) {
   if (p > d->end || (size_t)(d->end - p) < n) {
@@ -127,6 +112,7 @@ static int bc_need(BC_Decoder *d, const uint8_t *p, size_t n,
 static const char *bc_disassembly_mnemonic(IR_Op op) {
   switch (op) {
     case IR_OP_HALT: return "HALT";
+    case IR_OP_RETURN: return "RETURN";
     case IR_OP_ADD: return "ADD";
     case IR_OP_SUB: return "SUBTRACT";
     case IR_OP_MUL: return "MULTIPLY";
@@ -201,6 +187,8 @@ static BC_StackEffect bc_base_stack_effect(IR_Op op) {
     case IR_OP_NEG: case IR_OP_NOT:
     case IR_OP_ITEM_DEREF:
       return (BC_StackEffect){1, 1, false};
+    case IR_OP_RETURN:
+      return (BC_StackEffect){1, 0, false};
     case IR_OP_DISCARD:
     case IR_OP_STORE_LOCAL: case IR_OP_JUMP_IF_FALSE:
     case IR_OP_ITEM_SAVE_CODE:
@@ -242,7 +230,7 @@ static BC_OpcodeSchema bc_make_schema(const IR_OpSchema *s) {
     out.valid_in_item_expression = bc_valid_context(s->op, BC_CONTEXT_ITEM_EXPRESSION);
     out.valid_in_dereference = bc_valid_context(s->op, BC_CONTEXT_DEREFERENCE);
     out.stack_effect = bc_base_stack_effect(s->op);
-    out.terminates = s->op == IR_OP_HALT;
+    out.terminates = s->op == IR_OP_HALT || s->op == IR_OP_RETURN;
     out.valid_top_level = out.valid_in_statement;
     out.item_assembly_only = out.valid_in_item_expression || out.valid_in_dereference;
   }
@@ -250,7 +238,7 @@ static BC_OpcodeSchema bc_make_schema(const IR_OpSchema *s) {
 }
 
 const BC_OpcodeSchema *bc_opcode_for_ir(IR_Op op) {
-  enum { BC_IR_OP_CACHE_COUNT = IR_OP_ITEM_SAVE_CODE + 1 };
+  enum { BC_IR_OP_CACHE_COUNT = IR_OP_RETURN + 1 };
   static BC_OpcodeSchema cache[BC_IR_OP_CACHE_COUNT];
   static bool initialized[BC_IR_OP_CACHE_COUNT];
   const IR_OpSchema *s = ir_opcode_schema(op);
@@ -449,6 +437,15 @@ static int bc_verify_stack_flow(BC_Decoder *d, uint8_t params) {
       free(work);
       return bc_fail(d, d->base + offset, meta->opcode, msg);
     }
+    if (meta->op == IR_OP_RETURN) {
+      if (in_depth != params + 1) {
+        free(depths);
+        free(work);
+        return bc_fail(d, d->base + offset, meta->opcode,
+                       "RETURN requires exactly one value above parameter baseline");
+      }
+      continue;
+    }
     if (meta->op == IR_OP_HALT) continue;
     if (meta->op == IR_OP_JUMP || meta->op == IR_OP_JUMP_IF_FALSE) {
       int16_t rel = (int16_t)meta->operand_u16;
@@ -594,6 +591,7 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
 
   switch (schema->op) {
     case IR_OP_HALT:
+    case IR_OP_RETURN:
     case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV: case IR_OP_NEG:
     case IR_OP_EQ: case IR_OP_NEQ: case IR_OP_LT: case IR_OP_GT: case IR_OP_LE: case IR_OP_GE:
     case IR_OP_NOT: case IR_OP_AND: case IR_OP_OR:
@@ -808,6 +806,8 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
   }
 
   const uint8_t *cursor = bytecode + 2;
+  uint8_t last_opcode = 0;
+  uint32_t last_start = 0;
   while (cursor < d.end) {
     const uint8_t *start = cursor;
     if (needs_instruction_starts) {
@@ -817,33 +817,29 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
       bc_release_analysis_storage(&d);
       return d.result;
     }
+    last_opcode = *start;
+    last_start = bc_offset(&d, start);
     if (*start == 'h') {
       d.result.halt_offset = bc_offset(&d, start);
-      if (d.options.validate_control_flow) {
-        if (!bc_validate_recorded_jumps(&d)) {
-          bc_release_analysis_storage(&d);
-          return d.result;
-        }
-      }
-      if (d.options.validate_stack_effects) {
-        if (!bc_verify_stack_flow(&d, params)) {
-          bc_release_analysis_storage(&d);
-          return d.result;
-        }
-      }
-      if (cursor < d.end) {
-        if (d.options.trailing_bytes == BC_TRAILING_BYTES_ERROR) {
-          bc_fail(&d, cursor, *cursor, "trailing bytes after HALT");
-        } else {
-          bc_warn(&d, cursor, *cursor, "trailing bytes after HALT");
-        }
-      }
-      bc_release_analysis_storage(&d);
-      return d.result;
     }
   }
 
-  bc_fail(&d, d.end, 0, "missing terminating HALT opcode");
+  if (d.result.status != BC_VERIFY_ERROR && cursor > bytecode + 2 && last_opcode != 'h') {
+    bc_fail(&d, d.base + last_start, last_opcode, "final physical instruction must be HALT");
+  }
+  if (d.result.status != BC_VERIFY_ERROR && d.options.validate_control_flow &&
+      !bc_validate_recorded_jumps(&d)) {
+    bc_release_analysis_storage(&d);
+    return d.result;
+  }
+  if (d.result.status != BC_VERIFY_ERROR && d.options.validate_stack_effects &&
+      !bc_verify_stack_flow(&d, params)) {
+    bc_release_analysis_storage(&d);
+    return d.result;
+  }
+
+  if (d.result.status == BC_VERIFY_OK && d.result.halt_offset == UINT32_MAX)
+    bc_fail(&d, d.end, 0, "missing terminating HALT opcode");
   bc_release_analysis_storage(&d);
   return d.result;
 }

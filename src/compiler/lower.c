@@ -58,8 +58,8 @@ static void lower_set_unsupported(LOWER_CTX *ctx, const AS_NODE *node, const cha
 
 static void lower_node(LOWER_CTX *ctx, AS_NODE *node);
 static void lower_expr(LOWER_CTX *ctx, AS_NODE *node);
-static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result);
-static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result);
+static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node);
+static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node);
 static void lower_arglist(LOWER_CTX *ctx, AS_NODE *arglist, int32_t *argc);
 
 static void lower_item(LOWER_CTX *ctx, AS_NODE *item);
@@ -407,7 +407,7 @@ static void lower_arglist(LOWER_CTX *ctx, AS_NODE *arglist, int32_t *argc) {
   }
 }
 
-static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result) {
+static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node) {
   AS_STMTLIST *stmtlist;
 
   if (!ctx || !node || ctx->errnum != ERR_NOERROR) return;
@@ -419,33 +419,37 @@ static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result) 
   stmtlist = (AS_STMTLIST *)node->lhs;
   if (!stmtlist) return;
   for (uint32_t i = 0; i < stmtlist->count; i++) {
-    lower_stmt(ctx, stmtlist->stmts[i], preserve_result && i + 1 == stmtlist->count);
+    lower_stmt(ctx, stmtlist->stmts[i]);
     if (ctx->errnum != ERR_NOERROR) return;
   }
 }
 
-static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result) {
+static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
   if (!ctx || !node || ctx->errnum != ERR_NOERROR) return;
 
   switch (node->nodetype) {
     case N_STMTLIST:
-      lower_stmtlist(ctx, node, preserve_result);
+      lower_stmtlist(ctx, node);
       return;
 
     case N_STMT:
-      lower_stmt(ctx, (AS_NODE *)node->lhs, preserve_result);
+      lower_stmt(ctx, (AS_NODE *)node->lhs);
       return;
 
     case N_EXPRSTMT:
       lower_expr(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
-      if (!preserve_result && !lower_emit(ctx, (IR_Inst){.op = IR_OP_DISCARD})) return;
+      if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_DISCARD})) return;
       return;
 
     case N_RETURN:
-      lower_expr(ctx, (AS_NODE *)node->lhs);
-      if (ctx->errnum != ERR_NOERROR) return;
-      lower_emit(ctx, (IR_Inst){.op = IR_OP_HALT});
+      if (node->lhs) {
+        lower_expr(ctx, (AS_NODE *)node->lhs);
+        if (ctx->errnum != ERR_NOERROR) return;
+        lower_emit(ctx, (IR_Inst){.op = IR_OP_RETURN});
+      } else {
+        lower_emit(ctx, (IR_Inst){.op = IR_OP_HALT});
+      }
       return;
 
     case N_ASSLOCAL: {
@@ -503,7 +507,7 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result) {
           if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = else_label})) return;
         }
 
-        lower_stmtlist(ctx, branch->then, false);
+        lower_stmtlist(ctx, branch->then);
         if (ctx->errnum != ERR_NOERROR) return;
 
         if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP, .a = end_label})) return;
@@ -530,7 +534,7 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result) {
       if (ctx->errnum != ERR_NOERROR) return;
       if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = end_label})) return;
 
-      lower_stmtlist(ctx, (AS_NODE *)node->rhs, false);
+      lower_stmtlist(ctx, (AS_NODE *)node->rhs);
       if (ctx->errnum != ERR_NOERROR) return;
       if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP, .a = start_label})) return;
 
@@ -548,7 +552,7 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node, bool preserve_result) {
       if (!lower_bind_label(ctx, start_label)) return;
       if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = start_label})) return;
 
-      lower_stmtlist(ctx, (AS_NODE *)node->rhs, false);
+      lower_stmtlist(ctx, (AS_NODE *)node->rhs);
       if (ctx->errnum != ERR_NOERROR) return;
       lower_expr(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
@@ -601,7 +605,7 @@ static bool lower_build_embedded_payload(LOWER_CTX *ctx, AS_NODE *node, int32_t 
 }
 
 static void lower_node(LOWER_CTX *ctx, AS_NODE *node) {
-  lower_stmt(ctx, node, true);
+  lower_stmt(ctx, node);
 }
 
 int8_t lower_ast_to_ir_diag(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **errdetail, CompilerDiagnostic *diag) {

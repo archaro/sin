@@ -1,4 +1,5 @@
 00 00          # header: locals=0 params=0
 50             # P: push float
 00 00 00 00 00 00 f8 3f  # binary64 1.5 (LE)
+77             # w: discard expression statement
 68             # h: halt

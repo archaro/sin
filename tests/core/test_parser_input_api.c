@@ -41,6 +41,33 @@ void test_parser_input_api(void) {
   ASSERT_TRUE(errdetail == NULL);
   as_delete(absyn);
 
+  const char returns[] = "return; return 17;";
+  ParseInput return_input = {returns, sizeof(returns) - 1, "returns.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&return_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  AS_STMTLIST *return_list = (AS_STMTLIST *)absyn->lhs;
+  ASSERT_EQ_INT(2, return_list->count);
+  ASSERT_EQ_INT(N_RETURN, return_list->stmts[0]->nodetype);
+  ASSERT_TRUE(return_list->stmts[0]->lhs == NULL);
+  ASSERT_EQ_INT(N_RETURN, return_list->stmts[1]->nodetype);
+  ASSERT_EQ_INT(N_VALUE, ((AS_NODE *)return_list->stmts[1]->lhs)->nodetype);
+  as_delete(absyn);
+
+  const char malformed_return[] = "return +;";
+  ParseInput malformed_return_input = {malformed_return,
+                                       sizeof(malformed_return) - 1,
+                                       "malformed-return.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&malformed_return_input, &absyn, &errdetail);
+  ASSERT_TRUE(rc != ERR_NOERROR);
+  ASSERT_TRUE(absyn == NULL);
+  ASSERT_NOT_NULL(errdetail);
+  free(errdetail);
+
   absyn = NULL;
   errdetail = NULL;
   rc = parse_source(NULL, &absyn, &errdetail);
@@ -106,7 +133,7 @@ void test_parser_scanner_setup_allocation_failures(void) {
 
 void test_parser_cleanup_allocation_failures(void) {
   const char source[] =
-      "1 + 2; if 3 then 4; elsif 0 then 5; else 6; endif; while 1 do 7; endwhile; do 8; while 1;";
+      "1 + 2; return; return 9; if 3 then 4; elsif 0 then 5; else 6; endif; while 1 do 7; endwhile; do 8; while 1;";
   ParseInput input = {source, sizeof(source) - 1, "parser-failure.src"};
 
   for (long fail_at = 0; fail_at < 96; ++fail_at) {

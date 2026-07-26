@@ -123,7 +123,7 @@ static void test_shared_logging_cli_levels(void) {
   const char *itemstore_path = "tests/fixtures/log-level.tmp.items";
   FILE *src = fopen(src_path, "wb");
   ASSERT_NOT_NULL(src);
-  const char *program = "@x = 1;\n@x;\n";
+  const char *program = "@x = 1;\nreturn @x;\n";
   ASSERT_EQ_INT((int)strlen(program), (int)fwrite(program, 1, strlen(program), src));
   ASSERT_EQ_INT(0, fclose(src));
 

@@ -16,6 +16,7 @@ void test_emitbc_all_ir_ops_accounted_for(void) {
    */
   static const ExpectedCoverage expected[] = {
       {IR_OP_HALT, 'h', 0},
+      {IR_OP_RETURN, 'Q', 0},
       {IR_OP_PUSH_INT, 'p', 1},
       {IR_OP_PUSH_FLOAT, 'P', 1},
       {IR_OP_PUSH_BOOL, 'b', 1},

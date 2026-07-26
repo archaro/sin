@@ -2,4 +2,5 @@
 6c 05 00       # l: push literal len=5
 68 65 6c 6c 6f # "hello"
 4d 01          # M: call lib token(sys.log)
+77             # w: discard expression statement
 68             # h: halt

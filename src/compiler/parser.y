@@ -438,6 +438,10 @@ stmt:   TWHILE expr TDO stmtlist TENDWHILE {
           $$ = parser_new_node(state, N_RETURN, NULL, NULL, false, false);
           if (!$$) YYERROR;
         }
+        | TRETURN expr {
+          $$ = parser_new_node(state, N_RETURN, $2, NULL, true, false);
+          if (!$$) YYERROR;
+        }
         | TLOCAL TASSIGN expr {
           $$ = parser_new_node(state, N_ASSLOCAL,
                                parser_new_value(state, V_LOCAL, $1), $3, true, true);

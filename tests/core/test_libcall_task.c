@@ -297,7 +297,7 @@ void test_task_thisid_in_callback_survives_self_close(void) {
   setup_libcall_runtime();
   config.loop = &loop;
   init_tasks();
-  insert_compiled_code(itemstore_root(config.itemstore_ctx), "callback.helper", "task.thisid;");
+  insert_compiled_code(itemstore_root(config.itemstore_ctx), "callback.helper", "return task.thisid;");
   insert_compiled_code(itemstore_root(config.itemstore_ctx), "task.callback",
       "observed.before = callback.helper;"
       "task.killtask{task.thisid};"

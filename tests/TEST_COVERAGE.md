@@ -8,10 +8,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
-| core      |   112 | `tests/core/`           |
+| core      |   115 | `tests/core/`           |
 | compiler  |    31 | `tests/compiler/`       |
 | runtime   |    83 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**226**|                         |
+| **Total** |**229**|                         |
 
 ## core
 
@@ -33,7 +33,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `run_suite(...)`
     - Per-test and per-suite elapsed-time reporting
     - Assertion-failure suite/test context via `tests/test_assert.h`
-    - Core suite registration (`core_tests[]` with 112 entries)
+    - Core suite registration (`core_tests[]` with 115 entries)
     - Suite registration validation rejects null/duplicate test entries
       before execution.
 - **Fixture contract integrity / regeneration policy**
@@ -48,7 +48,9 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   - `tests/core/test_absyn_lifecycle.c`
   - `tests/core/test_semant.c`
   - `tests/core/test_parser_input_api.c`
-    - parser allocation-failure cleanup includes post-test `DO..WHILE` trees
+    - parser allocation-failure cleanup includes `RETURN` and post-test
+      `DO..WHILE` trees; parser input coverage asserts bare and valued return
+      AST nodes and malformed return expressions
   - `tests/core/test_parser_float_literals.c`
     - `test_parser_float_literals_decimal_forms`
     - `test_parser_float_literals_integer_still_int`
@@ -64,6 +66,8 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   - `tests/core/test_ir_validate.c`
     - `test_lower_float_value_emits_push_float` (float compiler/lowering
       coverage)
+    - `test_lower_returns_and_discards_expression_statements` (explicit
+      `RETURN`, bare `HALT`, structural final `HALT`, and expression discard)
   - `tests/core/test_opcode_schema.c`
   - `tests/core/test_item_cache.c`
     - `test_murmur3_32_alignment_and_vectors` (deterministic MurmurHash3
@@ -129,6 +133,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   - `tests/compiler/test_emitbc_all_ir_ops_accounted_for.c`
     - `test_emitbc_all_ir_ops_accounted_for` (inventory guard for
       IR-op/schema coverage drift)
+  - `tests/compiler/test_bytecode_verify.c`
+    - full-buffer terminator decoding, malformed later bytes, RETURN stack
+      underflow, post-terminator jump targets, and conflicting reachable
+      return-depth joins
 - **Pipeline / golden outputs**
   - `tests/compiler/test_pipeline_golden.c`
     - `test_pipeline_golden`
@@ -338,6 +346,10 @@ integration, and an opt-in performance guard.
   - `tests/interpreter/test_runtime_benchmark_optin.c`
     - `test_runtime_benchmark_optin`
     - strict thresholds enabled with `SIN_STRICT_BENCH=1`
+- **Code-item results**
+  - `tests/interpreter/test_interpret_semantics_golden.c`
+    - explicit valued and bare returns, fallthrough `nil`, discarded final
+      expressions, early/control-flow returns, and owned-string return values
 - **Shared libcall fixture support**
   - `tests/shared/test_libcall_support.[ch]` provides private fixtures and
     helpers used by the split libcall test files. It has no standalone harness
