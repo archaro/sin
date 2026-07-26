@@ -16,6 +16,11 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 ## core
 
 ### Covered entry points
+
+- Itemstore lifecycle and cache isolation are covered by
+  `test_itemstore_cache_state_is_store_local`, including independent
+  generations, hit/miss counters, mutation invalidation, and destruction of
+  one store while another remains usable.
 - **Harness and suite wiring**
   - `tests/shared/test_harness.c`
     - `main(...)`

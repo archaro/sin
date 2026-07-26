@@ -126,12 +126,12 @@ void runtime_context_init(RuntimeContext *ctx, VM_t *vm) {
 
 static const char *runtime_item_label(ITEM_t *item, char *buffer, size_t size) {
   if (!item) return "<null>";
-  if (item->parent && item->parent->parent && size >= MAX_ITEM_NAME) {
+  if (item_parent(item) && item_parent(item_parent(item)) && size >= MAX_ITEM_NAME) {
     buffer[0] = '\0';
     get_itemname(item, buffer);
     return buffer;
   }
-  return item->name;
+  return item_layer_name(item);
 }
 
 static void set_runtime_bytecode_error(RuntimeContext *ctx, const char *label,
@@ -146,7 +146,7 @@ static void set_runtime_bytecode_error(RuntimeContext *ctx, const char *label,
       safe_label, offset, safe_message);
   if (needed < 0) {
     logerr("Runtime bytecode validation failed.\n");
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_BYTECODE,
                        "Runtime bytecode validation failed.",
                        ctx ? ctx->current_item : NULL);
     return;
@@ -156,7 +156,7 @@ static void set_runtime_bytecode_error(RuntimeContext *ctx, const char *label,
   char *detail = alloc_malloc(detail_len);
   if (!detail) {
     logerr("Runtime bytecode validation failed: out of memory while formatting diagnostic.\n");
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_BYTECODE,
                        "Runtime bytecode validation failed: out of memory while formatting diagnostic.",
                        ctx ? ctx->current_item : NULL);
     return;
@@ -166,7 +166,7 @@ static void set_runtime_bytecode_error(RuntimeContext *ctx, const char *label,
       "Runtime bytecode validation failed for item '%s' at offset %u: %s",
       safe_label, offset, safe_message);
   logerr("%s.\n", detail);
-  set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
+  set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_BYTECODE,
                          detail, ctx ? ctx->current_item : NULL);
   free(detail);
 }
@@ -175,25 +175,25 @@ static void set_runtime_bytecode_error(RuntimeContext *ctx, const char *label,
 static void report_strict_runtime_contract(RuntimeContext *ctx, const char *detail) {
   if (!ctx || !ctx->strict_runtime_contracts) return;
   logerr("Runtime contract violation: %s.\n", detail ? detail : "<no detail>");
-  set_error_item(ctx->itemroot, ERR_RUNTIME_INVALIDARGS, detail,
+  set_error_item(itemstore_root(ctx->itemstore), ERR_RUNTIME_INVALIDARGS, detail,
                          ctx->current_item);
 }
 
 static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
   char item_name[MAX_ITEM_NAME] = {0};
   const char *label = runtime_item_label(item, item_name, sizeof(item_name));
-  if (!item || item->type != ITEM_code) {
+  if (!item || item_kind(item) != ITEM_code) {
     set_runtime_bytecode_error(ctx, label, 0, "item is not executable code");
     return false;
   }
-  if (!item->bytecode) {
+  if (!item_bytecode(item)) {
     set_runtime_bytecode_error(ctx, label, 0, "null bytecode pointer");
     return false;
   }
   BC_VerifyOptions options = ctx->strict_validation
       ? bc_verify_strict_options() : bc_verify_runtime_options();
-  BC_VerifyResult result = bc_verify_bytecode(item->bytecode,
-      (uint32_t)item->bytecode_len, label, &options);
+  BC_VerifyResult result = bc_verify_bytecode(item_bytecode(item),
+      item_bytecode_length(item), label, &options);
   if (result.status != BC_VERIFY_ERROR) return true;
 
   set_runtime_bytecode_error(ctx, label, result.diagnostic.offset,
@@ -212,7 +212,7 @@ static bool report_decode_status(RuntimeContext *ctx, RuntimeDecodeStatus status
   if (runtime_decode_status_ok(status)) return true;
   if (status.code == RUNTIME_DECODE_TRUNCATED) {
     logerr("%s.\n", status.detail);
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_TRUNCATED,
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_TRUNCATED,
                            status.detail, ctx ? ctx->current_item : NULL);
   }
   return false;
@@ -314,8 +314,8 @@ uint8_t *op_undefined(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   uint8_t opcode = *(nextop - 1);
   uint32_t offset = 0;
-  if (ctx && ctx->current_item && ctx->current_item->bytecode) {
-    offset = (uint32_t)((nextop - 1) - ctx->current_item->bytecode);
+  if (ctx && ctx->current_item && item_bytecode(ctx->current_item)) {
+    offset = (uint32_t)((nextop - 1) - item_bytecode(ctx->current_item));
   }
   char detail[144];
   snprintf(detail, sizeof(detail),
@@ -687,7 +687,7 @@ uint8_t *op_libcall_token(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     char detail[64];
     snprintf(detail, sizeof(detail), "Unknown libcall token %u", token);
     logerr("%s.\n", detail);
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVLIB,
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_INVLIB,
                            detail, ctx ? ctx->current_item : NULL);
     push_stack(VM->stack, VALUE_NIL);
   } else {
@@ -717,7 +717,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (runtime_decode_status_ok(marker_status) && *nextop == 'P') {
     nextop++;
     if (!decode_assigncode_params(ctx, &nextop, &in)) {
-      set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
+      set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_BYTECODE,
                              "Invalid parameter block in code assignment bytecode.",
                              ctx ? ctx->current_item : NULL);
       nextop = NULL;
@@ -727,7 +727,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   itemname = pop_stack(VM->stack);
   if (!decode_assigncode_source(ctx, &nextop, &in)) {
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_BYTECODE,
                            "Invalid source block in code assignment bytecode.",
                            ctx ? ctx->current_item : NULL);
     nextop = NULL;
@@ -737,7 +737,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   logverbose("Source to compile: %s\n", in.source);
   if (itemname.type != VALUE_str) {
     logerr("Unable to assign code item: invalid name type %d.\n", itemname.type);
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDITEM,
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_INVALIDITEM,
                            "Invalid item name type for code assignment.",
                            ctx ? ctx->current_item : NULL);
     goto cleanup;
@@ -746,7 +746,7 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (itemname.type == VALUE_str) {
     char fullname[MAX_ITEM_NAME];
     if (!canonicalize_itemname(itemname.s, item, fullname)) {
-      set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDITEM,
+      set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_INVALIDITEM,
                              "Invalid item name for code assignment.",
                              ctx ? ctx->current_item : NULL);
       goto cleanup;
@@ -755,13 +755,13 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     itemname.s = strdup(fullname);
   }
 
-  result = compile_and_insert_codeitem(ctx->itemroot, &itemname, &in, &errdetail);
+  result = compile_and_insert_codeitem(itemstore_root(ctx->itemstore), &itemname, &in, &errdetail);
   if (result == 0) {
-    persist_codeitem_source(ctx->itemroot, &itemname, &in, ctx ? ctx->srcroot : NULL);
-    clear_error_item(ctx->itemroot);
+    persist_codeitem_source(itemstore_root(ctx->itemstore), &itemname, &in, ctx ? ctx->srcroot : NULL);
+    clear_error_item(itemstore_root(ctx->itemstore));
   } else {
     logerr("Compilation failed.\n");
-    set_error_item(ctx ? ctx->itemroot : NULL, result, errdetail,
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, result, errdetail,
                            ctx ? ctx->current_item : NULL);
   }
 
@@ -792,7 +792,7 @@ uint8_t *op_assignitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       logverbose("Unable to create item '%s': failed to resolve canonical name.\n", itemname.s);
     }
   }
-  assignitem(ctx->itemroot, &itemname, val);
+  assignitem(itemstore_root(ctx->itemstore), &itemname, val);
   return nextop;
 }
 
@@ -826,12 +826,13 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       FREE_STR(itemname);
       return nextop;
     }
-    ITEM_t *i = find_item_cached(ctx->itemroot, fullname, NULL);
+    ITEM_t *i = find_item_cached(itemstore_root(ctx->itemstore), fullname, NULL);
     if (i) {
       logverbose("Fetched item %s (called with %d arguments).\n", fullname, arg_count);
       // Just push the item value onto the stack.
-      if (i->type == ITEM_value) {
-        VALUE_t v = value_clone(&i->value);
+      if (item_kind(i) == ITEM_value) {
+        const VALUE_t *iv = item_value(i);
+        VALUE_t v = iv ? value_clone(iv) : VALUE_NIL;
         push_stack(VM->stack, v);
       } else {
         if (!verify_runtime_bytecode(ctx, i)) {
@@ -840,14 +841,15 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         }
         // Are there any arguments in excess of what this item takes?
         // If so, lose 'em.
-        while (arg_count > i->bytecode[1]) {
+        const uint8_t *ibytecode = item_bytecode(i);
+        while (arg_count > ibytecode[1]) {
           logverbose("Popping unneeded argument.\n");
           report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded extra argument for target item");
           throwaway_stack(VM->stack);
           arg_count--;
         }
         // Contrariwise, do we have fewer arguments than we should?
-        while (arg_count < i->bytecode[1]) {
+        while (arg_count < ibytecode[1]) {
           logverbose("Pushing additional nil-value argument.\n");
           push_stack(VM->stack, VALUE_NIL);
           arg_count++;
@@ -857,12 +859,12 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         // correctly adjusted to account for them at the top of the
         // current stack (they will be at the bottom of the frame for
         // the new item).
-        push_callstack(VM, item, nextop, i->bytecode[1], (uint8_t *)ctx->decoder.frame_start, (uint8_t *)ctx->decoder.frame_end);
+        push_callstack(VM, item, nextop, ibytecode[1], (uint8_t *)ctx->decoder.frame_start, (uint8_t *)ctx->decoder.frame_end);
         // Invariant at call-entry:
         // - caller VM stack/base/locals/params are captured in callstack.
         // - caller continuation (item + nextop + bytecode bounds) is captured.
         // - interpreter loop must transfer control to callee without recursion.
-        logverbose("Executing item %s\n", i->name);
+        logverbose("Executing item %s\n", item_layer_name(i));
         ctx->pending_call_item = i;
         FREE_STR(itemname);
         return NULL;
@@ -1028,10 +1030,11 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
             VALUE_t layername = pop_stack(VM->stack);
             if (layername.type == VALUE_str) {
               //  This is basically the same as op_fetchitem
-              ITEM_t *i = find_item(ctx->itemroot, layername.s);
+              ITEM_t *i = find_item(itemstore_root(ctx->itemstore), layername.s);
               if (i) {
                 // We have an item.  Convert its value into the dereferenced layer.
-                invalid = !append_layer_from_value(&sb, &i->value, &layer_state, layername.s);
+                const VALUE_t *iv = item_value(i);
+                invalid = !iv || !append_layer_from_value(&sb, iv, &layer_state, layername.s);
                 just_processed_layer = !invalid;
               } else {
                 logverbose("Item dereference failed for '%s'.\n", layername.s);
@@ -1144,7 +1147,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   if (!ctx->initialized) {
     init_interpreter(ctx);
   }
-  clear_error_item(ctx->itemroot);
+  clear_error_item(itemstore_root(ctx->itemstore));
   // Given some bytecode, interpret it until the HALT instruction is seen
   // NB: The HALT opcode (currently represented by the character 'h') does
   // not have an associated function.
@@ -1171,25 +1174,28 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   }
 
   // Enter initial frame.
-  ctx->current_item->inuse = true;
-  VM->stack->current += ctx->current_item->bytecode[0] - ctx->current_item->bytecode[1];
-  VM->stack->locals = ctx->current_item->bytecode[0];
-  VM->stack->params = ctx->current_item->bytecode[1];
-  uint8_t *op = ctx->current_item->bytecode + 2;
-  runtime_decoder_init(&ctx->decoder, op, ctx->current_item->bytecode + ctx->current_item->bytecode_len);
+  item_enter_use(ctx->current_item);
+  const uint8_t *current_code = item_bytecode(ctx->current_item);
+  uint32_t current_code_len = item_bytecode_length(ctx->current_item);
+  VM->stack->current += current_code[0] - current_code[1];
+  VM->stack->locals = current_code[0];
+  VM->stack->params = current_code[1];
+  uint8_t *op = (uint8_t *)current_code + 2;
+  runtime_decoder_init(&ctx->decoder, op, (uint8_t *)current_code + current_code_len);
 
   while (true) {
     if (consume_runtime_interrupt(ctx)) goto interpretation_failure;
     if (op < ctx->decoder.frame_start || op >= ctx->decoder.frame_end) {
-      uint32_t offset = ctx->current_item && ctx->current_item->bytecode
-          ? (uint32_t)(ctx->decoder.frame_end - ctx->current_item->bytecode) : 0;
+      const uint8_t *frame_code = ctx->current_item ? item_bytecode(ctx->current_item) : NULL;
+      uint32_t offset = frame_code
+          ? (uint32_t)(ctx->decoder.frame_end - frame_code) : 0;
       set_runtime_bytecode_error(ctx, NULL, offset,
           "execution reached the bytecode frame boundary without HALT");
       goto interpretation_failure;
     }
     if (*op == 'h') {
       VALUE_t return_value = pop_frame_result(VM->stack);
-      ctx->current_item->inuse = false;
+      item_leave_use(ctx->current_item);
 
       if (size_callstack(VM->callstack) == entry_callstack_depth) {
         reset_stack_to(VM->stack, entry_stack_current);
@@ -1209,7 +1215,7 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
       // - pop_callstack restored caller stack/base/locals/params.
       // - caller continuation state tells us exactly where to resume.
       ctx->current_item = prev_frame->item;
-      ctx->current_item->inuse = true;
+      item_enter_use(ctx->current_item);
       op = prev_frame->nextop;
       runtime_decoder_init(&ctx->decoder, prev_frame->bytecode_start, prev_frame->bytecode_end);
       push_stack(VM->stack, return_value);
@@ -1225,20 +1231,22 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
         if (!verify_runtime_bytecode(ctx, ctx->current_item)) {
           goto interpretation_failure;
         }
-        ctx->current_item->inuse = true;
-        VM->stack->current += ctx->current_item->bytecode[0] - ctx->current_item->bytecode[1];
-        VM->stack->locals = ctx->current_item->bytecode[0];
-        VM->stack->params = ctx->current_item->bytecode[1];
-        op = ctx->current_item->bytecode + 2;
-        runtime_decoder_init(&ctx->decoder, op, ctx->current_item->bytecode + ctx->current_item->bytecode_len);
+        item_enter_use(ctx->current_item);
+        current_code = item_bytecode(ctx->current_item);
+        current_code_len = item_bytecode_length(ctx->current_item);
+        VM->stack->current += current_code[0] - current_code[1];
+        VM->stack->locals = current_code[0];
+        VM->stack->params = current_code[1];
+        op = (uint8_t *)current_code + 2;
+        runtime_decoder_init(&ctx->decoder, op, (uint8_t *)current_code + current_code_len);
         continue;
       }
 interpretation_failure:
-      ctx->current_item->inuse = false;
+      item_leave_use(ctx->current_item);
       while (size_callstack(VM->callstack) > entry_callstack_depth) {
         FRAME_t *abandoned_frame = pop_callstack(VM);
         if (!abandoned_frame) break;
-        if (abandoned_frame->item) abandoned_frame->item->inuse = false;
+        if (abandoned_frame->item) item_leave_use(abandoned_frame->item);
       }
       reset_stack_to(VM->stack, entry_stack_current);
       VM->stack->base = entry_stack_base;

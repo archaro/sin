@@ -1,3 +1,4 @@
+#include "item.h"
 #include <stdarg.h>
 #include <setjmp.h>
 #include <stdbool.h>
@@ -113,6 +114,7 @@ void test_find_item_cached_rejects_invalid_names_without_counters(void);
 void test_find_item_cached_relative_invalid_name_preserves_counters(void);
 void test_find_item_cached_invalidation_on_delete_and_reinsert(void);
 void test_find_item_cached_distinguishes_roots(void);
+void test_itemstore_cache_state_is_store_local(void);
 void test_find_item_cached_root_lifecycle_invalidates_entries(void);
 void test_item_hashtable_resize_preserves_entries_and_count(void);
 void test_murmur3_32_alignment_and_vectors(void);
@@ -346,6 +348,7 @@ static const test_case_t core_tests[] = {
     {"test_find_item_cached_relative_invalid_name_preserves_counters", test_find_item_cached_relative_invalid_name_preserves_counters},
     {"test_find_item_cached_invalidation_on_delete_and_reinsert", test_find_item_cached_invalidation_on_delete_and_reinsert},
     {"test_find_item_cached_distinguishes_roots", test_find_item_cached_distinguishes_roots},
+    {"test_itemstore_cache_state_is_store_local", test_itemstore_cache_state_is_store_local},
     {"test_find_item_cached_root_lifecycle_invalidates_entries", test_find_item_cached_root_lifecycle_invalidates_entries},
     {"test_item_hashtable_resize_preserves_entries_and_count", test_item_hashtable_resize_preserves_entries_and_count},
     {"test_murmur3_32_alignment_and_vectors", test_murmur3_32_alignment_and_vectors},

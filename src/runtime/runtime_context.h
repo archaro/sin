@@ -36,7 +36,7 @@ struct RuntimeContext {
   // event loop handles, *maxconns, *lastconn, *safe_shutdown, and
   // *shutdown_requested, but does not own or free these pointers or strings.
   VM_t *vm;
-  ITEM_t *itemroot;
+  ITEMSTORE_t *itemstore;
   uv_loop_t *loop;
   const char *itemstore_filename;
   ITEMSTORE_DURABILITY_e itemstore_durability;

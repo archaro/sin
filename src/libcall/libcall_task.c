@@ -20,11 +20,11 @@ void execute_task_cb(uv_timer_t *req) {
   // we will keep it up for now).
   RuntimeContext *task_ctx = &task->runtime_context;
   task_ctx->vm = task->vm;
-  task_ctx->itemroot = task->itemroot;
+  task_ctx->itemstore = task->itemstore;
   task_ctx->loop = task->loop;
   task_ctx->current_task_id = task->id;
-  ITEM_t *item = find_item(task->itemroot, task->itemname);
-  if (item && item->type == ITEM_code) {
+  ITEM_t *item = find_item(itemstore_root(task->itemstore), task->itemname);
+  if (item && item_kind(item) == ITEM_code) {
     VALUE_t ret = interpret(task_ctx, item);
     reset_stack(task->vm->stack);
     if (ret.type == VALUE_int) {
@@ -61,7 +61,7 @@ static uint8_t *lc_task_timer_setup_failed(RuntimeContext *ctx, uint8_t *nextop,
   if (task) destroy_task(task);
   if (itemname) FREE_STR(*itemname);
   push_stack(ctx->vm->stack, VALUE_NIL);
-  set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
+  set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_INVALIDARGS,
                          detail, ctx ? ctx->current_item : NULL);
   return nextop;
 }
@@ -95,13 +95,13 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
         "task.newgametask intervals must be non-negative and within timer range");
   }
-  ITEM_t *taskitem = find_item(ctx->itemroot, itemname.s);
+  ITEM_t *taskitem = find_item(itemstore_root(ctx->itemstore), itemname.s);
   if (!taskitem) {
     // If the task item doesn't exist, it can't be run.
     // Ownership: free itemname once on this error path before returning.
     FREE_STR(itemname);
     push_stack(ctx->vm->stack, VALUE_NIL);
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_NOSUCHITEM,
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_NOSUCHITEM,
                            NULL, ctx ? ctx->current_item : NULL);
     return nextop;
   }
@@ -112,12 +112,12 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   if (!newtask) {
     FREE_STR(itemname);
     push_stack(ctx->vm->stack, VALUE_NIL);
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INVALIDARGS,
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_INVALIDARGS,
                            "Unable to allocate new game task.",
                            ctx ? ctx->current_item : NULL);
     return nextop;
   }
-  newtask->itemroot = ctx->itemroot;
+  newtask->itemstore = ctx->itemstore;
   newtask->loop = ctx->loop;
   newtask->runtime_context = *ctx;
   newtask->runtime_context.current_task_id = 0;
@@ -127,7 +127,7 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
     return lc_task_timer_setup_failed(ctx, nextop, newtask, &itemname,
                                       "task.newgametask failed to initialize runtime");
   }
-  newtask->runtime_context.itemroot = newtask->itemroot;
+  newtask->runtime_context.itemstore = newtask->itemstore;
   newtask->runtime_context.loop = newtask->loop;
   // Now add the task to the game loop starting at the correct interval
   if (!ctx->loop) {

@@ -18,7 +18,7 @@ typedef struct {
   uv_loop_t *loop;      // Run loop context
   int fd;               // Listener file descriptor
   VM_t *vm;             // Virtual Machine
-  ITEM_t *itemroot;     // Root of in-memory itemstore
+  ITEMSTORE_t *itemstore_ctx; // Owned in-memory itemstore
   char *srcroot;        // Root of source tree
   char *itemstore;      // Filename of on-disk itemstore
   ITEMSTORE_DURABILITY_e itemstore_durability;

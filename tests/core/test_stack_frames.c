@@ -1,4 +1,6 @@
+#include "item.h"
 #include <stdint.h>
+#include "test_helpers.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -15,15 +17,15 @@ extern CONFIG_t config;
 
 static void setup_stack_frame_runtime(void) {
   memset(&config, 0, sizeof(config));
-  config.itemroot = make_root_item("root");
-  ASSERT_NOT_NULL(config.itemroot);
+  config.itemstore_ctx = itemstore_owner(make_root_item("root"));
+  ASSERT_NOT_NULL(itemstore_root(config.itemstore_ctx));
   config.vm = make_vm();
   ASSERT_NOT_NULL(config.vm);
 }
 
 static void teardown_stack_frame_runtime(void) {
   destroy_vm(config.vm);
-  destroy_item(config.itemroot);
+  destroy_item(itemstore_root(config.itemstore_ctx));
   memset(&config, 0, sizeof(config));
 }
 
@@ -40,7 +42,7 @@ static ITEM_t *insert_frame_code(const char *name, const uint8_t *code,
   uint8_t *owned = malloc(length);
   ASSERT_NOT_NULL(owned);
   memcpy(owned, code, length);
-  ITEM_t *item = insert_code_item(config.itemroot, name, (uint32_t)length,
+  ITEM_t *item = insert_code_item(itemstore_root(config.itemstore_ctx), name, (uint32_t)length,
                                   owned);
   ASSERT_NOT_NULL(item);
   return item;
@@ -49,7 +51,7 @@ static ITEM_t *insert_frame_code(const char *name, const uint8_t *code,
 static VALUE_t run_frame_item(ITEM_t *item) {
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
-  ctx.itemroot = config.itemroot;
+  ctx.itemstore = config.itemstore_ctx;
   return interpret(&ctx, item);
 }
 
@@ -180,7 +182,7 @@ void test_nested_string_frames_release_locals_and_preserve_result(void) {
                 (long long)strbuf_tracked_count_for_tests());
   ASSERT_EQ_INT(-1, config.vm->stack->current);
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
-  ASSERT_TRUE(!outer->inuse);
+  ASSERT_TRUE(!item_is_in_use(outer));
   teardown_stack_frame_runtime();
 }
 
@@ -199,7 +201,7 @@ void test_nested_nil_return_releases_frame_locals(void) {
                 (long long)strbuf_tracked_count_for_tests());
   ASSERT_EQ_INT(-1, config.vm->stack->current);
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
-  ASSERT_TRUE(!outer->inuse);
+  ASSERT_TRUE(!item_is_in_use(outer));
   teardown_stack_frame_runtime();
 }
 
@@ -253,7 +255,7 @@ void test_deferred_interrupt_unwinds_nested_call_frames(void) {
   volatile sig_atomic_t interrupt_pending = 0;
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
-  ctx.itemroot = config.itemroot;
+  ctx.itemstore = config.itemstore_ctx;
   ctx.current_item = preexisting;
   ctx.invocation_callstack_floor = 17;
   ctx.invocation_caller_item = preexisting;
@@ -271,8 +273,8 @@ void test_deferred_interrupt_unwinds_nested_call_frames(void) {
   ASSERT_EQ_INT(1, stack->base);
   ASSERT_EQ_INT(7, stack->locals);
   ASSERT_EQ_INT(3, stack->params);
-  ASSERT_TRUE(!caller->inuse);
-  ASSERT_TRUE(!callee->inuse);
+  ASSERT_TRUE(!item_is_in_use(caller));
+  ASSERT_TRUE(!item_is_in_use(callee));
   ASSERT_TRUE(ctx.current_item == preexisting);
   ASSERT_EQ_INT(17, ctx.invocation_callstack_floor);
   ASSERT_TRUE(ctx.invocation_caller_item == preexisting);

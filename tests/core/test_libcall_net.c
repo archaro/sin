@@ -1,3 +1,4 @@
+#include "item.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,7 +12,6 @@
 #include "error.h"
 #include "interpret.h"
 #include "item.h"
-#include "item_internal.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 #include "task.h"
@@ -103,26 +103,26 @@ static void reset_telnet_capture(void) {
 void test_net_maxlines_returns_configured_slot_bound(void) {
   setup_libcall_runtime();
 
-  set_error_item(config.itemroot, ERR_NETWORK_ERROR, "prior error", NULL);
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR, "prior error", NULL);
   ASSERT_EQ_INT(0, size_stack(config.vm->stack));
-  (void)lc_net_maxlines(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_maxlines(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ASSERT_EQ_INT(1, size_stack(config.vm->stack));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_int, ret.type);
   ASSERT_EQ_INT(0, ret.i);
-  ITEM_t *err = find_item(config.itemroot, "error");
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(err)->i);
 
   config.maxconns = 37;
-  (void)lc_net_maxlines(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_maxlines(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ASSERT_EQ_INT(1, size_stack(config.vm->stack));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_int, ret.type);
   ASSERT_EQ_INT(37, ret.i);
-  err = find_item(config.itemroot, "error");
+  err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(err)->i);
 
   teardown_libcall_runtime();
 }
@@ -142,7 +142,7 @@ void test_net_write_ignores_non_writable_lines(void) {
     push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = (int64_t)i}});
     push_stack(config.vm->stack,
                (VALUE_t){VALUE_str, {.s = strdup("hello")}});
-    (void)lc_net_write(test_ctx(), NULL, config.itemroot);
+    (void)lc_net_write(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
     VALUE_t ret = pop_stack(config.vm->stack);
     ASSERT_EQ_INT(VALUE_nil, ret.type);
   }
@@ -179,24 +179,24 @@ void test_net_input_fair_queue_progresses_connect_data_disconnect(void) {
   line[2].status = LINE_disconnecting;
 
   RuntimeContext *ctx = test_ctx();
-  (void)lc_net_input(ctx, NULL, config.itemroot);
+  (void)lc_net_input(ctx, NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_int, ret.type);
   ASSERT_EQ_INT(1, ret.i);
-  ITEM_t *input_line_item = find_item(config.itemroot, "input.line");
+  ITEM_t *input_line_item = find_item(itemstore_root(config.itemstore_ctx), "input.line");
   ASSERT_NOT_NULL(input_line_item);
-  ASSERT_EQ_INT(0, input_line_item->value.i);
+  ASSERT_EQ_INT(0, item_value(input_line_item)->i);
 
-  (void)lc_net_input(ctx, NULL, config.itemroot);
+  (void)lc_net_input(ctx, NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_int, ret.type);
   ASSERT_EQ_INT(3, ret.i);
-  ASSERT_EQ_INT(1, input_line_item->value.i);
-  ITEM_t *input_text_item = find_item(config.itemroot, "input.text");
+  ASSERT_EQ_INT(1, item_value(input_line_item)->i);
+  ITEM_t *input_text_item = find_item(itemstore_root(config.itemstore_ctx), "input.text");
   ASSERT_NOT_NULL(input_text_item);
-  ASSERT_TRUE(strcmp(input_text_item->value.s, "hello") == 0);
+  ASSERT_TRUE(strcmp(item_value(input_text_item)->s, "hello") == 0);
 
-  (void)lc_net_input(ctx, NULL, config.itemroot);
+  (void)lc_net_input(ctx, NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_int, ret.type);
   ASSERT_EQ_INT(2, ret.i);
@@ -222,14 +222,14 @@ void test_net_ditch_disconnects_active_lines(void) {
   ASSERT_NOT_NULL(line[1].telnet);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
-  (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_ditch(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(1, ret.i);
   ASSERT_EQ_INT(LINE_disconnecting, line[1].status);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
-  (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_ditch(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
@@ -238,7 +238,7 @@ void test_net_ditch_disconnects_active_lines(void) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
   push_stack(config.vm->stack,
              (VALUE_t){VALUE_str, {.s = strdup("after ditch")}});
-  (void)lc_net_write(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_write(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   ASSERT_TRUE(strcmp(telnet_capture, "") == 0);
@@ -256,22 +256,22 @@ void test_net_flush_reports_line_status(void) {
   line[1].status = LINE_empty;
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
-  (void)lc_net_flush(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_flush(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(1, ret.i);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
-  (void)lc_net_flush(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_flush(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
-  ITEM_t *err = find_item(config.itemroot, "error");
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(err)->i);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
-  (void)lc_net_flush(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_flush(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("net.flush");
@@ -290,13 +290,13 @@ void test_net_ditch_reports_inactive_lines(void) {
 
   for (size_t i = 0; i < config.maxconns; i++) {
     push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = (int64_t)i}});
-    (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
+    (void)lc_net_ditch(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
     VALUE_t ret = pop_stack(config.vm->stack);
     ASSERT_EQ_INT(VALUE_bool, ret.type);
     ASSERT_EQ_INT(0, ret.i);
-    ITEM_t *err = find_item(config.itemroot, "error");
+    ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
     ASSERT_NOT_NULL(err);
-    ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+    ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(err)->i);
   }
 
   teardown_libcall_runtime();
@@ -310,13 +310,13 @@ void test_net_ditch_invalid_line_returns_nil(void) {
   ASSERT_NOT_NULL(line);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
-  (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_ditch(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("net.ditch");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
-  (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_ditch(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("net.ditch");
@@ -332,7 +332,7 @@ static void assert_telnet_capture_bytes(const unsigned char *expected,
 
 static VALUE_t call_net_echo(VALUE_t value) {
   push_stack(config.vm->stack, value);
-  (void)lc_net_echo(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_echo(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   return pop_stack(config.vm->stack);
 }
 
@@ -376,21 +376,21 @@ void test_net_echo_ignores_unavailable_current_line(void) {
   config.maxconns = 1;
   line = calloc((size_t)config.maxconns, sizeof(LINE_t));
   ASSERT_NOT_NULL(line);
-  set_error_item(config.itemroot, ERR_NETWORK_ERROR, "prior error", NULL);
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR, "prior error", NULL);
 
   config.lastconn = 1;
   VALUE_t ret = call_net_echo((VALUE_t){VALUE_str, {.s = strdup("value")}});
   ASSERT_EQ_INT(VALUE_nil, ret.type);
-  ITEM_t *error = find_item(config.itemroot, "error");
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_NETWORK_ERROR, error->value.i);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(error)->i);
 
   config.lastconn = 0;
   reset_telnet_capture();
   ret = call_net_echo((VALUE_t){VALUE_bool, {.i = 0}});
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   ASSERT_EQ_INT(0, telnet_capture_len);
-  ASSERT_EQ_INT(ERR_NETWORK_ERROR, error->value.i);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(error)->i);
 
   line[0].status = LINE_disconnecting;
   line[0].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
@@ -399,7 +399,7 @@ void test_net_echo_ignores_unavailable_current_line(void) {
   ret = call_net_echo((VALUE_t){VALUE_bool, {.i = 1}});
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   ASSERT_EQ_INT(0, telnet_capture_len);
-  ASSERT_EQ_INT(ERR_NETWORK_ERROR, error->value.i);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(error)->i);
 
   teardown_libcall_runtime();
 }
@@ -426,48 +426,48 @@ void test_net_connected_reports_writable_telnet_states(void) {
   line[4].status = LINE_empty;
   line[5].status = LINE_idle;
 
-  set_error_item(config.itemroot, ERR_NETWORK_ERROR, "prior error", NULL);
-  ITEM_t *err = find_item(config.itemroot, "error");
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR, "prior error", NULL);
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(err)->i);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
-  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_connected(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(1, ret.i);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 2}});
-  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_connected(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(1, ret.i);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
-  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_connected(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 3}});
-  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_connected(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 4}});
-  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_connected(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 5}});
-  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_connected(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
 
-  ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(err)->i);
 
   teardown_libcall_runtime();
 }
@@ -480,26 +480,26 @@ void test_net_connected_invalid_line_returns_nil(void) {
   ASSERT_NOT_NULL(line);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
-  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_connected(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("net.connected");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
-  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_connected(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("net.connected");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
-  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_connected(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("net.connected");
 
   push_stack(config.vm->stack,
              (VALUE_t){VALUE_int, {.i = INT64_C(4294967296)}});
-  (void)lc_net_connected(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_connected(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("net.connected");
@@ -537,12 +537,12 @@ void test_net_address_returns_owned_numeric_peer_address(void) {
   line[6].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
   ASSERT_NOT_NULL(line[6].telnet);
 
-  set_error_item(config.itemroot, ERR_NETWORK_ERROR, "prior error", NULL);
-  ITEM_t *err = find_item(config.itemroot, "error");
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR, "prior error", NULL);
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
-  (void)lc_net_address(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_address(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, ret.type);
   ASSERT_TRUE(strcmp(ret.s, "192.0.2.45") == 0);
@@ -552,7 +552,7 @@ void test_net_address_returns_owned_numeric_peer_address(void) {
   value_free(&ret);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
-  (void)lc_net_address(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_address(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, ret.type);
   ASSERT_TRUE(strcmp(ret.s, "2001:db8::45") == 0);
@@ -561,12 +561,12 @@ void test_net_address_returns_owned_numeric_peer_address(void) {
 
   for (int64_t index = 2; index < 7; index++) {
     push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = index}});
-    (void)lc_net_address(test_ctx(), NULL, config.itemroot);
+    (void)lc_net_address(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
     ret = pop_stack(config.vm->stack);
     ASSERT_EQ_INT(VALUE_nil, ret.type);
   }
 
-  ASSERT_EQ_INT(ERR_NETWORK_ERROR, err->value.i);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(err)->i);
   teardown_libcall_runtime();
 }
 
@@ -578,26 +578,26 @@ void test_net_address_invalid_line_returns_nil(void) {
   ASSERT_NOT_NULL(line);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
-  (void)lc_net_address(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_address(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("net.address");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
-  (void)lc_net_address(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_address(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("net.address");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
-  (void)lc_net_address(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_address(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("net.address");
 
   push_stack(config.vm->stack,
              (VALUE_t){VALUE_int, {.i = INT64_C(4294967296)}});
-  (void)lc_net_address(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_address(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("net.address");

@@ -1,4 +1,6 @@
+#include "item.h"
 #include <stdint.h>
+#include "test_helpers.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -52,11 +54,11 @@ static VALUE_t compile_and_run(const char *name, const char *source) {
   uint8_t *bytecode = malloc(len);
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, out->bytecode, len);
-  ITEM_t *code = insert_code_item(config.itemroot, name, len, bytecode);
+  ITEM_t *code = insert_code_item(itemstore_root(config.itemstore_ctx), name, len, bytecode);
   ASSERT_NOT_NULL(code);
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
-  ctx.itemroot = config.itemroot;
+  ctx.itemstore = config.itemstore_ctx;
   ctx.strict_validation = config.strict_validation;
   ctx.strict_runtime_contracts = config.strict_runtime_contracts;
   VALUE_t result = interpret(&ctx, code);
@@ -68,15 +70,15 @@ static VALUE_t compile_and_run(const char *name, const char *source) {
 
 static void setup_runtime(void) {
   memset(&config, 0, sizeof(config));
-  config.itemroot = make_root_item("root");
-  ASSERT_NOT_NULL(config.itemroot);
+  config.itemstore_ctx = itemstore_owner(make_root_item("root"));
+  ASSERT_NOT_NULL(itemstore_root(config.itemstore_ctx));
   config.vm = make_vm();
   ASSERT_NOT_NULL(config.vm);
 }
 
 static void teardown_runtime(void) {
   destroy_vm(config.vm);
-  destroy_item(config.itemroot);
+  destroy_item(itemstore_root(config.itemstore_ctx));
   memset(&config, 0, sizeof(config));
 }
 
@@ -120,6 +122,6 @@ void test_float_local_deref_layer_returns_nil_and_does_not_save_item(void) {
   VALUE_t result = compile_and_run("test.floatlocal",
                                    "@layer = 1.0; foo.[@layer] = 7; foo;");
   ASSERT_EQ_INT(VALUE_nil, result.type);
-  ASSERT_TRUE(find_item(config.itemroot, "foo") == NULL);
+  ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "foo") == NULL);
   teardown_runtime();
 }

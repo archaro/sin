@@ -39,10 +39,8 @@ static void fuzz_load_itemstore_bytes(const uint8_t *data, size_t size) {
     return;
   }
 
-  ITEM_t *loaded = load_itemstore(path);
-  if (loaded) {
-    destroy_item(loaded);
-  }
+  ITEMSTORE_t *store = itemstore_load(path);
+  itemstore_destroy(store);
   unlink(path);
 }
 

@@ -28,7 +28,7 @@ typedef struct {
   uv_timer_t *timer;
   TASKNODE_t *node;
   VM_t *vm;
-  ITEM_t *itemroot;
+  ITEMSTORE_t *itemstore;
   uv_loop_t *loop;
   RuntimeContext runtime_context;
   TASK_STATE_e state;

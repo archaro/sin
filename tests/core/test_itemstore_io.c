@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "test_helpers.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,7 @@
 #include "config.h"
 #include "item.h"
 #include "item_internal.h"
+#define get_itemstore_generation() itemstore_generation(itemstore_owner(root))
 #include "string_limits.h"
 #include "test_assert.h"
 
@@ -265,7 +267,7 @@ static void assert_child_order(ITEM_t *parent, const char *const *names,
 static void assert_int_item(ITEM_t *root, const char *name, int64_t expected) {
   ITEM_t *item = find_item(root, name);
   ASSERT_NOT_NULL(item);
-  ASSERT_EQ_INT(ITEM_value, item->type);
+  ASSERT_EQ_INT(ITEM_value, item_kind(item));
   ASSERT_EQ_INT(VALUE_int, item->value.type);
   ASSERT_EQ_INT(expected, item->value.i);
 }
@@ -274,7 +276,7 @@ static void assert_code_item(ITEM_t *root, const char *name,
                              const uint8_t *expected, size_t expected_len) {
   ITEM_t *item = find_item(root, name);
   ASSERT_NOT_NULL(item);
-  ASSERT_EQ_INT(ITEM_code, item->type);
+  ASSERT_EQ_INT(ITEM_code, item_kind(item));
   ASSERT_EQ_INT(expected_len, item->bytecode_len);
   ASSERT_TRUE(memcmp(expected, item->bytecode, expected_len) == 0);
 }
@@ -332,7 +334,7 @@ void test_itemstore_value_and_code_roundtrip(void) {
 
   ITEM_t *item = find_item(loaded, "nil");
   ASSERT_NOT_NULL(item);
-  ASSERT_EQ_INT(ITEM_value, item->type);
+  ASSERT_EQ_INT(ITEM_value, item_kind(item));
   ASSERT_EQ_INT(VALUE_nil, item->value.type);
 
   item = find_item(loaded, "bool");
@@ -357,7 +359,7 @@ void test_itemstore_value_and_code_roundtrip(void) {
 
   item = find_item(loaded, "code");
   ASSERT_NOT_NULL(item);
-  ASSERT_EQ_INT(ITEM_code, item->type);
+  ASSERT_EQ_INT(ITEM_code, item_kind(item));
   ASSERT_EQ_INT(sizeof(expected_bytecode), item->bytecode_len);
   ASSERT_TRUE(memcmp(expected_bytecode, item->bytecode,
                      sizeof(expected_bytecode)) == 0);
@@ -513,7 +515,7 @@ void test_insert_code_item_rejects_inuse_replacement(void) {
   replacement[0] = 0;
   replacement[1] = 'h';
   ASSERT_TRUE(insert_code_item(root, "code", 2, replacement) == NULL);
-  ASSERT_EQ_INT(ITEM_code, code->type);
+  ASSERT_EQ_INT(ITEM_code, item_kind(code));
   ASSERT_EQ_INT(1, code->bytecode_len);
   ASSERT_TRUE(code->bytecode == initial);
   free(replacement);

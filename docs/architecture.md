@@ -96,11 +96,12 @@ structured error items. Itemstore code may depend on common support, bytecode
 verification for persisted code items, and value representation. It should not
 depend on compiler pipeline or networking.
 
-Key entry points:
-
-- `make_root_item()`, `find_item()`, `insert_code_item()` in
-  `src/itemstore/item.h`.
-- `save_itemstore()` / `load_itemstore()` in `src/itemstore/item.h`.
+Key entry points are `itemstore_create()`, `itemstore_root()`,
+`itemstore_destroy()`, `find_item()`, and `insert_code_item()` for in-memory
+ownership and lookup. Persistence uses `itemstore_save()` and
+`itemstore_load()`; roots are borrowed and remain valid only until their
+owning store is destroyed. Cache generations and hit/miss statistics are
+store-local.
 
 ### Libcalls
 

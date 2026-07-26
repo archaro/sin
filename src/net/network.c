@@ -925,7 +925,7 @@ void input_processor(uv_timer_t *handle) {
     if (input_ctx->loop) uv_stop(input_ctx->loop);
     return;
   }
-  ITEM_t *input = find_item(input_ctx->itemroot, input_ctx->input_name);
+  ITEM_t *input = find_item(itemstore_root(input_ctx->itemstore), input_ctx->input_name);
   if (!input) {
     logerr("Input item does not exist!  Cannot continue.\n");
     exit(EXIT_FAILURE);

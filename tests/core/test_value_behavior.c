@@ -1,4 +1,6 @@
+#include "item.h"
 #include <stdint.h>
+#include "test_helpers.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,15 +28,15 @@ extern uint8_t *op_assignitem(RuntimeContext *ctx, uint8_t *nextop,
 static void setup_runtime(void) {
   memset(&config, 0, sizeof(config));
   init_errmsg();
-  config.itemroot = make_root_item("root");
-  ASSERT_NOT_NULL(config.itemroot);
+  config.itemstore_ctx = itemstore_owner(make_root_item("root"));
+  ASSERT_NOT_NULL(itemstore_root(config.itemstore_ctx));
   config.vm = make_vm();
   ASSERT_NOT_NULL(config.vm);
 }
 
 static void teardown_runtime(void) {
   destroy_vm(config.vm);
-  destroy_item(config.itemroot);
+  destroy_item(itemstore_root(config.itemstore_ctx));
   memset(&config, 0, sizeof(config));
 }
 
@@ -59,7 +61,7 @@ static void emit_str(uint8_t *code, size_t *pos, const char *value) {
 static VALUE_t run_interpret(ITEM_t *item) {
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
-  ctx.itemroot = config.itemroot;
+  ctx.itemstore = config.itemstore_ctx;
   ctx.strict_validation = config.strict_validation;
   ctx.strict_runtime_contracts = config.strict_runtime_contracts;
   return interpret(&ctx, item);
@@ -69,20 +71,20 @@ static VALUE_t run_code(const char *name, const uint8_t *template_code, size_t l
   uint8_t *bytecode = malloc(len);
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, template_code, len);
-  ITEM_t *code = insert_code_item(config.itemroot, name, (uint32_t)len, bytecode);
+  ITEM_t *code = insert_code_item(itemstore_root(config.itemstore_ctx), name, (uint32_t)len, bytecode);
   ASSERT_NOT_NULL(code);
   return run_interpret(code);
 }
 
 static void assert_error_code_and_detail(int expected_code, const char *needle) {
-  ITEM_t *err = find_item(config.itemroot, "error");
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(expected_code, err->value.i);
+  ASSERT_EQ_INT(expected_code, item_value(err)->i);
 
-  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ITEM_t *msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(msg);
-  ASSERT_EQ_INT(VALUE_str, msg->value.type);
-  ASSERT_TRUE(strstr(msg->value.s, needle) != NULL);
+  ASSERT_EQ_INT(VALUE_str, item_value(msg)->type);
+  ASSERT_TRUE(strstr(item_value(msg)->s, needle) != NULL);
 }
 
 void test_error_message_table_defines_active_errors(void) {
@@ -126,17 +128,17 @@ static void assert_truncated_bytecode_for_opcode(const char *name, uint8_t opcod
   VALUE_t result = run_code(name, code, sizeof(code));
   ASSERT_EQ_INT(VALUE_nil, result.type);
 
-  ITEM_t *err = find_item(config.itemroot, "error");
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, err->value.i);
+  ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, item_value(err)->i);
 
-  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ITEM_t *msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(msg);
-  ASSERT_EQ_INT(VALUE_str, msg->value.type);
+  ASSERT_EQ_INT(VALUE_str, item_value(msg)->type);
   char expected[96];
   int written = snprintf(expected, sizeof(expected), "truncated %s", opname);
   ASSERT_TRUE(written > 0 && (size_t)written < sizeof(expected));
-  ASSERT_TRUE(strstr(msg->value.s, expected) != NULL);
+  ASSERT_TRUE(strstr(item_value(msg)->s, expected) != NULL);
 }
 
 void test_runtime_decode_requires_frame_bounds(void) {
@@ -193,57 +195,57 @@ void test_error_item_preserves_compiler_diagnostic_fields(void) {
   compiler_diag_set_location(&diag, 7, 3, 1);
   compiler_diag_set_excerpt(&diag, "bad ^ token");
 
-  set_compiler_error_item(config.itemroot, &diag);
+  set_compiler_error_item(itemstore_root(config.itemstore_ctx), &diag);
 
-  ITEM_t *err = find_item(config.itemroot, "error");
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(VALUE_int, err->value.type);
-  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, err->value.i);
+  ASSERT_EQ_INT(VALUE_int, item_value(err)->type);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, item_value(err)->i);
 
-  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ITEM_t *msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(msg);
-  ASSERT_EQ_INT(VALUE_str, msg->value.type);
-  ASSERT_TRUE(strstr(msg->value.s, "SIN-PARSE-0005") != NULL);
-  ASSERT_TRUE(strstr(msg->value.s, "stage=PARSE") != NULL);
-  ASSERT_TRUE(strstr(msg->value.s, "file=example.sin") != NULL);
-  ASSERT_TRUE(strstr(msg->value.s, "line=7") != NULL);
-  ASSERT_TRUE(strstr(msg->value.s, "column=3") != NULL);
-  ASSERT_TRUE(strstr(msg->value.s, "message=parse: unexpected character") != NULL);
-  ASSERT_TRUE(strstr(msg->value.s, "excerpt=bad ^ token") != NULL);
+  ASSERT_EQ_INT(VALUE_str, item_value(msg)->type);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "SIN-PARSE-0005") != NULL);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "stage=PARSE") != NULL);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "file=example.sin") != NULL);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "line=7") != NULL);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "column=3") != NULL);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "message=parse: unexpected character") != NULL);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "excerpt=bad ^ token") != NULL);
 
-  ITEM_t *error_item = find_item(config.itemroot, "error.item");
+  ITEM_t *error_item = find_item(itemstore_root(config.itemstore_ctx), "error.item");
   ASSERT_NOT_NULL(error_item);
-  ASSERT_EQ_INT(VALUE_nil, error_item->value.type);
+  ASSERT_EQ_INT(VALUE_nil, item_value(error_item)->type);
 
-  ITEM_t *code = find_item(config.itemroot, "error.code");
+  ITEM_t *code = find_item(itemstore_root(config.itemstore_ctx), "error.code");
   ASSERT_NOT_NULL(code);
-  ASSERT_EQ_INT(VALUE_str, code->value.type);
-  ASSERT_TRUE(strcmp(code->value.s, "SIN-PARSE-0005") == 0);
+  ASSERT_EQ_INT(VALUE_str, item_value(code)->type);
+  ASSERT_TRUE(strcmp(item_value(code)->s, "SIN-PARSE-0005") == 0);
 
-  ITEM_t *stage = find_item(config.itemroot, "error.stage");
+  ITEM_t *stage = find_item(itemstore_root(config.itemstore_ctx), "error.stage");
   ASSERT_NOT_NULL(stage);
-  ASSERT_EQ_INT(VALUE_str, stage->value.type);
-  ASSERT_TRUE(strcmp(stage->value.s, "PARSE") == 0);
+  ASSERT_EQ_INT(VALUE_str, item_value(stage)->type);
+  ASSERT_TRUE(strcmp(item_value(stage)->s, "PARSE") == 0);
 
-  ITEM_t *file = find_item(config.itemroot, "error.file");
+  ITEM_t *file = find_item(itemstore_root(config.itemstore_ctx), "error.file");
   ASSERT_NOT_NULL(file);
-  ASSERT_EQ_INT(VALUE_str, file->value.type);
-  ASSERT_TRUE(strcmp(file->value.s, "example.sin") == 0);
+  ASSERT_EQ_INT(VALUE_str, item_value(file)->type);
+  ASSERT_TRUE(strcmp(item_value(file)->s, "example.sin") == 0);
 
-  ITEM_t *line_item = find_item(config.itemroot, "error.line");
+  ITEM_t *line_item = find_item(itemstore_root(config.itemstore_ctx), "error.line");
   ASSERT_NOT_NULL(line_item);
-  ASSERT_EQ_INT(VALUE_int, line_item->value.type);
-  ASSERT_EQ_INT(7, line_item->value.i);
+  ASSERT_EQ_INT(VALUE_int, item_value(line_item)->type);
+  ASSERT_EQ_INT(7, item_value(line_item)->i);
 
-  ITEM_t *column = find_item(config.itemroot, "error.column");
+  ITEM_t *column = find_item(itemstore_root(config.itemstore_ctx), "error.column");
   ASSERT_NOT_NULL(column);
-  ASSERT_EQ_INT(VALUE_int, column->value.type);
-  ASSERT_EQ_INT(3, column->value.i);
+  ASSERT_EQ_INT(VALUE_int, item_value(column)->type);
+  ASSERT_EQ_INT(3, item_value(column)->i);
 
-  ITEM_t *excerpt = find_item(config.itemroot, "error.excerpt");
+  ITEM_t *excerpt = find_item(itemstore_root(config.itemstore_ctx), "error.excerpt");
   ASSERT_NOT_NULL(excerpt);
-  ASSERT_EQ_INT(VALUE_str, excerpt->value.type);
-  ASSERT_TRUE(strcmp(excerpt->value.s, "bad ^ token") == 0);
+  ASSERT_EQ_INT(VALUE_str, item_value(excerpt)->type);
+  ASSERT_TRUE(strcmp(item_value(excerpt)->s, "bad ^ token") == 0);
 
   compiler_diag_reset(&diag);
   teardown_runtime();
@@ -764,9 +766,9 @@ void test_value_string_tracker_itemname_cleanup(void) {
 
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
-  ctx.itemroot = config.itemroot;
-  op_assignitem(&ctx, NULL, config.itemroot);
-  ASSERT_NOT_NULL(find_item(config.itemroot, "tracked.item"));
+  ctx.itemstore = config.itemstore_ctx;
+  op_assignitem(&ctx, NULL, itemstore_root(config.itemstore_ctx));
+  ASSERT_NOT_NULL(find_item(itemstore_root(config.itemstore_ctx), "tracked.item"));
   ASSERT_EQ_INT((long long)baseline,
                 (long long)strbuf_tracked_count_for_tests());
   teardown_runtime();
@@ -803,8 +805,8 @@ void test_value_string_boundaries_enforce_string_limit(void) {
   memset(too_long, 'x', SIN_MAX_STRING_BYTES + 1);
   too_long[SIN_MAX_STRING_BYTES + 1] = '\0';
   VALUE_t stored = {VALUE_str, {.s = too_long}};
-  ASSERT_TRUE(insert_item(config.itemroot, "oversized.value", stored) == NULL);
-  ASSERT_TRUE(find_item(config.itemroot, "oversized.value") == NULL);
+  ASSERT_TRUE(insert_item(itemstore_root(config.itemstore_ctx), "oversized.value", stored) == NULL);
+  ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "oversized.value") == NULL);
   value_free(&stored);
   teardown_runtime();
 }
@@ -909,7 +911,7 @@ void test_value_float_item_fetch_preserves_bits(void) {
     char item_name[32];
     snprintf(item_name, sizeof(item_name), "float.fetch.%c", (char)('a' + i));
     VALUE_t original = {VALUE_float, {.f = value_float_from_bits(expected_bits[i])}};
-    ASSERT_NOT_NULL(insert_item(config.itemroot, item_name, original));
+    ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), item_name, original));
 
     uint8_t code[64] = {0};
     size_t pos = 0;
@@ -1094,8 +1096,8 @@ void test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_er
   setup_runtime();
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
-  ctx.itemroot = config.itemroot;
-  ITEM_t *current = insert_item(config.itemroot, "test.assigncode_bad_source",
+  ctx.itemstore = config.itemstore_ctx;
+  ITEM_t *current = insert_item(itemstore_root(config.itemstore_ctx), "test.assigncode_bad_source",
                                 VALUE_NIL);
   ASSERT_NOT_NULL(current);
   ctx.current_item = current;
@@ -1135,19 +1137,19 @@ void test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_erro
 }
 
 static void assert_error_nil(void) {
-  ITEM_t *err = find_item(config.itemroot, "error");
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(VALUE_nil, err->value.type);
+  ASSERT_EQ_INT(VALUE_nil, item_value(err)->type);
 }
 
 static void assert_strict_runtime_contract_detail(const char *needle) {
-  ITEM_t *err = find_item(config.itemroot, "error");
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
-  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(err)->i);
+  ITEM_t *msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(msg);
-  ASSERT_EQ_INT(VALUE_str, msg->value.type);
-  ASSERT_TRUE(strstr(msg->value.s, needle) != NULL);
+  ASSERT_EQ_INT(VALUE_str, item_value(msg)->type);
+  ASSERT_TRUE(strstr(item_value(msg)->s, needle) != NULL);
 }
 
 static VALUE_t run_fetch_with_one_int_arg(const char *runner_name, VALUE_t fetch_name) {
@@ -1195,7 +1197,7 @@ void test_strict_runtime_contracts_reports_too_many_item_arguments(void) {
   uint8_t *target = malloc(sizeof(target_code));
   ASSERT_NOT_NULL(target);
   memcpy(target, target_code, sizeof(target_code));
-  ASSERT_NOT_NULL(insert_code_item(config.itemroot, "strict_runtime.target", sizeof(target_code), target));
+  ASSERT_NOT_NULL(insert_code_item(itemstore_root(config.itemstore_ctx), "strict_runtime.target", sizeof(target_code), target));
   config.strict_runtime_contracts = true;
   VALUE_t name = {VALUE_str, {.s = "strict_runtime.target"}};
   VALUE_t result = run_fetch_with_one_int_arg("strict_runtime.too_many_runner", name);
@@ -1249,18 +1251,18 @@ void test_strict_runtime_contracts_uses_context_itemroot(void) {
 
   RuntimeContext ctx;
   runtime_context_init(&ctx, vm);
-  ctx.itemroot = root;
+  ctx.itemstore = itemstore_owner(root);
   ctx.strict_runtime_contracts = true;
   VALUE_t result = interpret(&ctx, runner);
   ASSERT_EQ_INT(VALUE_nil, result.type);
 
   ITEM_t *err = find_item(root, "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(err)->i);
   ITEM_t *msg = find_item(root, "error.msg");
   ASSERT_NOT_NULL(msg);
-  ASSERT_EQ_INT(VALUE_str, msg->value.type);
-  ASSERT_TRUE(strstr(msg->value.s, "missing target item") != NULL);
+  ASSERT_EQ_INT(VALUE_str, item_value(msg)->type);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "missing target item") != NULL);
 
   destroy_vm(vm);
   destroy_item(root);
@@ -1273,22 +1275,22 @@ void test_strict_validation_runtime_opt_in(void) {
   uint8_t *bytecode = malloc(sizeof(code));
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, code, sizeof(code));
-  ITEM_t *item = insert_code_item(config.itemroot, "test.strict_invalid_local", sizeof(code), bytecode);
+  ITEM_t *item = insert_code_item(itemstore_root(config.itemstore_ctx), "test.strict_invalid_local", sizeof(code), bytecode);
   ASSERT_NOT_NULL(item);
 
   config.strict_validation = false;
   VALUE_t result = run_interpret(item);
   (void)result;
-  ITEM_t *err = find_item(config.itemroot, "error");
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(VALUE_nil, err->value.type);
+  ASSERT_EQ_INT(VALUE_nil, item_value(err)->type);
 
   teardown_runtime();
   setup_runtime();
   bytecode = malloc(sizeof(code));
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, code, sizeof(code));
-  item = insert_code_item(config.itemroot, "test.strict_invalid_local", sizeof(code), bytecode);
+  item = insert_code_item(itemstore_root(config.itemstore_ctx), "test.strict_invalid_local", sizeof(code), bytecode);
   ASSERT_NOT_NULL(item);
   config.strict_validation = true;
   int32_t before_current = config.vm->stack->current;
@@ -1296,40 +1298,40 @@ void test_strict_validation_runtime_opt_in(void) {
   uint8_t before_params = config.vm->stack->params;
   result = run_interpret(item);
   ASSERT_EQ_INT(VALUE_nil, result.type);
-  ASSERT_TRUE(!item->inuse);
+  ASSERT_TRUE(!item_is_in_use(item));
   ASSERT_EQ_INT(before_current, config.vm->stack->current);
   ASSERT_EQ_INT(before_locals, config.vm->stack->locals);
   ASSERT_EQ_INT(before_params, config.vm->stack->params);
 
-  err = find_item(config.itemroot, "error");
+  err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, err->value.i);
-  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, item_value(err)->i);
+  ITEM_t *msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(msg);
-  ASSERT_EQ_INT(VALUE_str, msg->value.type);
-  ASSERT_TRUE(strstr(msg->value.s, "test.strict_invalid_local") != NULL);
-  ASSERT_TRUE(strstr(msg->value.s, "offset") != NULL);
-  ASSERT_TRUE(strstr(msg->value.s, "local index") != NULL);
-  ITEM_t *error_item = find_item(config.itemroot, "error.item");
+  ASSERT_EQ_INT(VALUE_str, item_value(msg)->type);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "test.strict_invalid_local") != NULL);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "offset") != NULL);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "local index") != NULL);
+  ITEM_t *error_item = find_item(itemstore_root(config.itemstore_ctx), "error.item");
   ASSERT_NOT_NULL(error_item);
-  ASSERT_EQ_INT(VALUE_str, error_item->value.type);
-  ASSERT_TRUE(strcmp(error_item->value.s, "test.strict_invalid_local") == 0);
+  ASSERT_EQ_INT(VALUE_str, item_value(error_item)->type);
+  ASSERT_TRUE(strcmp(item_value(error_item)->s, "test.strict_invalid_local") == 0);
   teardown_runtime();
 }
 
 void test_strict_validation_rejects_null_bytecode(void) {
   setup_runtime();
-  ITEM_t *item = make_item("nullcode", config.itemroot, ITEM_code, VALUE_NIL, NULL, 0);
+  ITEM_t *item = insert_code_item(itemstore_root(config.itemstore_ctx), "nullcode", 0, NULL);
   ASSERT_NOT_NULL(item);
   config.strict_validation = true;
   VALUE_t result = run_interpret(item);
   ASSERT_EQ_INT(VALUE_nil, result.type);
-  ASSERT_TRUE(!item->inuse);
-  ITEM_t *err = find_item(config.itemroot, "error");
+  ASSERT_TRUE(!item_is_in_use(item));
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, err->value.i);
-  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, item_value(err)->i);
+  ITEM_t *msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(msg);
-  ASSERT_TRUE(strstr(msg->value.s, "null bytecode") != NULL);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "null bytecode") != NULL);
   teardown_runtime();
 }

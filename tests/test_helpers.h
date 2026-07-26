@@ -2,10 +2,40 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "compiler/absyn.h"
 #include "compiler/emitbc.h"
 #include "compiler/ir.h"
+#include "item.h"
+
+/* Test fixtures expose borrowed roots while retaining the explicit
+ * ITEMSTORE_t lifecycle.  The owner is recovered through the public accessor
+ * for teardown. */
+static inline ITEM_t *test_make_root_item(const char *name) {
+  ITEMSTORE_t *store = itemstore_create(name);
+  return store ? itemstore_root(store) : NULL;
+}
+static inline void test_destroy_item(ITEM_t *root) {
+  if (root) itemstore_destroy(itemstore_owner(root));
+}
+static inline ITEM_t *test_load_itemstore(const char *filename) {
+  ITEMSTORE_t *store = itemstore_load(filename);
+  return store ? itemstore_root(store) : NULL;
+}
+static inline ITEM_t *test_load_itemstore_with_options(const char *filename,
+                                                   bool strict_validation) {
+  ITEMSTORE_t *store = itemstore_load_with_options(filename, strict_validation);
+  return store ? itemstore_root(store) : NULL;
+}
+static inline bool test_save_itemstore(const char *filename, ITEM_t *root) {
+  return root && itemstore_save(filename, itemstore_owner(root));
+}
+#define make_root_item test_make_root_item
+#define destroy_item test_destroy_item
+#define load_itemstore test_load_itemstore
+#define load_itemstore_with_options test_load_itemstore_with_options
+#define save_itemstore test_save_itemstore
 
 AS_NODE *t_int(int64_t value);
 AS_NODE *t_local(const char *name);

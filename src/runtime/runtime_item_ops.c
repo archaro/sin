@@ -114,7 +114,7 @@ bool decode_assigncode_source(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_I
 
 int8_t compile_and_insert_codeitem(ITEM_t *itemroot, const VALUE_t *itemname, const CODEITEM_INPUT_t *in, char **errdetail) {
   ITEM_t *testitem = find_item(itemroot, itemname->s);
-  if (testitem && testitem->inuse) return ERR_COMP_INUSE;
+  if (testitem && item_is_in_use(testitem)) return ERR_COMP_INUSE;
   OUTPUT_t *out = NULL;
   int8_t rc = compile_source_to_bytecode_with_params(in->source, in->source_len, in->params, in->param_count, &out, errdetail);
   if (rc == 0 && out) {

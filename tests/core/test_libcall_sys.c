@@ -1,3 +1,4 @@
+#include "item.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,7 +12,6 @@
 #include "error.h"
 #include "interpret.h"
 #include "item.h"
-#include "item_internal.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 #include "task.h"
@@ -22,6 +22,11 @@
 #include "version.h"
 
 #include "network.h"
+
+/* Persistence test hooks are implemented by itemstore but intentionally kept
+ * out of the public item API; declare them locally for black-box tests. */
+void itemstore_set_directory_sync_hook_for_tests(bool (*hook)(const char *path));
+void itemstore_set_pre_publish_hook_for_tests(void (*hook)(const char *path));
 
 uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -129,22 +134,22 @@ static void race_pre_publish_hook(const char *path) {
 static void assert_persistence_error(const char *operation,
                                      const char *target,
                                      const char *current_item) {
-  ITEM_t *error = find_item(config.itemroot, "error");
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(VALUE_int, error->value.type);
-  ASSERT_EQ_INT(ERR_RUNTIME_PERSISTENCE, error->value.i);
+  ASSERT_EQ_INT(VALUE_int, item_value(error)->type);
+  ASSERT_EQ_INT(ERR_RUNTIME_PERSISTENCE, item_value(error)->i);
 
-  ITEM_t *message = find_item(config.itemroot, "error.msg");
+  ITEM_t *message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(message);
-  ASSERT_EQ_INT(VALUE_str, message->value.type);
-  ASSERT_TRUE(strstr(message->value.s, errmsg[ERR_RUNTIME_PERSISTENCE]) != NULL);
-  ASSERT_TRUE(strstr(message->value.s, operation) != NULL);
-  ASSERT_TRUE(strstr(message->value.s, target) != NULL);
+  ASSERT_EQ_INT(VALUE_str, item_value(message)->type);
+  ASSERT_TRUE(strstr(item_value(message)->s, errmsg[ERR_RUNTIME_PERSISTENCE]) != NULL);
+  ASSERT_TRUE(strstr(item_value(message)->s, operation) != NULL);
+  ASSERT_TRUE(strstr(item_value(message)->s, target) != NULL);
 
-  ITEM_t *provenance = find_item(config.itemroot, "error.item");
+  ITEM_t *provenance = find_item(itemstore_root(config.itemstore_ctx), "error.item");
   ASSERT_NOT_NULL(provenance);
-  ASSERT_EQ_INT(VALUE_str, provenance->value.type);
-  ASSERT_TRUE(strcmp(provenance->value.s, current_item) == 0);
+  ASSERT_EQ_INT(VALUE_str, item_value(provenance)->type);
+  ASSERT_TRUE(strcmp(item_value(provenance)->s, current_item) == 0);
 }
 
 static int persistence_sync_calls;
@@ -166,48 +171,48 @@ static bool count_persistence_directory_sync(const char *path) {
 void test_sys_item_libcalls(void) {
   setup_libcall_runtime();
 
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "parent.first",
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "parent.first",
                               (VALUE_t){VALUE_int, {.i = 1}}));
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "parent.second",
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "parent.second",
                               (VALUE_t){VALUE_int, {.i = 2}}));
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "victim",
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "victim",
                               (VALUE_t){VALUE_bool, {.i = 1}}));
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("victim")}});
-  (void)lc_sys_exists(test_ctx(), NULL, config.itemroot);
+  (void)lc_sys_exists(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(1, ret.i);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("missing")}});
-  (void)lc_sys_exists(test_ctx(), NULL, config.itemroot);
+  (void)lc_sys_exists(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("victim")}});
-  (void)lc_sys_delete(test_ctx(), NULL, config.itemroot);
+  (void)lc_sys_delete(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
-  ASSERT_TRUE(find_item(config.itemroot, "victim") == NULL);
+  ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "victim") == NULL);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("parent")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
-  (void)lc_sys_nthname(test_ctx(), NULL, config.itemroot);
+  (void)lc_sys_nthname(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, ret.type);
   ASSERT_TRUE(strcmp(ret.s, "second") == 0);
   FREE_STR(ret);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
-  (void)lc_sys_rootname(test_ctx(), NULL, config.itemroot);
+  (void)lc_sys_rootname(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, ret.type);
   ASSERT_TRUE(strcmp(ret.s, "parent") == 0);
   FREE_STR(ret);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
-  (void)lc_sys_exists(test_ctx(), NULL, config.itemroot);
+  (void)lc_sys_exists(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
@@ -221,15 +226,15 @@ void test_sys_persistence_libcalls(void) {
   char store_path[128];
   ASSERT_EQ_INT(0, test_make_temp_path("sin-sys-save", store_path,
                                       sizeof(store_path)));
-  ITEM_t *caller = insert_item(config.itemroot, "persistence.caller",
+  ITEM_t *caller = insert_item(itemstore_root(config.itemstore_ctx), "persistence.caller",
                                (VALUE_t){VALUE_bool, {.i = 1}});
   ASSERT_NOT_NULL(caller);
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "checkpoint.value",
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "checkpoint.value",
                               (VALUE_t){VALUE_int, {.i = 1}}));
 
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
-  ctx.itemroot = config.itemroot;
+  ctx.itemstore = config.itemstore_ctx;
   ctx.itemstore_filename = store_path;
   ctx.current_item = caller;
 
@@ -237,12 +242,12 @@ void test_sys_persistence_libcalls(void) {
   itemstore_set_directory_sync_hook_for_tests(
       count_persistence_directory_sync);
 
-  set_error_item(config.itemroot, ERR_RUNTIME_INVALIDARGS,
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
                  "unrelated prior error", caller);
-  ITEM_t *prior_message = find_item(config.itemroot, "error.msg");
+  ITEM_t *prior_message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(prior_message);
-  ASSERT_EQ_INT(VALUE_str, prior_message->value.type);
-  char *prior_message_text = strdup(prior_message->value.s);
+  ASSERT_EQ_INT(VALUE_str, item_value(prior_message)->type);
+  char *prior_message_text = strdup(item_value(prior_message)->s);
   ASSERT_NOT_NULL(prior_message_text);
 
   config.itemstore_durability = ITEMSTORE_DURABLE_FULL;
@@ -253,23 +258,23 @@ void test_sys_persistence_libcalls(void) {
   assert_bool_return(pop_stack(config.vm->stack), 1);
   ASSERT_EQ_INT(0, persistence_sync_calls);
   ASSERT_EQ_INT(0, persistence_directory_sync_calls);
-  ITEM_t *error = find_item(config.itemroot, "error");
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, error->value.i);
-  prior_message = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
+  prior_message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(prior_message);
-  ASSERT_EQ_INT(VALUE_str, prior_message->value.type);
-  ASSERT_TRUE(strcmp(prior_message->value.s, prior_message_text) == 0);
+  ASSERT_EQ_INT(VALUE_str, item_value(prior_message)->type);
+  ASSERT_TRUE(strcmp(item_value(prior_message)->s, prior_message_text) == 0);
   free(prior_message_text);
 
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "checkpoint.value",
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "checkpoint.value",
                               (VALUE_t){VALUE_int, {.i = 2}}));
   ITEM_t *loaded = load_itemstore(store_path);
   ASSERT_NOT_NULL(loaded);
   ITEM_t *loaded_checkpoint = find_item(loaded, "checkpoint.value");
   ASSERT_NOT_NULL(loaded_checkpoint);
-  ASSERT_EQ_INT(VALUE_int, loaded_checkpoint->value.type);
-  ASSERT_EQ_INT(1, loaded_checkpoint->value.i);
+  ASSERT_EQ_INT(VALUE_int, item_value(loaded_checkpoint)->type);
+  ASSERT_EQ_INT(1, item_value(loaded_checkpoint)->i);
   destroy_item(loaded);
 
   config.itemstore_durability = ITEMSTORE_DURABLE_FAST;
@@ -281,13 +286,13 @@ void test_sys_persistence_libcalls(void) {
   ASSERT_EQ_INT(1, persistence_sync_calls);
   ASSERT_EQ_INT(1, persistence_directory_sync_calls);
 
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "backup.only",
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "backup.only",
                               (VALUE_t){VALUE_int, {.i = 3}}));
-  set_error_item(config.itemroot, ERR_RUNTIME_INVALIDARGS,
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
                  "backup prior error", caller);
-  prior_message = find_item(config.itemroot, "error.msg");
+  prior_message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(prior_message);
-  prior_message_text = strdup(prior_message->value.s);
+  prior_message_text = strdup(item_value(prior_message)->s);
   ASSERT_NOT_NULL(prior_message_text);
   ctx.itemstore_durability = ITEMSTORE_DURABLE_FULL;
   persistence_sync_calls = 0;
@@ -296,12 +301,12 @@ void test_sys_persistence_libcalls(void) {
   assert_bool_return(pop_stack(config.vm->stack), 1);
   ASSERT_EQ_INT(1, persistence_sync_calls);
   ASSERT_EQ_INT(1, persistence_directory_sync_calls);
-  error = find_item(config.itemroot, "error");
+  error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, error->value.i);
-  prior_message = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
+  prior_message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(prior_message);
-  ASSERT_TRUE(strcmp(prior_message->value.s, prior_message_text) == 0);
+  ASSERT_TRUE(strcmp(item_value(prior_message)->s, prior_message_text) == 0);
   free(prior_message_text);
 
   loaded = load_itemstore(store_path);
@@ -321,7 +326,7 @@ void test_sys_persistence_libcalls(void) {
   ASSERT_NOT_NULL(find_item(loaded, "backup.only"));
   loaded_checkpoint = find_item(loaded, "checkpoint.value");
   ASSERT_NOT_NULL(loaded_checkpoint);
-  ASSERT_EQ_INT(2, loaded_checkpoint->value.i);
+  ASSERT_EQ_INT(2, item_value(loaded_checkpoint)->i);
   destroy_item(loaded);
   ASSERT_EQ_INT(0, unlink(backups.gl_pathv[0]));
   globfree(&backups);
@@ -344,7 +349,7 @@ void test_sys_persistence_libcalls(void) {
   written = snprintf(backup_one, sizeof(backup_one), "%s_1", base_backup);
   ASSERT_TRUE(written > 0 && (size_t)written < sizeof(backup_one));
 
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "backup.e2e",
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "backup.e2e",
                               (VALUE_t){VALUE_int, {.i = 42}}));
   ctx.itemstore_durability = ITEMSTORE_DURABLE_FAST;
   (void)lc_sys_backup(&ctx, NULL, caller);
@@ -359,7 +364,7 @@ void test_sys_persistence_libcalls(void) {
   ASSERT_TRUE(written > 0 && (size_t)written < sizeof(backup_one_snapshot));
   ASSERT_EQ_INT(0, link(backup_one, backup_one_snapshot));
 
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "backup.e2e",
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "backup.e2e",
                               (VALUE_t){VALUE_int, {.i = 99}}));
   (void)lc_sys_backup(&ctx, NULL, caller);
   assert_bool_return(pop_stack(config.vm->stack), 1);
@@ -370,7 +375,7 @@ void test_sys_persistence_libcalls(void) {
   ASSERT_NOT_NULL(loaded);
   ITEM_t *backup_two_value = find_item(loaded, "backup.e2e");
   ASSERT_NOT_NULL(backup_two_value);
-  ASSERT_EQ_INT(99, backup_two_value->value.i);
+  ASSERT_EQ_INT(99, item_value(backup_two_value)->i);
   destroy_item(loaded);
   assert_file_bytes_equal(base_snapshot, base_backup,
                           "sys.backup preserves occupied target bytes");
@@ -389,7 +394,7 @@ void test_sys_persistence_libcalls(void) {
   race_pre_publish_path_matches = false;
   race_pre_publish_symlink_created = false;
   itemstore_set_pre_publish_hook_for_tests(race_pre_publish_hook);
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "backup.race",
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "backup.race",
                               (VALUE_t){VALUE_int, {.i = 77}}));
   (void)lc_sys_backup(&ctx, NULL, caller);
   assert_bool_return(pop_stack(config.vm->stack), 1);
@@ -433,9 +438,9 @@ void test_sys_persistence_libcalls(void) {
   assert_bool_return(pop_stack(config.vm->stack), 0);
   assert_persistence_error("sys.backup", failing_path,
                            "persistence.caller");
-  ITEM_t *backup_failure_message = find_item(config.itemroot, "error.msg");
+  ITEM_t *backup_failure_message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(backup_failure_message);
-  const char *backup_target = strstr(backup_failure_message->value.s,
+  const char *backup_target = strstr(item_value(backup_failure_message)->s,
                                      failing_path);
   ASSERT_NOT_NULL(backup_target);
   ASSERT_EQ_INT('_', backup_target[strlen(failing_path)]);
@@ -451,13 +456,13 @@ void test_sys_persistence_libcalls(void) {
                            "persistence.caller");
 
   ctx.itemstore_filename = store_path;
-  ctx.itemroot = NULL;
+  ctx.itemstore = NULL;
   (void)lc_sys_save(&ctx, NULL, caller);
   assert_bool_return(pop_stack(config.vm->stack), 0);
   (void)lc_sys_backup(&ctx, NULL, caller);
   assert_bool_return(pop_stack(config.vm->stack), 0);
 
-  ctx.itemroot = config.itemroot;
+  ctx.itemstore = config.itemstore_ctx;
   char invalid_runtime_path[128];
   ASSERT_EQ_INT(0, test_make_temp_path("sin-sys-save-invalid-runtime",
                                       invalid_runtime_path,
@@ -499,24 +504,24 @@ void test_sys_persistence_libcalls(void) {
 void test_sys_introspection_libcalls(void) {
   setup_libcall_runtime();
 
-  ITEM_t *top = insert_halt_code(config.itemroot, "topcode");
-  ITEM_t *nested = insert_halt_code(config.itemroot, "scope.runner");
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "scope.runner.relative",
+  ITEM_t *top = insert_halt_code(itemstore_root(config.itemstore_ctx), "topcode");
+  ITEM_t *nested = insert_halt_code(itemstore_root(config.itemstore_ctx), "scope.runner");
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "scope.runner.relative",
                               (VALUE_t){VALUE_bool, {.i = 1}}));
-  insert_halt_code(config.itemroot, "types.code");
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "types.nil", VALUE_NIL));
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "types.bool",
+  insert_halt_code(itemstore_root(config.itemstore_ctx), "types.code");
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "types.nil", VALUE_NIL));
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "types.bool",
                               (VALUE_t){VALUE_bool, {.i = 1}}));
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "types.int",
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "types.int",
                               (VALUE_t){VALUE_int, {.i = 42}}));
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "types.float",
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "types.float",
                               (VALUE_t){VALUE_float, {.f = 1.25}}));
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "types.string",
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "types.string",
                               (VALUE_t){VALUE_str, {.s = strdup("value")}}));
 
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
-  ctx.itemroot = config.itemroot;
+  ctx.itemstore = config.itemstore_ctx;
   ctx.current_item = top;
 
   assert_string_return(call_sys_noarg(lc_sys_thisitem, &ctx), "topcode");
@@ -534,7 +539,7 @@ void test_sys_introspection_libcalls(void) {
   ASSERT_EQ_INT(VALUE_nil, result.type);
   ctx.current_item = nested;
 
-  set_error_item(config.itemroot, ERR_RUNTIME_NOSUCHITEM,
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_NOSUCHITEM,
                  "unrelated prior error", nested);
   assert_string_return(call_sys_noarg(lc_sys_thisitem, &ctx), "scope.runner");
   assert_string_return(call_sys_noarg(lc_sys_parentitem, &ctx), "scope");
@@ -562,9 +567,9 @@ void test_sys_introspection_libcalls(void) {
   result = call_sys_name(lc_sys_itemtype, &ctx,
       (VALUE_t){VALUE_str, {.s = strdup("invalid-name!")}});
   ASSERT_EQ_INT(VALUE_nil, result.type);
-  ITEM_t *error = find_item(config.itemroot, "error");
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, error->value.i);
+  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, item_value(error)->i);
 
   result = call_sys_name(lc_sys_childcount, &ctx,
       (VALUE_t){VALUE_str, {.s = strdup("types")}});
@@ -585,9 +590,9 @@ void test_sys_introspection_libcalls(void) {
   result = call_sys_name(lc_sys_childcount, &ctx,
       (VALUE_t){VALUE_str, {.s = strdup("invalid-name!")}});
   ASSERT_EQ_INT(VALUE_nil, result.type);
-  error = find_item(config.itemroot, "error");
+  error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, error->value.i);
+  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, item_value(error)->i);
 
   int64_t enumerated_children = 0;
   for (int64_t i = 0; i < type_child_count; i++) {
@@ -658,37 +663,37 @@ void test_sys_introspection_libcalls(void) {
   ASSERT_TRUE((uint64_t)monotime_first.i >= mono_before);
   ASSERT_TRUE((uint64_t)monotime_second.i <= mono_after);
 
-  error = find_item(config.itemroot, "error");
+  error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, error->value.i);
+  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, item_value(error)->i);
 
   result = call_sys_name(lc_sys_itemtype, &ctx,
                          (VALUE_t){VALUE_int, {.i = 1}});
   ASSERT_EQ_INT(VALUE_nil, result.type);
-  error = find_item(config.itemroot, "error");
+  error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, error->value.i);
-  ITEM_t *message = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
+  ITEM_t *message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(message);
-  ASSERT_EQ_INT(VALUE_str, message->value.type);
-  ASSERT_TRUE(strstr(message->value.s, "sys.itemtype") != NULL);
-  ITEM_t *provenance = find_item(config.itemroot, "error.item");
+  ASSERT_EQ_INT(VALUE_str, item_value(message)->type);
+  ASSERT_TRUE(strstr(item_value(message)->s, "sys.itemtype") != NULL);
+  ITEM_t *provenance = find_item(itemstore_root(config.itemstore_ctx), "error.item");
   ASSERT_NOT_NULL(provenance);
-  ASSERT_EQ_INT(VALUE_str, provenance->value.type);
-  ASSERT_TRUE(strcmp(provenance->value.s, "scope.runner") == 0);
+  ASSERT_EQ_INT(VALUE_str, item_value(provenance)->type);
+  ASSERT_TRUE(strcmp(item_value(provenance)->s, "scope.runner") == 0);
 
   result = call_sys_name(lc_sys_childcount, &ctx,
                          (VALUE_t){VALUE_bool, {.i = 1}});
   ASSERT_EQ_INT(VALUE_nil, result.type);
-  error = find_item(config.itemroot, "error");
+  error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, error->value.i);
-  message = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
+  message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(message);
-  ASSERT_TRUE(strstr(message->value.s, "sys.childcount") != NULL);
-  provenance = find_item(config.itemroot, "error.item");
+  ASSERT_TRUE(strstr(item_value(message)->s, "sys.childcount") != NULL);
+  provenance = find_item(itemstore_root(config.itemstore_ctx), "error.item");
   ASSERT_NOT_NULL(provenance);
-  ASSERT_TRUE(strcmp(provenance->value.s, "scope.runner") == 0);
+  ASSERT_TRUE(strcmp(item_value(provenance)->s, "scope.runner") == 0);
 
   ASSERT_EQ_INT(-1, config.vm->stack->current);
   teardown_libcall_runtime();
@@ -722,13 +727,13 @@ void test_sys_wall_milliseconds_boundaries(void) {
 void test_sys_caller_paramcount_libcalls(void) {
   setup_libcall_runtime();
 
-  ITEM_t *caller_a = insert_halt_code(config.itemroot, "calls.a");
-  ITEM_t *caller_b = insert_halt_code(config.itemroot, "calls.b");
-  ITEM_t *callee_c = insert_halt_code(config.itemroot, "calls.c");
-  ITEM_t *direct_invoker = insert_halt_code(config.itemroot, "calls.invoker");
-  ITEM_t *param_context = insert_halt_code(config.itemroot,
+  ITEM_t *caller_a = insert_halt_code(itemstore_root(config.itemstore_ctx), "calls.a");
+  ITEM_t *caller_b = insert_halt_code(itemstore_root(config.itemstore_ctx), "calls.b");
+  ITEM_t *callee_c = insert_halt_code(itemstore_root(config.itemstore_ctx), "calls.c");
+  ITEM_t *direct_invoker = insert_halt_code(itemstore_root(config.itemstore_ctx), "calls.invoker");
+  ITEM_t *param_context = insert_halt_code(itemstore_root(config.itemstore_ctx),
                                            "params.scope.runner");
-  ITEM_t *zero_params = insert_halt_code(config.itemroot,
+  ITEM_t *zero_params = insert_halt_code(itemstore_root(config.itemstore_ctx),
                                          "params.scope.runner.zero");
   uint8_t *multiple_bytecode = malloc(3u);
   ASSERT_NOT_NULL(multiple_bytecode);
@@ -736,23 +741,23 @@ void test_sys_caller_paramcount_libcalls(void) {
   multiple_bytecode[1] = 3;
   multiple_bytecode[2] = (uint8_t)'h';
   ITEM_t *multiple_params = insert_code_item(
-      config.itemroot, "params.scope.runner.multiple", 3u,
+      itemstore_root(config.itemstore_ctx), "params.scope.runner.multiple", 3u,
       multiple_bytecode);
   ASSERT_NOT_NULL(multiple_params);
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "params.value", VALUE_TRUE));
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "params.value", VALUE_TRUE));
   ITEM_t *missing_bytecode = insert_code_item(
-      config.itemroot, "params.missing_bytecode", 0, NULL);
+      itemstore_root(config.itemstore_ctx), "params.missing_bytecode", 0, NULL);
   ASSERT_NOT_NULL(missing_bytecode);
   uint8_t *short_bytecode = malloc(1u);
   ASSERT_NOT_NULL(short_bytecode);
   short_bytecode[0] = 0;
   ITEM_t *short_header = insert_code_item(
-      config.itemroot, "params.short_header", 1u, short_bytecode);
+      itemstore_root(config.itemstore_ctx), "params.short_header", 1u, short_bytecode);
   ASSERT_NOT_NULL(short_header);
 
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
-  ctx.itemroot = config.itemroot;
+  ctx.itemstore = config.itemstore_ctx;
   ctx.current_item = callee_c;
   ctx.invocation_callstack_floor = 0;
 
@@ -762,7 +767,7 @@ void test_sys_caller_paramcount_libcalls(void) {
   ASSERT_TRUE(lc_sys_calleritem(NULL, &nextop_marker, NULL) ==
               &nextop_marker);
 
-  set_error_item(config.itemroot, ERR_RUNTIME_NOSUCHITEM,
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_NOSUCHITEM,
                  "unrelated prior error", callee_c);
   config.vm->callstack->current = 0;
   config.vm->callstack->entry[0].item = caller_a;
@@ -775,7 +780,7 @@ void test_sys_caller_paramcount_libcalls(void) {
   ASSERT_TRUE(strcmp(owned_first.s, "calls.a") == 0);
   ASSERT_TRUE(strcmp(owned_second.s, "calls.a") == 0);
   ASSERT_TRUE(owned_first.s != owned_second.s);
-  ASSERT_TRUE(owned_first.s != caller_a->name);
+  ASSERT_TRUE(owned_first.s != item_layer_name(caller_a));
   value_free(&owned_first);
   value_free(&owned_second);
 
@@ -789,9 +794,9 @@ void test_sys_caller_paramcount_libcalls(void) {
   assert_string_return(call_sys_noarg(lc_sys_calleritem, &ctx),
                        "calls.invoker");
   config.vm->callstack->current = -1;
-  ITEM_t *error = find_item(config.itemroot, "error");
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, error->value.i);
+  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, item_value(error)->i);
 
   ctx.current_item = param_context;
   result = call_sys_name(lc_sys_paramcount, &ctx,
@@ -802,7 +807,7 @@ void test_sys_caller_paramcount_libcalls(void) {
       (VALUE_t){VALUE_str, {.s = strdup("params.scope.runner.multiple")}});
   ASSERT_EQ_INT(VALUE_int, result.type);
   ASSERT_EQ_INT(3, result.i);
-  ASSERT_EQ_INT(0, zero_params->bytecode[1]);
+  ASSERT_EQ_INT(0, item_bytecode(zero_params)[1]);
 
   static const char *const nil_names[] = {
     "invalid-name!", "params.missing", "params.value",
@@ -812,25 +817,25 @@ void test_sys_caller_paramcount_libcalls(void) {
     result = call_sys_name(lc_sys_paramcount, &ctx,
         (VALUE_t){VALUE_str, {.s = strdup(nil_names[i])}});
     ASSERT_EQ_INT(VALUE_nil, result.type);
-    error = find_item(config.itemroot, "error");
+    error = find_item(itemstore_root(config.itemstore_ctx), "error");
     ASSERT_NOT_NULL(error);
-    ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, error->value.i);
+    ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, item_value(error)->i);
   }
 
   result = call_sys_name(lc_sys_paramcount, &ctx,
                          (VALUE_t){VALUE_int, {.i = 1}});
   ASSERT_EQ_INT(VALUE_nil, result.type);
-  error = find_item(config.itemroot, "error");
+  error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, error->value.i);
-  ITEM_t *message = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
+  ITEM_t *message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(message);
-  ASSERT_EQ_INT(VALUE_str, message->value.type);
-  ASSERT_TRUE(strstr(message->value.s, "sys.paramcount") != NULL);
-  ITEM_t *provenance = find_item(config.itemroot, "error.item");
+  ASSERT_EQ_INT(VALUE_str, item_value(message)->type);
+  ASSERT_TRUE(strstr(item_value(message)->s, "sys.paramcount") != NULL);
+  ITEM_t *provenance = find_item(itemstore_root(config.itemstore_ctx), "error.item");
   ASSERT_NOT_NULL(provenance);
-  ASSERT_EQ_INT(VALUE_str, provenance->value.type);
-  ASSERT_TRUE(strcmp(provenance->value.s, "params.scope.runner") == 0);
+  ASSERT_EQ_INT(VALUE_str, item_value(provenance)->type);
+  ASSERT_TRUE(strcmp(item_value(provenance)->s, "params.scope.runner") == 0);
 
   ASSERT_EQ_INT(-1, config.vm->stack->current);
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
@@ -850,17 +855,17 @@ void test_sys_source_libcall(void) {
 
   char srcroot[] = "/tmp/sin-sys-source-XXXXXX";
   ASSERT_NOT_NULL(mkdtemp(srcroot));
-  ITEM_t *runner = insert_halt_code(config.itemroot, "source.scope.runner");
-  ITEM_t *target = insert_halt_code(config.itemroot,
+  ITEM_t *runner = insert_halt_code(itemstore_root(config.itemstore_ctx), "source.scope.runner");
+  ITEM_t *target = insert_halt_code(itemstore_root(config.itemstore_ctx),
                                     "source.scope.runner.target");
-  ITEM_t *empty = insert_halt_code(config.itemroot,
+  ITEM_t *empty = insert_halt_code(itemstore_root(config.itemstore_ctx),
                                    "source.scope.runner.empty");
-  insert_halt_code(config.itemroot, "source.scope.runner.missing");
-  ITEM_t *oversized = insert_halt_code(config.itemroot,
+  insert_halt_code(itemstore_root(config.itemstore_ctx), "source.scope.runner.missing");
+  ITEM_t *oversized = insert_halt_code(itemstore_root(config.itemstore_ctx),
                                        "source.scope.runner.oversized");
-  ITEM_t *embedded_nul = insert_halt_code(config.itemroot,
+  ITEM_t *embedded_nul = insert_halt_code(itemstore_root(config.itemstore_ctx),
                                           "source.scope.runner.nul");
-  ASSERT_NOT_NULL(insert_item(config.itemroot, "source.value", VALUE_TRUE));
+  ASSERT_NOT_NULL(insert_item(itemstore_root(config.itemstore_ctx), "source.value", VALUE_TRUE));
 
   char exact_source[] = "target = code (\n  42;\n);\n";
   ASSERT_TRUE(save_itemsource_in_srcroot(target, exact_source, srcroot));
@@ -890,11 +895,11 @@ void test_sys_source_libcall(void) {
 
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
-  ctx.itemroot = config.itemroot;
+  ctx.itemstore = config.itemstore_ctx;
   ctx.current_item = runner;
   ctx.srcroot = srcroot;
 
-  set_error_item(config.itemroot, ERR_RUNTIME_NOSUCHITEM,
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_NOSUCHITEM,
                  "unrelated prior error", runner);
   VALUE_t owned_first = call_sys_name(lc_sys_source, &ctx,
       (VALUE_t){VALUE_str, {.s = strdup(".target")}});
@@ -926,67 +931,67 @@ void test_sys_source_libcall(void) {
         (VALUE_t){VALUE_str, {.s = strdup(nil_names[i])}});
     ASSERT_EQ_INT(VALUE_nil, result.type);
   }
-  ITEM_t *error = find_item(config.itemroot, "error");
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, error->value.i);
+  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, item_value(error)->i);
 
   result = call_sys_name(lc_sys_source, &ctx,
                          (VALUE_t){VALUE_int, {.i = 1}});
   ASSERT_EQ_INT(VALUE_nil, result.type);
-  error = find_item(config.itemroot, "error");
+  error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, error->value.i);
-  ITEM_t *message = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
+  ITEM_t *message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(message);
-  ASSERT_EQ_INT(VALUE_str, message->value.type);
-  ASSERT_TRUE(strstr(message->value.s, "sys.source") != NULL);
-  ITEM_t *provenance = find_item(config.itemroot, "error.item");
+  ASSERT_EQ_INT(VALUE_str, item_value(message)->type);
+  ASSERT_TRUE(strstr(item_value(message)->s, "sys.source") != NULL);
+  ITEM_t *provenance = find_item(itemstore_root(config.itemstore_ctx), "error.item");
   ASSERT_NOT_NULL(provenance);
-  ASSERT_EQ_INT(VALUE_str, provenance->value.type);
-  ASSERT_TRUE(strcmp(provenance->value.s, "source.scope.runner") == 0);
+  ASSERT_EQ_INT(VALUE_str, item_value(provenance)->type);
+  ASSERT_TRUE(strcmp(item_value(provenance)->s, "source.scope.runner") == 0);
 
   result = call_sys_name(lc_sys_source, &ctx,
       (VALUE_t){VALUE_str, {.s = strdup(".missing")}});
   assert_string_return(result, "");
-  error = find_item(config.itemroot, "error");
+  error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_SOURCE, error->value.i);
-  message = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(ERR_RUNTIME_SOURCE, item_value(error)->i);
+  message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(message);
-  ASSERT_TRUE(strstr(message->value.s, "sys.source") != NULL);
-  ASSERT_TRUE(strstr(message->value.s, "source.sin") != NULL);
-  provenance = find_item(config.itemroot, "error.item");
+  ASSERT_TRUE(strstr(item_value(message)->s, "sys.source") != NULL);
+  ASSERT_TRUE(strstr(item_value(message)->s, "source.sin") != NULL);
+  provenance = find_item(itemstore_root(config.itemstore_ctx), "error.item");
   ASSERT_NOT_NULL(provenance);
-  ASSERT_TRUE(strcmp(provenance->value.s, "source.scope.runner") == 0);
+  ASSERT_TRUE(strcmp(item_value(provenance)->s, "source.scope.runner") == 0);
 
   ctx.srcroot = NULL;
   result = call_sys_name(lc_sys_source, &ctx,
       (VALUE_t){VALUE_str, {.s = strdup(".target")}});
   assert_string_return(result, "");
-  error = find_item(config.itemroot, "error");
+  error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_SOURCE, error->value.i);
+  ASSERT_EQ_INT(ERR_RUNTIME_SOURCE, item_value(error)->i);
 
   ctx.srcroot = srcroot;
   result = call_sys_name(lc_sys_source, &ctx,
       (VALUE_t){VALUE_str, {.s = strdup(".oversized")}});
   assert_string_return(result, "");
-  error = find_item(config.itemroot, "error");
+  error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_SOURCE, error->value.i);
-  message = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(ERR_RUNTIME_SOURCE, item_value(error)->i);
+  message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(message);
-  ASSERT_TRUE(strstr(message->value.s, "exceeds") != NULL);
+  ASSERT_TRUE(strstr(item_value(message)->s, "exceeds") != NULL);
 
   result = call_sys_name(lc_sys_source, &ctx,
       (VALUE_t){VALUE_str, {.s = strdup(".nul")}});
   assert_string_return(result, "");
-  error = find_item(config.itemroot, "error");
+  error = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(error);
-  ASSERT_EQ_INT(ERR_RUNTIME_SOURCE, error->value.i);
-  message = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(ERR_RUNTIME_SOURCE, item_value(error)->i);
+  message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(message);
-  ASSERT_TRUE(strstr(message->value.s, "NUL") != NULL);
+  ASSERT_TRUE(strstr(item_value(message)->s, "NUL") != NULL);
 
   ASSERT_EQ_INT(-1, config.vm->stack->current);
   ASSERT_EQ_INT(-1, config.vm->callstack->current);

@@ -37,7 +37,7 @@ CONFIG_t config;
 
 static bool runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
   runtime_context_init(ctx, vm);
-  ctx->itemroot = config.itemroot;
+  ctx->itemstore = config.itemstore_ctx;
   ctx->loop = config.loop;
   ctx->itemstore_filename = config.itemstore;
   ctx->itemstore_durability = config.itemstore_durability;
@@ -116,17 +116,17 @@ static void usage_error(const char *message) {
   logerr("Try 'sin --help' for more information.\n");
 }
 
-static ITEM_t *load_or_create_itemstore_with_options(const char *filename,
+static ITEMSTORE_t *load_or_create_itemstore_with_options(const char *filename,
                                                  bool strict_validation) {
   struct stat buffer;
   if (stat(filename, &buffer) == 0) {
     logmsg("Loading itemstore from %s.\n", filename);
-    ITEM_t *root = load_itemstore_with_options(filename, strict_validation);
-    if (!root) {
+    ITEMSTORE_t *store = itemstore_load_with_options(filename, strict_validation);
+    if (!store) {
       logerr("Existing itemstore '%s' could not be loaded; refusing to "
              "replace it.\n", filename);
     }
-    return root;
+    return store;
   }
 
   if (errno != ENOENT) {
@@ -136,7 +136,7 @@ static ITEM_t *load_or_create_itemstore_with_options(const char *filename,
   }
 
   logmsg("Creating a new itemstore, which will be saved as %s.\n", filename);
-  return make_root_item("root");
+  return itemstore_create("root");
 }
 
 static bool flag_requested(int argc, char **argv, const char *flag) {
@@ -176,6 +176,7 @@ typedef struct SinStartupState {
   bool boot_vm_initialized;
   bool boot_completed;
   RuntimeContext boot_ctx;
+  ITEMSTORE_t *boot_store;
   ITEM_t *boot_item;
 } SinStartupState;
 
@@ -219,7 +220,7 @@ static int init_default_config(int argc, char **argv, SinStartupOptions *startup
   startup->bytecode = NULL;
   startup->loadonly = false;
 
-  config.itemroot = NULL;
+  config.itemstore_ctx = NULL;
   config.srcroot = NULL;
   config.itemstore = NULL;
   config.itemstore_durability = ITEMSTORE_DURABLE_FULL;
@@ -328,17 +329,17 @@ static SinParseResult parse_sin_options(int argc, char **argv,
         printf("sin %s\n", SINVERSION);
         return SIN_PARSE_EXIT_SUCCESS;
       case 'i':
-        destroy_item(config.itemroot);
-        config.itemroot = NULL;
+        itemstore_destroy(config.itemstore_ctx);
+        config.itemstore_ctx = NULL;
         free(config.itemstore);
         config.itemstore = strdup(optarg);
         if (!config.itemstore) {
           logerr("Unable to allocate itemstore filename.\n");
           return EXIT_FAILURE;
         }
-        config.itemroot = load_or_create_itemstore_with_options(config.itemstore,
+        config.itemstore_ctx = load_or_create_itemstore_with_options(config.itemstore,
             config.strict_validation);
-        if (!config.itemroot) return EXIT_FAILURE;
+        if (!config.itemstore_ctx) return EXIT_FAILURE;
         break;
       case 'l':
         if (optarg == NULL && optind < argc && argv[optind][0] != '-') optarg = argv[optind++];
@@ -346,12 +347,12 @@ static SinParseResult parse_sin_options(int argc, char **argv,
         log_to_file(optarg != NULL ? optarg : "sin");
         break;
       case 'n': {
-        if (!config.itemroot) {
+        if (!config.itemstore_ctx) {
           logerr("If -n option is given, -i option must be given first.\n");
           return EXIT_FAILURE;
         }
-        ITEM_t *input_item = find_item(config.itemroot, optarg);
-        if (!input_item || input_item->type != ITEM_code) {
+        ITEM_t *input_item = find_item(itemstore_root(config.itemstore_ctx), optarg);
+        if (!input_item || item_kind(input_item) != ITEM_code) {
           logerr("Item `%s` does not exist, or is not a code item.\n", optarg);
           return EXIT_FAILURE;
         }
@@ -445,15 +446,15 @@ static int ensure_source_root(void) {
 }
 
 static int ensure_itemstore(void) {
-  if (!config.itemroot) {
+  if (!config.itemstore_ctx) {
     config.itemstore = strdup("items.dat");
     if (!config.itemstore) {
       logerr("Unable to allocate itemstore filename.\n");
       return EXIT_FAILURE;
     }
-    config.itemroot = load_or_create_itemstore_with_options(config.itemstore,
+    config.itemstore_ctx = load_or_create_itemstore_with_options(config.itemstore,
             config.strict_validation);
-    if (!config.itemroot) return EXIT_FAILURE;
+    if (!config.itemstore_ctx) return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
 }
@@ -492,9 +493,10 @@ static void destroy_boot_runtime(SinStartupState *state, bool destroy_boot_item)
     destroy_vm(vm);
   }
   if (destroy_boot_item && state->boot_item) {
-    ITEM_t *boot = state->boot_item;
+    ITEMSTORE_t *boot_store = state->boot_store;
+    state->boot_store = NULL;
     state->boot_item = NULL;
-    destroy_item(boot);
+    itemstore_destroy(boot_store);
   }
 }
 
@@ -508,14 +510,13 @@ restart_boot:
   }
   if (ensure_itemstore() != EXIT_SUCCESS) goto boot_failure;
   if (!state->boot_item) {
-    state->boot_item = make_root_item("boot");
-    if (!state->boot_item) {
+    state->boot_store = itemstore_create_boot("boot", startup->bytecode,
+                                              (uint32_t)startup->filesize);
+    if (!state->boot_store) {
       logerr("Unable to allocate boot item.\n");
       goto boot_failure;
     }
-    state->boot_item->type = ITEM_code;
-    state->boot_item->bytecode = startup->bytecode;
-    state->boot_item->bytecode_len = (uint32_t)startup->filesize;
+    state->boot_item = itemstore_root(state->boot_store);
     startup->bytecode = NULL;
   }
   if (!state->boot_vm_initialized) {
@@ -691,7 +692,7 @@ static int shutdown_startup(SinStartupState *state, SinStartupOptions *startup,
     }
   }
   if (persist_itemstore && config.safe_shutdown) {
-    if (!save_itemstore_with_options(config.itemstore, config.itemroot,
+    if (!itemstore_save_with_options(config.itemstore, config.itemstore_ctx,
                                      config.itemstore_durability)) {
       logerr("Shutdown could not persist itemstore '%s'.\n", config.itemstore);
       if (runloop_retval == 0) runloop_retval = EXIT_FAILURE;
@@ -707,8 +708,8 @@ static int shutdown_startup(SinStartupState *state, SinStartupOptions *startup,
   free(config.input);
   free(config.inputline);
   free(config.inputtext);
-  destroy_item(config.itemroot);
-  config.itemroot = NULL;
+  itemstore_destroy(config.itemstore_ctx);
+  config.itemstore_ctx = NULL;
   if (persist_itemstore || state->log_redirected) close_log();
   return runloop_retval;
 }

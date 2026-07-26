@@ -1,3 +1,4 @@
+#include "item.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,7 +12,6 @@
 #include "error.h"
 #include "interpret.h"
 #include "item.h"
-#include "item_internal.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 #include "task.h"
@@ -85,7 +85,7 @@ extern CONFIG_t config;
 static RuntimeContext test_runtime_ctx;
 RuntimeContext *test_ctx(void) {
   runtime_context_init(&test_runtime_ctx, config.vm);
-  test_runtime_ctx.itemroot = config.itemroot;
+  test_runtime_ctx.itemstore = config.itemstore_ctx;
   test_runtime_ctx.strict_validation = config.strict_validation;
   test_runtime_ctx.strict_runtime_contracts = config.strict_runtime_contracts;
   test_runtime_ctx.maxconns = &config.maxconns;
@@ -99,8 +99,8 @@ RuntimeContext *test_ctx(void) {
 void setup_libcall_runtime(void) {
   memset(&config, 0, sizeof(config));
   init_errmsg();
-  config.itemroot = make_root_item("root");
-  ASSERT_NOT_NULL(config.itemroot);
+  config.itemstore_ctx = itemstore_owner(make_root_item("root"));
+  ASSERT_NOT_NULL(itemstore_root(config.itemstore_ctx));
   config.vm = make_vm();
   ASSERT_NOT_NULL(config.vm);
 }
@@ -117,17 +117,17 @@ void teardown_libcall_runtime(void) {
     line = NULL;
   }
   destroy_vm(config.vm);
-  destroy_item(config.itemroot);
+  destroy_item(itemstore_root(config.itemstore_ctx));
 }
 void assert_invalid_args_detail_contains(const char *expected) {
-  ITEM_t *err = find_item(config.itemroot, "error");
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(VALUE_int, err->value.type);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
-  ITEM_t *msg = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(VALUE_int, item_value(err)->type);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(err)->i);
+  ITEM_t *msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(msg);
-  ASSERT_EQ_INT(VALUE_str, msg->value.type);
-  ASSERT_TRUE(strstr(msg->value.s, expected) != NULL);
+  ASSERT_EQ_INT(VALUE_str, item_value(msg)->type);
+  ASSERT_TRUE(strstr(item_value(msg)->s, expected) != NULL);
 }
 
 void assert_invalid_args_float_detail_contains(const char *expected) {

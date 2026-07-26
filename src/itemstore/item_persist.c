@@ -31,6 +31,7 @@ extern CONFIG_t config;
 
 static ITEMSTORE_LOAD_CONSTRUCTOR_FAILURE_HOOK_t
     load_constructor_failure_hook;
+static ITEMSTORE_SYNC_HOOK_t sync_hook_override;
 
 bool itemstore_default_sync_hook(FILE *file, const char *path) {
 #ifdef _WIN32
@@ -84,9 +85,7 @@ static bool itemstore_default_directory_sync_hook(const char *path) {
 }
 
 void itemstore_set_sync_hook_for_tests(ITEMSTORE_SYNC_HOOK_t hook) {
-  itemstore_default_context()->sync_hook = hook != NULL
-      ? hook
-      : itemstore_default_sync_hook;
+  sync_hook_override = hook;
 }
 
 void itemstore_set_load_constructor_failure_hook_for_tests(
@@ -507,7 +506,12 @@ static ITEMSTORE_SAVE_RESULT_e itemstore_save_core(
   }
 
   if (itemstore_durability_requires_sync(durability)
-      && !itemstore_default_context()->sync_hook(file, temp_path)) {
+      && !(sync_hook_override != NULL
+               ? sync_hook_override
+               : (root != NULL && root->store != NULL
+                      && root->store->context.sync_hook != NULL
+                  ? root->store->context.sync_hook
+                  : itemstore_default_sync_hook))(file, temp_path)) {
     logerr("Failed to sync temporary itemstore %s.\n", temp_path);
     goto cleanup;
   }

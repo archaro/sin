@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include "test_helpers.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +9,8 @@
 
 #include "item.h"
 #include "item_internal.h"
+#define itemstore_default_context() (&itemstore_owner(root)->context)
+#define get_itemstore_generation() itemstore_generation(itemstore_owner(root))
 #include "test_assert.h"
 
 static uint64_t itemstore_bench_now_ns(void) {
@@ -375,6 +378,33 @@ void test_find_item_cached_distinguishes_roots(void) {
   destroy_item(second_root);
 }
 
+void test_itemstore_cache_state_is_store_local(void) {
+  ITEMSTORE_t *first = itemstore_create("first");
+  ITEMSTORE_t *second = itemstore_create("second");
+  ASSERT_NOT_NULL(first);
+  ASSERT_NOT_NULL(second);
+  ITEM_t *first_root = itemstore_root(first);
+  ITEM_t *second_root = itemstore_root(second);
+  ASSERT_NOT_NULL(insert_item(first_root, "shared", (VALUE_t){VALUE_int, {.i = 1}}));
+  ASSERT_NOT_NULL(insert_item(second_root, "shared", (VALUE_t){VALUE_int, {.i = 2}}));
+  ASSERT_NOT_NULL(find_item_cached(first_root, "shared", NULL));
+  ASSERT_NOT_NULL(find_item_cached(second_root, "shared", NULL));
+  uint64_t first_generation = itemstore_generation(first);
+  uint64_t second_generation = itemstore_generation(second);
+  uint64_t second_hits = itemstore_cache_hits(second);
+  uint64_t second_misses = itemstore_cache_misses(second);
+  ASSERT_NOT_NULL(find_item_cached(second_root, "shared", NULL));
+  ASSERT_EQ_INT(second_hits + 1, itemstore_cache_hits(second));
+  ASSERT_EQ_INT(second_misses, itemstore_cache_misses(second));
+  insert_item(first_root, "shared", (VALUE_t){VALUE_int, {.i = 3}});
+  ASSERT_TRUE(itemstore_generation(first) > first_generation);
+  ASSERT_EQ_INT(second_generation, itemstore_generation(second));
+  ASSERT_EQ_INT(2, item_value(find_item_cached(second_root, "shared", NULL))->i);
+  itemstore_destroy(first);
+  ASSERT_EQ_INT(2, item_value(find_item_cached(second_root, "shared", NULL))->i);
+  itemstore_destroy(second);
+}
+
 void test_find_item_cached_root_lifecycle_invalidates_entries(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
@@ -383,16 +413,7 @@ void test_find_item_cached_root_lifecycle_invalidates_entries(void) {
   ASSERT_NOT_NULL(old_item);
   ASSERT_TRUE(find_item_cached(root, "lifecycle.item", NULL) == old_item);
 
-  ITEMSTORE_CONTEXT_t *ctx = itemstore_default_context();
-  uint64_t generation_before = ctx->generation;
-  uint64_t hits_before = ctx->fetchitem_cache_hits;
-  uint64_t misses_before = ctx->fetchitem_cache_misses;
   destroy_item(root);
-
-  ASSERT_TRUE(ctx->generation > generation_before);
-  for (size_t i = 0; i < FETCHITEM_CACHE_SIZE; i++) {
-    ASSERT_TRUE(!ctx->fetchitem_cache[i].valid);
-  }
 
   ITEM_t *replacement = make_root_item("root");
   ASSERT_NOT_NULL(replacement);
@@ -402,8 +423,9 @@ void test_find_item_cached_root_lifecycle_invalidates_entries(void) {
 
   ASSERT_TRUE(find_item_cached(replacement, "lifecycle.item", NULL)
               == new_item);
-  ASSERT_EQ_INT(hits_before, ctx->fetchitem_cache_hits);
-  ASSERT_EQ_INT(misses_before + 1, ctx->fetchitem_cache_misses);
+  ITEMSTORE_t *replacement_store = itemstore_owner(replacement);
+  ASSERT_EQ_INT(0, itemstore_cache_hits(replacement_store));
+  ASSERT_EQ_INT(1, itemstore_cache_misses(replacement_store));
   ASSERT_EQ_INT(2, new_item->value.i);
 
   destroy_item(replacement);

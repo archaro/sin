@@ -10,6 +10,25 @@
 
 #include "item.h"
 
+typedef struct Entry ENTRY_t;
+typedef struct HashTable HASHTABLE_t;
+
+struct Item {
+  ITEM_e type;
+  uint32_t bytecode_len;
+  char name[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
+  bool inuse;
+  uint8_t pad[7];
+  ITEM_t *parent;
+  HASHTABLE_t *children;
+  uint8_t *bytecode;
+  VALUE_t value;
+  size_t ordered_size;
+  size_t ordered_capacity;
+  ITEM_t **ordered_array;
+  ITEMSTORE_t *store;
+};
+
 // Define the hash table entry.
 struct Entry {
   char *key;
@@ -47,6 +66,11 @@ typedef struct ItemstoreContext {
   ITEMSTORE_SYNC_HOOK_t sync_hook;
 } ITEMSTORE_CONTEXT_t;
 
+struct Itemstore {
+  ITEM_t *root;
+  ITEMSTORE_CONTEXT_t context;
+};
+
 typedef bool (*ITEMSTORE_LOAD_CONSTRUCTOR_FAILURE_HOOK_t)(const char *name);
 typedef int (*ITEMSTORE_SOURCE_WRITE_HOOK_t)(const char *source, FILE *file);
 typedef int (*ITEMSTORE_SOURCE_CLOSE_HOOK_t)(FILE *file);
@@ -54,9 +78,8 @@ typedef bool (*ITEMSTORE_ITEM_CREATION_FAILURE_HOOK_t)(const char *name);
 typedef bool (*ITEMSTORE_DIRECTORY_SYNC_HOOK_t)(const char *path);
 typedef void (*ITEMSTORE_PRE_PUBLISH_HOOK_t)(const char *path);
 
-ITEMSTORE_CONTEXT_t *itemstore_default_context(void);
-void itemstore_bump_generation(void);
-void itemstore_invalidate_cache(void);
+void itemstore_bump_generation_for(const ITEM_t *item);
+void itemstore_invalidate_cache_for(const ITEM_t *item);
 bool itemstore_default_sync_hook(FILE *file, const char *path);
 void itemstore_set_load_constructor_failure_hook_for_tests(
     ITEMSTORE_LOAD_CONSTRUCTOR_FAILURE_HOOK_t hook);
@@ -82,6 +105,18 @@ ITEM_t *make_loaded_item(const char *name, ITEM_t *parent, ITEM_e type,
                          VALUE_t value, uint8_t *bytecode, int len,
                          uint32_t expected_children);
 void detach_item_and_destroy(ITEM_t *item);
+ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
+                  VALUE_t value, uint8_t *bytecode, int len);
+ITEM_t *make_root_item(const char *name);
+void destroy_item(ITEM_t *item);
+
+bool save_itemstore_with_options(const char *filename, ITEM_t *root,
+                                 ITEMSTORE_DURABILITY_e durability);
+ITEMSTORE_SAVE_RESULT_e save_itemstore_no_replace(
+    const char *filename, ITEM_t *root, ITEMSTORE_DURABILITY_e durability);
+bool save_itemstore(const char *filename, ITEM_t *root);
+ITEM_t *load_itemstore_with_options(const char *filename, bool strict_validation);
+ITEM_t *load_itemstore(const char *filename);
 
 // Hash table internals.
 HASHTABLE_t *create_hashtable(int size);

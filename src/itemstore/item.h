@@ -30,8 +30,7 @@
 #define ITEM_ARRAY_INIT_CAPACITY  10
 
 typedef struct Item ITEM_t;
-typedef struct Entry ENTRY_t;
-typedef struct HashTable HASHTABLE_t;
+typedef struct Itemstore ITEMSTORE_t;
 
 typedef enum {ITEM_value, ITEM_code} ITEM_e;
 typedef enum {
@@ -45,34 +44,40 @@ typedef enum {
 } ITEMSTORE_SAVE_RESULT_e;
 typedef bool (*ITEMSTORE_SYNC_HOOK_t)(FILE *file, const char *path);
 
-struct Item {
-  ITEM_e type;           // 4 bytes
-  uint32_t bytecode_len; // 4 bytes
-  char name[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
-  bool inuse;            // Set when an item is being executed.
-  uint8_t pad[7];        // 6 bytes of padding for 8-byte alignment
-  ITEM_t *parent;        // 8 bytes - Pointer to the parent item
-  HASHTABLE_t *children; // Owned hash table for immediate children.
-  uint8_t *bytecode;     // Owned bytecode buffer for code items; NULL for value items.
-  VALUE_t value;         // Owned VALUE_t payload for value items; destroyed with the item.
-  size_t ordered_size;  // Number of children in the ordered array
-  size_t ordered_capacity; // Max size of ordered array
-  ITEM_t **ordered_array; // Owned array of borrowed child pointers; children own themselves.
-};
+/* Explicit itemstore ownership boundary.  The root returned by
+ * itemstore_root() is borrowed and remains valid until itemstore_destroy(). */
+ITEMSTORE_t *itemstore_create(const char *name);
+/* Creates a dedicated store for detached boot bytecode.  The store takes
+ * ownership of bytecode on success; callers retain it if construction fails. */
+ITEMSTORE_t *itemstore_create_boot(const char *name, uint8_t *bytecode,
+                                   uint32_t bytecode_len);
+ITEM_t *itemstore_root(ITEMSTORE_t *store);
+void itemstore_destroy(ITEMSTORE_t *store);
+ITEMSTORE_t *itemstore_load_with_options(const char *filename,
+                                         bool strict_validation);
+ITEMSTORE_t *itemstore_load(const char *filename);
+bool itemstore_save_with_options(const char *filename, ITEMSTORE_t *store,
+                                 ITEMSTORE_DURABILITY_e durability);
+bool itemstore_save(const char *filename, ITEMSTORE_t *store);
+ITEMSTORE_SAVE_RESULT_e itemstore_save_no_replace(
+    const char *filename, ITEMSTORE_t *store,
+    ITEMSTORE_DURABILITY_e durability);
+uint64_t itemstore_generation(const ITEMSTORE_t *store);
+uint64_t itemstore_cache_hits(const ITEMSTORE_t *store);
+uint64_t itemstore_cache_misses(const ITEMSTORE_t *store);
+ITEMSTORE_t *itemstore_owner(const ITEM_t *item);
+ITEM_e item_kind(const ITEM_t *item);
+const char *item_layer_name(const ITEM_t *item);
+ITEM_t *item_parent(const ITEM_t *item);
+const VALUE_t *item_value(const ITEM_t *item);
+const uint8_t *item_bytecode(const ITEM_t *item);
+uint32_t item_bytecode_length(const ITEM_t *item);
+size_t item_child_count(const ITEM_t *item);
+ITEM_t *item_child_at(const ITEM_t *item, size_t index);
+bool item_is_in_use(const ITEM_t *item);
+void item_enter_use(ITEM_t *item);
+void item_leave_use(ITEM_t *item);
 
-// Itemstore API
-ITEM_t *make_root_item(const char *name);
-// make_item creates an item owned by its parent/itemstore. For ITEM_value, the
-// item takes ownership of value, including any VALUE_str payload. For ITEM_code,
-// the item takes ownership of bytecode and frees it from destroy_item(); value is
-// ignored. On failure before an item is constructed, the caller still owns the
-// supplied payloads.
-ITEM_t *make_item(const char *name, ITEM_t *parent, ITEM_e type,
-                                VALUE_t value, uint8_t *bytecode, int len);
-// Recursively destroys item and all children. Frees owned bytecode for code
-// items, owned VALUE_t string payloads for value items, the child table, ordered
-// child-pointer array, and the ITEM_t itself.
-void destroy_item(ITEM_t *item);    
 // insert_item creates or replaces a value item. On success, the itemstore takes
 // ownership of value, including any VALUE_str payload; callers must not free the
 // string after transfer. Existing value payloads or code bytecode are freed
@@ -121,19 +126,7 @@ char *read_itemsource_in_srcroot(ITEM_t *item, const char *srcroot,
                                  char *detail, size_t detail_size);
 bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability);
 void itemstore_set_sync_hook_for_tests(ITEMSTORE_SYNC_HOOK_t hook);
-bool save_itemstore_with_options(const char *filename, ITEM_t *root,
-                                 ITEMSTORE_DURABILITY_e durability);
-ITEMSTORE_SAVE_RESULT_e save_itemstore_no_replace(
-    const char *filename, ITEM_t *root, ITEMSTORE_DURABILITY_e durability);
-bool save_itemstore(const char *filename, ITEM_t *root);
-
-// Loads and returns a newly allocated item tree. The caller owns the returned
-// root and must destroy it with destroy_item(); NULL indicates failure and
-// transfers no ownership.
-ITEM_t *load_itemstore_with_options(const char *filename, bool strict_validation);
-ITEM_t *load_itemstore(const char *filename); 
 void dump_item(ITEM_t *item, char *item_name, bool isroot);
-uint64_t get_itemstore_generation(void);
 
 // Other item-related API functions
 bool is_valid_layer(const char *str);

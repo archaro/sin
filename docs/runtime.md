@@ -167,3 +167,11 @@ Network slots move through a small logical lifecycle:
 - Disconnected/reusable: `LINE_empty` with no handle, Telnet object, buffers, or
   pending output state is reusable. `net.input` reports the disconnect event,
   destroys the line, and returns the slot to this reusable state.
+
+Runtime contexts borrow an explicit `ITEMSTORE_t *` for execution. The store
+owns its complete tree and cache context; `itemstore_root()` returns a borrowed
+root for relative lookup operations. Runtime item pointers are non-owning and
+must not outlive the store. `itemstore_generation()`, `itemstore_cache_hits()`,
+and `itemstore_cache_misses()` expose allocation-free diagnostics for tests and
+benchmarks. Destroying one store invalidates only that store's borrowed items
+and cache entries; other stores remain usable.

@@ -1,3 +1,4 @@
+#include "item.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,7 +12,6 @@
 #include "error.h"
 #include "interpret.h"
 #include "item.h"
-#include "item_internal.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 #include "task.h"
@@ -87,7 +87,7 @@ static void assert_float_string_libcall_returns_invalidargs_nil(
     const char *expected) {
   VALUE_t arg = {VALUE_float, {.f = 1.25}};
   push_stack(config.vm->stack, arg);
-  (void)func(test_ctx(), NULL, config.itemroot);
+  (void)func(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains(expected);
@@ -100,7 +100,7 @@ static void assert_float_string_libcall_uses_context_itemroot(
 
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
-  ctx.itemroot = context_root;
+  ctx.itemstore = itemstore_owner(context_root);
 
   VALUE_t arg = {VALUE_float, {.f = 1.25}};
   push_stack(config.vm->stack, arg);
@@ -110,15 +110,15 @@ static void assert_float_string_libcall_uses_context_itemroot(
 
   ITEM_t *context_err = find_item(context_root, "error");
   ASSERT_NOT_NULL(context_err);
-  ASSERT_EQ_INT(VALUE_int, context_err->value.type);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, context_err->value.i);
+  ASSERT_EQ_INT(VALUE_int, item_value(context_err)->type);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(context_err)->i);
   ITEM_t *context_msg = find_item(context_root, "error.msg");
   ASSERT_NOT_NULL(context_msg);
-  ASSERT_EQ_INT(VALUE_str, context_msg->value.type);
-  ASSERT_TRUE(strstr(context_msg->value.s, expected) != NULL);
+  ASSERT_EQ_INT(VALUE_str, item_value(context_msg)->type);
+  ASSERT_TRUE(strstr(item_value(context_msg)->s, expected) != NULL);
 
-  ITEM_t *global_err = find_item(config.itemroot, "error");
-  ASSERT_TRUE(global_err == NULL || global_err->value.type == VALUE_nil);
+  ITEM_t *global_err = find_item(itemstore_root(config.itemstore_ctx), "error");
+  ASSERT_TRUE(global_err == NULL || item_value(global_err)->type == VALUE_nil);
 
   destroy_item(context_root);
 }
@@ -129,7 +129,7 @@ static void assert_str_unary_result(
     const char *expected) {
   VALUE_t text = {VALUE_str, {.s = strdup(input)}};
   push_stack(config.vm->stack, text);
-  (void)func(test_ctx(), NULL, config.itemroot);
+  (void)func(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, ret.type);
   ASSERT_TRUE(strcmp(ret.s, expected) == 0);
@@ -141,7 +141,7 @@ static void assert_str_substr_result(const char *input, int64_t start,
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(input)}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = start}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = len}});
-  (void)lc_str_substr(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_substr(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, ret.type);
   ASSERT_TRUE(strcmp(ret.s, expected) == 0);
@@ -150,7 +150,7 @@ static void assert_str_substr_result(const char *input, int64_t start,
 
 static void assert_str_valtostr_result(VALUE_t input, const char *expected) {
   push_stack(config.vm->stack, input);
-  (void)lc_str_valtostr(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_valtostr(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, ret.type);
   ASSERT_TRUE(strcmp(ret.s, expected) == 0);
@@ -163,7 +163,7 @@ static void assert_str_replace_result(const char *text, const char *old_text,
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(text)}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(old_text)}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(new_text)}});
-  (void)lc_str_replace(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_replace(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, ret.type);
   ASSERT_TRUE(strcmp(ret.s, expected) == 0);
@@ -174,7 +174,7 @@ static void assert_str_repeat_result(const char *text, int64_t count,
                                      const char *expected) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(text)}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = count}});
-  (void)lc_str_repeat(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_repeat(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, ret.type);
   ASSERT_TRUE(strcmp(ret.s, expected) == 0);
@@ -186,7 +186,7 @@ static void assert_str_pad_result(
     const char *text, int64_t width, const char *expected) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(text)}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = width}});
-  (void)func(test_ctx(), NULL, config.itemroot);
+  (void)func(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, ret.type);
   ASSERT_TRUE(strcmp(ret.s, expected) == 0);
@@ -197,7 +197,7 @@ static void assert_str_find_result(const char *haystack, const char *needle,
                                    int64_t expected) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(haystack)}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(needle)}});
-  (void)lc_str_find(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_find(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_int, ret.type);
   ASSERT_EQ_INT(expected, ret.i);
@@ -207,7 +207,7 @@ static void assert_str_contains_result(const char *haystack, const char *needle,
                                        int expected) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(haystack)}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(needle)}});
-  (void)lc_str_contains(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_contains(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(expected, ret.i);
@@ -218,7 +218,7 @@ static void assert_str_affix_result(
     const char *haystack, const char *needle, int expected) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(haystack)}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(needle)}});
-  (void)func(test_ctx(), NULL, config.itemroot);
+  (void)func(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(expected, ret.i);
@@ -250,14 +250,14 @@ void test_str_len_returns_string_byte_length(void) {
 
   VALUE_t text = {VALUE_str, {.s = strdup("hello")}};
   push_stack(config.vm->stack, text);
-  (void)lc_str_len(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_len(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_int, ret.type);
   ASSERT_EQ_INT(5, ret.i);
 
   VALUE_t empty = {VALUE_str, {.s = strdup("")}};
   push_stack(config.vm->stack, empty);
-  (void)lc_str_len(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_len(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_int, ret.type);
   ASSERT_EQ_INT(0, ret.i);
@@ -277,7 +277,7 @@ void test_str_valtostr_converts_values_to_strings(void) {
   char *original = strdup("already text");
   ASSERT_NOT_NULL(original);
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = original}});
-  (void)lc_str_valtostr(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_valtostr(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, ret.type);
   ASSERT_TRUE(ret.s == original);
@@ -331,7 +331,7 @@ void test_str_substr_returns_requested_byte_range(void) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("abcdef")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 2}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
-  (void)lc_str_substr(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_substr(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
 
@@ -344,7 +344,7 @@ void test_str_substr_invalid_args_return_nil(void) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
-  (void)lc_str_substr(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_substr(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.substr");
@@ -352,7 +352,7 @@ void test_str_substr_invalid_args_return_nil(void) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("abcdef")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
-  (void)lc_str_substr(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_substr(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.substr");
@@ -360,7 +360,7 @@ void test_str_substr_invalid_args_return_nil(void) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("abcdef")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
-  (void)lc_str_substr(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_substr(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.substr start");
@@ -368,7 +368,7 @@ void test_str_substr_invalid_args_return_nil(void) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("abcdef")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.0}});
-  (void)lc_str_substr(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_substr(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.substr");
@@ -466,21 +466,21 @@ void test_str_find_and_contains_invalid_args_return_contracts(void) {
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("needle")}});
-  (void)lc_str_find(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_find(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.find");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("haystack")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
-  (void)lc_str_find(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_find(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.find");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("needle")}});
-  (void)lc_str_contains(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_contains(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
@@ -494,7 +494,7 @@ void test_str_startswith_and_endswith_invalid_args_return_contracts(void) {
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("needle")}});
-  (void)lc_str_startswith(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_startswith(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
@@ -502,7 +502,7 @@ void test_str_startswith_and_endswith_invalid_args_return_contracts(void) {
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("haystack")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
-  (void)lc_str_endswith(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_endswith(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
@@ -516,7 +516,7 @@ void test_str_eqcasei_invalid_args_return_contracts(void) {
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("right")}});
-  (void)lc_str_eqcasei(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_eqcasei(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
@@ -524,7 +524,7 @@ void test_str_eqcasei_invalid_args_return_contracts(void) {
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("left")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
-  (void)lc_str_eqcasei(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_eqcasei(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
@@ -539,7 +539,7 @@ void test_str_replace_invalid_args_return_nil(void) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("old")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("new")}});
-  (void)lc_str_replace(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_replace(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.replace");
@@ -547,7 +547,7 @@ void test_str_replace_invalid_args_return_nil(void) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("new")}});
-  (void)lc_str_replace(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_replace(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.replace");
@@ -555,7 +555,7 @@ void test_str_replace_invalid_args_return_nil(void) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("old")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
-  (void)lc_str_replace(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_replace(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.replace");
@@ -568,21 +568,21 @@ void test_str_repeat_invalid_args_return_nil(void) {
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 2}});
-  (void)lc_str_repeat(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_repeat(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.repeat");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 2.0}});
-  (void)lc_str_repeat(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_repeat(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.repeat");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
-  (void)lc_str_repeat(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_repeat(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.repeat");
@@ -600,19 +600,19 @@ void test_str_growth_libcalls_enforce_string_limit(void) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = text}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("a")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("aa")}});
-  (void)lc_str_replace(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_replace(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("0123456789")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 7000}});
-  (void)lc_str_repeat(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_repeat(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = (int64_t)SIN_MAX_STRING_BYTES + 1}});
-  (void)lc_str_padleft(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_padleft(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
 
@@ -624,28 +624,28 @@ void test_str_padleft_and_padright_invalid_args_return_nil(void) {
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 1.25}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 5}});
-  (void)lc_str_padleft(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_padleft(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.padleft");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 5.0}});
-  (void)lc_str_padright(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_padright(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.padright");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
-  (void)lc_str_padleft(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_padleft(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.padleft");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("text")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
-  (void)lc_str_padright(test_ctx(), NULL, config.itemroot);
+  (void)lc_str_padright(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("str.padright");
@@ -676,7 +676,7 @@ void test_str_libcall_invalidargs_uses_context_itemroot(void) {
 
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
-  ctx.itemroot = context_root;
+  ctx.itemstore = itemstore_owner(context_root);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("abcdef")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = -1}});
@@ -687,8 +687,8 @@ void test_str_libcall_invalidargs_uses_context_itemroot(void) {
 
   ITEM_t *context_msg = find_item(context_root, "error.msg");
   ASSERT_NOT_NULL(context_msg);
-  ASSERT_EQ_INT(VALUE_str, context_msg->value.type);
-  ASSERT_TRUE(strstr(context_msg->value.s, "str.substr start") != NULL);
+  ASSERT_EQ_INT(VALUE_str, item_value(context_msg)->type);
+  ASSERT_TRUE(strstr(item_value(context_msg)->s, "str.substr start") != NULL);
 
   destroy_item(context_root);
 

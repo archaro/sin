@@ -52,13 +52,13 @@ static bool lc_sys_persistence_runtime_ready(RuntimeContext *ctx) {
   // VM stack to dispatch the handler, and the item root carries diagnostics.
   // Keep direct invalid C-level invocations defensive, but do not persist when
   // their result or error cannot be delivered through the normal ABI.
-  return ctx && ctx->vm && ctx->vm->stack && ctx->itemroot;
+  return ctx && ctx->vm && ctx->vm->stack && itemstore_root(ctx->itemstore);
 }
 
 static void lc_sys_set_persistence_error(RuntimeContext *ctx,
                                          const char *operation,
                                          const char *target) {
-  ITEM_t *root = ctx ? ctx->itemroot : NULL;
+  ITEM_t *root = ctx ? itemstore_root(ctx->itemstore) : NULL;
   ITEM_t *current_item = ctx ? ctx->current_item : NULL;
   const char *display_target = target && target[0] ? target : "<unconfigured>";
   int needed = snprintf(NULL, 0, "%s failed for '%s'", operation,
@@ -87,7 +87,7 @@ static uint8_t *lc_sys_persist(RuntimeContext *ctx, uint8_t *nextop,
     return lc_sys_persistence_return(ctx, nextop, false);
   }
 
-  bool success = save_itemstore_with_options(target, ctx->itemroot,
+  bool success = itemstore_save_with_options(target, ctx->itemstore,
                                              ctx->itemstore_durability);
   if (!success) lc_sys_set_persistence_error(ctx, operation, target);
   return lc_sys_persistence_return(ctx, nextop, success);
@@ -128,8 +128,9 @@ static bool next_sys_compile_tmp_name(ITEM_t *root, char *name,
 
 static bool sys_compile_error_is_nil(ITEM_t *root) {
   ITEM_t *error = root ? find_item(root, "error") : NULL;
-  return !error ||
-      (error->type == ITEM_value && error->value.type == VALUE_nil);
+  const VALUE_t *value = error ? item_value(error) : NULL;
+  return !error || (item_kind(error) == ITEM_value && value &&
+                    value->type == VALUE_nil);
 }
 
 static uint8_t *lc_sys_compile_fail(RuntimeContext *ctx, uint8_t *nextop,
@@ -225,8 +226,8 @@ uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       return lc_sys_persistence_return(ctx, nextop, false);
     }
 
-    ITEMSTORE_SAVE_RESULT_e result = save_itemstore_no_replace(
-        backupfile, ctx->itemroot, ctx->itemstore_durability);
+    ITEMSTORE_SAVE_RESULT_e result = itemstore_save_no_replace(
+        backupfile, ctx->itemstore, ctx->itemstore_durability);
     if (result == ITEMSTORE_SAVE_SUCCESS) {
       free(backupfile);
       return lc_sys_persistence_return(ctx, nextop, true);
@@ -266,9 +267,11 @@ static int64_t lc_sys_count_value(size_t count) {
 
 static const char *lc_sys_item_type_name(const ITEM_t *target) {
   if (!target) return NULL;
-  if (target->type == ITEM_code) return "code";
-  if (target->type != ITEM_value) return NULL;
-  switch (target->value.type) {
+  if (item_kind(target) == ITEM_code) return "code";
+  if (item_kind(target) != ITEM_value) return NULL;
+  const VALUE_t *value = item_value(target);
+  if (!value) return NULL;
+  switch (value->type) {
     case VALUE_nil: return "nil";
     case VALUE_bool: return "bool";
     case VALUE_int: return "int";
@@ -329,13 +332,13 @@ uint8_t *lc_sys_thisitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 uint8_t *lc_sys_parentitem(RuntimeContext *ctx, uint8_t *nextop,
                            ITEM_t *item) {
   (void)item;
-  if (!ctx || !ctx->current_item || !ctx->current_item->parent ||
-      !ctx->current_item->parent->parent) {
+  ITEM_t *parent = ctx && ctx->current_item ? item_parent(ctx->current_item) : NULL;
+  if (!parent || !item_parent(parent)) {
     return lc_sys_return_nil(ctx, nextop);
   }
 
   char name[MAX_ITEM_NAME] = {0};
-  get_itemname(ctx->current_item->parent, name);
+  get_itemname(parent, name);
   return lc_sys_return(ctx, nextop, lc_sys_string_copy(name));
 }
 
@@ -371,7 +374,7 @@ uint8_t *lc_sys_itemtype(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   char fullname[MAX_ITEM_NAME];
   ITEM_t *current_item = ctx ? ctx->current_item : NULL;
   if (canonicalize_itemname(itemname.s, current_item, fullname)) {
-    ITEM_t *target = find_item(ctx->itemroot, fullname);
+    ITEM_t *target = find_item(itemstore_root(ctx->itemstore), fullname);
     result = lc_sys_string_copy(lc_sys_item_type_name(target));
   }
   value_free(&itemname);
@@ -392,10 +395,10 @@ uint8_t *lc_sys_childcount(RuntimeContext *ctx, uint8_t *nextop,
   char fullname[MAX_ITEM_NAME];
   ITEM_t *current_item = ctx ? ctx->current_item : NULL;
   if (canonicalize_itemname(itemname.s, current_item, fullname)) {
-    ITEM_t *target = find_item(ctx->itemroot, fullname);
+    ITEM_t *target = find_item(itemstore_root(ctx->itemstore), fullname);
     if (target) {
       result = (VALUE_t){VALUE_int,
-                         {.i = lc_sys_count_value(target->ordered_size)}};
+                         {.i = lc_sys_count_value(item_child_count(target))}};
     }
   }
   value_free(&itemname);
@@ -416,12 +419,14 @@ uint8_t *lc_sys_paramcount(RuntimeContext *ctx, uint8_t *nextop,
 
   VALUE_t result = VALUE_NIL;
   char fullname[MAX_ITEM_NAME];
-  if (ctx->itemroot && canonicalize_itemname(itemname.s, ctx->current_item,
+  if (itemstore_root(ctx->itemstore) && canonicalize_itemname(itemname.s, ctx->current_item,
                                              fullname)) {
-    ITEM_t *target = find_item(ctx->itemroot, fullname);
-    if (target && target->type == ITEM_code && target->bytecode &&
-        target->bytecode_len >= 2u) {
-      result = (VALUE_t){VALUE_int, {.i = (int64_t)target->bytecode[1]}};
+    ITEM_t *target = find_item(itemstore_root(ctx->itemstore), fullname);
+    const uint8_t *bytecode = target ? item_bytecode(target) : NULL;
+    uint32_t bytecode_len = target ? item_bytecode_length(target) : 0;
+    if (target && item_kind(target) == ITEM_code && bytecode &&
+        bytecode_len >= 2u) {
+      result = (VALUE_t){VALUE_int, {.i = (int64_t)bytecode[1]}};
     }
   }
   value_free(&itemname);
@@ -440,13 +445,13 @@ uint8_t *lc_sys_source(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   char fullname[MAX_ITEM_NAME];
-  if (!ctx->itemroot ||
+  if (!itemstore_root(ctx->itemstore) ||
       !canonicalize_itemname(itemname.s, ctx->current_item, fullname)) {
     value_free(&itemname);
     return lc_sys_return_nil(ctx, nextop);
   }
-  ITEM_t *target = find_item(ctx->itemroot, fullname);
-  if (!target || target->type != ITEM_code) {
+  ITEM_t *target = find_item(itemstore_root(ctx->itemstore), fullname);
+  if (!target || item_kind(target) != ITEM_code) {
     value_free(&itemname);
     return lc_sys_return_nil(ctx, nextop);
   }
@@ -463,7 +468,7 @@ uint8_t *lc_sys_source(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   char error_detail[1024];
   (void)snprintf(error_detail, sizeof(error_detail), "sys.source{%s}: %s",
                  fullname, read_detail[0] ? read_detail : "source read failed");
-  set_error_item(ctx->itemroot, ERR_RUNTIME_SOURCE, error_detail,
+  set_error_item(itemstore_root(ctx->itemstore), ERR_RUNTIME_SOURCE, error_detail,
                  ctx->current_item);
   return lc_sys_return(ctx, nextop, lc_sys_string_copy(""));
 }
@@ -471,8 +476,8 @@ uint8_t *lc_sys_source(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 uint8_t *lc_sys_rootcount(RuntimeContext *ctx, uint8_t *nextop,
                           ITEM_t *item) {
   (void)item;
-  int64_t count = ctx && ctx->itemroot
-      ? lc_sys_count_value(ctx->itemroot->ordered_size) : 0;
+  int64_t count = ctx && itemstore_root(ctx->itemstore)
+      ? lc_sys_count_value(item_child_count(itemstore_root(ctx->itemstore))) : 0;
   return lc_sys_return(ctx, nextop,
                        (VALUE_t){VALUE_int, {.i = count}});
 }
@@ -589,32 +594,32 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       compiler_diag_set_location(&diag, 1, 1, 1);
       compiler_diag_set_excerpt(&diag, val.s ? val.s : "");
     }
-    set_compiler_error_item(ctx ? ctx->itemroot : NULL, &diag);
+    set_compiler_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, &diag);
     return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
   }
 
   ptrdiff_t raw_len = out->nextbyte - out->bytecode;
   if (raw_len < 0 || (uintmax_t)raw_len > UINT32_MAX) {
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_BYTECODE,
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_BYTECODE,
         "Sys.compile bytecode output length is out of range.",
         ctx ? ctx->current_item : NULL);
     return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
   }
   uint32_t len = (uint32_t)raw_len;
-  clear_error_item(ctx ? ctx->itemroot : NULL);
+  clear_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL);
 
-  if (!next_sys_compile_tmp_name(ctx ? ctx->itemroot : NULL, tmpname,
+  if (!next_sys_compile_tmp_name(ctx ? itemstore_root(ctx->itemstore) : NULL, tmpname,
                                  sizeof(tmpname))) {
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INTERNAL,
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_INTERNAL,
         "Sys.compile temporary item name generation failed.",
         ctx ? ctx->current_item : NULL);
     return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
   }
 
-  ITEM_t *tmpitem = insert_code_item(ctx->itemroot, tmpname, len, out->bytecode);
+  ITEM_t *tmpitem = insert_code_item(itemstore_root(ctx->itemstore), tmpname, len, out->bytecode);
 
   if (!tmpitem) {
-    set_error_item(ctx ? ctx->itemroot : NULL, ERR_RUNTIME_INTERNAL,
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_INTERNAL,
         "Sys.compile temporary code item could not be created.",
         ctx ? ctx->current_item : NULL);
     return lc_sys_compile_fail(ctx, nextop, &val, out, true, &diag);
@@ -630,14 +635,14 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     value_free(&dropped);
   }
 
-  delete_item(ctx->itemroot, tmpname);
-  bool error_is_nil = sys_compile_error_is_nil(ctx->itemroot);
+  delete_item(itemstore_root(ctx->itemstore), tmpname);
+  bool error_is_nil = sys_compile_error_is_nil(itemstore_root(ctx->itemstore));
   bool success = !ctx->interrupted && error_is_nil;
   if (ctx->interrupted && error_is_nil) {
-    set_error_item(ctx->itemroot, ERR_RUNTIME_SIGUSR1, NULL,
+    set_error_item(itemstore_root(ctx->itemstore), ERR_RUNTIME_SIGUSR1, NULL,
                    ctx->current_item);
   } else if (success) {
-    clear_error_item(ctx->itemroot);
+    clear_error_item(itemstore_root(ctx->itemstore));
   }
 
   lc_sys_free_output(out, false);
@@ -657,7 +662,7 @@ uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   char fullname[MAX_ITEM_NAME];
   bool exists = canonicalize_itemname(itemname.s, item, fullname) &&
-      find_item(ctx->itemroot, fullname) != NULL;
+      find_item(itemstore_root(ctx->itemstore), fullname) != NULL;
   value_free(&itemname);
   return lc_sys_return(ctx, nextop, exists ? VALUE_TRUE : VALUE_FALSE);
 }
@@ -672,7 +677,7 @@ uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   char fullname[MAX_ITEM_NAME];
   if (canonicalize_itemname(itemname.s, item, fullname)) {
-    delete_item(ctx->itemroot, fullname);
+    delete_item(itemstore_root(ctx->itemstore), fullname);
   }
   value_free(&itemname);
   return lc_sys_return_nil(ctx, nextop);
@@ -692,12 +697,12 @@ uint8_t *lc_sys_nthname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t result = VALUE_NIL;
   char fullname[MAX_ITEM_NAME];
   if (canonicalize_itemname(itemname.s, item, fullname)) {
-    ITEM_t *parent = find_item(ctx->itemroot, fullname);
+    ITEM_t *parent = find_item(itemstore_root(ctx->itemstore), fullname);
     if (parent) {
       ITEM_t *child = find_item_by_index(parent, (size_t)index.i);
       if (child) {
         result.type = VALUE_str;
-        result.s = strdup(child->name);
+        result.s = strdup(item_layer_name(child));
         if (!result.s) result = VALUE_NIL;
       }
     }
@@ -719,10 +724,10 @@ uint8_t *lc_sys_rootname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   VALUE_t result = VALUE_NIL;
-  ITEM_t *child = find_item_by_index(ctx->itemroot, (size_t)index.i);
+  ITEM_t *child = find_item_by_index(itemstore_root(ctx->itemstore), (size_t)index.i);
   if (child) {
     result.type = VALUE_str;
-    result.s = strdup(child->name);
+    result.s = strdup(item_layer_name(child));
     if (!result.s) result = VALUE_NIL;
   }
 

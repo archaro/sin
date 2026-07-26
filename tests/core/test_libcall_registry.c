@@ -1,3 +1,4 @@
+#include "item.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,7 +12,6 @@
 #include "error.h"
 #include "interpret.h"
 #include "item.h"
-#include "item_internal.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 #include "task.h"
@@ -108,7 +108,7 @@ static void assert_sys_log_output(VALUE_t out, const char *expected) {
   ASSERT_TRUE(dup2(fileno(capture), STDOUT_FILENO) >= 0);
 
   push_stack(config.vm->stack, out);
-  (void)lc_sys_log(test_ctx(), NULL, config.itemroot);
+  (void)lc_sys_log(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   fflush(stdout);
@@ -128,7 +128,7 @@ static void assert_net_write_output(VALUE_t out, const char *expected) {
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
   push_stack(config.vm->stack, out);
-  (void)lc_net_write(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_write(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   ASSERT_TRUE(strcmp(telnet_capture, expected) == 0);
@@ -388,8 +388,8 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
 
   memset(&config, 0, sizeof(config));
   init_errmsg();
-  config.itemroot = make_root_item("root");
-  ASSERT_NOT_NULL(config.itemroot);
+  config.itemstore_ctx = itemstore_owner(make_root_item("root"));
+  ASSERT_NOT_NULL(itemstore_root(config.itemstore_ctx));
   config.vm = make_vm();
   ASSERT_NOT_NULL(config.vm);
 
@@ -402,7 +402,7 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
   ASSERT_NOT_NULL(bytecode);
   memcpy(bytecode, template_bytecode, sizeof(template_bytecode));
 
-  ITEM_t *code = insert_code_item(config.itemroot, "test.missinglibcall",
+  ITEM_t *code = insert_code_item(itemstore_root(config.itemstore_ctx), "test.missinglibcall",
                                   sizeof(template_bytecode), bytecode);
   ASSERT_NOT_NULL(code);
 
@@ -410,19 +410,19 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
   VALUE_t v2 = interpret(test_ctx(), code);
   ASSERT_EQ_INT(VALUE_nil, v1.type);
   ASSERT_EQ_INT(VALUE_nil, v2.type);
-  ITEM_t *err_item = find_item(config.itemroot, "error");
+  ITEM_t *err_item = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err_item);
-  ASSERT_EQ_INT(VALUE_int, err_item->value.type);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVLIB, err_item->value.i);
-  ITEM_t *err_msg = find_item(config.itemroot, "error.msg");
+  ASSERT_EQ_INT(VALUE_int, item_value(err_item)->type);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVLIB, item_value(err_item)->i);
+  ITEM_t *err_msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(err_msg);
-  ASSERT_EQ_INT(VALUE_str, err_msg->value.type);
-  ASSERT_TRUE(strstr(err_msg->value.s, "Unknown libcall token 255") != NULL);
+  ASSERT_EQ_INT(VALUE_str, item_value(err_msg)->type);
+  ASSERT_TRUE(strstr(item_value(err_msg)->s, "Unknown libcall token 255") != NULL);
   ASSERT_EQ_INT(-1, config.vm->stack->current);
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
 
   destroy_vm(config.vm);
-  destroy_item(config.itemroot);
+  destroy_item(itemstore_root(config.itemstore_ctx));
 }
 
 void test_default_libcall_wrappers_lazy_init_after_reset(void) {
@@ -468,22 +468,22 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
   push_stack(config.vm->stack, bad_name);
   push_stack(config.vm->stack, start);
   push_stack(config.vm->stack, repeat);
-  (void)lc_task_newgametask(test_ctx(), NULL, config.itemroot);
+  (void)lc_task_newgametask(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
-  ITEM_t *err = find_item(config.itemroot, "error");
+  ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(err)->i);
   assert_invalid_args_detail_contains("task.newgametask");
 
   VALUE_t bad_taskid = {VALUE_str, {.s = strdup("x")}};
   push_stack(config.vm->stack, bad_taskid);
-  (void)lc_task_killtask(test_ctx(), NULL, config.itemroot);
+  (void)lc_task_killtask(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
-  err = find_item(config.itemroot, "error");
+  err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(err)->i);
   assert_invalid_args_detail_contains("task.killtask");
 
   VALUE_t missing_item = {VALUE_str, {.s = strdup("missing.task")}};
@@ -492,7 +492,7 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
   push_stack(config.vm->stack, missing_item);
   push_stack(config.vm->stack, negative_start);
   push_stack(config.vm->stack, valid_repeat);
-  (void)lc_task_newgametask(test_ctx(), NULL, config.itemroot);
+  (void)lc_task_newgametask(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("intervals");
@@ -504,12 +504,12 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
   VALUE_t out = {VALUE_str, {.s = strdup("hello")}};
   push_stack(config.vm->stack, bad_line);
   push_stack(config.vm->stack, out);
-  (void)lc_net_write(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_write(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
-  err = find_item(config.itemroot, "error");
+  err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, err->value.i);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(err)->i);
   assert_invalid_args_detail_contains("net.write");
 
   teardown_libcall_runtime();
@@ -524,14 +524,14 @@ void test_libcall_float_integer_only_arguments_rejected(void) {
   push_stack(config.vm->stack, itemname);
   push_stack(config.vm->stack, float_start);
   push_stack(config.vm->stack, repeat);
-  (void)lc_task_newgametask(test_ctx(), NULL, config.itemroot);
+  (void)lc_task_newgametask(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_float_detail_contains("task.newgametask");
 
   VALUE_t float_taskid = {VALUE_float, {.f = 2.0}};
   push_stack(config.vm->stack, float_taskid);
-  (void)lc_task_killtask(test_ctx(), NULL, config.itemroot);
+  (void)lc_task_killtask(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_float_detail_contains("task.killtask");
@@ -543,26 +543,26 @@ void test_libcall_float_integer_only_arguments_rejected(void) {
   VALUE_t out = {VALUE_str, {.s = strdup("hello")}};
   push_stack(config.vm->stack, float_line);
   push_stack(config.vm->stack, out);
-  (void)lc_net_write(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_write(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_float_detail_contains("net.write");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
-  (void)lc_net_flush(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_flush(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_float_detail_contains("net.flush");
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_float, {.f = 0.0}});
-  (void)lc_net_ditch(test_ctx(), NULL, config.itemroot);
+  (void)lc_net_ditch(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_float_detail_contains("net.ditch");
 
   VALUE_t float_source = {VALUE_float, {.f = 3.25}};
   push_stack(config.vm->stack, float_source);
-  (void)lc_sys_compile(test_ctx(), NULL, config.itemroot);
+  (void)lc_sys_compile(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);

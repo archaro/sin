@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "test_helpers.h"
 
 #include <uv.h>
 
@@ -39,7 +40,7 @@ void test_task_one_shot_auto_retires(void) {
   ASSERT_NOT_NULL(root);
   task = make_task("missing", 0);
   ASSERT_NOT_NULL(task);
-  task->itemroot = root;
+  task->itemstore = itemstore_owner(root);
   id = task->id;
   ASSERT_TRUE(start_task_timer(task, &loop, execute_task_cb, 0));
 
