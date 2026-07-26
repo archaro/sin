@@ -63,15 +63,15 @@ void test_loaded_zero_child_item_can_gain_runtime_child(void) {
   ASSERT_EQ_INT(0, item_children_ordered_capacity(input->children));
   ASSERT_TRUE(item_child_at(input, 0) == NULL);
 
-  ITEM_t *line = test_item_set_value(root, "input.line",
-                             (VALUE_t){.type = VALUE_int, .i = 7});
-  ASSERT_NOT_NULL(line);
-  ASSERT_EQ_INT(VALUE_int, line->value.type);
-  ASSERT_EQ_INT(7, line->value.i);
+  ITEM_t *line_item = test_item_set_value(root, "input.line",
+                                          (VALUE_t){.type = VALUE_int, .i = 7});
+  ASSERT_NOT_NULL(line_item);
+  ASSERT_EQ_INT(VALUE_int, line_item->value.type);
+  ASSERT_EQ_INT(7, line_item->value.i);
   ASSERT_EQ_INT(1, item_child_count(input));
   ASSERT_TRUE(item_children_ordered_capacity(input->children) >=
               item_child_count(input));
-  ASSERT_TRUE(item_child_at(input, 0) == line);
+  ASSERT_TRUE(item_child_at(input, 0) == line_item);
 
   destroy_item(root);
 }
