@@ -381,7 +381,7 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 %left TAND
 %left TEQUAL TNOTEQUAL TLT TGT TLTEQ TGTEQ
 %left TPLUS TMINUS
-%left TMULT TDIV
+%left TMULT TDIV TMOD
 %left TINC TDEC
 %left TLAYERSEP
 %right TDEREFSTART TCODE
@@ -487,6 +487,7 @@ expr:     TLOCAL { $$ = parser_new_value(state, V_LOCAL, $1); if (!$$) YYERROR; 
         | expr TMINUS expr { $$ = parser_new_node(state, N_SUB, $1, $3, true, true); if (!$$) YYERROR; }
         | expr TMULT expr { $$ = parser_new_node(state, N_MUL, $1, $3, true, true); if (!$$) YYERROR; }
         | expr TDIV expr { $$ = parser_new_node(state, N_DIV, $1, $3, true, true); if (!$$) YYERROR; }
+        | expr TMOD expr { $$ = parser_new_node(state, N_MOD, $1, $3, true, true); if (!$$) YYERROR; }
         | TLPAREN expr TRPAREN {
           $$ = $2;
           if (!$$) { parser_set_failure(state, NULL); YYERROR; }

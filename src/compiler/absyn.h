@@ -18,7 +18,7 @@ struct AS_VALUE_s {
 };
 typedef struct AS_VALUE_s AS_VALUE;
 
-typedef enum { N_VALUE, N_ADD, N_SUB, N_MUL, N_DIV, N_INC, N_DEC,
+typedef enum { N_VALUE, N_ADD, N_SUB, N_MUL, N_DIV, N_MOD, N_INC, N_DEC,
                N_EQUAL, N_NOTEQ, N_OR, N_AND, N_LT, N_LTEQ, N_GT, N_GTEQ,
                N_DEREF, N_ITEM, N_RELITEM, N_NOT, N_LIBCALL, N_ARGLIST,
                N_CODE, N_CALL, N_ASSITEM,

@@ -26,6 +26,7 @@ void test_emitbc_all_ir_ops_accounted_for(void) {
       {IR_OP_SUB, 's', 1},
       {IR_OP_MUL, 'm', 1},
       {IR_OP_DIV, 'd', 1},
+      {IR_OP_MOD, '%', 1},
       {IR_OP_NEG, 'n', 1},
       {IR_OP_EQ, 'o', 1},
       {IR_OP_NEQ, 'q', 1},

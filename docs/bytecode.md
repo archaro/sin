@@ -78,6 +78,7 @@ arguments as described below.
 | `b` | `IR_OP_PUSH_BOOL` | `u8 value` | Push a boolean value; non-zero is true and zero is false. |
 | `c` | `IR_OP_STORE_LOCAL` | `u8 local_index` | Store the top stack value into the addressed local slot and pop it. |
 | `d` | `IR_OP_DIV` | none | Pop two numeric values, divide the previous value by the top value, and push the result. Integer-only divide by zero substitutes zero; integer overflow, including `INT64_MIN / -1`, pushes `nil`. Float division follows IEEE 754 after int-to-float promotion. Invalid operands produce `nil` or the integer-zero result for non-float invalid division. |
+| `%` | `IR_OP_MOD` | none | Pop two values and push remainder. Integer zero divisor pushes `nil`; `INT64_MIN % -1` is zero. Float operands promote to binary64 and use `fmod()` (floating zero divisor yields NaN). Invalid non-numeric operands push `nil`. |
 | `e` | `IR_OP_LOAD_LOCAL` | `u8 local_index` | Push a copy of the addressed local value. |
 | `f` | `IR_OP_INC_LOCAL` | `u8 local_index` | Increment an integer local; report an error for non-integers. |
 | `g` | `IR_OP_DEC_LOCAL` | `u8 local_index` | Decrement an integer local; report an error for non-integers. |

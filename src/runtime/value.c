@@ -322,6 +322,7 @@ static double float_add(double lhs, double rhs) { return lhs + rhs; }
 static double float_sub(double lhs, double rhs) { return lhs - rhs; }
 static double float_mul(double lhs, double rhs) { return lhs * rhs; }
 static double float_div(double lhs, double rhs) { return lhs / rhs; }
+static double float_mod(double lhs, double rhs) { return fmod(lhs, rhs); }
 
 static bool value_int_add_overflows(int64_t lhs, int64_t rhs) {
   return (rhs > 0 && lhs > INT64_MAX - rhs) ||
@@ -410,6 +411,24 @@ bool value_div(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
     return value_arith_float(left, right, result, float_div);
   }
   *result = VALUE_ZERO;
+  return false;
+}
+
+bool value_mod(const VALUE_t *left, const VALUE_t *right, VALUE_t *result) {
+  int64_t lhs;
+  int64_t rhs;
+  if (!result) return false;
+  if (value_as_int_operand(left, &lhs) && value_as_int_operand(right, &rhs)) {
+    if (rhs == 0) { *result = VALUE_NIL; return false; }
+    result->type = VALUE_int;
+    if (lhs == INT64_MIN && rhs == -1) { result->i = 0; return true; }
+    result->i = lhs % rhs;
+    return true;
+  }
+  if ((left && left->type == VALUE_float) || (right && right->type == VALUE_float)) {
+    return value_arith_float(left, right, result, float_mod);
+  }
+  *result = VALUE_NIL;
   return false;
 }
 

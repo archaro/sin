@@ -226,6 +226,7 @@ void as_delete(AS_NODE *root) {
     case N_SUB:
     case N_MUL:
     case N_DIV:
+    case N_MOD:
     case N_INC:
     case N_DEC:
     case N_EQUAL:
@@ -270,7 +271,7 @@ void as_delete(AS_NODE *root) {
 // Keep this in sync with ENUM_VALUE!
 const char *valname[] = { "V_INT", "V_FLOAT", "V_STR", "V_LOCAL", "V_LAYER", "V_BOOLTRUE", "V_BOOLFALSE", "V_NIL" };
 // And keep this in sync with ENUM_NODE!
-const char *nodename[] = { "N_VALUE", "N_ADD", "N_SUB", "N_MUL", "N_DIV", "N_INC", "N_DEC", "N_EQUAL", "N_NOTEQ", "N_OR", "N_AND", "N_LT", "N_LTEQ", "N_GT", "N_GTEQ", "N_DEREF", "N_ITEM", "N_RELITEM", "N_NOT", "N_LIBCALL", "N_ARGLIST", "N_CODE", "N_CALL", "N_ASSITEM", "N_ASSLOCAL", "N_EXPRSTMT", "N_RETURN", "N_STMTLIST", "N_STMT", "N_WHILESTMT", "N_IFSTMT", "N_DOWHILESTMT" };
+const char *nodename[] = { "N_VALUE", "N_ADD", "N_SUB", "N_MUL", "N_DIV", "N_MOD", "N_INC", "N_DEC", "N_EQUAL", "N_NOTEQ", "N_OR", "N_AND", "N_LT", "N_LTEQ", "N_GT", "N_GTEQ", "N_DEREF", "N_ITEM", "N_RELITEM", "N_NOT", "N_LIBCALL", "N_ARGLIST", "N_CODE", "N_CALL", "N_ASSITEM", "N_ASSLOCAL", "N_EXPRSTMT", "N_RETURN", "N_STMTLIST", "N_STMT", "N_WHILESTMT", "N_IFSTMT", "N_DOWHILESTMT" };
 
 void as_pretty_print(int tree_depth) {
   // Indent to make everything look all neat and professional
@@ -379,6 +380,7 @@ static void as_walk_internal(AS_NODE *root, int tree_depth) {
     case N_SUB:
     case N_MUL:
     case N_DIV:
+    case N_MOD:
     case N_INC:
     case N_DEC:
     case N_EQUAL:

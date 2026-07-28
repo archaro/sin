@@ -289,6 +289,14 @@ void test_value_integer_arithmetic_helpers(void) {
   ASSERT_EQ_INT(2, result.i);
   ASSERT_TRUE(value_neg(&result));
   ASSERT_EQ_INT(-2, result.i);
+  ASSERT_TRUE(value_mod(&left, &right, &result));
+  ASSERT_EQ_INT(1, result.i);
+  VALUE_t neg_left = {VALUE_int, {.i = -9}};
+  ASSERT_TRUE(value_mod(&neg_left, &right, &result));
+  ASSERT_EQ_INT(-1, result.i);
+  VALUE_t zero = {VALUE_int, {.i = 0}};
+  ASSERT_TRUE(!value_mod(&left, &zero, &result));
+  ASSERT_EQ_INT(VALUE_nil, result.type);
 
   setup_runtime();
   uint8_t code[64] = {0};
@@ -331,6 +339,9 @@ void test_value_integer_overflow_contract(void) {
   ASSERT_EQ_INT(VALUE_nil, result.type);
   ASSERT_TRUE(!value_div(&min, &minus_one, &result));
   ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_TRUE(value_mod(&min, &minus_one, &result));
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(0, result.i);
   ASSERT_TRUE(value_div(&one, &zero, &result));
   ASSERT_EQ_INT(VALUE_int, result.type);
   ASSERT_EQ_INT(0, result.i);
@@ -452,6 +463,17 @@ void test_value_float_arithmetic_helpers(void) {
   ASSERT_TRUE(value_mul(&int_value, &float_value, &result));
   ASSERT_EQ_INT(VALUE_float, result.type);
   ASSERT_TRUE(result.f == 1.0);
+  ASSERT_TRUE(value_mod(&int_value, &float_value, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 0.0);
+  VALUE_t float_five_half = {VALUE_float, {.f = 5.5}};
+  VALUE_t float_two = {VALUE_float, {.f = 2.0}};
+  ASSERT_TRUE(value_mod(&float_five_half, &float_two, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 1.5);
+  ASSERT_TRUE(value_mod(&one, &zero, &result));
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(isnan(result.f));
 
   ASSERT_TRUE(value_div(&one, &zero, &result));
   ASSERT_EQ_INT(VALUE_float, result.type);
@@ -501,6 +523,16 @@ void test_value_float_arithmetic_interpreter_bytecode(void) {
   VALUE_t result = run_code("test.value_float_arithmetic_bytecode", code, pos);
   ASSERT_EQ_INT(VALUE_float, result.type);
   ASSERT_TRUE(value_float_to_bits(result.f) == UINT64_C(0x7ff0000000000000));
+  value_free(&result);
+
+  pos = 0;
+  code[pos++] = 0; code[pos++] = 0;
+  code[pos++] = 'p'; emit_i64(code, &pos, 5);
+  code[pos++] = 'p'; emit_i64(code, &pos, 2);
+  code[pos++] = '%'; code[pos++] = 'Q'; code[pos++] = 'h';
+  result = run_code("test.value_modulo_bytecode", code, pos);
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(1, result.i);
   value_free(&result);
 
   pos = 0;
@@ -571,6 +603,12 @@ void test_value_arithmetic_invalid_and_nil_operands(void) {
   ASSERT_TRUE(!value_div(&str_value, &int_value, &result));
   ASSERT_EQ_INT(VALUE_int, result.type);
   ASSERT_EQ_INT(0, result.i);
+  ASSERT_TRUE(!value_mod(&nil_value, &int_value, &result));
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_TRUE(!value_mod(&bool_value, &int_value, &result));
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_TRUE(!value_mod(&str_value, &int_value, &result));
+  ASSERT_EQ_INT(VALUE_nil, result.type);
   ASSERT_TRUE(!value_neg(&bool_value));
   ASSERT_EQ_INT(VALUE_bool, bool_value.type);
   ASSERT_EQ_INT(1, bool_value.i);

@@ -13,6 +13,7 @@ OP(ADD,            'a', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDAT
 OP(SUB,            's', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_subtract)
 OP(MUL,            'm', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_multiply)
 OP(DIV,            'd', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_divide)
+OP(MOD,            '%', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_modulo)
 OP(NEG,            'n', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_negate)
 OP(EQ,             'o', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_equal)
 OP(NEQ,            'q', true,  OPERAND_NONE,       SIZE_FIXED_1,         VALIDATE_NONE, op_notequal)

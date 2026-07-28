@@ -101,6 +101,7 @@ void test_emitbc_opcode_map(void) {
       {"sub", IR_OP_SUB, 's', 0},
       {"mul", IR_OP_MUL, 'm', 0},
       {"div", IR_OP_DIV, 'd', 0},
+      {"mod", IR_OP_MOD, '%', 0},
       {"neg", IR_OP_NEG, 'n', 0},
       {"eq", IR_OP_EQ, 'o', 0},
       {"neq", IR_OP_NEQ, 'q', 0},

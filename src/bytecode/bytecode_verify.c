@@ -118,6 +118,7 @@ static const char *bc_disassembly_mnemonic(IR_Op op) {
     case IR_OP_SUB: return "SUBTRACT";
     case IR_OP_MUL: return "MULTIPLY";
     case IR_OP_DIV: return "DIVIDE";
+    case IR_OP_MOD: return "MODULO";
     case IR_OP_NEG: return "NEGATE";
     case IR_OP_EQ: return "BOOL EQ";
     case IR_OP_NEQ: return "BOOL NOTEQ";
@@ -181,7 +182,7 @@ static BC_StackEffect bc_base_stack_effect(IR_Op op) {
       return (BC_StackEffect){0, 1, false};
     case IR_OP_LIBCALL_TOKEN:
       return (BC_StackEffect){0, 1, true};
-    case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV:
+    case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV: case IR_OP_MOD:
     case IR_OP_EQ: case IR_OP_NEQ: case IR_OP_LT: case IR_OP_GT:
     case IR_OP_LE: case IR_OP_GE: case IR_OP_AND: case IR_OP_OR:
       return (BC_StackEffect){2, 1, false};
@@ -594,7 +595,7 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
     case IR_OP_HALT:
     case IR_OP_RETURN:
     case IR_OP_PUSH_NIL:
-    case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV: case IR_OP_NEG:
+    case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV: case IR_OP_MOD: case IR_OP_NEG:
     case IR_OP_EQ: case IR_OP_NEQ: case IR_OP_LT: case IR_OP_GT: case IR_OP_LE: case IR_OP_GE:
     case IR_OP_NOT: case IR_OP_AND: case IR_OP_OR:
     case IR_OP_DISCARD:

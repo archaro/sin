@@ -257,6 +257,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   "--"          { return TDEC; }
   "-"           { return TMINUS; }
   "*"           { return TMULT; }
+  "%"           { return TMOD; }
   "/*"          { BEGIN(COMMENT); }
   "/"           { return TDIV; }
   "("           { return TLPAREN; }

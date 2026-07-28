@@ -122,5 +122,6 @@ bool value_add(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
 bool value_sub(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
 bool value_mul(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
 bool value_div(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
+bool value_mod(const VALUE_t *left, const VALUE_t *right, VALUE_t *result);
 bool value_neg(VALUE_t *value);
 bool value_order(const VALUE_t *left, const VALUE_t *right, int *comparison);

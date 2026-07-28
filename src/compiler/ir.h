@@ -26,6 +26,7 @@ typedef enum {
   IR_OP_SUB,
   IR_OP_MUL,
   IR_OP_DIV,
+  IR_OP_MOD,
   IR_OP_NEG,
 
   IR_OP_EQ,

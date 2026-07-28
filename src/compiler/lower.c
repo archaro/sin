@@ -302,6 +302,7 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
     case N_SUB: lower_binary_expr(ctx, node, IR_OP_SUB); return;
     case N_MUL: lower_binary_expr(ctx, node, IR_OP_MUL); return;
     case N_DIV: lower_binary_expr(ctx, node, IR_OP_DIV); return;
+    case N_MOD: lower_binary_expr(ctx, node, IR_OP_MOD); return;
     case N_EQUAL: lower_binary_expr(ctx, node, IR_OP_EQ); return;
     case N_NOTEQ: lower_binary_expr(ctx, node, IR_OP_NEQ); return;
     case N_LT: lower_binary_expr(ctx, node, IR_OP_LT); return;

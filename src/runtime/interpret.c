@@ -602,6 +602,18 @@ uint8_t *op_multiply(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *op_modulo(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  VALUE_t v1 = pop_stack(VM->stack);
+  VALUE_t v2 = pop_stack(VM->stack);
+  VALUE_t result;
+  (void)value_mod(&v2, &v1, &result);
+  value_free(&v1);
+  value_free(&v2);
+  push_stack(VM->stack, result);
+  return nextop;
+}
+
 uint8_t *op_negate(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // If the top value on the stack is an int, negate it.
   //  Complain bitterly if not.

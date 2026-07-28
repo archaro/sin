@@ -36,6 +36,10 @@ static AS_NODE *build_arithmetic_program(void) {
   AS_NODE *stmt = t_node(N_EXPRSTMT, add, NULL);
   return t_stmtlist_with_one(stmt);
 }
+static AS_NODE *build_modulo_program(void) {
+  AS_NODE *mod = t_node(N_MOD, v_int(5), v_int(2));
+  return t_stmtlist_with_one(t_node(N_EXPRSTMT, mod, NULL));
+}
 
 static AS_NODE *build_float_literal_program(void) {
   AS_NODE *stmt = t_node(N_EXPRSTMT, v_float_bits(UINT64_C(0x3ff8000000000000)), NULL);
@@ -73,6 +77,8 @@ static const PipelineGoldenCase PIPELINE_CASES[] = {
     {"locals_store_load", build_locals_store_load_program, "@x = 7; @x;", "tests/fixtures/locals_store_load.hex",
      PIPELINE_LAYER_AST | PIPELINE_LAYER_SOURCE},
     {"arithmetic_add", build_arithmetic_program, "2 + 3;", "tests/fixtures/arithmetic_add.hex",
+     PIPELINE_LAYER_AST | PIPELINE_LAYER_SOURCE},
+    {"arithmetic_modulo", build_modulo_program, "5 % 2;", "tests/fixtures/arithmetic_modulo.hex",
      PIPELINE_LAYER_AST | PIPELINE_LAYER_SOURCE},
     {"float_literal", build_float_literal_program, "1.5;", "tests/fixtures/float_literal.hex",
      PIPELINE_LAYER_AST | PIPELINE_LAYER_SOURCE},

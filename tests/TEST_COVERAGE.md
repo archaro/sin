@@ -422,3 +422,8 @@ the `net.*` libcall contract tests in `tests/core/test_libcall_net.c`:
 - `tests/network/test_chat_smoke.c` exercises the full stack end-to-end
   through real localhost sockets and the Sinistra runtime. These tests are
   built and run by `make test-chat-smoke`.
+
+Modulo `%` coverage includes value helper and runtime opcode cases (integer,
+float, zero divisors, invalid operands), opcode schema/accounting manifests,
+and parser-to-bytecode pipeline validation through the standard compiler and
+interpreter suites, including `tests/fixtures/arithmetic_modulo.hex`.

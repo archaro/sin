@@ -1,0 +1,8 @@
+00 00          # header: locals=0 params=0
+70             # p: push int
+05 00 00 00 00 00 00 00  # 5
+70             # p: push int
+02 00 00 00 00 00 00 00  # 2
+25             # %: modulo
+77             # w: discard expression statement
+68             # h: halt

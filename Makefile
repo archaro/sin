@@ -24,7 +24,7 @@ LIBUV_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(LIBUV_PC) 2>/dev/null)
 LIBUV_LIBS := $(shell $(PKG_CONFIG) --libs $(LIBUV_PC) 2>/dev/null || printf '%s' '-luv')
 CFLAGS ?= $(BASE_CFLAGS)
 LDFLAGS ?=
-LIBS ?= $(LIBUV_LIBS)
+LIBS ?= $(LIBUV_LIBS) -lm
 
 .DEFAULT_GOAL := all
 

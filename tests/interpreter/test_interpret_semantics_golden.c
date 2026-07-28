@@ -306,6 +306,7 @@ void test_interpret_result_semantics(void) {
   assert_result_nil("result.expression_statements_discard", "1; 2;");
   assert_result_nil("result.middle_expression_discard", "@x = 7; @x; 8;");
   assert_result_int("result.explicit_return", "return 42;", 42);
+  assert_result_int("result.modulo_precedence", "return 20 % 6 * 2 + 1;", 5);
   assert_result_nil("result.bare_return", "return;");
   assert_result_nil("result.explicit_nil_return", "return nil;");
   assert_result_bool("result.nil_semantics", "return nil == nil and !nil and nil != false and nil != 0 and nil != \"\";", true);
