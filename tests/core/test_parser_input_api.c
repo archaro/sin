@@ -41,6 +41,22 @@ void test_parser_input_api(void) {
   ASSERT_TRUE(errdetail == NULL);
   as_delete(absyn);
 
+  const char nil_source[] = "RETURN NiL;";
+  ParseInput nil_input = {nil_source, sizeof(nil_source) - 1, "nil.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  ASSERT_EQ_INT(ERR_NOERROR, parse_source(&nil_input, &absyn, &errdetail));
+  ASSERT_TRUE(errdetail == NULL);
+  AS_STMTLIST *nil_list = (AS_STMTLIST *)absyn->lhs;
+  ASSERT_EQ_INT(1, nil_list->count);
+  ASSERT_EQ_INT(N_RETURN, nil_list->stmts[0]->nodetype);
+  ASSERT_NOT_NULL(nil_list->stmts[0]->lhs);
+  ASSERT_EQ_INT(N_VALUE, ((AS_NODE *)nil_list->stmts[0]->lhs)->nodetype);
+  AS_VALUE *nil_value = (AS_VALUE *)((AS_NODE *)nil_list->stmts[0]->lhs)->lhs;
+  ASSERT_NOT_NULL(nil_value);
+  ASSERT_EQ_INT(V_NIL, nil_value->valtype);
+  as_delete(absyn);
+
   const char returns[] = "return; return 17;";
   ParseInput return_input = {returns, sizeof(returns) - 1, "returns.src"};
   absyn = NULL;

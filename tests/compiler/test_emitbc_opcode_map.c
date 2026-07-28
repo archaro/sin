@@ -96,6 +96,7 @@ void test_emitbc_opcode_map(void) {
       {"push_float", IR_OP_PUSH_FLOAT, 'P', 0},
       {"push_bool", IR_OP_PUSH_BOOL, 'b', 0},
       {"push_string", IR_OP_PUSH_STRING, 'l', 0},
+      {"push_nil", IR_OP_PUSH_NIL, 'N', 0},
       {"add", IR_OP_ADD, 'a', 0},
       {"sub", IR_OP_SUB, 's', 0},
       {"mul", IR_OP_MUL, 'm', 0},

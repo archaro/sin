@@ -11,6 +11,7 @@
 #include "test_helpers.h"
 #include "shared/test_pipeline_cases.h"
 
+
 static void assert_verify_status(const uint8_t *bytes, uint32_t len,
                                  BC_VerifyStatus expected,
                                  const char *label,
@@ -77,6 +78,11 @@ void test_bytecode_verify_policy_profiles(void) {
   ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
 }
 
+static void test_bytecode_verify_push_nil_return_flow(void) {
+  const uint8_t bytes[] = {0, 0, 'N', 'Q', 'h'};
+  assert_verify_status(bytes, sizeof(bytes), BC_VERIFY_OK, "push_nil", NULL);
+}
+
 void test_bytecode_verify_analysis_storage_is_profile_scoped(void) {
   enum { PUSH_COUNT = 4096 };
   const size_t bytecode_len = 2 + (size_t)PUSH_COUNT * 2 + 1;
@@ -110,6 +116,7 @@ void test_bytecode_verify_analysis_storage_is_profile_scoped(void) {
 }
 
 void test_bytecode_verify_minimal_and_header_errors(void) {
+  test_bytecode_verify_push_nil_return_flow();
   const uint8_t minimal[] = {0, 0, 'h'};
   assert_verify_status(minimal, sizeof(minimal), BC_VERIFY_OK, "minimal", NULL);
 

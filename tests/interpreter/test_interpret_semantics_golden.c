@@ -307,6 +307,12 @@ void test_interpret_result_semantics(void) {
   assert_result_nil("result.middle_expression_discard", "@x = 7; @x; 8;");
   assert_result_int("result.explicit_return", "return 42;", 42);
   assert_result_nil("result.bare_return", "return;");
+  assert_result_nil("result.explicit_nil_return", "return nil;");
+  assert_result_bool("result.nil_semantics", "return nil == nil and !nil and nil != false and nil != 0 and nil != \"\";", true);
+  assert_result_bool("result.nil_local_and_item", "@n = nil; result.explicit_nil = nil; return @n == nil;", true);
+  ITEM_t *explicit_nil = find_item(itemstore_root(config.itemstore_ctx), "result.explicit_nil");
+  ASSERT_NOT_NULL(explicit_nil);
+  ASSERT_EQ_INT(VALUE_nil, item_value(explicit_nil)->type);
   assert_result_int("result.early_return", "return 7; @x = 9;", 7);
   assert_result_int("result.if_return", "if true then return 8; endif; return 9;", 8);
   assert_result_int("result.while_return", "@i = 0; while true do @i++; return @i; endwhile;", 1);

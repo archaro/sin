@@ -8,14 +8,18 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
-| core      |   115 | `tests/core/`           |
+| core      |   116 | `tests/core/`           |
 | compiler  |    31 | `tests/compiler/`       |
 | runtime   |    83 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**229**|                         |
+| **Total** |**230**|                         |
 
 ## core
 
 ### Covered entry points
+
+- Nil literal coverage includes parser/AST recognition and lifecycle, lowering,
+  encoded `N` fixture and verifier stack flow, plus runtime return, truthiness,
+  equality, local assignment, and direct item storage checks.
 
 - Itemstore lifecycle and cache isolation are covered by
   `test_itemstore_cache_state_is_store_local`, including independent topology

@@ -109,6 +109,7 @@ arguments as described below.
 | `I` | `IR_OP_ITEM_BEGIN` | item layers until `E` | Begin absolute item-name assembly. |
 | `L` | `IR_OP_ITEM_PUSH_LAYER` | `u8 length`, bytes | Inside item assembly, append a literal layer name. |
 | `M` | `IR_OP_LIBCALL_TOKEN` | `u8 token` | Dispatch a prevalidated library-call registry token. |
+| `N` | `IR_OP_PUSH_NIL` | none | Push the canonical nil value. |
 | `R` | `IR_OP_ITEM_BEGIN_REL` | item layers until `E` | Begin relative item-name assembly using the current item as context. |
 | `V` | `IR_OP_ITEM_PUSH_DEREF_LOCAL` | `u8 local_index` | Inside a `D` dereference payload, turn the addressed local value into a layer name. |
 

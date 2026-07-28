@@ -1,0 +1,4 @@
+00 00          # header: locals=0 params=0
+4e             # N: push nil
+51             # Q: return
+68             # h: halt

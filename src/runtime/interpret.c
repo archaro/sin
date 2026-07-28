@@ -367,6 +367,13 @@ uint8_t *op_pushbool(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *op_pushnil(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  push_stack(ctx->vm->stack, VALUE_NIL);
+  logverbose("OP_PUSHNIL\n");
+  return nextop;
+}
+
 uint8_t *op_inclocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Interpret the next byte as an index into the locals.
   // If that local is an int, increment it.  Otherwise complain.

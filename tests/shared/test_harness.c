@@ -77,6 +77,7 @@ void test_absyn_stmtlist_multiple_statements(void);
 void test_absyn_if_elsif_else_chain(void);
 void test_absyn_item_deref_chains(void);
 void test_absyn_float_value_preserves_bits(void);
+void test_absyn_nil_value_payload_free(void);
 void test_absyn_malformed_float_valnode_returns_null(void);
 void test_absyn_constructor_allocation_failures(void);
 void test_absyn_valnode_string_second_allocation_failure(void);
@@ -313,6 +314,7 @@ static const test_case_t core_tests[] = {
     {"test_absyn_if_elsif_else_chain", test_absyn_if_elsif_else_chain},
     {"test_absyn_item_deref_chains", test_absyn_item_deref_chains},
     {"test_absyn_float_value_preserves_bits", test_absyn_float_value_preserves_bits},
+    {"test_absyn_nil_value_payload_free", test_absyn_nil_value_payload_free},
     {"test_absyn_malformed_float_valnode_returns_null", test_absyn_malformed_float_valnode_returns_null},
     {"test_absyn_constructor_allocation_failures", test_absyn_constructor_allocation_failures},
     {"test_absyn_valnode_string_second_allocation_failure", test_absyn_valnode_string_second_allocation_failure},

@@ -6,6 +6,7 @@
 #include "test_assert.h"
 #include "test_helpers.h"
 
+
 void test_absyn_nested_binary_expressions(void) {
   AS_NODE *left = t_node(N_ADD, t_int(1), t_int(2));
   AS_NODE *right = t_node(N_SUB, t_int(8), t_int(3));
@@ -162,5 +163,23 @@ void test_absyn_float_value_preserves_bits(void) {
   ASSERT_EQ_INT(V_FLOAT, value->valtype);
   ASSERT_EQ_INT((int64_t)bits, (int64_t)value->value.f_bits);
 
+  as_delete(node);
+}
+
+void test_absyn_nil_value_payload_free(void) {
+  alloc_test_fail_after(0);
+  ASSERT_TRUE(as_new_value(V_NIL, 0, NULL) == NULL);
+  alloc_test_fail_after(-1);
+  AS_VALUE *value = as_new_value(V_NIL, 0, NULL);
+  ASSERT_NOT_NULL(value);
+  ASSERT_EQ_INT(V_NIL, value->valtype);
+  ASSERT_EQ_INT(0, value->value.i);
+  free(value);
+  alloc_test_fail_after(1);
+  ASSERT_TRUE(as_new_valnode(V_NIL, NULL) == NULL);
+  alloc_test_fail_after(-1);
+  AS_NODE *node = as_new_valnode(V_NIL, NULL);
+  ASSERT_NOT_NULL(node);
+  ASSERT_EQ_INT(V_NIL, ((AS_VALUE *)node->lhs)->valtype);
   as_delete(node);
 }

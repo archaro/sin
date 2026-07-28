@@ -21,6 +21,7 @@ void test_emitbc_all_ir_ops_accounted_for(void) {
       {IR_OP_PUSH_FLOAT, 'P', 1},
       {IR_OP_PUSH_BOOL, 'b', 1},
       {IR_OP_PUSH_STRING, 'l', 1},
+      {IR_OP_PUSH_NIL, 'N', 1},
       {IR_OP_ADD, 'a', 1},
       {IR_OP_SUB, 's', 1},
       {IR_OP_MUL, 'm', 1},

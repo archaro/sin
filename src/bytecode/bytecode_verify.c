@@ -113,6 +113,7 @@ static const char *bc_disassembly_mnemonic(IR_Op op) {
   switch (op) {
     case IR_OP_HALT: return "HALT";
     case IR_OP_RETURN: return "RETURN";
+    case IR_OP_PUSH_NIL: return "NIL";
     case IR_OP_ADD: return "ADD";
     case IR_OP_SUB: return "SUBTRACT";
     case IR_OP_MUL: return "MULTIPLY";
@@ -175,7 +176,7 @@ static BC_OperandKind bc_operand_encoding_from_ir(const IR_OpSchema *s) {
 static BC_StackEffect bc_base_stack_effect(IR_Op op) {
   switch (op) {
     case IR_OP_PUSH_INT: case IR_OP_PUSH_FLOAT: case IR_OP_PUSH_BOOL:
-    case IR_OP_PUSH_STRING: case IR_OP_LOAD_LOCAL: case IR_OP_ITEM_BEGIN:
+    case IR_OP_PUSH_STRING: case IR_OP_PUSH_NIL: case IR_OP_LOAD_LOCAL: case IR_OP_ITEM_BEGIN:
     case IR_OP_ITEM_BEGIN_REL:
       return (BC_StackEffect){0, 1, false};
     case IR_OP_LIBCALL_TOKEN:
@@ -592,6 +593,7 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
   switch (schema->op) {
     case IR_OP_HALT:
     case IR_OP_RETURN:
+    case IR_OP_PUSH_NIL:
     case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV: case IR_OP_NEG:
     case IR_OP_EQ: case IR_OP_NEQ: case IR_OP_LT: case IR_OP_GT: case IR_OP_LE: case IR_OP_GE:
     case IR_OP_NOT: case IR_OP_AND: case IR_OP_OR:

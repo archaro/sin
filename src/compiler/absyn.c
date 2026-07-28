@@ -12,7 +12,7 @@
 
 static void as_delete_value_payload(AS_VALUE *value) {
   if (!value) return;
-  if (value->valtype != V_INT && value->valtype != V_FLOAT && value->valtype != V_BOOLTRUE && value->valtype != V_BOOLFALSE) {
+  if (value->valtype != V_INT && value->valtype != V_FLOAT && value->valtype != V_BOOLTRUE && value->valtype != V_BOOLFALSE && value->valtype != V_NIL) {
     free(value->value.s);
   }
 }
@@ -27,7 +27,7 @@ AS_VALUE *as_new_value(ENUM_VALUE valtype, uint64_t ival, char *sval) {
   AS_VALUE *newval = alloc_malloc(sizeof *newval);
   if (!newval) return NULL;
   newval->valtype = valtype;
-  if (valtype == V_INT || valtype == V_BOOLTRUE || valtype == V_BOOLFALSE) {
+  if (valtype == V_INT || valtype == V_BOOLTRUE || valtype == V_BOOLFALSE || valtype == V_NIL) {
     newval->value.i = (int64_t)ival;
   } else if (valtype == V_FLOAT) {
     newval->value.f_bits = ival;
@@ -52,7 +52,7 @@ AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval) {
   // Create a new node of type N_VALUE
   // Like as_new_value(), but puts the value into a node and returns that.
   AS_VALUE *newval;
-  if (valtype != V_BOOLTRUE && valtype != V_BOOLFALSE && !sval) return NULL;
+  if (valtype != V_BOOLTRUE && valtype != V_BOOLFALSE && valtype != V_NIL && !sval) return NULL;
   if (valtype == V_INT) {
     newval = as_new_value(V_INT, (uint64_t)atoll(sval), NULL);
     free(sval);
@@ -74,6 +74,9 @@ AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval) {
   } else if (valtype == V_BOOLFALSE) {
     free(sval);
     newval = as_new_value(V_BOOLFALSE, 0, NULL);
+  } else if (valtype == V_NIL) {
+    free(sval);
+    newval = as_new_value(V_NIL, 0, NULL);
   } else {
     newval = as_new_value(valtype, 0, sval);
     if (!newval) {
@@ -265,7 +268,7 @@ void as_delete(AS_NODE *root) {
 }
 
 // Keep this in sync with ENUM_VALUE!
-const char *valname[] = { "V_INT", "V_FLOAT", "V_STR", "V_LOCAL", "V_LAYER", "V_BOOLTRUE", "V_BOOLFALSE" };
+const char *valname[] = { "V_INT", "V_FLOAT", "V_STR", "V_LOCAL", "V_LAYER", "V_BOOLTRUE", "V_BOOLFALSE", "V_NIL" };
 // And keep this in sync with ENUM_NODE!
 const char *nodename[] = { "N_VALUE", "N_ADD", "N_SUB", "N_MUL", "N_DIV", "N_INC", "N_DEC", "N_EQUAL", "N_NOTEQ", "N_OR", "N_AND", "N_LT", "N_LTEQ", "N_GT", "N_GTEQ", "N_DEREF", "N_ITEM", "N_RELITEM", "N_NOT", "N_LIBCALL", "N_ARGLIST", "N_CODE", "N_CALL", "N_ASSITEM", "N_ASSLOCAL", "N_EXPRSTMT", "N_RETURN", "N_STMTLIST", "N_STMT", "N_WHILESTMT", "N_IFSTMT", "N_DOWHILESTMT" };
 
@@ -290,6 +293,8 @@ void as_reconstruct_value(AS_NODE *node) {
     } else {
       logverbose("0x%016llx", (unsigned long long)val->value.f_bits);
     }
+  } else if (val->valtype == V_NIL) {
+    logverbose("nil");
   } else {
     logverbose("%s", val->value.s);
   }

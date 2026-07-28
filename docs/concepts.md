@@ -135,9 +135,10 @@ Arithmetic: `+`, `-`, `*`, `/` (integer arithmetic when both operands are intege
 
 The usual boolean comparison operators are present, and work in the same way as C.  The `||` and `&&` operators are not present: instead, use `or` and `and`.
 
-Boolean literals are `true` and `false`.
+Boolean literals are `true` and `false`; `nil` is the explicit nil literal (all
+three are case-insensitive reserved words).
 
-True values are: `true`, true outcomes of boolean operations, integer values which are not `0`, float values other than `+0.0` and `-0.0` (including NaN), and non-empty strings.  False values are: `false`, `nil`, integer `0`, float `+0.0` or `-0.0`, and the empty string (`""`).
+True values are: `true`, true outcomes of boolean operations, integer values which are not `0`, float values other than `+0.0` and `-0.0` (including NaN), and non-empty strings.  False values are: `false`, `nil`, integer `0`, float `+0.0` or `-0.0`, and the empty string (`""`). Nil compares equal to nil and remains distinct from `false`, `0`, and `""`.
 
 Examples:
 `is_wizard = true;`

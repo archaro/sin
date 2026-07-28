@@ -9,6 +9,7 @@
 static AS_NODE *v_int(int64_t n) { return t_int(n); }
 static AS_NODE *v_str(const char *s) { return as_new_valnode(V_STR, strdup(s)); }
 static AS_NODE *v_float_bits(uint64_t bits) { return t_node(N_VALUE, as_new_value(V_FLOAT, bits, NULL), NULL); }
+static AS_NODE *v_nil(void) { return t_node(N_VALUE, as_new_value(V_NIL, 0, NULL), NULL); }
 
 static AS_NODE *build_int_literal_program(void) {
   AS_NODE *stmt = t_node(N_EXPRSTMT, v_int(42), NULL);
@@ -18,6 +19,9 @@ static AS_NODE *build_int_literal_program(void) {
 static AS_NODE *build_string_literal_program(void) {
   AS_NODE *stmt = t_node(N_EXPRSTMT, v_str("hi"), NULL);
   return t_stmtlist_with_one(stmt);
+}
+static AS_NODE *build_nil_literal_program(void) {
+  return t_stmtlist_with_one(t_node(N_RETURN, v_nil(), NULL));
 }
 
 static AS_NODE *build_locals_store_load_program(void) {
@@ -64,6 +68,8 @@ static const PipelineGoldenCase PIPELINE_CASES[] = {
      PIPELINE_LAYER_AST | PIPELINE_LAYER_SOURCE},
     {"string_literal", build_string_literal_program, NULL, "tests/fixtures/string_literal.hex",
      PIPELINE_LAYER_AST},
+    {"nil_literal", build_nil_literal_program, "return nil;", "tests/fixtures/nil_literal.hex",
+     PIPELINE_LAYER_AST | PIPELINE_LAYER_SOURCE},
     {"locals_store_load", build_locals_store_load_program, "@x = 7; @x;", "tests/fixtures/locals_store_load.hex",
      PIPELINE_LAYER_AST | PIPELINE_LAYER_SOURCE},
     {"arithmetic_add", build_arithmetic_program, "2 + 3;", "tests/fixtures/arithmetic_add.hex",

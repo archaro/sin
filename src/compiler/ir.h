@@ -20,6 +20,7 @@ typedef enum {
   IR_OP_PUSH_FLOAT,
   IR_OP_PUSH_BOOL,
   IR_OP_PUSH_STRING,
+  IR_OP_PUSH_NIL,
 
   IR_OP_ADD,
   IR_OP_SUB,

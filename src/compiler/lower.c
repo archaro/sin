@@ -262,6 +262,9 @@ static void lower_value_expr(LOWER_CTX *ctx, AS_NODE *node) {
     case V_BOOLFALSE:
       lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_BOOL, .a = value->value.i ? 1 : 0});
       return;
+    case V_NIL:
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_NIL});
+      return;
     case V_STR:
       lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_STRING, .imm = (int64_t)(intptr_t)value->value.s});
       return;

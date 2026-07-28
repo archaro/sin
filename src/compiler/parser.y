@@ -365,7 +365,7 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 %token <char *> TLIBNAME
 %token <char *> TCODEBODY
 %token <char *> TUNKNOWNCHAR
-%token TTRUE TFALSE
+%token TTRUE TFALSE TNIL
 %nonassoc TSEMI TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF TRETURN
 
 %type <AS_NODE*> deref_content dereference first_layer subsequent_layers layer
@@ -473,6 +473,7 @@ expr:     TLOCAL { $$ = parser_new_value(state, V_LOCAL, $1); if (!$$) YYERROR; 
         | TSTRINGLIT { $$ = parser_new_value(state, V_STR, $1); if (!$$) YYERROR; }
         | TTRUE { $$ = parser_new_value(state, V_BOOLTRUE, NULL); if (!$$) YYERROR; }
         | TFALSE { $$ = parser_new_value(state, V_BOOLFALSE, NULL); if (!$$) YYERROR; }
+        | TNIL { $$ = parser_new_value(state, V_NIL, NULL); if (!$$) YYERROR; }
         | item args { $$ = parser_new_node(state, N_CALL, $1, $2, true, false); if (!$$) YYERROR; }
         | expr TEQUAL expr { $$ = parser_new_node(state, N_EQUAL, $1, $3, true, true); if (!$$) YYERROR; }
         | expr TNOTEQUAL expr { $$ = parser_new_node(state, N_NOTEQ, $1, $3, true, true); if (!$$) YYERROR; }

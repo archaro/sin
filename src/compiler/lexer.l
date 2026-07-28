@@ -242,6 +242,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   "then"        { return TTHEN; }
   "true"        { return TTRUE; }
   "false"       { return TFALSE; }
+  "nil"         { return TNIL; }
   "while"       { return TWHILE; }
   "="           { return TASSIGN; }
   "=="          { return TEQUAL; }
