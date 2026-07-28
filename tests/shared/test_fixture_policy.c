@@ -67,6 +67,7 @@ void test_fixture_policy_declared_goldens_exist(void) {
       {"echo_load_src", "examples/echo-load.src", "SOT: examples/echo-load.src | regen: authored source fixture"},
       {"int_literal_src", "tests/fixtures/int_literal.src", "SOT: tests/fixtures/int_literal.src | regen: authored source fixture"},
       {"break_log_src", "tests/fixtures/interpret/break-log.src", "SOT: tests/fixtures/interpret/break-log.src | regen: authored source fixture"},
+      {"continue_log_src", "tests/fixtures/interpret/continue-log.src", "SOT: tests/fixtures/interpret/continue-log.src | regen: authored source fixture"},
   };
 
   static const FixtureEntry bytecode_hex_fixtures[] = {
@@ -80,6 +81,7 @@ void test_fixture_policy_declared_goldens_exist(void) {
       {"echo_load_expected", "tests/fixtures/interpret/echo-load.expected.txt", "SOT: runtime output contract for echo-load | regen: ./scomp examples/echo-load.src tests/fixtures/interpret/echo-load.generated.obj && ./sin -o tests/fixtures/interpret/echo-load.generated.obj > tests/fixtures/interpret/echo-load.expected.txt"},
       {"sdiss_basic_expected", "tests/fixtures/sdiss/basic.expected.txt", "SOT: sdiss stdout for tests/fixtures/sdiss/basic.hex | regen: ./sdiss --no-header -o tests/fixtures/sdiss/basic.bin"},
       {"break_log_expected", "tests/fixtures/interpret/break-log.expected.txt", "SOT: runtime output contract for break-log | regen: ./scomp tests/fixtures/interpret/break-log.src tests/fixtures/interpret/break-log.generated.obj && ./sin -o tests/fixtures/interpret/break-log.generated.obj > tests/fixtures/interpret/break-log.expected.txt"},
+      {"continue_log_expected", "tests/fixtures/interpret/continue-log.expected.txt", "SOT: runtime output contract for continue-log | regen: ./scomp tests/fixtures/interpret/continue-log.src tests/fixtures/interpret/continue-log.generated.obj && ./sin -o tests/fixtures/interpret/continue-log.generated.obj > tests/fixtures/interpret/continue-log.expected.txt"},
   };
 
   assert_no_duplicate_fixture_entries(source_fixtures,
