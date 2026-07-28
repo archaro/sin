@@ -55,6 +55,7 @@ void test_parser_input_api(void) {
   AS_VALUE *nil_value = (AS_VALUE *)((AS_NODE *)nil_list->stmts[0]->lhs)->lhs;
   ASSERT_NOT_NULL(nil_value);
   ASSERT_EQ_INT(V_NIL, nil_value->valtype);
+  as_delete(absyn);
 
   const char control_flow[] = "break; continue;";
   ParseInput control_input = {control_flow, sizeof(control_flow) - 1,
