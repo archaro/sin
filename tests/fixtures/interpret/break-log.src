@@ -1,0 +1,8 @@
+@a = 0;
+WHILE @a < 10 DO
+  IF @a == 5 THEN
+    BREAK;
+  ENDIF;
+  @a++;
+ENDWHILE;
+sys.log{@a};

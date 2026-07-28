@@ -180,6 +180,8 @@ void test_interpret_semantics_golden(void) {
        "tests/fixtures/interpret/echo-boot.expected.txt", {NULL, NULL}},
       {"echo_load", "examples/echo-load.src",
        "tests/fixtures/interpret/echo-load.expected.txt", {"input", NULL}},
+      {"break_log", "tests/fixtures/interpret/break-log.src",
+       "tests/fixtures/interpret/break-log.expected.txt", {NULL, NULL}},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
