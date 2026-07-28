@@ -106,6 +106,12 @@ Comments begin with `/*` and end with `*/`, and may include anything, including 
 truthy. For example, `@a = 0; DO sys.log{@a}; @a++; WHILE @a < 5;` logs a
 counter from zero through four. The loop itself has no result value.
 
+`BREAK;` exits the nearest enclosing loop. `CONTINUE;` skips to the next
+iteration of the nearest loop: in a `WHILE ... DO` loop it re-tests the
+condition, while in a `DO ... WHILE` loop it proceeds to the trailing condition
+before deciding whether to repeat. These statements cannot be used outside a
+loop.
+
 `RETURN;` can be used at any point to halt execution of the item and return
 `nil`. `RETURN expression;` evaluates the expression once, halts immediately,
 and returns that value. Falling off the end also returns `nil`; expression

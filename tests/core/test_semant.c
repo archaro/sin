@@ -7,6 +7,8 @@
 #include "test_assert.h"
 #include "test_helpers.h"
 
+static void test_sem_break_continue_loop_scope(void);
+
 void test_sem_check_locals_reusable_context(void) {
   SEM_CTX *ctx = sem_create_ctx();
   ASSERT_NOT_NULL(ctx);
@@ -153,6 +155,47 @@ void test_sem_embedded_scope_error_detail_includes_provenance(void) {
 
   free(errdetail);
   as_delete(program);
+  sem_delete_ctx(ctx);
+  test_sem_break_continue_loop_scope();
+}
+
+static void test_sem_break_continue_loop_scope(void) {
+  AS_NODE *root = NULL;
+  SEM_CTX *ctx = NULL;
+  char *errdetail = NULL;
+  for (int nodetype = N_BREAK; nodetype <= N_CONTINUE; nodetype++) {
+    AS_NODE *embedded_body = as_new_stmtlist_node();
+    embedded_body = as_stmtlist_append(
+        embedded_body, t_node((ENUM_NODE)nodetype, NULL, NULL));
+    AS_NODE *embedded = t_node(N_CODE, NULL, embedded_body);
+    AS_NODE *outer_body = t_stmtlist_with_one(t_node(N_EXPRSTMT, embedded, NULL));
+    root = t_stmtlist_with_one(t_node(N_WHILESTMT, t_int(1), outer_body));
+    ctx = sem_create_ctx();
+    ASSERT_NOT_NULL(ctx);
+    errdetail = NULL;
+    ASSERT_EQ_INT(ERR_COMP_SYNTAX, sem_check_locals(root, &errdetail, ctx));
+    ASSERT_NOT_NULL(errdetail);
+    ASSERT_TRUE(strstr(errdetail, nodetype == N_BREAK
+                                      ? "embedded code: semant: BREAK outside loop"
+                                      : "embedded code: semant: CONTINUE outside loop") != NULL);
+    free(errdetail);
+    as_delete(root);
+    sem_delete_ctx(ctx);
+  }
+
+  AS_NODE *while_body = t_stmtlist_with_one(t_node(N_CONTINUE, NULL, NULL));
+  AS_NODE *while_node = t_node(N_WHILESTMT, t_int(1), while_body);
+  AS_NODE *do_body = t_stmtlist_with_one(t_node(N_BREAK, NULL, NULL));
+  AS_NODE *do_node = t_node(N_DOWHILESTMT, t_int(1), do_body);
+  root = as_new_stmtlist_node();
+  root = as_stmtlist_append(root, while_node);
+  root = as_stmtlist_append(root, do_node);
+  ctx = sem_create_ctx();
+  ASSERT_NOT_NULL(ctx);
+  errdetail = NULL;
+  ASSERT_EQ_INT(ERR_NOERROR, sem_check_locals(root, &errdetail, ctx));
+  ASSERT_TRUE(errdetail == NULL);
+  as_delete(root);
   sem_delete_ctx(ctx);
 }
 

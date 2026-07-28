@@ -226,7 +226,9 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
 
 <INITIAL>{
   "and"         { return TAND; }
+  "break"       { return TBREAK; }
   "code"        { BEGIN(CODE); return TCODE; }
+  "continue"    { return TCONTINUE; }
   "do"          { return TDO; }
   "else"        { return TELSE; }
   "elsif"       { return TELSIF; }

@@ -164,6 +164,7 @@ SEM_CTX *sem_create_ctx(void) {
   (*ctx).capacity = 0;
   (*ctx).index_capacity = 0;
   (*ctx).local_index_sorted = true;
+  (*ctx).loop_depth = 0;
   (*ctx).errnum = ERR_NOERROR;
   (*ctx).errdetail = NULL;
 
@@ -257,8 +258,23 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
     case N_DOWHILESTMT:
       /* Body executes at least once, so assignments there define locals
        * before the condition is evaluated. */
+      ctx->loop_depth++;
       sem_walk(ctx, (AS_NODE *)node->rhs);
+      ctx->loop_depth--;
       sem_walk(ctx, (AS_NODE *)node->lhs);
+      return;
+    case N_WHILESTMT:
+      sem_walk(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum != ERR_NOERROR) return;
+      ctx->loop_depth++;
+      sem_walk(ctx, (AS_NODE *)node->rhs);
+      ctx->loop_depth--;
+      return;
+    case N_BREAK:
+      if (ctx->loop_depth == 0) sem_set_error(ctx, ERR_COMP_SYNTAX, "BREAK outside loop");
+      return;
+    case N_CONTINUE:
+      if (ctx->loop_depth == 0) sem_set_error(ctx, ERR_COMP_SYNTAX, "CONTINUE outside loop");
       return;
     case N_CODE: {
       SEM_CTX *embedded = sem_create_ctx();
@@ -317,6 +333,7 @@ int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic
 
   compdiag_reset_detail(&ctx->errdetail);
   ctx->errnum = ERR_NOERROR;
+  ctx->loop_depth = 0;
 
   sem_walk(ctx, root);
 

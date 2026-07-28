@@ -452,6 +452,21 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
       }
       return;
 
+    case N_BREAK:
+      if (ctx->break_label < 0) {
+        lower_set_error(ctx, ERR_COMP_SYNTAX, "BREAK outside loop");
+        return;
+      }
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP, .a = ctx->break_label});
+      return;
+    case N_CONTINUE:
+      if (ctx->continue_label < 0) {
+        lower_set_error(ctx, ERR_COMP_SYNTAX, "CONTINUE outside loop");
+        return;
+      }
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP, .a = ctx->continue_label});
+      return;
+
     case N_ASSLOCAL: {
       AS_NODE *local = (AS_NODE *)node->lhs;
       uint8_t index = 0;
@@ -534,7 +549,13 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
       if (ctx->errnum != ERR_NOERROR) return;
       if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = end_label})) return;
 
+      int32_t old_break = ctx->break_label;
+      int32_t old_continue = ctx->continue_label;
+      ctx->break_label = end_label;
+      ctx->continue_label = start_label;
       lower_stmtlist(ctx, (AS_NODE *)node->rhs);
+      ctx->break_label = old_break;
+      ctx->continue_label = old_continue;
       if (ctx->errnum != ERR_NOERROR) return;
       if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP, .a = start_label})) return;
 
@@ -545,15 +566,25 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
 
     case N_DOWHILESTMT: {
       int32_t start_label = -1;
+      int32_t cond_label = -1;
       int32_t end_label = -1;
       if (!lower_new_label(ctx, &start_label)) return;
+      if (!lower_new_label(ctx, &cond_label)) return;
       if (!lower_new_label(ctx, &end_label)) return;
 
       if (!lower_bind_label(ctx, start_label)) return;
       if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = start_label})) return;
 
+      int32_t old_break = ctx->break_label;
+      int32_t old_continue = ctx->continue_label;
+      ctx->break_label = end_label;
+      ctx->continue_label = cond_label;
       lower_stmtlist(ctx, (AS_NODE *)node->rhs);
+      ctx->break_label = old_break;
+      ctx->continue_label = old_continue;
       if (ctx->errnum != ERR_NOERROR) return;
+      if (!lower_bind_label(ctx, cond_label)) return;
+      if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = cond_label})) return;
       lower_expr(ctx, (AS_NODE *)node->lhs);
       if (ctx->errnum != ERR_NOERROR) return;
       if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = end_label})) return;
@@ -624,6 +655,8 @@ int8_t lower_ast_to_ir_diag(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char 
   ctx.sem = sem;
   ctx.ir = ir_create_unit();
   ctx.errnum = ERR_NOERROR;
+  ctx.break_label = -1;
+  ctx.continue_label = -1;
 
   if (!libcall_init_registry()) {
     ir_destroy_unit(ctx.ir);

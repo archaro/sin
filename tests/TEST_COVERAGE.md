@@ -50,7 +50,9 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   - `tests/core/test_parser_input_api.c`
     - parser allocation-failure cleanup includes `RETURN` and post-test
       `DO..WHILE` trees; parser input coverage asserts bare and valued return
-      AST nodes and malformed return expressions
+      AST nodes, `BREAK`/`CONTINUE` nodes, and malformed return expressions
+  - `tests/compiler/test_pipeline_negative_matrix.c`
+    - semantic rejection and stable diagnostics for `BREAK`/`CONTINUE` outside loops
   - `tests/core/test_parser_float_literals.c`
     - `test_parser_float_literals_decimal_forms`
     - `test_parser_float_literals_integer_still_int`
@@ -68,6 +70,8 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
       coverage)
     - `test_lower_returns_and_discards_expression_statements` (explicit
       `RETURN`, bare `HALT`, structural final `HALT`, and expression discard)
+    - defensive lowering rejection for manually constructed outside-loop
+      `BREAK`/`CONTINUE` nodes
   - `tests/core/test_opcode_schema.c`
   - `tests/core/test_item_cache.c`
     - `test_murmur3_32_alignment_and_vectors` (deterministic MurmurHash3
@@ -418,3 +422,7 @@ the `net.*` libcall contract tests in `tests/core/test_libcall_net.c`:
 - `tests/network/test_chat_smoke.c` exercises the full stack end-to-end
   through real localhost sockets and the Sinistra runtime. These tests are
   built and run by `make test-chat-smoke`.
+
+Loop-control coverage (BREAK/CONTINUE) includes parser recognition, semantic
+scope rejection, nearest-loop lowering, and runtime behavior in both loop
+forms, including DO-WHILE condition targeting.

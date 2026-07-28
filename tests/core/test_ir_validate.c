@@ -157,6 +157,22 @@ static void test_lower_local_resolution_errors_consistent(void) {
   as_delete(null_expr_stmt);
 }
 
+static void test_lower_control_flow_outside_loop_rejected(void) {
+  for (int nodetype = N_BREAK; nodetype <= N_CONTINUE; nodetype++) {
+    AS_NODE *root = t_stmtlist_with_one(t_node((ENUM_NODE)nodetype, NULL, NULL));
+    IR_Unit *ir = NULL;
+    char *errdetail = NULL;
+    ASSERT_EQ_INT(ERR_COMP_SYNTAX,
+                  lower_ast_to_ir(root, NULL, &ir, &errdetail));
+    ASSERT_TRUE(ir == NULL);
+    ASSERT_NOT_NULL(errdetail);
+    ASSERT_TRUE(strstr(errdetail, nodetype == N_BREAK ? "BREAK outside loop"
+                                                       : "CONTINUE outside loop") != NULL);
+    free(errdetail);
+    as_delete(root);
+  }
+}
+
 void test_ir_validate(void) {
   test_ir_validate_ok_case();
   test_ir_validate_unbound_label_rejected();
@@ -166,4 +182,5 @@ void test_ir_validate(void) {
   test_lower_float_value_emits_push_float();
   test_lower_returns_and_discards_expression_statements();
   test_lower_local_resolution_errors_consistent();
+  test_lower_control_flow_outside_loop_rejected();
 }

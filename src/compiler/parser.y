@@ -366,6 +366,7 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 %token <char *> TCODEBODY
 %token <char *> TUNKNOWNCHAR
 %token TTRUE TFALSE
+%token TBREAK TCONTINUE
 %nonassoc TSEMI TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF TRETURN
 
 %type <AS_NODE*> deref_content dereference first_layer subsequent_layers layer
@@ -432,6 +433,14 @@ stmt:   TWHILE expr TDO stmtlist TENDWHILE {
         }
         | TIF expr TTHEN stmtlist elsif_else_opt TENDIF {
           $$ = parser_new_if_node(state, $2, $4, $5);
+          if (!$$) YYERROR;
+        }
+        | TBREAK {
+          $$ = parser_new_node(state, N_BREAK, NULL, NULL, false, false);
+          if (!$$) YYERROR;
+        }
+        | TCONTINUE {
+          $$ = parser_new_node(state, N_CONTINUE, NULL, NULL, false, false);
           if (!$$) YYERROR;
         }
         | TRETURN {
