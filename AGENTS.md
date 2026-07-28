@@ -22,39 +22,6 @@ criteria, final validation, and the final answer. It is always the final
 reviewer and must not accept a worker's summary without inspecting the diff and
 test evidence.
 
-### DeepSeek transport workaround
-
-Until the installed Codex release fixes the cross-provider encrypted-message
-defect tracked by `openai/codex#28058`, do not use native Multi-Agent V2
-`spawn_agent`, `send_message`, or `followup_task` calls for DeepSeek. Those
-calls can deliver an empty plaintext payload to an OpenRouter/DeepSeek child.
-
-Run each DeepSeek turn as a standalone non-interactive Codex process and supply
-the handoff as an ordinary prompt argument or through stdin:
-
-```sh
-codex exec -C <repo-root> --sandbox workspace-write \
-  -c 'approval_policy="never"' \
-  -c 'model_provider="openrouter"' \
-  -m 'deepseek/deepseek-v4-pro' \
-  -c 'model_reasoning_effort="high"' \
-  '<self-contained handoff>'
-```
-
-- Launch the outer `codex exec` outside the root agent's sandbox with scoped
-  escalation (normally the `["codex", "exec"]` prefix). Keep the inner
-  DeepSeek process sandboxed as `workspace-write`; use `read-only` instead when
-  the task does not require edits.
-- Wait for the process to finish and treat its final stdout, exit status,
-  working-tree diff, and test output as the worker handoff. The process is not a
-  native subagent and will not appear in native agent status or mailbox tools.
-- Give every corrective DeepSeek turn a new, complete `codex exec` prompt that
-  includes the original task plus the root review findings. Do not use native
-  continuation messages at the DeepSeek boundary.
-- Retire this workaround only after the installed Codex version contains an
-  upstream fix and a cross-provider spawn and follow-up probe confirms that the
-  complete plaintext payload reaches DeepSeek.
-
 ### Special instructions for OpenAI models
 - In Code Mode, within each bounded stage, run independent,
   functions.exec-available tool calls concurrently in one functions.exec call.
@@ -71,9 +38,6 @@ codex exec -C <repo-root> --sandbox workspace-write \
 For every native implementation, correction, or review agent:
 
 - Set `fork_turns: "none"`; never pass the root conversation history.
-
-For every standalone DeepSeek process, use the ordinary prompt as the isolated
-handoff; do not include the root conversation history.
 
 For every implementation, correction, or review handoff:
 
@@ -94,29 +58,21 @@ For non-trivial code changes:
 
 1. Inspect enough of the repository to define a bounded task, explicit
    acceptance criteria, affected subsystems, constraints, and tests.
-2. Give the first implementation attempt to DeepSeek through the standalone
-   `codex exec` transport above, using an isolated handoff.
+2. Give the first implementation attempt to Luna (Medium).
 3. Review its diff and test evidence yourself.
-4. If useful, give rejected DeepSeek work one focused corrective
-   `codex exec` turn with a complete updated handoff.
-5. If the third DeepSeek result still fails a check, is incomplete, violates
+4. If useful, give rejected Luna work up to three focused corrective turn with
+   a complete updated handoff and upgrade the effort to High.
+5. If the fifth Luna result still fails a check, is incomplete, violates
    an acceptance criterion, requires substantial correction, or leaves
-   unresolved uncertainty, delegate the correction to `terra_writer`. Never
-   give DeepSeek a third implementation turn for the same bounded task.
-6. Give Luna the original task and criteria, current tree state, a concise
-   account of DeepSeek's approach, concrete review findings, relevant failure
-   output, and the exact reason for escalation. Then independently review and
-   validate Luna's result.
+   unresolved uncertainty, delegate the correction to Sol (High).
 
 The root may make tiny mechanical edits. Substantive implementation follows
-the DeepSeek-first, Luna-on-third-rejection policy.
+the Luna-first, Sol-on-fifth-rejection policy.
 
 ### Agent count and review scope
 
 Use the smallest workflow that satisfies the task:
 
-- A request to use a worker means the implementation worker above; it does not
-  by itself require `subagent-driven-development` or separate reviewer agents.
 - One bounded task normally needs one implementation process plus root review
   and validation. Do not automatically add both task and whole-branch reviewers.
 - Add one independent reviewer only for unusual risk, cross-subsystem work,
