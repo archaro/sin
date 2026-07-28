@@ -55,6 +55,18 @@ void test_parser_input_api(void) {
   AS_VALUE *nil_value = (AS_VALUE *)((AS_NODE *)nil_list->stmts[0]->lhs)->lhs;
   ASSERT_NOT_NULL(nil_value);
   ASSERT_EQ_INT(V_NIL, nil_value->valtype);
+
+  const char control_flow[] = "break; continue;";
+  ParseInput control_input = {control_flow, sizeof(control_flow) - 1,
+                              "control-flow.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&control_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  AS_STMTLIST *controls = (AS_STMTLIST *)absyn->lhs;
+  ASSERT_EQ_INT(N_BREAK, controls->stmts[0]->nodetype);
+  ASSERT_EQ_INT(N_CONTINUE, controls->stmts[1]->nodetype);
   as_delete(absyn);
 
   const char returns[] = "return; return 17;";

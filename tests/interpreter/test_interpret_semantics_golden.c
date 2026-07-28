@@ -180,6 +180,10 @@ void test_interpret_semantics_golden(void) {
        "tests/fixtures/interpret/echo-boot.expected.txt", {NULL, NULL}},
       {"echo_load", "examples/echo-load.src",
        "tests/fixtures/interpret/echo-load.expected.txt", {"input", NULL}},
+      {"break_log", "tests/fixtures/interpret/break-log.src",
+       "tests/fixtures/interpret/break-log.expected.txt", {NULL, NULL}},
+      {"continue_log", "tests/fixtures/interpret/continue-log.src",
+       "tests/fixtures/interpret/continue-log.expected.txt", {NULL, NULL}},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
@@ -340,6 +344,12 @@ void test_interpret_result_semantics(void) {
                     "@i = 0; do @i++; while false; return @i;", 1);
   assert_result_nil("result.do_while_statement_discards_body_value",
                     "@i = 0; do @i++; 44; while false;");
+  assert_result_int("result.break_continue_while",
+                    "@i = 0; @sum = 0; while @i < 5 do @i++; if @i == 2 then continue; endif; if @i == 4 then break; endif; @sum++; endwhile; return @sum;", 2);
+  assert_result_int("result.break_continue_do_while",
+                    "@a = 0; do @a++; if @a == 1 then continue; endif; if @a == 2 then break; endif; while @a < 1; @b = 0; do @b++; break; while true; return @a * 10 + @b;", 11);
+  assert_result_int("result.break_continue_nearest_nested",
+                    "@outer = 0; @hits = 0; while @outer < 2 do @outer++; @inner = 0; do @inner++; if @inner == 1 then continue; endif; @hits++; if @inner == 2 then break; endif; while @inner < 4; endwhile; return @hits;", 2);
 
   assert_result_bool("result.return_libcall", "return sys.exists{\"result.missing\"};", false);
   assert_result_int("result.nonfinal_libcall_discard",

@@ -33,6 +33,7 @@ typedef struct {
   uint32_t capacity;
   uint32_t index_capacity;
   bool local_index_sorted;
+  uint32_t loop_depth;
   int8_t errnum;
   char *errdetail;
 } SEM_CTX;

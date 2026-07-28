@@ -1,0 +1,7 @@
+===stdout===
+Using 'srcroot' as the source root.
+5
+===stderr===
+
+===exit===
+0

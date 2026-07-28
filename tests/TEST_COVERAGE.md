@@ -54,7 +54,9 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   - `tests/core/test_parser_input_api.c`
     - parser allocation-failure cleanup includes `RETURN` and post-test
       `DO..WHILE` trees; parser input coverage asserts bare and valued return
-      AST nodes and malformed return expressions
+      AST nodes, `BREAK`/`CONTINUE` nodes, and malformed return expressions
+  - `tests/compiler/test_pipeline_negative_matrix.c`
+    - semantic rejection and stable diagnostics for `BREAK`/`CONTINUE` outside loops
   - `tests/core/test_parser_float_literals.c`
     - `test_parser_float_literals_decimal_forms`
     - `test_parser_float_literals_integer_still_int`
@@ -72,6 +74,8 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
       coverage)
     - `test_lower_returns_and_discards_expression_statements` (explicit
       `RETURN`, bare `HALT`, structural final `HALT`, and expression discard)
+    - defensive lowering rejection for manually constructed outside-loop
+      `BREAK`/`CONTINUE` nodes
   - `tests/core/test_opcode_schema.c`
   - `tests/core/test_item_cache.c`
     - `test_murmur3_32_alignment_and_vectors` (deterministic MurmurHash3
@@ -427,3 +431,7 @@ Modulo `%` coverage includes value helper and runtime opcode cases (integer,
 float, zero divisors, invalid operands), opcode schema/accounting manifests,
 and parser-to-bytecode pipeline validation through the standard compiler and
 interpreter suites, including `tests/fixtures/arithmetic_modulo.hex`.
+
+Loop-control coverage (BREAK/CONTINUE) includes parser recognition, semantic
+scope rejection, nearest-loop lowering, and runtime behavior in both loop
+forms, including DO-WHILE condition targeting.

@@ -61,6 +61,8 @@ void test_pipeline_negative_matrix(void) {
       {"parser_do_while_missing_condition", CASE_SOURCE, "do 1; while ;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 3},
       {"semantic_use_before_def", CASE_SOURCE, "@x;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @x", 1},
       {"semantic_invalid_increment_target", CASE_SOURCE, "@x = 1; @y++;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @y", 1},
+      {"semantic_break_outside_loop", CASE_SOURCE, "break;", NULL, ERR_COMP_SYNTAX, STAGE_SEMANTIC, "BREAK outside loop", 2},
+      {"semantic_continue_outside_loop", CASE_SOURCE, "continue;", NULL, ERR_COMP_SYNTAX, STAGE_SEMANTIC, "CONTINUE outside loop", 2},
 
       {"parser_combo_priority_over_semantic", CASE_SOURCE, "@x; endif;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 3},
       {"semantic_combo_first_undefined_local", CASE_SOURCE, "@b; @a++;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @b", 3},
