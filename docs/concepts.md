@@ -139,7 +139,7 @@ Arithmetic: `+`, `-`, `*`, `/`, `%` (same precedence and left associativity as `
 
 `WHILE @a++ < 100 DO ...; ENDWHILE;`
 
-The usual boolean comparison operators are present, and work in the same way as C.  The `||` and `&&` operators are not present: instead, use `or` and `and`.
+The usual boolean comparison operators are present, and work in the same way as C.  The `||` and `&&` operators are not present: instead, use `or` and `and`.  Boolean `and` and `or` are short-circuiting: expressions are evaluated from left to right, and the right-hand expression is skipped when the left side already determines the result.  Both operators always return a normalized boolean.  Binary operands and call arguments likewise evaluate left to right in source order.
 
 Boolean literals are `true` and `false`; `nil` is the explicit nil literal (all
 three are case-insensitive reserved words).

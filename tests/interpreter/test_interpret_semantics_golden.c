@@ -314,6 +314,23 @@ void test_interpret_result_semantics(void) {
   assert_result_nil("result.bare_return", "return;");
   assert_result_nil("result.explicit_nil_return", "return nil;");
   assert_result_bool("result.nil_semantics", "return nil == nil and !nil and nil != false and nil != 0 and nil != \"\";", true);
+  assert_result_int("result.and_skips_falsy_rhs",
+                    "result.marker = 0; result.rhs = code ( result.marker = 1; return 7; ); false and result.rhs; return result.marker;", 0);
+  assert_result_int("result.or_skips_truthy_rhs",
+                    "result.marker = 0; result.rhs = code ( result.marker = 1; return 7; ); true or result.rhs; return result.marker;", 0);
+  assert_result_int("result.and_evaluates_rhs_once",
+                    "result.marker = 0; result.rhs = code ( result.marker = result.marker + 1; return 7; ); true and result.rhs; return result.marker;", 1);
+  assert_result_int("result.or_evaluates_rhs_once",
+                    "result.marker = 0; result.rhs = code ( result.marker = result.marker + 1; return 7; ); false or result.rhs; return result.marker;", 1);
+  assert_result_int("result.logical_lhs_evaluates_once",
+                    "result.marker = 0; result.lhs = code ( result.marker = result.marker + 1; return false; ); result.rhs = code ( result.marker = result.marker + 10; return true; ); result.lhs and result.rhs; return result.marker;", 1);
+  assert_result_bool("result.and_normalizes_truthiness", "return 3 and 7;", true);
+  assert_result_bool("result.or_normalizes_truthiness", "return 0 or 7;", true);
+  assert_result_bool("result.falsy_short_circuit_normalizes", "return nil and 7;", false);
+  assert_result_int("result.binary_operands_left_to_right",
+                    "result.order = 0; result.left = code ( result.order = result.order * 10 + 1; return 2; ); result.right = code ( result.order = result.order * 10 + 2; return 3; ); result.left + result.right; return result.order;", 12);
+  assert_result_int("result.call_arguments_left_to_right",
+                    "result.order = 0; result.callee = code {@a, @b} ( return @a * 10 + @b; ); result.one = code ( result.order = result.order * 10 + 1; return 1; ); result.two = code ( result.order = result.order * 10 + 2; return 2; ); result.callee{result.one, result.two}; return result.order;", 12);
   assert_result_bool("result.nil_local_and_item", "@n = nil; result.explicit_nil = nil; return @n == nil;", true);
   ITEM_t *explicit_nil = find_item(itemstore_root(config.itemstore_ctx), "result.explicit_nil");
   ASSERT_NOT_NULL(explicit_nil);

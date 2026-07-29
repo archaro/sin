@@ -290,6 +290,45 @@ static void lower_binary_expr(LOWER_CTX *ctx, AS_NODE *node, IR_Op op) {
   lower_emit(ctx, (IR_Inst){.op = op});
 }
 
+/* Lower logical operators as control flow so the RHS is only evaluated when
+ * its value can affect the result.  JUMP_IF_FALSE consumes its condition,
+ * therefore each branch explicitly pushes the normalized boolean result. */
+static void lower_short_circuit_expr(LOWER_CTX *ctx, AS_NODE *node,
+                                     bool is_or) {
+  int32_t rhs_label = -1;
+  int32_t false_label = -1;
+  int32_t end_label = -1;
+
+  if (is_or && !lower_new_label(ctx, &rhs_label)) return;
+  if (!lower_new_label(ctx, &false_label) ||
+      !lower_new_label(ctx, &end_label)) return;
+
+  lower_expr(ctx, (AS_NODE *)node->lhs);
+  if (ctx->errnum != ERR_NOERROR) return;
+  if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE,
+                                 .a = is_or ? rhs_label : false_label})) return;
+
+  if (is_or) {
+    if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_BOOL, .a = 1})) return;
+    if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP, .a = end_label})) return;
+    if (!lower_bind_label(ctx, rhs_label) ||
+        !lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = rhs_label})) return;
+  }
+
+  lower_expr(ctx, (AS_NODE *)node->rhs);
+  if (ctx->errnum != ERR_NOERROR) return;
+  if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE,
+                                 .a = false_label})) return;
+  if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_BOOL, .a = 1})) return;
+  if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP, .a = end_label})) return;
+
+  if (!lower_bind_label(ctx, false_label) ||
+      !lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = false_label}) ||
+      !lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_BOOL, .a = 0}) ||
+      !lower_bind_label(ctx, end_label)) return;
+  lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = end_label});
+}
+
 static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
   if (!ctx || !node || ctx->errnum != ERR_NOERROR) return;
 
@@ -309,8 +348,8 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
     case N_LTEQ: lower_binary_expr(ctx, node, IR_OP_LE); return;
     case N_GT: lower_binary_expr(ctx, node, IR_OP_GT); return;
     case N_GTEQ: lower_binary_expr(ctx, node, IR_OP_GE); return;
-    case N_AND: lower_binary_expr(ctx, node, IR_OP_AND); return;
-    case N_OR: lower_binary_expr(ctx, node, IR_OP_OR); return;
+    case N_AND: lower_short_circuit_expr(ctx, node, false); return;
+    case N_OR: lower_short_circuit_expr(ctx, node, true); return;
 
     case N_NOT:
       lower_expr(ctx, (AS_NODE *)node->lhs);

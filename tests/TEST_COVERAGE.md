@@ -21,6 +21,11 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   encoded `N` fixture and verifier stack flow, plus runtime return, truthiness,
   equality, local assignment, and direct item storage checks.
 
+- Short-circuit boolean lowering and deterministic left-to-right expression
+  evaluation are covered by `test_ir_validate` and interpreter semantics
+  golden/source cases, including branch-balanced IR, normalized boolean
+  results, skipped RHS expressions, and ordered call arguments.
+
 - Itemstore lifecycle and cache isolation are covered by
   `test_itemstore_cache_state_is_store_local`, including independent topology
   and payload revisions, hit/miss counters, mutation invalidation, and destruction of

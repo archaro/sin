@@ -190,6 +190,34 @@ static void test_lower_control_flow_outside_loop_rejected(void) {
   }
 }
 
+static void test_lower_short_circuit_uses_balanced_control_flow(void) {
+  const int nodes[] = {N_AND, N_OR};
+  for (size_t n = 0; n < sizeof(nodes) / sizeof(nodes[0]); n++) {
+    AS_NODE *expr = t_node((ENUM_NODE)nodes[n], t_int(0), t_int(1));
+    AS_NODE *root = t_stmtlist_with_one(t_node(N_RETURN, expr, NULL));
+    IR_Unit *ir = NULL;
+    char *errdetail = NULL;
+    ASSERT_EQ_INT(ERR_NOERROR, lower_ast_to_ir(root, NULL, &ir, &errdetail));
+    ASSERT_NOT_NULL(ir);
+    size_t jumps = 0;
+    size_t labels = 0;
+    size_t bools = 0;
+    for (size_t i = 0; i < ir->function.count; i++) {
+      IR_Op op = ir->function.code[i].op;
+      ASSERT_TRUE(op != IR_OP_AND && op != IR_OP_OR);
+      if (op == IR_OP_JUMP || op == IR_OP_JUMP_IF_FALSE) jumps++;
+      if (op == IR_OP_LABEL) labels++;
+      if (op == IR_OP_PUSH_BOOL) bools++;
+    }
+    ASSERT_EQ_INT(nodes[n] == N_OR ? 4 : 3, (int)jumps);
+    ASSERT_EQ_INT(nodes[n] == N_OR ? 3 : 2, (int)labels);
+    ASSERT_EQ_INT(nodes[n] == N_OR ? 3 : 2, (int)bools);
+    free(errdetail);
+    ir_destroy_unit(ir);
+    as_delete(root);
+  }
+}
+
 void test_ir_validate(void) {
   test_ir_validate_ok_case();
   test_ir_validate_unbound_label_rejected();
@@ -201,4 +229,5 @@ void test_ir_validate(void) {
   test_lower_returns_and_discards_expression_statements();
   test_lower_local_resolution_errors_consistent();
   test_lower_control_flow_outside_loop_rejected();
+  test_lower_short_circuit_uses_balanced_control_flow();
 }
