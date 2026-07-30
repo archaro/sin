@@ -83,6 +83,7 @@ void test_absyn_constructor_allocation_failures(void);
 void test_absyn_valnode_string_second_allocation_failure(void);
 void test_absyn_stmtlist_growth_failure_preserves_statement(void);
 void test_sem_check_locals_reusable_context(void);
+void test_sem_locals_in_lists_and_itemrefs(void);
 void test_sem_duplicate_local_keeps_original_index(void);
 void test_sem_code_params_are_treated_as_defined_locals(void);
 void test_sem_seed_params_duplicate_name_only_marks_target_symbol(void);
@@ -98,6 +99,7 @@ void test_bytecode_verify_local_index_bounds(void);
 void test_bytecode_verify_jump_targets(void);
 void test_bytecode_verify_stack_flow(void);
 void test_parser_input_api(void);
+void test_parser_lists_and_itemrefs_ast(void);
 void test_parser_scanner_setup_allocation_failures(void);
 void test_parser_cleanup_allocation_failures(void);
 void test_cli_io_helpers(void);
@@ -324,6 +326,7 @@ static const test_case_t core_tests[] = {
     {"test_absyn_valnode_string_second_allocation_failure", test_absyn_valnode_string_second_allocation_failure},
     {"test_absyn_stmtlist_growth_failure_preserves_statement", test_absyn_stmtlist_growth_failure_preserves_statement},
     {"test_sem_check_locals_reusable_context", test_sem_check_locals_reusable_context},
+    {"test_sem_locals_in_lists_and_itemrefs", test_sem_locals_in_lists_and_itemrefs},
     {"test_sem_duplicate_local_keeps_original_index", test_sem_duplicate_local_keeps_original_index},
     {"test_sem_code_params_are_treated_as_defined_locals", test_sem_code_params_are_treated_as_defined_locals},
     {"test_sem_seed_params_duplicate_name_only_marks_target_symbol", test_sem_seed_params_duplicate_name_only_marks_target_symbol},
@@ -339,6 +342,7 @@ static const test_case_t core_tests[] = {
     {"test_bytecode_verify_jump_targets", test_bytecode_verify_jump_targets},
     {"test_bytecode_verify_stack_flow", test_bytecode_verify_stack_flow},
     {"test_parser_input_api", test_parser_input_api},
+    {"test_parser_lists_and_itemrefs_ast", test_parser_lists_and_itemrefs_ast},
     {"test_parser_scanner_setup_allocation_failures", test_parser_scanner_setup_allocation_failures},
     {"test_parser_cleanup_allocation_failures", test_parser_cleanup_allocation_failures},
     {"test_cli_io_helpers", test_cli_io_helpers},

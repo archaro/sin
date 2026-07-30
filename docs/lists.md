@@ -1,8 +1,12 @@
 # Lists and item references
 
-Source syntax and list libcalls remain out of scope. Phase 3 provides the
+List libcalls remain out of scope. Phase 3 provides the
 immutable C runtime value described below; item references remain available
 through their existing internal API.
+
+Phase 4 adds parser and AST support for list literals and item-reference
+syntax. Lists and references are not executable yet; lowering, bytecode,
+runtime operations, persistence, and source-like rendering remain deferred.
 
 ## Lists
 

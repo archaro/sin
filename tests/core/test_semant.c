@@ -3,11 +3,61 @@
 #include <stdio.h>
 
 #include "error.h"
+#include "compiler/parse_input.h"
+#include "parser.h"
 #include "compiler/semant.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 
 static void test_sem_break_continue_loop_scope(void);
+
+static AS_NODE *parse_semantic_lists(const char *source) {
+  AS_NODE *absyn = NULL;
+  char *errdetail = NULL;
+  ParseInput input = {source, strlen(source), "list-semantic-test.src"};
+  ASSERT_EQ_INT(ERR_NOERROR, parse_source(&input, &absyn, &errdetail));
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(absyn);
+  return absyn;
+}
+
+void test_sem_locals_in_lists_and_itemrefs(void) {
+  AS_NODE *root = parse_semantic_lists(
+      "@x = 1; #[@missing, &players.[@index]];");
+  SEM_CTX *ctx = sem_create_ctx();
+  ASSERT_NOT_NULL(ctx);
+  char *errdetail = NULL;
+  ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF,
+                sem_check_locals(root, &errdetail, ctx));
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strcmp(errdetail, "semant: @missing") == 0);
+  free(errdetail);
+  as_delete(root);
+  sem_delete_ctx(ctx);
+
+  root = parse_semantic_lists(
+      "@x = 1; #[@x, &players.[@index]];");
+  ctx = sem_create_ctx();
+  ASSERT_NOT_NULL(ctx);
+  errdetail = NULL;
+  ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF,
+                sem_check_locals(root, &errdetail, ctx));
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strcmp(errdetail, "semant: @index") == 0);
+  free(errdetail);
+  as_delete(root);
+  sem_delete_ctx(ctx);
+
+  root = parse_semantic_lists(
+      "@x = 1; @index = 2; #[@x, &players.[@index]];");
+  ctx = sem_create_ctx();
+  ASSERT_NOT_NULL(ctx);
+  errdetail = NULL;
+  ASSERT_EQ_INT(ERR_NOERROR, sem_check_locals(root, &errdetail, ctx));
+  ASSERT_TRUE(errdetail == NULL);
+  as_delete(root);
+  sem_delete_ctx(ctx);
+}
 
 void test_sem_check_locals_reusable_context(void) {
   SEM_CTX *ctx = sem_create_ctx();

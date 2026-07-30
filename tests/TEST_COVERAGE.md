@@ -13,10 +13,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
-| core      |   120 | `tests/core/`           |
+| core      |   122 | `tests/core/`           |
 | compiler  |    31 | `tests/compiler/`       |
 | runtime   |    83 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**234**|                         |
+| **Total** |**236**|                         |
 
 ## core
 
@@ -63,8 +63,15 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   - `tests/core/test_semant.c`
   - `tests/core/test_parser_input_api.c`
     - parser allocation-failure cleanup includes `RETURN` and post-test
-      `DO..WHILE` trees; parser input coverage asserts bare and valued return
-      AST nodes, `BREAK`/`CONTINUE` nodes, and malformed return expressions
+      `DO..WHILE` trees plus nested list/item-reference trees; parser input
+      coverage asserts bare and valued return AST nodes, `BREAK`/`CONTINUE`
+      nodes, and malformed return expressions
+    - `test_parser_lists_and_itemrefs_ast` covers empty, singleton, nested,
+      mixed, and expression-position lists; distinguishes dereference, item
+      call/fetch, and item-reference ASTs; checks dynamic item-reference
+      dereference layers and malformed list syntax
+    - `test_sem_locals_in_lists_and_itemrefs` covers local lookup through list
+      elements and dynamic item-reference layers
   - `tests/compiler/test_pipeline_negative_matrix.c`
     - semantic rejection and stable diagnostics for `BREAK`/`CONTINUE` outside loops
   - `tests/core/test_parser_float_literals.c`

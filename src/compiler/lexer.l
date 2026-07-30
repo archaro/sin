@@ -287,6 +287,8 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   {local}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLOCAL; }
   {layer}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLAYER; }
   "\."          { return TLAYERSEP; }
+  "#["           { return TLISTSTART; }
+  "&"            { return TITEMREF; }
   "\["          { return TDEREFSTART; }
   "\]"          { return TDEREFEND; }
 }

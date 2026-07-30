@@ -11,6 +11,45 @@
 #include "string_limits.h"
 #include "test_assert.h"
 
+static AS_NODE *parse_lists_ok(const char *source) {
+  AS_NODE *absyn = NULL;
+  char *errdetail = NULL;
+  ParseInput input = {source, strlen(source), "list-parser-test.src"};
+  ASSERT_EQ_INT(ERR_NOERROR, parse_source(&input, &absyn, &errdetail));
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(absyn);
+  return absyn;
+}
+
+static void parse_lists_fails(const char *source) {
+  AS_NODE *absyn = NULL;
+  char *errdetail = NULL;
+  ParseInput input = {source, strlen(source), "list-parser-test.src"};
+  ASSERT_TRUE(parse_source(&input, &absyn, &errdetail) != ERR_NOERROR);
+  ASSERT_NOT_NULL(errdetail);
+  free(errdetail);
+  as_delete(absyn);
+}
+
+static AS_NODE *list_element(AS_NODE *list, unsigned int index) {
+  AS_NODE *elem = (AS_NODE *)list->lhs;
+  for (unsigned int i = 0; i < index; ++i) {
+    ASSERT_NOT_NULL(elem);
+    ASSERT_EQ_INT(N_LISTELEM, elem->nodetype);
+    elem = (AS_NODE *)elem->rhs;
+  }
+  ASSERT_NOT_NULL(elem);
+  ASSERT_EQ_INT(N_LISTELEM, elem->nodetype);
+  return elem;
+}
+
+static AS_VALUE *node_value(AS_NODE *node) {
+  ASSERT_NOT_NULL(node);
+  ASSERT_EQ_INT(N_VALUE, node->nodetype);
+  ASSERT_NOT_NULL(node->lhs);
+  return (AS_VALUE *)node->lhs;
+}
+
 void test_parser_input_api(void) {
   AS_NODE *absyn = NULL;
   char *errdetail = NULL;
@@ -162,10 +201,10 @@ void test_parser_scanner_setup_allocation_failures(void) {
 
 void test_parser_cleanup_allocation_failures(void) {
   const char source[] =
-      "1 + 2; return; return 9; if 3 then 4; elsif 0 then 5; else 6; endif; while 1 do 7; endwhile; do 8; while 1;";
+      "1 + 2; return; return 9; if 3 then 4; elsif 0 then 5; else 6; endif; while 1 do 7; endwhile; do 8; while 1; #[1, #[2, &players.[@index]], &fred];";
   ParseInput input = {source, sizeof(source) - 1, "parser-failure.src"};
 
-  for (long fail_at = 0; fail_at < 96; ++fail_at) {
+  for (long fail_at = 0; fail_at < 128; ++fail_at) {
     AS_NODE *absyn = NULL;
     char *errdetail = NULL;
     alloc_test_fail_after(fail_at);
@@ -179,4 +218,70 @@ void test_parser_cleanup_allocation_failures(void) {
     }
     free(errdetail);
   }
+}
+
+void test_parser_lists_and_itemrefs_ast(void) {
+  AS_NODE *root = parse_lists_ok(
+      "#[]; #[fred]; #[&fred]; [fred]; "
+      "#[1, #[], fred, &players.[@index]]; return #[[fred]];");
+  AS_STMTLIST *stmts = (AS_STMTLIST *)root->lhs;
+  ASSERT_EQ_INT(6, stmts->count);
+
+  AS_NODE *expr = (AS_NODE *)stmts->stmts[0]->lhs;
+  ASSERT_EQ_INT(N_LIST, expr->nodetype);
+  ASSERT_TRUE(expr->lhs == NULL);
+
+  expr = (AS_NODE *)stmts->stmts[1]->lhs;
+  ASSERT_EQ_INT(N_LIST, expr->nodetype);
+  AS_NODE *elem = list_element(expr, 0);
+  ASSERT_EQ_INT(N_CALL, ((AS_NODE *)elem->lhs)->nodetype);
+  ASSERT_EQ_INT(N_ITEM, ((AS_NODE *)((AS_NODE *)elem->lhs)->lhs)->nodetype);
+
+  expr = (AS_NODE *)stmts->stmts[2]->lhs;
+  ASSERT_EQ_INT(N_LIST, expr->nodetype);
+  elem = list_element(expr, 0);
+  ASSERT_EQ_INT(N_ITEMREF, ((AS_NODE *)elem->lhs)->nodetype);
+  ASSERT_EQ_INT(N_ITEM, ((AS_NODE *)((AS_NODE *)elem->lhs)->lhs)->nodetype);
+
+  expr = (AS_NODE *)stmts->stmts[3]->lhs;
+  ASSERT_EQ_INT(N_CALL, expr->nodetype);
+  ASSERT_EQ_INT(N_ITEM, ((AS_NODE *)expr->lhs)->nodetype);
+  ASSERT_EQ_INT(N_DEREF, ((AS_NODE *)((AS_NODE *)expr->lhs)->lhs)->nodetype);
+
+  expr = (AS_NODE *)stmts->stmts[4]->lhs;
+  ASSERT_EQ_INT(N_LIST, expr->nodetype);
+  elem = list_element(expr, 0);
+  ASSERT_EQ_INT(V_INT, node_value((AS_NODE *)elem->lhs)->valtype);
+  elem = list_element(expr, 1);
+  ASSERT_EQ_INT(N_LIST, ((AS_NODE *)elem->lhs)->nodetype);
+  ASSERT_TRUE(((AS_NODE *)elem->lhs)->lhs == NULL);
+  elem = list_element(expr, 2);
+  ASSERT_EQ_INT(N_CALL, ((AS_NODE *)elem->lhs)->nodetype);
+  elem = list_element(expr, 3);
+  AS_NODE *dynamic_ref = (AS_NODE *)elem->lhs;
+  ASSERT_EQ_INT(N_ITEMREF, dynamic_ref->nodetype);
+  AS_NODE *dynamic_item = (AS_NODE *)dynamic_ref->lhs;
+  ASSERT_EQ_INT(N_ITEM, dynamic_item->nodetype);
+  ASSERT_EQ_INT(V_LAYER, node_value((AS_NODE *)dynamic_item->lhs)->valtype);
+  ASSERT_TRUE(strcmp("players", node_value((AS_NODE *)dynamic_item->lhs)->value.s) == 0);
+  AS_NODE *dynamic_tail = (AS_NODE *)dynamic_item->rhs;
+  ASSERT_EQ_INT(N_ITEM, dynamic_tail->nodetype);
+  AS_NODE *dynamic_deref = (AS_NODE *)dynamic_tail->lhs;
+  ASSERT_EQ_INT(N_DEREF, dynamic_deref->nodetype);
+  ASSERT_EQ_INT(V_LOCAL, node_value((AS_NODE *)dynamic_deref->lhs)->valtype);
+  ASSERT_TRUE(strcmp("@index", node_value((AS_NODE *)dynamic_deref->lhs)->value.s) == 0);
+
+  expr = (AS_NODE *)stmts->stmts[5]->lhs;
+  ASSERT_EQ_INT(N_LIST, expr->nodetype);
+  AS_NODE *nested_call = (AS_NODE *)list_element(expr, 0)->lhs;
+  ASSERT_EQ_INT(N_CALL, nested_call->nodetype);
+  ASSERT_EQ_INT(N_DEREF, ((AS_NODE *)((AS_NODE *)nested_call->lhs)->lhs)->nodetype);
+
+  as_delete(root);
+
+  parse_lists_fails("#[1 2];");
+  parse_lists_fails("#[1;");
+  parse_lists_fails("#[1,];");
+  parse_lists_fails("# [1];");
+  parse_lists_fails("&1;");
 }

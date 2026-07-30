@@ -221,6 +221,10 @@ static AS_NODE *parser_new_relative_item(SCANNER_STATE_t *state,
   return parser_new_node(state, N_RELITEM, item, NULL, true, false);
 }
 
+static AS_NODE *parser_new_list_elem(SCANNER_STATE_t *state, AS_NODE *value, AS_NODE *next) {
+  return parser_new_node(state, N_LISTELEM, value, next, true, false);
+}
+
 void yyerror(YYLTYPE *locp, yyscan_t scanner, SCANNER_STATE_t *state, char const *s) {
   // yyerror() is called whenever there is a syntax error, so we need to
   // set the error number in the state appropriately.
@@ -366,10 +370,11 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 %token <char *> TCODEBODY
 %token <char *> TUNKNOWNCHAR
 %token TTRUE TFALSE TNIL
+%token TLISTSTART TITEMREF
 %token TBREAK TCONTINUE
 %nonassoc TSEMI TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF TRETURN
 
-%type <AS_NODE*> deref_content dereference first_layer subsequent_layers layer
+%type <AS_NODE*> deref_content dereference first_layer subsequent_layers layer list list_elems itemref
 %type <AS_NODE*> param_local param_list params item expr stmt stmtlist
 %type <AS_NODE*> stmtsemi arg_list args item_assignment libcall
 %type <AS_IF*> elsif_else_opt
@@ -483,6 +488,8 @@ expr:     TLOCAL { $$ = parser_new_value(state, V_LOCAL, $1); if (!$$) YYERROR; 
         | TTRUE { $$ = parser_new_value(state, V_BOOLTRUE, NULL); if (!$$) YYERROR; }
         | TFALSE { $$ = parser_new_value(state, V_BOOLFALSE, NULL); if (!$$) YYERROR; }
         | TNIL { $$ = parser_new_value(state, V_NIL, NULL); if (!$$) YYERROR; }
+        | list { $$ = $1; }
+        | itemref { $$ = $1; }
         | item args { $$ = parser_new_node(state, N_CALL, $1, $2, true, false); if (!$$) YYERROR; }
         | expr TEQUAL expr { $$ = parser_new_node(state, N_EQUAL, $1, $3, true, true); if (!$$) YYERROR; }
         | expr TNOTEQUAL expr { $$ = parser_new_node(state, N_NOTEQ, $1, $3, true, true); if (!$$) YYERROR; }
@@ -577,6 +584,31 @@ item_assignment: expr { $$ = $1; }
           if (!$$) YYERROR;
         }
         ;
+
+list: TLISTSTART TDEREFEND {
+        $$ = parser_new_node(state, N_LIST, NULL, NULL, false, false);
+        if (!$$) YYERROR;
+      }
+      | TLISTSTART list_elems TDEREFEND {
+        $$ = parser_new_node(state, N_LIST, $2, NULL, true, false);
+        if (!$$) YYERROR;
+      }
+      ;
+
+list_elems: expr {
+             $$ = parser_new_list_elem(state, $1, NULL);
+             if (!$$) YYERROR;
+           }
+           | expr TCOMMA list_elems {
+             $$ = parser_new_list_elem(state, $1, $3);
+             if (!$$) YYERROR;
+           }
+           ;
+
+itemref: TITEMREF item {
+          $$ = parser_new_node(state, N_ITEMREF, $2, NULL, true, false);
+          if (!$$) YYERROR;
+        }
 
 item:     first_layer subsequent_layers {
           $$ = parser_new_node(state, N_ITEM, $1, $2, true, false);
