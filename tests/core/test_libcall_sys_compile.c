@@ -154,9 +154,20 @@ void test_sys_itemref_dynamic_calls(void) {
       ");");
   ITEM_t *run = find_item(itemstore_root(config.itemstore_ctx), "run");
   ASSERT_NOT_NULL(run);
-  VALUE_t result = interpret(test_ctx(), run);
+  RuntimeContext *strict_ctx = test_ctx();
+  strict_ctx->strict_runtime_contracts = true;
+  VALUE_t result = interpret(strict_ctx, run);
   ASSERT_EQ_INT(VALUE_nil, result.type);
   value_free(&result);
+  ITEM_t *strict_error = find_item(itemstore_root(config.itemstore_ctx), "error");
+  ITEM_t *strict_message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
+  ITEM_t *strict_origin = find_item(itemstore_root(config.itemstore_ctx), "error.item");
+  ASSERT_NOT_NULL(strict_error);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(strict_error)->i);
+  ASSERT_NOT_NULL(strict_message);
+  ASSERT_TRUE(strstr(item_value(strict_message)->s, "sys.call discarded extra argument") != NULL);
+  ASSERT_NOT_NULL(strict_origin);
+  ASSERT_TRUE(strcmp(item_value(strict_origin)->s, "run") == 0);
 
   ITEM_t *exact = assert_int_item("results.order", 12);
   (void)exact;

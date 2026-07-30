@@ -286,11 +286,12 @@ static const char *lc_sys_item_type_name(const ITEM_t *target) {
 }
 
 /* Resolve the shared item-name contract used by sys introspection calls. */
-static bool lc_sys_resolve_itemname(RuntimeContext *ctx, const VALUE_t *name,
-                                    char *fullname) {
+static bool lc_sys_resolve_itemname(RuntimeContext *ctx, ITEM_t *item,
+                                    const VALUE_t *name, char *fullname) {
   if (!name || !fullname) return false;
   if (name->type == VALUE_str) {
-    return canonicalize_itemname(name->s, ctx ? ctx->current_item : NULL,
+    return canonicalize_itemname(name->s,
+                                 item ? item : (ctx ? ctx->current_item : NULL),
                                  fullname);
   }
   if (name->type == VALUE_itemref) {
@@ -303,6 +304,7 @@ static bool lc_sys_resolve_itemname(RuntimeContext *ctx, const VALUE_t *name,
 static void lc_sys_report_strict_contract(RuntimeContext *ctx,
                                           const char *detail) {
   if (!ctx || !ctx->strict_runtime_contracts) return;
+  logerr("Runtime contract violation: %s.\n", detail ? detail : "<no detail>");
   set_error_item(itemstore_root(ctx->itemstore), ERR_RUNTIME_INVALIDARGS,
                  detail, ctx->current_item);
 }
@@ -398,7 +400,7 @@ uint8_t *lc_sys_itemtype(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   VALUE_t result = VALUE_NIL;
   char fullname[MAX_ITEM_NAME];
-  if (lc_sys_resolve_itemname(ctx, &itemname, fullname)) {
+  if (lc_sys_resolve_itemname(ctx, item, &itemname, fullname)) {
     ITEM_t *target = find_item(itemstore_root(ctx->itemstore), fullname);
     result = lc_sys_string_copy(lc_sys_item_type_name(target));
   }
@@ -418,7 +420,7 @@ uint8_t *lc_sys_childcount(RuntimeContext *ctx, uint8_t *nextop,
 
   VALUE_t result = VALUE_NIL;
   char fullname[MAX_ITEM_NAME];
-  if (lc_sys_resolve_itemname(ctx, &itemname, fullname)) {
+  if (lc_sys_resolve_itemname(ctx, item, &itemname, fullname)) {
     ITEM_t *target = find_item(itemstore_root(ctx->itemstore), fullname);
     if (target) {
       result = (VALUE_t){VALUE_int,
@@ -443,8 +445,8 @@ uint8_t *lc_sys_paramcount(RuntimeContext *ctx, uint8_t *nextop,
 
   VALUE_t result = VALUE_NIL;
   char fullname[MAX_ITEM_NAME];
-  if (itemstore_root(ctx->itemstore) && lc_sys_resolve_itemname(ctx, &itemname,
-                                                                  fullname)) {
+  if (itemstore_root(ctx->itemstore) &&
+      lc_sys_resolve_itemname(ctx, item, &itemname, fullname)) {
     ITEM_t *target = find_item(itemstore_root(ctx->itemstore), fullname);
     const uint8_t *bytecode = target ? item_bytecode(target) : NULL;
     uint32_t bytecode_len = target ? item_bytecode_length(target) : 0;
@@ -470,7 +472,7 @@ uint8_t *lc_sys_source(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   char fullname[MAX_ITEM_NAME];
   if (!itemstore_root(ctx->itemstore) ||
-      !lc_sys_resolve_itemname(ctx, &itemname, fullname)) {
+      !lc_sys_resolve_itemname(ctx, item, &itemname, fullname)) {
     value_free(&itemname);
     return lc_sys_return_nil(ctx, nextop);
   }
@@ -497,10 +499,10 @@ uint8_t *lc_sys_source(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return lc_sys_return(ctx, nextop, lc_sys_string_copy(""));
 }
 
-static ITEM_t *lc_sys_reference_target(RuntimeContext *ctx, const VALUE_t *ref,
-                                       char *fullname) {
+static ITEM_t *lc_sys_reference_target(RuntimeContext *ctx, ITEM_t *item,
+                                       const VALUE_t *ref, char *fullname) {
   if (!ctx || !ref || ref->type != VALUE_itemref ||
-      !lc_sys_resolve_itemname(ctx, ref, fullname)) return NULL;
+      !lc_sys_resolve_itemname(ctx, item, ref, fullname)) return NULL;
   return find_item(itemstore_root(ctx->itemstore), fullname);
 }
 
@@ -545,7 +547,7 @@ uint8_t *lc_sys_itemref(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
   char fullname[MAX_ITEM_NAME];
   VALUE_t result = VALUE_NIL;
-  if (lc_sys_resolve_itemname(ctx, &name, fullname)) {
+  if (lc_sys_resolve_itemname(ctx, item, &name, fullname)) {
     SIN_ITEMREF_t *ref = sin_itemref_create(fullname);
     if (ref) result = (VALUE_t){VALUE_itemref, {.itemref = ref}};
   }
@@ -576,7 +578,7 @@ uint8_t *lc_sys_fetch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         "sys.fetch reference must be an item reference");
   }
   char fullname[MAX_ITEM_NAME];
-  ITEM_t *target = lc_sys_reference_target(ctx, &ref, fullname);
+  ITEM_t *target = lc_sys_reference_target(ctx, item, &ref, fullname);
   VALUE_t result = VALUE_NIL;
   if (target && item_kind(target) == ITEM_value) {
     const VALUE_t *stored = item_value(target);
@@ -602,7 +604,7 @@ uint8_t *lc_sys_call(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         "sys.call requires an item reference and a list");
   }
   char fullname[MAX_ITEM_NAME];
-  ITEM_t *target = lc_sys_reference_target(ctx, &ref, fullname);
+  ITEM_t *target = lc_sys_reference_target(ctx, item, &ref, fullname);
   size_t count = sin_list_count(arguments.list);
   bool prepared = target && item_kind(target) == ITEM_code;
   VALUE_t result = VALUE_NIL;
@@ -846,7 +848,7 @@ uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   char fullname[MAX_ITEM_NAME];
-  bool exists = lc_sys_resolve_itemname(ctx, &itemname, fullname) &&
+  bool exists = lc_sys_resolve_itemname(ctx, item, &itemname, fullname) &&
       find_item(itemstore_root(ctx->itemstore), fullname) != NULL;
   value_free(&itemname);
   return lc_sys_return(ctx, nextop, exists ? VALUE_TRUE : VALUE_FALSE);
@@ -862,7 +864,7 @@ uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   char fullname[MAX_ITEM_NAME];
-  if (lc_sys_resolve_itemname(ctx, &itemname, fullname)) {
+  if (lc_sys_resolve_itemname(ctx, item, &itemname, fullname)) {
     (void)item_delete(itemstore_root(ctx->itemstore), fullname);
   }
   value_free(&itemname);
@@ -883,7 +885,7 @@ uint8_t *lc_sys_nthname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   VALUE_t result = VALUE_NIL;
   char fullname[MAX_ITEM_NAME];
-  if (lc_sys_resolve_itemname(ctx, &itemname, fullname)) {
+  if (lc_sys_resolve_itemname(ctx, item, &itemname, fullname)) {
     ITEM_t *parent = find_item(itemstore_root(ctx->itemstore), fullname);
     if (parent) {
       ITEM_t *child = item_child_at(parent, (size_t)index.i);

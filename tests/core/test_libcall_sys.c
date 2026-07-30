@@ -269,6 +269,8 @@ void test_sys_itemref_contracts(void) {
                                        "scope.caller", (VALUE_t){VALUE_int, {.i = 1}});
   ASSERT_NOT_NULL(caller);
   ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx),
+                                      "scope.caller.target", VALUE_TRUE));
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx),
                                       "scope.caller.child", VALUE_TRUE));
   ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx),
                                       "scope.caller.to_delete", VALUE_TRUE));
@@ -291,26 +293,31 @@ void test_sys_itemref_contracts(void) {
   ITEM_t *error_item = find_item(itemstore_root(config.itemstore_ctx), "error.item");
   ASSERT_NOT_NULL(error_item);
   ASSERT_EQ_INT(VALUE_str, item_value(error_item)->type);
-  ASSERT_TRUE(strcmp(item_value(error_item)->s, "scope.caller") == 0);
+  ctx->current_item = itemstore_root(config.itemstore_ctx);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(".target")}});
+  (void)lc_sys_exists(ctx, NULL, caller);
+  VALUE_t relative = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, relative.type);
+  ASSERT_EQ_INT(1, relative.i);
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
   (void)lc_sys_itemref(ctx, NULL, caller);
   invalid = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, invalid.type);
   assert_invalid_args_detail_contains("sys.itemref");
-  ASSERT_TRUE(strcmp(item_value(error_item)->s, "scope.caller") == 0);
+  ASSERT_TRUE(strcmp(item_value(error_item)->s, "root") == 0);
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
   (void)lc_sys_fetch(ctx, NULL, caller);
   invalid = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, invalid.type);
   assert_invalid_args_detail_contains("sys.fetch");
-  ASSERT_TRUE(strcmp(item_value(error_item)->s, "scope.caller") == 0);
+  ASSERT_TRUE(strcmp(item_value(error_item)->s, "root") == 0);
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 2}});
   (void)lc_sys_call(ctx, NULL, caller);
   invalid = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, invalid.type);
   assert_invalid_args_detail_contains("sys.call");
-  ASSERT_TRUE(strcmp(item_value(error_item)->s, "scope.caller") == 0);
+  ASSERT_TRUE(strcmp(item_value(error_item)->s, "root") == 0);
 
   push_stack(config.vm->stack,
              (VALUE_t){VALUE_str, {.s = strdup("scope.caller")}});
@@ -325,13 +332,13 @@ void test_sys_itemref_contracts(void) {
   (void)lc_sys_childcount(ctx, NULL, caller);
   invalid = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_int, invalid.type);
-  ASSERT_EQ_INT(3, invalid.i);
+  ASSERT_EQ_INT(4, invalid.i);
   push_stack(config.vm->stack, value_clone(&caller_ref));
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
   (void)lc_sys_nthname(ctx, NULL, caller);
   invalid = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_str, invalid.type);
-  ASSERT_TRUE(strcmp(invalid.s, "child") == 0);
+  ASSERT_TRUE(strcmp(invalid.s, "target") == 0);
   value_free(&invalid);
   push_stack(config.vm->stack, value_clone(&caller_ref));
   (void)lc_sys_itemtype(ctx, NULL, caller);
