@@ -65,12 +65,12 @@ Key entry points:
 ### Runtime VM
 
 Files: `src/runtime/interpret.*`, `src/runtime/runtime_*`,
-`src/runtime/itemref.*`,
+`src/runtime/itemref.*`, `src/runtime/list.*`,
 `src/runtime/vm.*`, `src/runtime/stack.*`, `src/runtime/value.*`,
 `src/runtime/task.*`.
 
-Ownership: bytecode decoding/execution, VM stacks, runtime values, task
-scheduling, and interpreter context. Runtime code may depend on common support,
+Ownership: bytecode decoding/execution, VM stacks, runtime values, persistent
+immutable lists, task scheduling, and interpreter context. Runtime code may depend on common support,
 bytecode verification, itemstore, libcalls, and networking. Direct compiler
 dependencies should be deliberate and documented; `sys.compile` is one such
 crossing.

@@ -11,6 +11,7 @@
 #include <limits.h>
 
 typedef struct SIN_ITEMREF SIN_ITEMREF_t;
+typedef struct SIN_LIST SIN_LIST_t;
 
 /*
  * Sin serializes and interprets VALUE_float as IEEE 754 binary64. Keep these
@@ -30,7 +31,8 @@ typedef enum { VALUE_int,
                VALUE_str,
                VALUE_nil,
                VALUE_bool,
-               VALUE_itemref
+               VALUE_itemref,
+               VALUE_list
              } VALUE_e;
 
 typedef enum { VALUE_NUMERIC_NONE,
@@ -59,6 +61,7 @@ typedef struct {
     uint64_t f_bits; // This is an IEEE 754 binary64 payload view
     char *s; // This is a string value
     SIN_ITEMREF_t *itemref;
+    SIN_LIST_t *list;
   };
 } VALUE_t;
 
@@ -107,6 +110,8 @@ bool value_is_type(const VALUE_t *value, VALUE_e type);
 void value_free(VALUE_t *value);
 bool value_string_within_limit(const VALUE_t *value);
 VALUE_t value_clone(const VALUE_t *value);
+/* Fallible ownership-preserving clone used by aggregate construction. */
+bool value_clone_fallible(const VALUE_t *value, VALUE_t *out);
 void value_move(VALUE_t *dst, VALUE_t *src);
 void value_replace(VALUE_t *dst, VALUE_t src);
 bool value_equal(const VALUE_t *left, const VALUE_t *right);

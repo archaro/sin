@@ -375,6 +375,8 @@ bool write_item(FILE *file, ITEM_t *item) {
       case VALUE_float: value_tag = ITEMSTORE_VALUE_TAG_FLOAT; break;
       case VALUE_str: value_tag = ITEMSTORE_VALUE_TAG_STRING; break;
       case VALUE_bool: value_tag = ITEMSTORE_VALUE_TAG_BOOL; break;
+      case VALUE_itemref:
+      case VALUE_list:
       default:
         logerr("Failed to write itemstore item '%s': unsupported value type "
                "%d.\n", item->name, item->value.type);
@@ -416,6 +418,10 @@ bool write_item(FILE *file, ITEM_t *item) {
         if (!write_u8(file, item->value.i ? 1u : 0u,
                       "boolean payload")) return false;
         break;
+      case VALUE_itemref:
+      case VALUE_list:
+      default:
+        return false;
     }
   } else if (item->type == ITEM_code) {
     if (item->bytecode_len > ITEMSTORE_MAX_BYTECODE_LEN) {
@@ -735,7 +741,11 @@ static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
         }
         itemval.i = boolean;
         break;
-      }
+      case VALUE_itemref:
+      case VALUE_list:
+      default:
+        goto fail_before_item;
+    }
     }
   } else {
     if (!read_u32_le(file, &bytecode_len, "bytecode length")) return NULL;

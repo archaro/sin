@@ -1,8 +1,8 @@
-# Lists and item references (planned / in development)
+# Lists and item references
 
-This feature is planned and its source syntax is not implemented. Internal C
-item-reference values are now available; the following
-contracts are frozen before any representation-dependent code is introduced.
+Source syntax and list libcalls remain out of scope. Phase 3 provides the
+immutable C runtime value described below; item references remain available
+through their existing internal API.
 
 ## Lists
 
@@ -17,6 +17,17 @@ lists and aliases never mutate. Lists may contain any value, cannot be cyclic,
 are false when empty and true otherwise, and use recursive structural `==` /
 `!=`. Relational comparisons are unsupported and produce the normal invalid
 comparison result. Identity is not exposed.
+
+The C API in `src/runtime/list.h` stores a 32-way persistent vector with a
+separate one-to-32-element tail. `sin_list_build_owned()` consumes every
+owned input element (including failed builds) and clears each array slot;
+`sin_list_get()` borrows an element, while `sin_list_append()` and
+`sin_list_set()` borrow their inputs and return a new owned list. List handles
+and tree nodes are non-atomic reference counted. Count is limited to
+1,048,576 elements and nesting depth to 64; an empty or scalar-only list has
+depth 1. Cloning a `VALUE_list` shares its handle, and releasing a value
+releases that handle. List plain-text rendering is deferred; debug output is a
+bounded `<list:COUNT>` summary.
 
 Initial API: `list.length{@list}`, `list.get{@list,@index}`,
 `list.append{@list,@value}`, `list.set{@list,@index,@value}`,

@@ -15,6 +15,8 @@
 #include "runtime_value.h"
 #include "string_limits.h"
 #include "itemref.h"
+#include "list.h"
+#include "memory.h"
 
 const VALUE_t VALUE_NIL = {.type = VALUE_nil, .i = 0};
 const VALUE_t VALUE_TRUE = {.type = VALUE_bool, .i = 1};
@@ -41,6 +43,7 @@ const char *value_type_name(VALUE_e type) {
     case VALUE_nil: return "nil";
     case VALUE_bool: return "bool";
     case VALUE_itemref: return "itemref";
+    case VALUE_list: return "list";
   }
   return "unknown";
 }
@@ -93,6 +96,8 @@ VALUE_text_result_e value_plain_text(const VALUE_t *value,
       if (nil_policy != VALUE_TEXT_NIL_LITERAL) return VALUE_TEXT_FORMAT_ERROR;
       return value_plain_text_copy("nil", buffer, buffer_size, text,
                                    text_length);
+    case VALUE_list:
+      return VALUE_TEXT_UNKNOWN_TYPE;
     case VALUE_int:
       written = snprintf(formatted, sizeof(formatted), "%" PRId64, value->i);
       break;
@@ -126,6 +131,8 @@ void value_free(VALUE_t *value) {
     free_runtime_string(value->s);
   } else if (value->type == VALUE_itemref) {
     sin_itemref_release(value->itemref);
+  } else if (value->type == VALUE_list) {
+    sin_list_release(value->list);
   }
   value->type = VALUE_nil;
   value->i = 0;
@@ -136,18 +143,43 @@ bool value_string_within_limit(const VALUE_t *value) {
       strlen(value->s ? value->s : "") <= SIN_MAX_STRING_BYTES;
 }
 
-VALUE_t value_clone(const VALUE_t *value) {
-  if (!value) return VALUE_NIL;
-  VALUE_t out = *value;
+bool value_clone_fallible(const VALUE_t *value, VALUE_t *out) {
+  if (!out) return false;
+  *out = VALUE_NIL;
+  if (!value) return false;
+  *out = *value;
   if (value->type == VALUE_str) {
-    if (!value_string_within_limit(value)) return VALUE_NIL;
-    out.s = value->s ? strdup(value->s) : strdup("");
-    if (!out.s) return VALUE_NIL;
+    const char *source = value->s ? value->s : "";
+    size_t length = strlen(source);
+    if (!value_string_within_limit(value) || length == SIZE_MAX) {
+      *out = VALUE_NIL;
+      return false;
+    }
+    out->s = alloc_malloc(length + 1u);
+    if (!out->s) {
+      *out = VALUE_NIL;
+      return false;
+    }
+    memcpy(out->s, source, length + 1u);
+  } else if (value->type == VALUE_itemref) {
+    out->itemref = sin_itemref_retain(value->itemref);
+    if (value->itemref && !out->itemref) {
+      *out = VALUE_NIL;
+      return false;
+    }
+  } else if (value->type == VALUE_list) {
+    out->list = sin_list_retain(value->list);
+    if (value->list && !out->list) {
+      *out = VALUE_NIL;
+      return false;
+    }
   }
-  if (value->type == VALUE_itemref) {
-    out.itemref = sin_itemref_retain(value->itemref);
-    if (value->itemref && !out.itemref) return VALUE_NIL;
-  }
+  return true;
+}
+
+VALUE_t value_clone(const VALUE_t *value) {
+  VALUE_t out = VALUE_NIL;
+  (void)value_clone_fallible(value, &out);
   return out;
 }
 
@@ -190,6 +222,8 @@ int value_is_truthy(const VALUE_t *value) {
       return value->s && value->s[0] != '\0';
     case VALUE_itemref:
       return 1;
+    case VALUE_list:
+      return value->list && sin_list_count(value->list) != 0;
     case VALUE_nil:
     default:
       return 0;
@@ -240,6 +274,8 @@ bool value_equal(const VALUE_t *left, const VALUE_t *right) {
       if (!left->itemref || !right->itemref) return false;
       return strcmp(sin_itemref_path(left->itemref),
                     sin_itemref_path(right->itemref)) == 0;
+    case VALUE_list:
+      return sin_list_equal(left->list, right->list);
     case VALUE_nil:
       return true;
     case VALUE_float:
@@ -521,6 +557,9 @@ const char *value_debug_string(const VALUE_t *value, char *buffer, size_t buffer
     case VALUE_itemref:
       snprintf(buffer, buffer_size, "&%s", sin_itemref_path(value->itemref) ?
                sin_itemref_path(value->itemref) : "");
+      break;
+    case VALUE_list:
+      snprintf(buffer, buffer_size, "<list:%zu>", sin_list_count(value->list));
       break;
     case VALUE_nil:
       snprintf(buffer, buffer_size, "nil");
