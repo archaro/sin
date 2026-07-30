@@ -20,6 +20,7 @@ kept in sync with the source files named in each document.
   `src/compiler/ir/opcode_schema.def`.
 - [`runtime.md`](runtime.md): runtime ownership, interpreter, and libcall API
   boundaries.
+- [`lists.md`](lists.md): planned list and item-reference contracts (in development).
 - [`itemstore-format.md`](itemstore-format.md): persisted itemstore wire format.
 - [`history.md`](history.md): project background.
 - [`documentation-roadmap.md`](documentation-roadmap.md): remaining

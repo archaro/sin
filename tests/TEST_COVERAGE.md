@@ -358,7 +358,14 @@ integration, and an opt-in performance guard.
 - **Runtime performance guard (opt-in strict mode)**
   - `tests/interpreter/test_runtime_benchmark_optin.c`
     - `test_runtime_benchmark_optin`
-    - strict thresholds enabled with `SIN_STRICT_BENCH=1`
+    - scalar value clone/move/replace/free, scalar and string stack movement,
+      item value fetch/assignment, and stable five-sample median ratios
+    - code-item parameter and explicit-return movement compared with an
+      interpreter control workload
+    - existing end-to-end interpreter workloads remain covered by
+      `test_interpret_stress`
+    - strict thresholds enabled with `SIN_STRICT_BENCH=1`; normal runs never
+      enforce machine-dependent benchmark budgets
 - **Code-item results**
   - `tests/interpreter/test_interpret_semantics_golden.c`
     - explicit valued and bare returns, fallthrough `nil`, discarded final
