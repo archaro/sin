@@ -372,14 +372,15 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 %token TTRUE TFALSE TNIL
 %token TLISTSTART TITEMREF
 %token TBREAK TCONTINUE
-%nonassoc TSEMI TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF TRETURN
+%token TSEMI TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF TRETURN
+%token TASSIGN TINC TDEC TLAYERSEP TDEREFSTART TCODE TDEREFEND
+%token TLPAREN TRPAREN TLBRACE TRBRACE TCOMMA
 
 %type <AS_NODE*> deref_content dereference first_layer subsequent_layers layer list list_elems itemref
 %type <AS_NODE*> param_local param_list params item expr stmt stmtlist
 %type <AS_NODE*> stmtsemi arg_list args item_assignment libcall
 %type <AS_IF*> elsif_else_opt
 
-%right TASSIGN
 // Precedence is ordered from low to high.  Keep OR below AND and keep
 // equality/relational operators above both boolean operators.
 // This intentionally changes mixed `and`/`or` grouping to conventional logic.
@@ -388,12 +389,7 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 %left TEQUAL TNOTEQUAL TLT TGT TLTEQ TGTEQ
 %left TPLUS TMINUS
 %left TMULT TDIV TMOD
-%left TINC TDEC
-%left TLAYERSEP
-%right TDEREFSTART TCODE
-%left TDEREFEND
-%right UMINUS TNOT
-%nonassoc TLPAREN TRPAREN TLBRACE TRBRACE TCOMMA
+%precedence UMINUS TNOT
 
 // Free lexer-allocated token strings when symbols are discarded by error
 // recovery or parser teardown.
@@ -406,7 +402,7 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 input:  stmtlist { state->absyn = $1; }
         ;
 
-stmtlist: /* Nothing */ {
+stmtlist: %empty {
             $$ = as_new_stmtlist_node();
             if (!$$) { parser_set_failure(state, NULL); YYERROR; }
           }
@@ -529,7 +525,7 @@ libcall:  TLIBNAME TLAYERSEP TLAYER args {
         }
         ;
 
-elsif_else_opt: /* empty */ { $$ = NULL; }
+elsif_else_opt: %empty { $$ = NULL; }
         | TELSIF expr TTHEN stmtlist elsif_else_opt {
           if (!$2) {
             as_delete($4);
@@ -547,7 +543,7 @@ elsif_else_opt: /* empty */ { $$ = NULL; }
         }
         ;
 
-params:   /* Nothing */ { $$ = NULL; }
+params:   %empty { $$ = NULL; }
         | TLBRACE param_list TRBRACE { $$ = $2; }
         ;
 
@@ -564,7 +560,7 @@ param_list: param_local {
 param_local: TLOCAL { $$ = parser_new_value(state, V_LOCAL, $1); if (!$$) YYERROR; }
         ;
 
-args:     /* Nothing */ { $$ = NULL; }
+args:     %empty { $$ = NULL; }
         | TLBRACE arg_list TRBRACE { $$ = $2; }
         ;
 
@@ -624,7 +620,7 @@ first_layer: TLAYER { $$ = parser_new_value(state, V_LAYER, $1); if (!$$) YYERRO
         | dereference { $$ = $1; }
         ;
 
-subsequent_layers: /* Nothing */ { $$ = NULL; }
+subsequent_layers: %empty { $$ = NULL; }
         | TLAYERSEP layer subsequent_layers {
           $$ = parser_new_node(state, N_ITEM, $2, $3, true, false);
           if (!$$) YYERROR;
