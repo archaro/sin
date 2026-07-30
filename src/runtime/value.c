@@ -14,6 +14,7 @@
 #include "floatconv.h"
 #include "runtime_value.h"
 #include "string_limits.h"
+#include "itemref.h"
 
 const VALUE_t VALUE_NIL = {.type = VALUE_nil, .i = 0};
 const VALUE_t VALUE_TRUE = {.type = VALUE_bool, .i = 1};
@@ -39,6 +40,7 @@ const char *value_type_name(VALUE_e type) {
     case VALUE_str: return "str";
     case VALUE_nil: return "nil";
     case VALUE_bool: return "bool";
+    case VALUE_itemref: return "itemref";
   }
   return "unknown";
 }
@@ -75,6 +77,17 @@ VALUE_text_result_e value_plain_text(const VALUE_t *value,
       *text = value->s ? value->s : "";
       *text_length = strlen(*text);
       return VALUE_TEXT_OK;
+    case VALUE_itemref: {
+      const char *path = sin_itemref_path(value->itemref);
+      size_t length = sin_itemref_path_length(value->itemref);
+      if (!path || length > SIZE_MAX - 2u || buffer == NULL || buffer_size <= length + 1u)
+        return VALUE_TEXT_BUFFER_TOO_SMALL;
+      buffer[0] = '&';
+      memcpy(buffer + 1u, path, length + 1u);
+      *text = buffer;
+      *text_length = length + 1u;
+      return VALUE_TEXT_OK;
+    }
     case VALUE_nil:
       if (nil_policy == VALUE_TEXT_NIL_OMIT) return VALUE_TEXT_NIL;
       if (nil_policy != VALUE_TEXT_NIL_LITERAL) return VALUE_TEXT_FORMAT_ERROR;
@@ -111,6 +124,8 @@ void value_free(VALUE_t *value) {
   if (!value) return;
   if (value->type == VALUE_str && value->s) {
     free_runtime_string(value->s);
+  } else if (value->type == VALUE_itemref) {
+    sin_itemref_release(value->itemref);
   }
   value->type = VALUE_nil;
   value->i = 0;
@@ -128,6 +143,10 @@ VALUE_t value_clone(const VALUE_t *value) {
     if (!value_string_within_limit(value)) return VALUE_NIL;
     out.s = value->s ? strdup(value->s) : strdup("");
     if (!out.s) return VALUE_NIL;
+  }
+  if (value->type == VALUE_itemref) {
+    out.itemref = sin_itemref_retain(value->itemref);
+    if (value->itemref && !out.itemref) return VALUE_NIL;
   }
   return out;
 }
@@ -169,6 +188,8 @@ int value_is_truthy(const VALUE_t *value) {
       return value->f != 0.0;
     case VALUE_str:
       return value->s && value->s[0] != '\0';
+    case VALUE_itemref:
+      return 1;
     case VALUE_nil:
     default:
       return 0;
@@ -215,6 +236,10 @@ bool value_equal(const VALUE_t *left, const VALUE_t *right) {
       return left->i == right->i;
     case VALUE_str:
       return strcmp(left->s ? left->s : "", right->s ? right->s : "") == 0;
+    case VALUE_itemref:
+      if (!left->itemref || !right->itemref) return false;
+      return strcmp(sin_itemref_path(left->itemref),
+                    sin_itemref_path(right->itemref)) == 0;
     case VALUE_nil:
       return true;
     case VALUE_float:
@@ -492,6 +517,10 @@ const char *value_debug_string(const VALUE_t *value, char *buffer, size_t buffer
       break;
     case VALUE_str:
       snprintf(buffer, buffer_size, "'%s'", value->s ? value->s : "");
+      break;
+    case VALUE_itemref:
+      snprintf(buffer, buffer_size, "&%s", sin_itemref_path(value->itemref) ?
+               sin_itemref_path(value->itemref) : "");
       break;
     case VALUE_nil:
       snprintf(buffer, buffer_size, "nil");

@@ -17,6 +17,8 @@
 #include "string_limits.h"
 #include "test_assert.h"
 #include "value.h"
+#include "itemref.h"
+#include "memory.h"
 #include "vm.h"
 
 extern CONFIG_t config;
@@ -809,6 +811,70 @@ void test_value_plain_text_formats_nonowning(void) {
   result = value_plain_text(NULL, VALUE_TEXT_NIL_LITERAL, buffer,
                             sizeof(buffer), &text, &text_length);
   ASSERT_EQ_INT(VALUE_TEXT_FORMAT_ERROR, result);
+
+  SIN_ITEMREF_t *ref = sin_itemref_create("root.child");
+  ASSERT_NOT_NULL(ref);
+  VALUE_t itemref = {VALUE_itemref, {.itemref = ref}};
+  char itembuf[32];
+  result = value_plain_text(&itemref, VALUE_TEXT_NIL_LITERAL, itembuf,
+                            sizeof(itembuf), &text, &text_length);
+  ASSERT_EQ_INT(VALUE_TEXT_OK, result);
+  ASSERT_TRUE(strcmp(itembuf, "&root.child") == 0);
+  char keep[] = "keep";
+  result = value_plain_text(&itemref, VALUE_TEXT_NIL_LITERAL, keep, 4,
+                            &text, &text_length);
+  ASSERT_EQ_INT(VALUE_TEXT_BUFFER_TOO_SMALL, result);
+  ASSERT_TRUE(strcmp(keep, "keep") == 0);
+  value_free(&itemref);
+}
+
+void test_value_itemref_lifecycle_and_contract(void) {
+  SIN_ITEMREF_t *ref = sin_itemref_create("root.child");
+  ASSERT_NOT_NULL(ref);
+  ASSERT_EQ_INT(strlen("root.child"), sin_itemref_path_length(ref));
+  ASSERT_TRUE(strcmp(sin_itemref_path(ref), "root.child") == 0);
+  ASSERT_TRUE(strcmp(value_type_name(VALUE_itemref), "itemref") == 0);
+  VALUE_t value = {VALUE_itemref, {.itemref = ref}};
+  ASSERT_TRUE(value_is_truthy(&value));
+  char debug[32];
+  ASSERT_TRUE(strcmp(value_debug_string(&value, debug, sizeof(debug)),
+                     "&root.child") == 0);
+  VALUE_t same = {VALUE_itemref, {.itemref = sin_itemref_create("root.child")}};
+  VALUE_t other = {VALUE_itemref, {.itemref = sin_itemref_create("root.other")}};
+  VALUE_t str = {VALUE_str, {.s = strdup("root.child")}};
+  ASSERT_TRUE(value_equal(&value, &same));
+  ASSERT_TRUE(value_not_equal(&value, &other));
+  ASSERT_TRUE(value_not_equal(&value, &str));
+  VALUE_t clone = value_clone(&value);
+  ASSERT_EQ_INT(VALUE_itemref, clone.type);
+  ASSERT_TRUE(clone.itemref == ref);
+  value_free(&value);
+  ASSERT_TRUE(strcmp(sin_itemref_path(clone.itemref), "root.child") == 0);
+  VALUE_t moved = VALUE_NIL;
+  value_move(&moved, &clone);
+  ASSERT_EQ_INT(VALUE_nil, clone.type);
+  ASSERT_EQ_INT(VALUE_itemref, moved.type);
+  ASSERT_TRUE(strcmp(sin_itemref_path(moved.itemref), "root.child") == 0);
+  value_replace(&same, moved);
+  ASSERT_EQ_INT(VALUE_itemref, same.type);
+  ASSERT_TRUE(strcmp(sin_itemref_path(same.itemref), "root.child") == 0);
+  VALUE_t boolean = convert_to_bool(same);
+  ASSERT_EQ_INT(VALUE_bool, boolean.type);
+  ASSERT_TRUE(boolean.i);
+  value_free(&boolean);
+  value_free(&other);
+  value_free(&str);
+  alloc_test_fail_after(1);
+  ASSERT_TRUE(sin_itemref_create("x") == NULL);
+  alloc_test_fail_after(-1);
+  ASSERT_TRUE(sin_itemref_create(NULL) == NULL);
+  ASSERT_TRUE(sin_itemref_create("") == NULL);
+  char overlong[MAX_ITEM_NAME + 1u];
+  memset(overlong, 'x', sizeof(overlong));
+  overlong[sizeof(overlong) - 1u] = '\0';
+  ASSERT_TRUE(sin_itemref_create(overlong) == NULL);
+  VALUE_t malformed = {VALUE_itemref, {.itemref = NULL}};
+  ASSERT_TRUE(!value_equal(&malformed, &malformed));
 }
 
 void test_value_string_tracker_itemname_cleanup(void) {

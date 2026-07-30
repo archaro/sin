@@ -1,5 +1,7 @@
 # Test Coverage Map
 
+Value behavior coverage includes opaque item-reference lifecycle, ownership,
+canonical-path equality, truthiness, and formatting contracts.
 This document maps major subsystems to concrete test entry points so reviewers
 can quickly verify what is covered and what remains intentionally out of scope.
 

@@ -277,6 +277,7 @@ static const char *lc_sys_item_type_name(const ITEM_t *target) {
     case VALUE_int: return "int";
     case VALUE_float: return "float";
     case VALUE_str: return "string";
+    case VALUE_itemref: return "itemref";
   }
   return NULL;
 }

@@ -1,6 +1,7 @@
 # Lists and item references (planned / in development)
 
-This feature is planned and its syntax is not implemented. The following
+This feature is planned and its source syntax is not implemented. Internal C
+item-reference values are now available; the following
 contracts are frozen before any representation-dependent code is introduced.
 
 ## Lists

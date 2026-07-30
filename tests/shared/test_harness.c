@@ -234,6 +234,7 @@ void test_value_string_tracker_releases_through_value_free(void);
 void test_value_string_tracker_releases_through_stack_discard(void);
 void test_value_string_tracker_forgets_before_reallocation(void);
 void test_value_plain_text_formats_nonowning(void);
+void test_value_itemref_lifecycle_and_contract(void);
 void test_value_string_tracker_itemname_cleanup(void);
 void test_value_string_concat_enforces_string_limit(void);
 void test_value_string_boundaries_enforce_string_limit(void);
@@ -407,6 +408,7 @@ static const test_case_t core_tests[] = {
     {"test_value_string_tracker_releases_through_stack_discard", test_value_string_tracker_releases_through_stack_discard},
     {"test_value_string_tracker_forgets_before_reallocation", test_value_string_tracker_forgets_before_reallocation},
     {"test_value_plain_text_formats_nonowning", test_value_plain_text_formats_nonowning},
+    {"test_value_itemref_lifecycle_and_contract", test_value_itemref_lifecycle_and_contract},
     {"test_value_string_tracker_itemname_cleanup", test_value_string_tracker_itemname_cleanup},
     {"test_value_string_concat_enforces_string_limit", test_value_string_concat_enforces_string_limit},
     {"test_value_string_boundaries_enforce_string_limit", test_value_string_boundaries_enforce_string_limit},

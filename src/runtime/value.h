@@ -10,6 +10,8 @@
 #include <float.h>
 #include <limits.h>
 
+typedef struct SIN_ITEMREF SIN_ITEMREF_t;
+
 /*
  * Sin serializes and interprets VALUE_float as IEEE 754 binary64. Keep these
  * requirements at the value boundary so every user of VALUE_t gets an early
@@ -27,7 +29,8 @@ typedef enum { VALUE_int,
                VALUE_float,
                VALUE_str,
                VALUE_nil,
-               VALUE_bool
+               VALUE_bool,
+               VALUE_itemref
              } VALUE_e;
 
 typedef enum { VALUE_NUMERIC_NONE,
@@ -55,6 +58,7 @@ typedef struct {
     double f; // This is a floating-point value used for arithmetic
     uint64_t f_bits; // This is an IEEE 754 binary64 payload view
     char *s; // This is a string value
+    SIN_ITEMREF_t *itemref;
   };
 } VALUE_t;
 

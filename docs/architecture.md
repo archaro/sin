@@ -65,6 +65,7 @@ Key entry points:
 ### Runtime VM
 
 Files: `src/runtime/interpret.*`, `src/runtime/runtime_*`,
+`src/runtime/itemref.*`,
 `src/runtime/vm.*`, `src/runtime/stack.*`, `src/runtime/value.*`,
 `src/runtime/task.*`.
 
