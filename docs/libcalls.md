@@ -40,6 +40,15 @@ Examples:
 
 ## Registered libcalls
 
+The `list` library provides immutable list operations:
+`list.length{list}` returns an integer count; `list.get{list,index}` returns an
+owned clone; `list.append{list,value}`, `list.set{list,index,value}`,
+`list.concat{left,right}`, and `list.slice{list,start,length}` return owned
+lists. Indices and lengths are non-negative, zero-based integers. Invalid
+types return `nil` and report `ERR_RUNTIME_INVALIDARGS` with current-item
+provenance; negative or out-of-range values return `nil` without changing the
+error item.
+
 String values are limited by `SIN_MAX_STRING_BYTES` in
 `src/common/string_limits.h`, currently 65,535 bytes. String calls that would
 construct a larger result return `nil`.
@@ -71,6 +80,12 @@ disconnecting or empty line returns `false` and sets the network error item.
 
 | Libcall | Library | Call | Arity | Argument expectations | Return value | Side effects | Failure behaviour | Example |
 | --- | --- | --- | ---: | --- | --- | --- | --- | --- |
+| `list.length{list}` | `list` | `length` | 1 | `list` must evaluate to a list. | The element count as an integer. | Consumes the argument without changing the list. | A non-list argument sets `ERR_RUNTIME_INVALIDARGS` and returns `nil`. | `@count = list.length{@values};` |
+| `list.get{list, index}` | `list` | `get` | 2 | `list` must be a list and `index` an integer zero-based index. | An owned clone of the selected value. | Consumes the arguments without changing the list. Nested list and item-reference storage remains shared. | Wrong types set `ERR_RUNTIME_INVALIDARGS`. A negative or out-of-range index, ownership failure, or allocation failure returns `nil` without changing `error`. | `@first = list.get{@values, 0};` |
+| `list.append{list, value}` | `list` | `append` | 2 | `list` must be a list; `value` may have any value type. | A new list with `value` appended. | Preserves the input list and structurally shares its persistent storage. | A non-list first argument sets `ERR_RUNTIME_INVALIDARGS`. A size, depth, ownership, or allocation failure returns `nil` without changing `error`. | `@more = list.append{@values, 4};` |
+| `list.set{list, index, value}` | `list` | `set` | 3 | `list` must be a list, `index` an integer zero-based index, and `value` may have any value type. | A new list with the selected element replaced. | Preserves the input list and structurally shares unaffected persistent storage. | Wrong list/index types set `ERR_RUNTIME_INVALIDARGS`. A negative or out-of-range index, depth failure, ownership failure, or allocation failure returns `nil` without changing `error`. | `@changed = list.set{@values, 1, 9};` |
+| `list.concat{left, right}` | `list` | `concat` | 2 | Both arguments must be lists. | A new list containing `left` followed by `right`. | Preserves both inputs and reuses persistent storage from `left`; an empty side may share the other list directly. | Wrong types set `ERR_RUNTIME_INVALIDARGS`. A combined-size, depth, ownership, or allocation failure returns `nil` without changing `error`. | `@all = list.concat{@first, @second};` |
+| `list.slice{list, start, length}` | `list` | `slice` | 3 | `list` must be a list; `start` and `length` must be non-negative integers whose half-open range fits wholly in the list. `start` may equal the list length only when `length` is zero. | A new list containing the requested range; a zero length returns an empty list. | Preserves the input list and shares nested values according to normal value ownership. | Wrong types set `ERR_RUNTIME_INVALIDARGS`. Negative or out-of-range values, ownership failure, or allocation failure return `nil` without changing `error`. | `@middle = list.slice{@values, 1, 2};` |
 | `sys.backup` | `sys` | `backup` | 0 | None. | `true` only when the timestamped backup is written and the configured durability level is fully confirmed; otherwise `false`. The boolean result is an intentional compatibility change from the previous `nil` return. | Synchronously saves a separate backup of the current in-memory itemstore using the configured durability mode. The filename is the configured itemstore name followed by the readable `YYYYMMDD-HHMMSS` timestamp suffix. If that name already exists, a deterministic numeric suffix (`_1`, `_2`, ...) is selected so an earlier backup is never replaced; the primary store is not replaced. The synchronous write pauses event-loop progress. | Missing persistence configuration or a write/durability failure sets `ERR_RUNTIME_PERSISTENCE` with operation, target-path detail when available, and executing-item provenance. `false` means durability was not fully confirmed; if failure occurs after atomic publication, the selected backup target may nevertheless contain the new snapshot. Success preserves any unrelated prior error. | `@ok = sys.backup;` |
 | `sys.log{value}` | `sys` | `log` | 1 | Any expression.  Strings are logged as text, integers as decimal integers, floats as canonical binary64 decimal text (including `0.0`, `-0.0`, `inf`, `-inf`, and `nan`), booleans as `true` or `false`, and `nil` is ignored. | `nil`. | Writes to the system log. | Unknown value types produce a diagnostic log message. | `sys.log{"player connected"};` |
 | `sys.shutdown` | `sys` | `shutdown` | 0 | None. | `nil`. | Logs the request, marks the shutdown as safe, and stops the event loop so the engine can shut down cleanly and save the itemstore. | No failure is reported to Sinistra code. | `sys.shutdown;` |

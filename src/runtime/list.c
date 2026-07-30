@@ -542,6 +542,45 @@ SIN_LIST_t *sin_list_set(const SIN_LIST_t *list, size_t index,
   return result;
 }
 
+SIN_LIST_t *sin_list_concat(const SIN_LIST_t *left, const SIN_LIST_t *right) {
+  SIN_LIST_t *result;
+  if (!left || !right || left->count > SIN_LIST_MAX_ELEMENTS - right->count)
+    return NULL;
+  if (left->count == 0) return sin_list_retain((SIN_LIST_t *)right);
+  if (right->count == 0) return sin_list_retain((SIN_LIST_t *)left);
+  result = sin_list_retain((SIN_LIST_t *)left);
+  if (!result) return NULL;
+  for (size_t i = 0; i < right->count; ++i) {
+    const VALUE_t *value = sin_list_get(right, i);
+    SIN_LIST_t *next = sin_list_append(result, value);
+    sin_list_release(result);
+    if (!next) return NULL;
+    result = next;
+  }
+  return result;
+}
+
+SIN_LIST_t *sin_list_slice(const SIN_LIST_t *list, size_t start, size_t length) {
+  VALUE_t *values;
+  SIN_LIST_t *result;
+  if (!list || start > list->count || length > SIN_LIST_MAX_ELEMENTS ||
+      length > list->count - start) return NULL;
+  if (length == 0) return sin_list_build_owned(NULL, 0);
+  values = alloc_calloc(length, sizeof(*values));
+  if (!values) return NULL;
+  for (size_t i = 0; i < length; ++i) {
+    const VALUE_t *source = sin_list_get(list, start + i);
+    if (!source || !value_clone_fallible(source, &values[i])) {
+      for (size_t j = 0; j < i; ++j) value_free(&values[j]);
+      free(values);
+      return NULL;
+    }
+  }
+  result = sin_list_build_owned(values, length);
+  free(values);
+  return result;
+}
+
 bool sin_list_equal(const SIN_LIST_t *left, const SIN_LIST_t *right) {
   if (!left || !right) return false;
   if (left == right) return true;

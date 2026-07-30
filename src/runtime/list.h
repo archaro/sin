@@ -26,4 +26,7 @@ const VALUE_t *sin_list_get(const SIN_LIST_t *list, size_t index);
 /* Inputs are borrowed; failures leave the original list unchanged. */
 SIN_LIST_t *sin_list_append(const SIN_LIST_t *list, const VALUE_t *value);
 SIN_LIST_t *sin_list_set(const SIN_LIST_t *list, size_t index, const VALUE_t *value);
+/* Borrowed inputs; returned lists are owned by the caller. */
+SIN_LIST_t *sin_list_concat(const SIN_LIST_t *left, const SIN_LIST_t *right);
+SIN_LIST_t *sin_list_slice(const SIN_LIST_t *list, size_t start, size_t length);
 bool sin_list_equal(const SIN_LIST_t *left, const SIN_LIST_t *right);

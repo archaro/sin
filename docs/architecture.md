@@ -112,7 +112,8 @@ statistics are cumulative per store.
 
 ### Libcalls
 
-Files: `src/libcall/libcall*.c`, `src/libcall/libcall*.h`.
+Files: `src/libcall/libcall*.c`, `src/libcall/libcall*.h`, including the
+dedicated immutable list handlers in `libcall_list.c`.
 
 Ownership: Sinistra standard library primitives exposed to bytecode. Libcalls
 bridge runtime values to host services such as tasks, networking, system
@@ -173,7 +174,7 @@ item data. Crossings between them should be explicit. Examples:
 - Add new libcalls through `src/libcall/libcall_list.h`, implement the
   handler, and add runtime coverage in the matching `tests/core/test_libcall_*.c`
   file: registry/generic contracts remain in `test_libcall_registry.c`, with
-  `sys`, `task`, `net`, and `str` handlers in their respective files.
+  `sys`, `task`, `net`, `str`, and `list` handlers in their respective files.
 - Keep low-level, itemstore, task, stack, value, and libcall tests under
   `tests/core/` (including `test_libcall_sys_compile.c`, the runtime
   integration coverage for `sys.compile`); compiler and disassembler tests under `tests/compiler/`; and

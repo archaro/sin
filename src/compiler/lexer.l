@@ -235,6 +235,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   "endif"       { return TENDIF; }
   "endwhile"    { return TENDWHILE; }
   "if"          { return TIF; }
+  "list"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "net"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "or"          { return TOR; }
   "return"      { return TRETURN; }

@@ -187,21 +187,21 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_TRUE(libcalls[token].func == lc_net_echo);
 
   ASSERT_TRUE(libcall_lookup_token("net", "maxlines", &token, &args));
-  ASSERT_EQ_INT(26, token);
+  ASSERT_EQ_INT(32, token);
   ASSERT_EQ_INT(0, args);
   ASSERT_EQ_INT(3, libcalls[token].lib_index);
   ASSERT_EQ_INT(5, libcalls[token].call_index);
   ASSERT_TRUE(libcalls[token].func == lc_net_maxlines);
 
   ASSERT_TRUE(libcall_lookup_token("net", "connected", &token, &args));
-  ASSERT_EQ_INT(27, token);
+  ASSERT_EQ_INT(33, token);
   ASSERT_EQ_INT(1, args);
   ASSERT_EQ_INT(3, libcalls[token].lib_index);
   ASSERT_EQ_INT(6, libcalls[token].call_index);
   ASSERT_TRUE(libcalls[token].func == lc_net_connected);
 
   ASSERT_TRUE(libcall_lookup_token("net", "address", &token, &args));
-  ASSERT_EQ_INT(28, token);
+  ASSERT_EQ_INT(34, token);
   ASSERT_EQ_INT(1, args);
   ASSERT_EQ_INT(3, libcalls[token].lib_index);
   ASSERT_EQ_INT(7, libcalls[token].call_index);
@@ -250,11 +250,11 @@ void test_libcall_registry_roundtrip(void) {
     uint8_t arity;
     OP_t handler;
   } task_calls[] = {
-    {"newgametask", 47, 0, 3, lc_task_newgametask},
-    {"killtask", 48, 1, 1, lc_task_killtask},
-    {"thisid", 49, 2, 0, lc_task_thisid},
-    {"exists", 50, 3, 1, lc_task_exists},
-    {"count", 51, 4, 0, lc_task_count},
+    {"newgametask", 53, 0, 3, lc_task_newgametask},
+    {"killtask", 54, 1, 1, lc_task_killtask},
+    {"thisid", 55, 2, 0, lc_task_thisid},
+    {"exists", 56, 3, 1, lc_task_exists},
+    {"count", 57, 4, 0, lc_task_count},
   };
   for (size_t i = 0; i < sizeof(task_calls) / sizeof(task_calls[0]); i++) {
     token = 0;
@@ -290,7 +290,7 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_EQ_INT(2, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
   ASSERT_TRUE(libcall_lookup_token("net", "flush", &token, &args));
-  ASSERT_EQ_INT(24, token);
+  ASSERT_EQ_INT(30, token);
   ASSERT_EQ_INT(1, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
 

@@ -15,8 +15,8 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 |-----------|-------|-------------------------|
 | core      |   122 | `tests/core/`           |
 | compiler  |    34 | `tests/compiler/`       |
-| runtime   |    84 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**240**|                         |
+| runtime   |    88 | `tests/core/`, `tests/interpreter/` |
+| **Total** |**244**|                         |
 
 ## core
 
@@ -192,7 +192,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 ## runtime
 
-The runtime suite contains 84 tests registered in `runtime_tests[]`.
+The runtime suite contains 88 tests registered in `runtime_tests[]`.
 Twelve tests come
 from `tests/core/test_value_behavior.c` and exercise the decoder, interpreter
 contracts, and strict-validation machinery directly. The remaining tests cover
@@ -461,3 +461,9 @@ interpreter suites, including `tests/fixtures/arithmetic_modulo.hex`.
 Loop-control coverage (BREAK/CONTINUE) includes parser recognition, semantic
 scope rejection, nearest-loop lowering, and runtime behavior in both loop
 forms, including DO-WHILE condition targeting.
+
+List libcall coverage (`tests/core/test_libcall_list.c`) checks canonical
+registry token, arity, and handler mappings, valid immutable operations and
+input preservation, empty and range behavior, owned nested-list and
+item-reference results, diagnostic provenance, and source-level dispatch of all
+six `list.*` calls.

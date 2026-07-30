@@ -29,6 +29,12 @@
   X("sys",  "calleritem",  1, 18, 0, lc_sys_calleritem) \
   X("sys",  "paramcount",  1, 19, 1, lc_sys_paramcount) \
   X("sys",  "source",      1, 20, 1, lc_sys_source) \
+  X("list", "length",      5,  0, 1, lc_list_length) \
+  X("list", "get",         5,  1, 2, lc_list_get) \
+  X("list", "append",      5,  2, 2, lc_list_append) \
+  X("list", "set",         5,  3, 3, lc_list_set) \
+  X("list", "concat",      5,  4, 2, lc_list_concat) \
+  X("list", "slice",       5,  5, 3, lc_list_slice) \
   X("net",  "input",       3,  0, 0, lc_net_input) \
   X("net",  "write",       3,  1, 2, lc_net_write) \
   X("net",  "ditch",       3,  2, 1, lc_net_ditch) \
