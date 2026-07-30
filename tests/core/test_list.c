@@ -121,6 +121,7 @@ void test_list_boundaries_persistence_and_equality(void) {
   value_free(&nested_value);
   ASSERT_TRUE(sin_list_set(appended, 34, &value) == NULL);
 
+  sin_list_release(appended);
   appended = sin_list_append(large, &value);
   ASSERT_NOT_NULL(appended);
   height2 = sin_list_retain(appended);
