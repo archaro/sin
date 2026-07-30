@@ -247,6 +247,32 @@ void test_bytecode_verify_truncated_operand_widths(void) {
                        BC_VERIFY_ERROR, "excessive_embedded_parameter_bytes",
                        "embedded parameter bytes exceed maximum string size");
   free(excessive_param_bytes);
+
+  const uint8_t truncated_build_list[] = {0, 0, '[', 1, 0, 0};
+  assert_verify_status(truncated_build_list, sizeof(truncated_build_list),
+                       BC_VERIFY_ERROR, "truncated_build_list",
+                       "truncated BUILD_LIST");
+}
+
+void test_bytecode_verify_list_operations(void) {
+  const uint8_t empty[] = {0, 0, '[', 0, 0, 0, 0, 'Q', 'h'};
+  assert_verify_status(empty, sizeof(empty), BC_VERIFY_OK, "empty list", NULL);
+  const uint8_t nonempty[] = {0, 0, 'b', 1, '[', 1, 0, 0, 0, 'Q', 'h'};
+  assert_verify_status(nonempty, sizeof(nonempty), BC_VERIFY_OK, "nonempty list", NULL);
+  const uint8_t over_limit[] = {0, 0, '[', 0x01, 0x00, 0x10, 0x00, 'h'};
+  assert_verify_status(over_limit, sizeof(over_limit), BC_VERIFY_ERROR,
+                       "list over limit", "list count exceeds maximum");
+  const uint8_t underflow[] = {0, 0, '[', 1, 0, 0, 0, 'h'};
+  assert_verify_status(underflow, sizeof(underflow), BC_VERIFY_ERROR,
+                       "list underflow", "stack underflow");
+  const uint8_t itemref_underflow[] = {0, 0, '&', 'h'};
+  assert_verify_status(itemref_underflow, sizeof(itemref_underflow), BC_VERIFY_ERROR,
+                       "itemref underflow", "stack underflow");
+  const uint8_t merge[] = {0, 0, 'b', 1, 'k', 0x0c, 0x00,
+                           'b', 1, '[', 1, 0, 0, 0, 'j', 0x02, 0x00,
+                           'Q', 'h'};
+  assert_verify_status(merge, sizeof(merge), BC_VERIFY_ERROR,
+                       "list count flow", "conflicting stack depths");
 }
 
 void test_bytecode_verify_local_indexes_and_items(void) {

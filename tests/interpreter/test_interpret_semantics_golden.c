@@ -15,8 +15,12 @@
 #include "test_helpers.h"
 #include "value.h"
 #include "vm.h"
+#include "list.h"
+#include "itemref.h"
+#include "memory.h"
 
 extern CONFIG_t config;
+extern uint8_t *op_build_list(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 typedef struct {
   const char *name;
@@ -230,7 +234,9 @@ static void teardown_result_semantics_runtime(void) {
   memset(&config, 0, sizeof(config));
 }
 
-static ITEM_t *compile_result_semantics_item(const char *label, const char *source) {
+static ITEM_t *compile_result_semantics_item_named(const char *label,
+                                                   const char *source,
+                                                   const char *requested_name) {
   OUTPUT_t *out = NULL;
   char *errdetail = NULL;
   int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
@@ -246,15 +252,25 @@ static ITEM_t *compile_result_semantics_item(const char *label, const char *sour
   uint8_t *bytecode = out->bytecode;
   out->bytecode = NULL;
   static unsigned next_item_id = 0;
-  char item_name[32];
-  int n = snprintf(item_name, sizeof(item_name), "result.t%u", next_item_id++);
-  ASSERT_TRUE(n > 0 && (size_t)n < sizeof(item_name));
+  char generated_name[32];
+  const char *item_name = requested_name;
+  if (!item_name) {
+    int n = snprintf(generated_name, sizeof(generated_name), "result.t%u",
+                     next_item_id++);
+    ASSERT_TRUE(n > 0 && (size_t)n < sizeof(generated_name));
+    item_name = generated_name;
+  }
   ITEM_t *item = test_item_set_code(itemstore_root(config.itemstore_ctx), item_name, (uint32_t)bytecode_len, bytecode);
   ASSERT_NOT_NULL(item);
 
   free(out);
   free(errdetail);
   return item;
+}
+
+static ITEM_t *compile_result_semantics_item(const char *label,
+                                             const char *source) {
+  return compile_result_semantics_item_named(label, source, NULL);
 }
 
 static VALUE_t run_result_semantics_source(const char *label, const char *source) {
@@ -266,6 +282,16 @@ static VALUE_t run_result_semantics_source(const char *label, const char *source
   ctx.itemstore_durability = config.itemstore_durability;
   ctx.strict_validation = config.strict_validation;
   ctx.strict_runtime_contracts = config.strict_runtime_contracts;
+  return interpret(&ctx, item);
+}
+
+static VALUE_t run_result_semantics_source_named(const char *label,
+                                                 const char *source,
+                                                 const char *item_name) {
+  ITEM_t *item = compile_result_semantics_item_named(label, source, item_name);
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemstore = config.itemstore_ctx;
   return interpret(&ctx, item);
 }
 
@@ -294,6 +320,18 @@ static void assert_result_string(const char *name, const char *source,
   VALUE_t result = run_result_semantics_source(name, source);
   ASSERT_EQ_INT(VALUE_str, result.type);
   ASSERT_TRUE(strcmp(result.s, expected) == 0);
+  value_free(&result);
+}
+
+static void assert_result_list_ints(const char *name, const char *source,
+                                    const int64_t *expected, size_t count) {
+  VALUE_t result = run_result_semantics_source(name, source);
+  ASSERT_EQ_INT(VALUE_list, result.type);
+  ASSERT_EQ_INT((int)count, (int)sin_list_count(result.list));
+  for (size_t i = 0; i < count; i++) {
+    ASSERT_EQ_INT(VALUE_int, sin_list_get(result.list, i)->type);
+    ASSERT_EQ_INT((int)expected[i], (int)sin_list_get(result.list, i)->i);
+  }
   value_free(&result);
 }
 
@@ -347,6 +385,36 @@ void test_interpret_result_semantics(void) {
                                       (VALUE_t){VALUE_int, {.i = 13}}));
   assert_result_int("result.value_item_unchanged", "return result.value_item;", 13);
   assert_result_nil("result.assignment_has_no_result", "@x = 7;");
+  {
+    assert_result_list_ints("result.empty_list", "return #[];", NULL, 0);
+    const int64_t ordered[] = {1, 2, 12};
+    assert_result_list_ints("result.list_order_once",
+      "result.order = 0; result.one = code ( result.order = result.order * 10 + 1; return 1; ); result.two = code ( result.order = result.order * 10 + 2; return 2; ); return #[result.one, result.two, result.order];",
+      ordered, 3);
+  }
+  assert_result_int("result.list_code_items_once",
+                    "result.marker = 0; result.one = code ( result.marker = result.marker + 1; return 1; ); result.two = code ( result.marker = result.marker + 1; return 2; ); #[result.one, result.two]; return result.marker;", 2);
+  {
+    VALUE_t result = run_result_semantics_source("result.itemref", "result.marker = 0; @index = 3; fred = code ( result.marker = result.marker + 1; return 7; ); return #[fred, &fred, &players.[@index], result.marker];");
+    ASSERT_EQ_INT(VALUE_list, result.type);
+    ASSERT_EQ_INT(VALUE_int, sin_list_get(result.list, 0)->type);
+    ASSERT_EQ_INT(7, (int)sin_list_get(result.list, 0)->i);
+    ASSERT_EQ_INT(VALUE_itemref, sin_list_get(result.list, 1)->type);
+    ASSERT_TRUE(strcmp(sin_itemref_path(sin_list_get(result.list, 1)->itemref), "fred") == 0);
+    ASSERT_EQ_INT(VALUE_itemref, sin_list_get(result.list, 2)->type);
+    ASSERT_TRUE(strcmp(sin_itemref_path(sin_list_get(result.list, 2)->itemref), "players.3") == 0);
+    ASSERT_EQ_INT(VALUE_int, sin_list_get(result.list, 3)->type);
+    ASSERT_EQ_INT(1, (int)sin_list_get(result.list, 3)->i);
+    value_free(&result);
+  }
+  {
+    VALUE_t result = run_result_semantics_source_named(
+        "result.relative_itemref", "return &.sibling;", "result.relative");
+    ASSERT_EQ_INT(VALUE_itemref, result.type);
+    ASSERT_TRUE(strcmp(sin_itemref_path(result.itemref),
+                       "result.relative.sibling") == 0);
+    value_free(&result);
+  }
 
   assert_result_nil("result.if_statement_discards_branch_value",
                     "if true then 7; else 8; endif;");
@@ -399,6 +467,28 @@ void test_interpret_result_semantics(void) {
   ASSERT_EQ_INT(0, unlink(save_path));
 
   teardown_result_semantics_runtime();
+}
+
+void test_runtime_build_list_allocation_failure_consumes_inputs(void) {
+  VM_t *vm = make_vm();
+  ASSERT_NOT_NULL(vm);
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, vm);
+  uint8_t frame[] = {2, 0, 0, 0};
+  runtime_decoder_init(&ctx.decoder, frame, frame + sizeof(frame));
+  char *first = strdup("first");
+  char *second = strdup("second");
+  ASSERT_NOT_NULL(first);
+  ASSERT_NOT_NULL(second);
+  push_stack(vm->stack, (VALUE_t){VALUE_str, {.s = first}});
+  push_stack(vm->stack, (VALUE_t){VALUE_str, {.s = second}});
+  alloc_test_fail_after(0);
+  uint8_t *next = op_build_list(&ctx, frame, NULL);
+  alloc_test_fail_after(-1);
+  ASSERT_TRUE(next == frame + sizeof(frame));
+  ASSERT_EQ_INT(1, size_stack(vm->stack));
+  ASSERT_EQ_INT(VALUE_nil, peek_stack(vm->stack)->type);
+  destroy_vm(vm);
 }
 
 

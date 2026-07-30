@@ -13,6 +13,7 @@
 #include "compiler/ir.h"
 #include "compiler/ir/opcode_schema.h"
 #include "memory.h"
+#include "list.h"
 
 static bool ensure_inst_capacity(IR_Function* function, size_t needed) {
   if (function->capacity >= needed) {
@@ -298,6 +299,18 @@ int8_t ir_validate_diag(IR_Unit* unit, uint32_t local_count, char **errdetail, C
         }
         break;
       }
+      case IR_OP_BUILD_LIST:
+        if (inst->a < 0) {
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (BUILD_LIST) has negative list count %d.",
+                                   i, inst->a);
+        }
+        if ((uint32_t)inst->a > SIN_LIST_MAX_ELEMENTS) {
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (BUILD_LIST) list count %d exceeds maximum %u.",
+                                   i, inst->a, (unsigned)SIN_LIST_MAX_ELEMENTS);
+        }
+        break;
       case IR_OP_LIBCALL_TOKEN:
         if (inst->a < 0) {
           return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,

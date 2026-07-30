@@ -50,6 +50,10 @@ and are truthy even when unresolved. Deletion and recreation of the same path
 therefore preserves resolution behavior. References are assignable and planned
 for itemstore v2 persistence.
 
+Executable list literals evaluate elements left-to-right. Prefixing an item
+expression with `&` builds an owning canonical item reference without fetching
+the target.
+
 Planned calls are `sys.itemref{"fred"}` (string to reference or nil),
 `sys.itemname{@ref}`, `sys.fetch{@ref}`, and
 `sys.call{@ref,@arguments}`. Existing name-taking sys calls (including exists,

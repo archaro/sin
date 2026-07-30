@@ -5,6 +5,16 @@
 
 #include "test_assert.h"
 #include "test_helpers.h"
+#include "sdiss_core.h"
+
+typedef struct { char *buf; size_t len; size_t cap; } SdissCapture;
+static void capture_sdiss(void *ctx, const char *data, size_t len) {
+  SdissCapture *c = ctx;
+  if (c->len + len + 1u > c->cap) return;
+  memcpy(c->buf + c->len, data, len);
+  c->len += len;
+  c->buf[c->len] = '\0';
+}
 
 static char *read_text(const char *path) {
   FILE *f = fopen(path, "rb");
@@ -117,4 +127,16 @@ void test_sdiss_reads_compiler_operand_widths(void) {
   run_sdiss_fixture("tests/fixtures/sdiss/operand-widths.bin", output2, sizeof(output2), &exit_code);
   ASSERT_EQ_INT(0, exit_code);
   remove(tmp_path);
+}
+
+void test_sdiss_lists_and_itemrefs_show_full_operands(void) {
+  const uint8_t bytes[] = {0x00, 0x00, '[', 0x01, 0x04, 0x00, 0x00, '&', 'h'};
+  char output[4096] = {0};
+  SdissCapture capture = {output, 0, sizeof(output)};
+  SDissOptions options = {.raw = 0, .no_header = 1};
+  SDissResult result = sdiss_disassemble_bytes(bytes, sizeof(bytes), &options,
+                                                capture_sdiss, &capture);
+  ASSERT_EQ_INT(0, result.status);
+  ASSERT_TRUE(strstr(output, "BUILD LIST COUNT 1025") != NULL);
+  ASSERT_TRUE(strstr(output, "MAKE ITEMREF") != NULL);
 }

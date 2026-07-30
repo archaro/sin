@@ -5,6 +5,7 @@
 
 #include "compiler/lower.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,7 @@
 #include "compiler/compdiag.h"
 #include "error.h"
 #include "libcall.h"
+#include "runtime/list.h"
 
 static void lower_set_error(LOWER_CTX *ctx, int8_t errnum, const char *detail) {
   if (!ctx) return;
@@ -63,6 +65,23 @@ static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node);
 static void lower_arglist(LOWER_CTX *ctx, AS_NODE *arglist, int32_t *argc);
 
 static void lower_item(LOWER_CTX *ctx, AS_NODE *item);
+static bool lower_list_count(LOWER_CTX *ctx, AS_NODE *node, size_t *out) {
+  size_t n = 0;
+  while (node) {
+    if (node->nodetype != N_LISTELEM || !node->lhs) {
+      lower_set_error(ctx, ERR_COMP_SYNTAX, "malformed list element chain");
+      return false;
+    }
+    if (n == SIN_LIST_MAX_ELEMENTS || n == INT32_MAX) {
+      lower_set_error(ctx, ERR_COMP_SYNTAX, "list element count exceeds maximum");
+      return false;
+    }
+    ++n;
+    node = (AS_NODE *)node->rhs;
+  }
+  *out = n;
+  return true;
+}
 static bool lower_build_embedded_payload(LOWER_CTX *ctx, AS_NODE *node, int32_t *payload_index);
 static bool lower_resolve_local_index(LOWER_CTX *ctx, AS_NODE *node, uint8_t *out_index);
 
@@ -361,6 +380,20 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
     case N_RELITEM:
       lower_item(ctx, node);
       return;
+
+    case N_ITEMREF:
+      lower_item(ctx, (AS_NODE *)node->lhs);
+      if (ctx->errnum == ERR_NOERROR) lower_emit(ctx, (IR_Inst){.op = IR_OP_MAKE_ITEMREF});
+      return;
+
+    case N_LIST: {
+      AS_NODE *elem = (AS_NODE *)node->lhs;
+      size_t count = 0;
+      if (elem && !lower_list_count(ctx, elem, &count)) return;
+      while (elem && ctx->errnum == ERR_NOERROR) { lower_expr(ctx, (AS_NODE *)elem->lhs); elem = (AS_NODE *)elem->rhs; }
+      if (ctx->errnum == ERR_NOERROR) lower_emit(ctx, (IR_Inst){.op = IR_OP_BUILD_LIST, .a = (int32_t)count});
+      return;
+    }
 
     case N_DEREF:
       lower_deref_payload(ctx, (AS_NODE *)node->lhs);

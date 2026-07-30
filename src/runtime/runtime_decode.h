@@ -49,6 +49,7 @@ RuntimeDecodeStatus require_bytes(const RuntimeDecoder *decoder, uint8_t *nextop
  */
 RuntimeDecodeStatus bc_read_u8(const RuntimeDecoder *decoder, uint8_t *nextop, uint8_t *out, const char *opname);
 RuntimeDecodeStatus bc_read_u16(const RuntimeDecoder *decoder, uint8_t *nextop, uint16_t *out, const char *opname);
+RuntimeDecodeStatus bc_read_u32(const RuntimeDecoder *decoder, uint8_t *nextop, uint32_t *out, const char *opname);
 RuntimeDecodeStatus bc_read_i16(const RuntimeDecoder *decoder, uint8_t *nextop, int16_t *out, const char *opname);
 RuntimeDecodeStatus bc_read_u64_payload(const RuntimeDecoder *decoder, uint8_t *nextop, uint64_t *out, const char *opname);
 RuntimeDecodeStatus bc_read_i64(const RuntimeDecoder *decoder, uint8_t *nextop, int64_t *out, const char *opname);

@@ -26,6 +26,8 @@
 #include "runtime_item_ops.h"
 #include "runtime_opcode.h"
 #include "runtime_value.h"
+#include "itemref.h"
+#include "list.h"
 #include "strbuilder.h"
 
 #define VM ctx->vm
@@ -920,6 +922,80 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 uint8_t *op_discard(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   throwaway_stack(ctx->vm->stack);
+  return nextop;
+}
+
+uint8_t *op_build_list(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  uint32_t count = 0;
+  VALUE_t *values = NULL;
+  (void)item;
+  RuntimeDecodeStatus status = bc_read_u32(&ctx->decoder, nextop, &count, "OP_BUILD_LIST count");
+  if (!runtime_decode_status_ok(status)) return NULL;
+  nextop = status.next;
+  if (count > SIN_LIST_MAX_ELEMENTS) {
+    set_runtime_bytecode_error(
+        ctx, NULL, (uint32_t)(nextop - ctx->decoder.frame_start) - 4u,
+                               "BUILD_LIST count exceeds maximum");
+    return NULL;
+  }
+  if ((size_t)count > (size_t)size_stack(VM->stack)) {
+    set_runtime_bytecode_error(
+        ctx, NULL, (uint32_t)(nextop - ctx->decoder.frame_start) - 5u,
+                               "BUILD_LIST stack underflow");
+    return NULL;
+  }
+  if (count == 0) {
+    SIN_LIST_t *empty = sin_list_build_owned(NULL, 0);
+    if (!empty) {
+      push_stack(VM->stack, VALUE_NIL);
+      return nextop;
+    }
+    push_stack(VM->stack, (VALUE_t){VALUE_list, {.list = empty}});
+    return nextop;
+  }
+  values = alloc_calloc(count, sizeof(*values));
+  if (!values) {
+    while (count--) throwaway_stack(VM->stack);
+    push_stack(VM->stack, VALUE_NIL);
+    return nextop;
+  }
+  for (uint32_t i = count; i > 0; i--) {
+    values[i - 1] = pop_stack(VM->stack);
+  }
+  SIN_LIST_t *list = sin_list_build_owned(values, count);
+  free(values);
+  if (!list) {
+    push_stack(VM->stack, VALUE_NIL);
+    return nextop;
+  }
+  push_stack(VM->stack, (VALUE_t){VALUE_list, {.list = list}});
+  return nextop;
+}
+
+uint8_t *op_make_itemref(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  if (size_stack(VM->stack) < 1) {
+    push_stack(VM->stack, VALUE_NIL);
+    return nextop;
+  }
+  VALUE_t assembled = pop_stack(VM->stack);
+  if (assembled.type != VALUE_str) {
+    value_free(&assembled);
+    push_stack(VM->stack, VALUE_NIL);
+    return nextop;
+  }
+  char fullname[MAX_ITEM_NAME];
+  if (!canonicalize_itemname(assembled.s, item, fullname)) {
+    value_free(&assembled);
+    push_stack(VM->stack, VALUE_NIL);
+    return nextop;
+  }
+  SIN_ITEMREF_t *ref = sin_itemref_create(fullname);
+  value_free(&assembled);
+  if (!ref) {
+    push_stack(VM->stack, VALUE_NIL);
+    return nextop;
+  }
+  push_stack(VM->stack, (VALUE_t){VALUE_itemref, {.itemref = ref}});
   return nextop;
 }
 

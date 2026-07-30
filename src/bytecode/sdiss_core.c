@@ -129,6 +129,9 @@ static void print_operand_line(SDissState *state, const BC_Instruction *inst) {
       print_escaped_bytes(state, inst->operand.value.bytes.data, inst->operand.value.bytes.len);
       outln(state, "\n");
       break;
+    case IR_OP_BUILD_LIST:
+      outln(state, "BUILD LIST COUNT %u\n", (unsigned int)inst->operand.value.u32);
+      break;
     default:
       outln(state, "%s\n", inst->mnemonic);
       break;

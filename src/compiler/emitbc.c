@@ -56,6 +56,13 @@ static int bw_write_u16(BC_Writer *w, uint16_t v) {
   w->used += sizeof(v);
   return 1;
 }
+static int bw_write_u32(BC_Writer *w, uint32_t v) {
+  if (!bw_ensure(w, sizeof(v))) return 0;
+  memcpy(w->out->nextbyte, &v, sizeof(v));
+  w->out->nextbyte += sizeof(v);
+  w->used += sizeof(v);
+  return 1;
+}
 static int bw_write_i16(BC_Writer *w, int16_t v) {
   if (!bw_ensure(w, sizeof(v))) return 0;
   memcpy(w->out->nextbyte, &v, sizeof(v));
@@ -115,6 +122,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case SIZE_FIXED_1: isz = 1; break;
       case SIZE_FIXED_2: isz = 2; break;
       case SIZE_FIXED_3: isz = 3; break;
+      case SIZE_FIXED_5: isz = 5; break;
       case SIZE_PUSH_INT: isz = 1 + 8; break;
       case SIZE_PUSH_FLOAT: isz = 1 + 8; break;
       case SIZE_PUSH_STRING: isz = 1 + 2 + (int)strlen((const char *)(intptr_t)in->imm); break;
@@ -173,6 +181,17 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
           return errnum;
         }
         break;
+      case VALIDATE_A_U32:
+        if (in->a < 0) {
+          free(pos);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX,
+                                  DIAG_PHASE_EMITBC, "emitbc",
+                                  "%s operand a out of range for u32: %d",
+                                  meta->name, in->a);
+          return errnum;
+        }
+        break;
       case VALIDATE_A_B_U8:
         if (in->a < 0 || in->a > UINT8_MAX || in->b < 0 || in->b > UINT8_MAX) {
           free(pos);
@@ -214,6 +233,9 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
         break;
       case IR_OP_CALL:
         if (!bw_write_u16(&w, (uint16_t)in->a)) goto oom;
+        break;
+      case IR_OP_BUILD_LIST:
+        if (!bw_write_u32(&w, (uint32_t)in->a)) goto oom;
         break;
       case IR_OP_ITEM_DEREF:
         /* ITEM_DEREF is the zero-argument form of the VM's shared 'F'

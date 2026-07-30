@@ -6,6 +6,7 @@
 #include "compiler/ir.h"
 #include "test_assert.h"
 #include "test_helpers.h"
+#include "compiler/compiler_pipeline.h"
 
 typedef struct {
   const char *name;
@@ -160,6 +161,36 @@ void test_emitbc_opcode_map(void) {
     free(out.bytecode);
     ir_destroy_unit(unit);
   }
+}
+
+void test_emitbc_lists_and_itemrefs_emission(void) {
+  const char *source = "return #[1, 2, &fred];";
+  OUTPUT_t *out = NULL;
+  char *errdetail = NULL;
+  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+  if (rc != ERR_NOERROR) fprintf(stderr, "list compile: rc=%d detail=%s\n", rc, errdetail ? errdetail : "<none>");
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_NOT_NULL(out);
+  size_t len = (size_t)(out->nextbyte - out->bytecode);
+  size_t build = SIZE_MAX;
+  size_t ref = SIZE_MAX;
+  for (size_t i = 2; i < len; i++) {
+    if (out->bytecode[i] == '[') build = i;
+    if (out->bytecode[i] == '&') ref = i;
+  }
+  ASSERT_TRUE(build != SIZE_MAX);
+  ASSERT_TRUE(ref != SIZE_MAX);
+  ASSERT_TRUE(ref < build);
+  ASSERT_TRUE(build >= 4);
+  ASSERT_EQ_INT(3, out->bytecode[build + 1]);
+  ASSERT_EQ_INT(0, out->bytecode[build + 2]);
+  ASSERT_EQ_INT(0, out->bytecode[build + 3]);
+  ASSERT_EQ_INT(0, out->bytecode[build + 4]);
+  ASSERT_TRUE(out->bytecode[ref - 1] == 'E');
+  ASSERT_TRUE(out->bytecode[ref + 1] == '[' || out->bytecode[ref + 1] == 'Q');
+  free(errdetail);
+  free(out->bytecode);
+  free(out);
 }
 
 

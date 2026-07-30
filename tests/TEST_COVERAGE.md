@@ -14,9 +14,9 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
 | core      |   122 | `tests/core/`           |
-| compiler  |    31 | `tests/compiler/`       |
-| runtime   |    83 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**236**|                         |
+| compiler  |    34 | `tests/compiler/`       |
+| runtime   |    84 | `tests/core/`, `tests/interpreter/` |
+| **Total** |**240**|                         |
 
 ## core
 
@@ -183,6 +183,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   - `tests/compiler/test_sdiss_fixtures.c`
     - `test_sdiss_fixture_basic`
     - `test_sdiss_reads_compiler_operand_widths`
+    - `test_sdiss_lists_and_itemrefs_show_full_operands`
 
 ### Known gaps
 - The negative matrix now includes representative multi-fault priority checks,
@@ -191,7 +192,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 ## runtime
 
-The runtime suite contains 83 tests registered in `runtime_tests[]`.
+The runtime suite contains 84 tests registered in `runtime_tests[]`.
 Twelve tests come
 from `tests/core/test_value_behavior.c` and exercise the decoder, interpreter
 contracts, and strict-validation machinery directly. The remaining tests cover
@@ -224,6 +225,7 @@ integration, and an opt-in performance guard.
         while true, and discards body expression values
       - source compilation and runtime execution of `sys.save` with a loadable
         checkpoint
+    - `test_runtime_build_list_allocation_failure_consumes_inputs`
     - `test_interpret_rejects_malformed_bytecode_before_execution`
     - `test_interpret_baseline_bytecode_safety_in_default_and_strict_modes`
 - **Interpreter stress / determinism under repeated runs**

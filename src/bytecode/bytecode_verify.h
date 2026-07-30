@@ -19,6 +19,7 @@ typedef enum {
   BC_OPERAND_NONE = 0,
   BC_OPERAND_U8,
   BC_OPERAND_U16,
+  BC_OPERAND_U32,
   BC_OPERAND_I16,
   BC_OPERAND_I64,
   BC_OPERAND_F64_BITS,
@@ -60,6 +61,7 @@ typedef struct {
   union {
     uint8_t u8;
     uint16_t u16;
+    uint32_t u32;
     int16_t i16;
     int64_t i64;
     uint64_t u64;
@@ -147,6 +149,6 @@ const BC_OpcodeSchema *bc_opcode_lookup(uint8_t opcode, BC_Context context);
 const BC_OpcodeSchema *bc_opcode_for_ir(IR_Op op);
 const char *bc_opcode_mnemonic(const BC_OpcodeSchema *schema);
 BC_StackEffect bc_opcode_stack_effect(const BC_OpcodeSchema *schema,
-                                      uint16_t operand_u16);
+                                      uint32_t operand_u32);
 uint8_t bc_opcode_byte(IR_Op op);
 BC_OperandKind bc_opcode_operand_encoding(IR_Op op);

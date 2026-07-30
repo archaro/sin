@@ -64,8 +64,10 @@ typedef enum {
   IR_OP_LIBCALL_TOKEN,
   IR_OP_ITEM_SAVE_CODE,
 
-  /* Keep this appended to minimize compatibility churn. */
-  IR_OP_RETURN
+  /* Keep new operations appended after the formerly last opcode. */
+  IR_OP_RETURN,
+  IR_OP_BUILD_LIST,
+  IR_OP_MAKE_ITEMREF
 } IR_Op;
 
 typedef struct {

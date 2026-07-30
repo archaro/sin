@@ -57,6 +57,14 @@ RuntimeDecodeStatus bc_read_u16(const RuntimeDecoder *decoder, uint8_t *nextop, 
   return runtime_decode_ok(nextop + sizeof(*out));
 }
 
+RuntimeDecodeStatus bc_read_u32(const RuntimeDecoder *decoder, uint8_t *nextop, uint32_t *out, const char *opname) {
+  RuntimeDecodeStatus status = require_bytes(decoder, nextop, 4, opname);
+  if (!runtime_decode_status_ok(status)) return status;
+  *out = (uint32_t)nextop[0] | ((uint32_t)nextop[1] << 8) |
+         ((uint32_t)nextop[2] << 16) | ((uint32_t)nextop[3] << 24);
+  return runtime_decode_ok(nextop + 4);
+}
+
 RuntimeDecodeStatus bc_read_i16(const RuntimeDecoder *decoder, uint8_t *nextop, int16_t *out, const char *opname) {
   RuntimeDecodeStatus status = require_bytes(decoder, nextop, sizeof(*out), opname);
   if (!runtime_decode_status_ok(status)) return status;

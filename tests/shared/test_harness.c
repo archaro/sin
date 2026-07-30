@@ -263,6 +263,7 @@ void test_list_limits_invalid_inputs_and_failures(void);
 /* Compiler component tests. */
 void test_emitbc_header(void);
 void test_emitbc_opcode_map(void);
+void test_emitbc_lists_and_itemrefs_emission(void);
 void test_emitbc_push_int_immediate_layout(void);
 void test_emitbc_push_float_immediate_layout(void);
 void test_emitbc_opcode_map_unsupported_ir_op(void);
@@ -276,6 +277,7 @@ void test_bytecode_verify_analysis_storage_is_profile_scoped(void);
 void test_bytecode_verify_minimal_and_header_errors(void);
 void test_bytecode_verify_opcode_terminators_and_complete_buffer(void);
 void test_bytecode_verify_truncated_operand_widths(void);
+void test_bytecode_verify_list_operations(void);
 void test_bytecode_verify_local_indexes_and_items(void);
 void test_bytecode_verify_jumps_and_stack_flow(void);
 void test_bytecode_verify_nesting_and_vm_stack_limits(void);
@@ -288,6 +290,7 @@ void test_pipeline_negative_matrix(void);
 void test_parser_examples_obj_golden(void);
 void test_sdiss_fixture_basic(void);
 void test_sdiss_reads_compiler_operand_widths(void);
+void test_sdiss_lists_and_itemrefs_show_full_operands(void);
 void test_sdiss_malformed_fixture_reports_verifier_diagnostic(void);
 void test_compiler_context_failures(void);
 void test_compiler_diag_pipeline(void);
@@ -297,6 +300,7 @@ void test_sys_compile_libcall_runtime(void);
 /* Runtime component tests. */
 void test_interpret_semantics_golden(void);
 void test_interpret_result_semantics(void);
+void test_runtime_build_list_allocation_failure_consumes_inputs(void);
 void test_interpret_rejects_malformed_bytecode_before_execution(void);
 void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void);
 void test_interpret_stress(void);
@@ -449,6 +453,7 @@ static const test_case_t core_tests[] = {
 static const test_case_t compiler_tests[] = {
     {"test_emitbc_header", test_emitbc_header},
     {"test_emitbc_opcode_map", test_emitbc_opcode_map},
+    {"test_emitbc_lists_and_itemrefs_emission", test_emitbc_lists_and_itemrefs_emission},
     {"test_emitbc_push_int_immediate_layout", test_emitbc_push_int_immediate_layout},
     {"test_emitbc_push_float_immediate_layout", test_emitbc_push_float_immediate_layout},
     {"test_emitbc_all_ir_ops_accounted_for", test_emitbc_all_ir_ops_accounted_for},
@@ -462,6 +467,7 @@ static const test_case_t compiler_tests[] = {
     {"test_bytecode_verify_minimal_and_header_errors", test_bytecode_verify_minimal_and_header_errors},
     {"test_bytecode_verify_opcode_terminators_and_complete_buffer", test_bytecode_verify_opcode_terminators_and_complete_buffer},
     {"test_bytecode_verify_truncated_operand_widths", test_bytecode_verify_truncated_operand_widths},
+    {"test_bytecode_verify_list_operations", test_bytecode_verify_list_operations},
     {"test_bytecode_verify_local_indexes_and_items", test_bytecode_verify_local_indexes_and_items},
     {"test_bytecode_verify_jumps_and_stack_flow", test_bytecode_verify_jumps_and_stack_flow},
     {"test_bytecode_verify_nesting_and_vm_stack_limits", test_bytecode_verify_nesting_and_vm_stack_limits},
@@ -475,6 +481,7 @@ static const test_case_t compiler_tests[] = {
     {"test_sdiss_fixture_basic", test_sdiss_fixture_basic},
     {"test_sdiss_malformed_fixture_reports_verifier_diagnostic", test_sdiss_malformed_fixture_reports_verifier_diagnostic},
     {"test_sdiss_reads_compiler_operand_widths", test_sdiss_reads_compiler_operand_widths},
+    {"test_sdiss_lists_and_itemrefs_show_full_operands", test_sdiss_lists_and_itemrefs_show_full_operands},
     {"test_compiler_context_failures", test_compiler_context_failures},
     {"test_compiler_diag_pipeline", test_compiler_diag_pipeline},
     {"test_cli_metadata_stdout_stderr_and_status", test_cli_metadata_stdout_stderr_and_status},
@@ -497,6 +504,7 @@ static const test_case_t runtime_tests[] = {
     {"test_strict_validation_rejects_null_bytecode", test_strict_validation_rejects_null_bytecode},
     {"test_interpret_semantics_golden", test_interpret_semantics_golden},
     {"test_interpret_result_semantics", test_interpret_result_semantics},
+    {"test_runtime_build_list_allocation_failure_consumes_inputs", test_runtime_build_list_allocation_failure_consumes_inputs},
     {"test_interpret_rejects_malformed_bytecode_before_execution", test_interpret_rejects_malformed_bytecode_before_execution},
     {"test_interpret_baseline_bytecode_safety_in_default_and_strict_modes", test_interpret_baseline_bytecode_safety_in_default_and_strict_modes},
     {"test_interpret_stress", test_interpret_stress},

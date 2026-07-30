@@ -46,6 +46,9 @@ and byte order assumptions.
 * **Two-byte immediates** (`u16` or signed `i16`) follow the opcode directly.
   Strings and embedded source blocks use unsigned 16-bit lengths. Jumps use a
   signed 16-bit relative offset.
+* **Four-byte immediates** (`u32`) follow the opcode directly. `[` /
+  `IR_OP_BUILD_LIST` stores its element count as a little-endian unsigned
+  32-bit value.
 * **Eight-byte immediates** are used by `p` / `IR_OP_PUSH_INT` and `P` /
   `IR_OP_PUSH_FLOAT`. Integers are encoded as `i64`. Floats are encoded as raw
   IEEE 754 binary64 payload bits copied through the emitter and interpreter as
@@ -103,6 +106,8 @@ arguments as described below.
 | `y` | `IR_OP_AND` | none | Pop the top two values, apply logical and, and push the boolean result. |
 | `z` | `IR_OP_OR` | none | Pop the top two values, apply logical or, and push the boolean result. |
 | `B` | `IR_OP_ITEM_SAVE_CODE` | optional params, then source block | Compile embedded source code and assign the compiled code item to the item name on top of the stack. On success, clear the error item. Malformed embedded payloads set `ERR_RUNTIME_BYTECODE`; invalid target item names set `ERR_RUNTIME_INVALIDITEM`; source compilation failures set the compiler error item. |
+| `[` | `IR_OP_BUILD_LIST` | `u32 count` (little-endian) | Consume `count` values in source order and push one list. |
+| `&` | `IR_OP_MAKE_ITEMREF` | none | Canonicalise the assembled item name and push an owning item reference. |
 | `C` | `IR_OP_ITEM_SAVE` | none | Pop an item name and value, then save the value into the item. |
 | `D` | `IR_OP_ITEM_PUSH_DEREF` | deref payload | Inside item assembly, append a dereferenced layer name. The payload identifies the dereference source, such as `V` plus a local index. |
 | `E` | `IR_OP_ITEM_END` | none | End item assembly. Evaluate the assembled item name and push the resulting name, or `nil` if the name is invalid. |
