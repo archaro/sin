@@ -13,7 +13,7 @@ trailing commas are rejected initially.
 Lists are immutable shared values. Assignment, arguments, returns, item
 storage, and cloning share storage; append/replacement operations return new
 lists and aliases never mutate. Lists may contain any value, cannot be cyclic,
-are false when empty and true otherwise, and use recursive structural `==` / 
+are false when empty and true otherwise, and use recursive structural `==` /
 `!=`. Relational comparisons are unsupported and produce the normal invalid
 comparison result. Identity is not exposed.
 

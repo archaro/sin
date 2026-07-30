@@ -98,41 +98,78 @@ static uint64_t bench_item_ops(size_t iters) {
   return elapsed;
 }
 
-static uint64_t bench_interpreter_ops(size_t iters, int with_argument) {
-  ITEMSTORE_t *store = itemstore_create("interp-bench");
-  VM_t *vm = make_vm();
-  ASSERT_NOT_NULL(store);
-  ASSERT_NOT_NULL(vm);
-  uint8_t *code = with_argument ? malloc(6u) : malloc(13u);
-  ASSERT_NOT_NULL(code);
-  if (with_argument) {
-    uint8_t bytes[] = {1, 1, 'e', 0, 'Q', 'h'};
-    memcpy(code, bytes, sizeof(bytes));
-  } else {
-    uint8_t bytes[] = {0, 0, 'p', 1, 0, 0, 0, 0, 0, 0, 0, 'Q', 'h'};
-    memcpy(code, bytes, sizeof(bytes));
-  }
-  ITEM_t *item = item_set_code(itemstore_root(store), with_argument ? "arg" : "control",
-                               with_argument ? 6u : 13u, code).item;
-  ASSERT_NOT_NULL(item);
+typedef struct {
+  ITEMSTORE_t *store;
+  VM_t *vm;
   RuntimeContext ctx;
-  runtime_context_init(&ctx, vm);
-  ctx.itemstore = store;
+  ITEM_t *caller;
+} InterpreterBenchmark_t;
+
+static ITEM_t *set_benchmark_code(ITEMSTORE_t *store, const char *name,
+                                  const uint8_t *bytes, size_t length) {
+  uint8_t *code = malloc(length);
+  ASSERT_NOT_NULL(code);
+  memcpy(code, bytes, length);
+  ITEM_t *item = item_set_code(itemstore_root(store), name, (uint32_t)length,
+                               code).item;
+  ASSERT_NOT_NULL(item);
+  return item;
+}
+
+static void prepare_interpreter_benchmark(InterpreterBenchmark_t *benchmark,
+                                          int with_argument) {
+  static const uint8_t argument_callee[] = {1, 1, 'e', 0, 'Q', 'h'};
+  static const uint8_t argument_caller[] = {
+      0, 0, 'p', 7, 0, 0, 0, 0, 0, 0, 0,
+      'l', 3, 0, 'a', 'r', 'g', 'F', 1, 0, 'Q', 'h'};
+  static const uint8_t control_callee[] = {0, 0, 'h'};
+  static const uint8_t control_caller[] = {
+      0, 0, 'l', 7, 0, 'c', 'o', 'n', 't', 'r', 'o', 'l', 'F', 0, 0, 'Q', 'h'};
+
+  benchmark->store = itemstore_create("interp-bench");
+  benchmark->vm = make_vm();
+  ASSERT_NOT_NULL(benchmark->store);
+  ASSERT_NOT_NULL(benchmark->vm);
+  if (with_argument) {
+    set_benchmark_code(benchmark->store, "arg", argument_callee,
+                       sizeof(argument_callee));
+    benchmark->caller = set_benchmark_code(benchmark->store, "arg.caller",
+                                            argument_caller,
+                                            sizeof(argument_caller));
+  } else {
+    set_benchmark_code(benchmark->store, "control", control_callee,
+                       sizeof(control_callee));
+    benchmark->caller = set_benchmark_code(benchmark->store, "control.caller",
+                                            control_caller,
+                                            sizeof(control_caller));
+  }
+  runtime_context_init(&benchmark->ctx, benchmark->vm);
+  benchmark->ctx.itemstore = benchmark->store;
+}
+
+static void destroy_interpreter_benchmark(InterpreterBenchmark_t *benchmark) {
+  runtime_destroy(&benchmark->ctx);
+  destroy_vm(benchmark->vm);
+  itemstore_destroy(benchmark->store);
+}
+
+static uint64_t bench_interpreter_ops(InterpreterBenchmark_t *benchmark,
+                                      size_t iters, int with_argument) {
   uint64_t start = now_ns();
   for (size_t i = 0; i < iters; i++) {
-    reset_stack(vm->stack);
-    if (with_argument) {
-      push_stack(vm->stack, (VALUE_t){.type = VALUE_int, .i = 7});
-      push_stack(vm->stack, VALUE_NIL);
-    }
-    VALUE_t result = interpret(&ctx, item);
-    if (with_argument) ASSERT_EQ_INT(7, result.i);
+    VALUE_t result = interpret(&benchmark->ctx, benchmark->caller);
     value_free(&result);
   }
   uint64_t elapsed = now_ns() - start;
-  runtime_destroy(&ctx);
-  destroy_vm(vm);
-  itemstore_destroy(store);
+
+  VALUE_t result = interpret(&benchmark->ctx, benchmark->caller);
+  if (with_argument) {
+    ASSERT_EQ_INT(VALUE_int, result.type);
+    ASSERT_EQ_INT(7, result.i);
+  } else {
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+  }
+  value_free(&result);
   return elapsed;
 }
 
@@ -189,10 +226,18 @@ void test_runtime_benchmark_optin(void) {
   uint64_t string_median = median_u64(string_samples, sample_count);
   uint64_t item_median = median_u64(item_samples, sample_count);
   uint64_t interp_control[sample_count], interp_args[sample_count];
+  InterpreterBenchmark_t control_benchmark = {0};
+  InterpreterBenchmark_t argument_benchmark = {0};
+  prepare_interpreter_benchmark(&control_benchmark, 0);
+  prepare_interpreter_benchmark(&argument_benchmark, 1);
   for (size_t i = 0; i < sample_count; i++) {
-    interp_control[i] = bench_interpreter_ops(value_iters / 10, 0);
-    interp_args[i] = bench_interpreter_ops(value_iters / 10, 1);
+    interp_control[i] = bench_interpreter_ops(&control_benchmark,
+                                              value_iters / 10, 0);
+    interp_args[i] = bench_interpreter_ops(&argument_benchmark,
+                                           value_iters / 10, 1);
   }
+  destroy_interpreter_benchmark(&argument_benchmark);
+  destroy_interpreter_benchmark(&control_benchmark);
   uint64_t control_median = median_u64(interp_control, sample_count);
   uint64_t args_median = median_u64(interp_args, sample_count);
   printf("[bench] value_clone_move_replace_free median=%llu ns (%llu ns/op)\n",
