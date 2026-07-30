@@ -179,6 +179,7 @@ void test_net_ditch_invalid_line_returns_nil(void);
 void test_net_echo_negotiates_current_line_and_consumes_values(void);
 void test_net_echo_ignores_unavailable_current_line(void);
 void test_sys_item_libcalls(void);
+void test_sys_itemref_contracts(void);
 void test_sys_persistence_libcalls(void);
 void test_sys_introspection_libcalls(void);
 void test_sys_wall_milliseconds_boundaries(void);
@@ -300,6 +301,7 @@ void test_compiler_context_failures(void);
 void test_compiler_diag_pipeline(void);
 void test_cli_metadata_stdout_stderr_and_status(void);
 void test_sys_compile_libcall_runtime(void);
+void test_sys_itemref_dynamic_calls(void);
 
 /* Runtime component tests. */
 void test_interpret_semantics_golden(void);
@@ -542,6 +544,7 @@ static const test_case_t runtime_tests[] = {
     {"test_net_echo_negotiates_current_line_and_consumes_values", test_net_echo_negotiates_current_line_and_consumes_values},
     {"test_net_echo_ignores_unavailable_current_line", test_net_echo_ignores_unavailable_current_line},
     {"test_sys_item_libcalls", test_sys_item_libcalls},
+    {"test_sys_itemref_contracts", test_sys_itemref_contracts},
     {"test_sys_persistence_libcalls", test_sys_persistence_libcalls},
     {"test_sys_introspection_libcalls", test_sys_introspection_libcalls},
     {"test_sys_wall_milliseconds_boundaries", test_sys_wall_milliseconds_boundaries},
@@ -581,6 +584,7 @@ static const test_case_t runtime_tests[] = {
     {"test_list_libcall_source_integration", test_list_libcall_source_integration},
     {"test_libcall_output_formats_values", test_libcall_output_formats_values},
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},
+    {"test_sys_itemref_dynamic_calls", test_sys_itemref_dynamic_calls},
     {"test_runtime_benchmark_optin", test_runtime_benchmark_optin},
 };
 

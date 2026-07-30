@@ -15,6 +15,8 @@
 #include "memory.h"
 #include "test_assert.h"
 #include "value.h"
+#include "list.h"
+#include "itemref.h"
 #include "version.h"
 #include "vm.h"
 
@@ -114,6 +116,103 @@ static void assert_only_temp_item_named(const char *expected_name) {
     }
   }
   ASSERT_EQ_INT(expected_name ? 1 : 0, found);
+}
+
+void test_sys_itemref_dynamic_calls(void) {
+  setup_runtime();
+  assert_compile_success_bool(
+      "zero = code ( return 7; );"
+      "one = code {@x} ( return @x; );"
+      "ordered = code {@a, @b, @c} ( return #[@a, @b, @c]; );"
+      "nested = code ( @r = sys.itemref{\"ordered\"}; return sys.call{@r, #[9, 8, 7]}; );"
+      "producer_one = code ( results.order = results.order * 10 + 1; return 11; );"
+      "producer_two = code ( results.order = results.order * 10 + 2; return 22; );"
+      "run = code ("
+      "  @z = sys.itemref{\"zero\"};"
+      "  @o = sys.itemref{\"one\"};"
+      "  @ordered = sys.itemref{\"ordered\"};"
+      "  results.exact = sys.call{@ordered, #[1, 2, 3]};"
+      "  results.missing = sys.call{@ordered, #[1]};"
+      "  results.excess = sys.call{@ordered, #[1, 2, 3, 4]};"
+      "  @nested = sys.itemref{\"nested\"}; results.nested = sys.fetch{@nested};"
+      "  results.order = 0;"
+      "  @producer = sys.itemref{\"producer\"};"
+      "  results.produced = sys.call{@ordered, #[producer_one, producer_two]};"
+      "  @aggref = sys.itemref{\"zero\"}; source.value = #[\"text\", #[1, 2], @aggref];"
+      "  results.missing_target = sys.fetch{sys.itemref{\"missing\"}};"
+      "  results.noncode_target = sys.call{sys.itemref{\"source.value\"}, #[]};"
+      "  @weak = sys.itemref{\"weak.target\"};"
+      "  results.weak_before = sys.fetch{@weak};"
+      "  weak.target = 11; results.weak_created = sys.fetch{@weak};"
+      "  sys.delete{@weak}; results.weak_deleted = sys.fetch{@weak};"
+      "  weak.target = 22; results.weak_recreated = sys.fetch{@weak};"
+      "  @aggregate = sys.itemref{\"source.value\"};"
+      "  results.aggregate = sys.fetch{@aggregate};"
+      "  sys.delete{@aggregate};"
+      "  results.zero = sys.fetch{@z};"
+      "  results.param_nil = sys.fetch{@o};"
+      ");");
+  ITEM_t *run = find_item(itemstore_root(config.itemstore_ctx), "run");
+  ASSERT_NOT_NULL(run);
+  VALUE_t result = interpret(test_ctx(), run);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  value_free(&result);
+
+  ITEM_t *exact = assert_int_item("results.order", 12);
+  (void)exact;
+  ITEM_t *stored = find_item(itemstore_root(config.itemstore_ctx), "results.exact");
+  ASSERT_NOT_NULL(stored);
+  ASSERT_EQ_INT(VALUE_list, item_value(stored)->type);
+  ASSERT_EQ_INT(3, sin_list_count(item_value(stored)->list));
+  ASSERT_EQ_INT(1, sin_list_get(item_value(stored)->list, 0)->i);
+  ASSERT_EQ_INT(2, sin_list_get(item_value(stored)->list, 1)->i);
+  ASSERT_EQ_INT(3, sin_list_get(item_value(stored)->list, 2)->i);
+  stored = find_item(itemstore_root(config.itemstore_ctx), "results.missing");
+  ASSERT_NOT_NULL(stored);
+  ASSERT_EQ_INT(VALUE_list, item_value(stored)->type);
+  ASSERT_EQ_INT(3, sin_list_count(item_value(stored)->list));
+  ASSERT_EQ_INT(1, sin_list_get(item_value(stored)->list, 0)->i);
+  ASSERT_EQ_INT(VALUE_nil, sin_list_get(item_value(stored)->list, 1)->type);
+  ASSERT_EQ_INT(VALUE_nil, sin_list_get(item_value(stored)->list, 2)->type);
+  stored = find_item(itemstore_root(config.itemstore_ctx), "results.excess");
+  ASSERT_NOT_NULL(stored);
+  ASSERT_EQ_INT(VALUE_list, item_value(stored)->type);
+  ASSERT_EQ_INT(3, sin_list_count(item_value(stored)->list));
+  ASSERT_EQ_INT(3, sin_list_get(item_value(stored)->list, 2)->i);
+  stored = find_item(itemstore_root(config.itemstore_ctx), "results.nested");
+  ASSERT_NOT_NULL(stored);
+  ASSERT_EQ_INT(VALUE_list, item_value(stored)->type);
+  ASSERT_EQ_INT(9, sin_list_get(item_value(stored)->list, 0)->i);
+  ASSERT_EQ_INT(8, sin_list_get(item_value(stored)->list, 1)->i);
+  ASSERT_EQ_INT(7, sin_list_get(item_value(stored)->list, 2)->i);
+  stored = find_item(itemstore_root(config.itemstore_ctx), "results.produced");
+  ASSERT_NOT_NULL(stored);
+  ASSERT_EQ_INT(VALUE_list, item_value(stored)->type);
+  ASSERT_EQ_INT(11, sin_list_get(item_value(stored)->list, 0)->i);
+  ASSERT_EQ_INT(22, sin_list_get(item_value(stored)->list, 1)->i);
+  assert_nil_item("results.missing_target");
+  assert_nil_item("results.noncode_target");
+  assert_nil_item("results.weak_before");
+  assert_int_item("results.weak_created", 11);
+  assert_nil_item("results.weak_deleted");
+  assert_int_item("results.weak_recreated", 22);
+  stored = find_item(itemstore_root(config.itemstore_ctx), "results.aggregate");
+  ASSERT_NOT_NULL(stored);
+  ASSERT_EQ_INT(VALUE_list, item_value(stored)->type);
+  ASSERT_EQ_INT(3, sin_list_count(item_value(stored)->list));
+  ASSERT_EQ_INT(VALUE_str, sin_list_get(item_value(stored)->list, 0)->type);
+  ASSERT_TRUE(strcmp(sin_list_get(item_value(stored)->list, 0)->s, "text") == 0);
+  ASSERT_EQ_INT(VALUE_list, sin_list_get(item_value(stored)->list, 1)->type);
+  ASSERT_EQ_INT(2, sin_list_count(sin_list_get(item_value(stored)->list, 1)->list));
+  ASSERT_EQ_INT(1, sin_list_get(sin_list_get(item_value(stored)->list, 1)->list, 0)->i);
+  ASSERT_EQ_INT(VALUE_itemref, sin_list_get(item_value(stored)->list, 2)->type);
+  ASSERT_TRUE(strcmp(sin_itemref_path(sin_list_get(item_value(stored)->list, 2)->itemref), "zero") == 0);
+  assert_int_item("results.zero", 7);
+  assert_nil_item("results.param_nil");
+  ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "source.value") == NULL);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  teardown_runtime();
 }
 
 static uint64_t parse_temp_counter(const char *name) {

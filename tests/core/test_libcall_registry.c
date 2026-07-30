@@ -52,6 +52,10 @@ uint8_t *lc_sys_monotime(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_calleritem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_paramcount(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_source(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_itemref(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_itemname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_fetch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_call(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 int64_t lc_sys_wall_milliseconds(int64_t seconds, int64_t microseconds);
 uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -187,21 +191,21 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_TRUE(libcalls[token].func == lc_net_echo);
 
   ASSERT_TRUE(libcall_lookup_token("net", "maxlines", &token, &args));
-  ASSERT_EQ_INT(32, token);
+  ASSERT_EQ_INT(36, token);
   ASSERT_EQ_INT(0, args);
   ASSERT_EQ_INT(3, libcalls[token].lib_index);
   ASSERT_EQ_INT(5, libcalls[token].call_index);
   ASSERT_TRUE(libcalls[token].func == lc_net_maxlines);
 
   ASSERT_TRUE(libcall_lookup_token("net", "connected", &token, &args));
-  ASSERT_EQ_INT(33, token);
+  ASSERT_EQ_INT(37, token);
   ASSERT_EQ_INT(1, args);
   ASSERT_EQ_INT(3, libcalls[token].lib_index);
   ASSERT_EQ_INT(6, libcalls[token].call_index);
   ASSERT_TRUE(libcalls[token].func == lc_net_connected);
 
   ASSERT_TRUE(libcall_lookup_token("net", "address", &token, &args));
-  ASSERT_EQ_INT(34, token);
+  ASSERT_EQ_INT(38, token);
   ASSERT_EQ_INT(1, args);
   ASSERT_EQ_INT(3, libcalls[token].lib_index);
   ASSERT_EQ_INT(7, libcalls[token].call_index);
@@ -225,6 +229,10 @@ void test_libcall_registry_roundtrip(void) {
     {"calleritem", 18, 18, 0, lc_sys_calleritem},
     {"paramcount", 19, 19, 1, lc_sys_paramcount},
     {"source", 20, 20, 1, lc_sys_source},
+    {"itemref", 21, 21, 1, lc_sys_itemref},
+    {"itemname", 22, 22, 1, lc_sys_itemname},
+    {"fetch", 23, 23, 1, lc_sys_fetch},
+    {"call", 24, 24, 2, lc_sys_call},
   };
   for (size_t i = 0; i < sizeof(sys_introspection_calls) /
                               sizeof(sys_introspection_calls[0]); i++) {
@@ -250,11 +258,11 @@ void test_libcall_registry_roundtrip(void) {
     uint8_t arity;
     OP_t handler;
   } task_calls[] = {
-    {"newgametask", 53, 0, 3, lc_task_newgametask},
-    {"killtask", 54, 1, 1, lc_task_killtask},
-    {"thisid", 55, 2, 0, lc_task_thisid},
-    {"exists", 56, 3, 1, lc_task_exists},
-    {"count", 57, 4, 0, lc_task_count},
+    {"newgametask", 57, 0, 3, lc_task_newgametask},
+    {"killtask", 58, 1, 1, lc_task_killtask},
+    {"thisid", 59, 2, 0, lc_task_thisid},
+    {"exists", 60, 3, 1, lc_task_exists},
+    {"count", 61, 4, 0, lc_task_count},
   };
   for (size_t i = 0; i < sizeof(task_calls) / sizeof(task_calls[0]); i++) {
     token = 0;
@@ -290,7 +298,7 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_EQ_INT(2, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
   ASSERT_TRUE(libcall_lookup_token("net", "flush", &token, &args));
-  ASSERT_EQ_INT(30, token);
+  ASSERT_EQ_INT(34, token);
   ASSERT_EQ_INT(1, args);
   ASSERT_NOT_NULL(libcall_func_token(token));
 

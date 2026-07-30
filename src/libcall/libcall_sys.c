@@ -18,6 +18,8 @@
 #include "log.h"
 #include "runtime_item_ops.h"
 #include "stack.h"
+#include "itemref.h"
+#include "list.h"
 #include "version.h"
 
 /* Test hook for controlling the timestamp used by sys.backup. */
@@ -283,6 +285,28 @@ static const char *lc_sys_item_type_name(const ITEM_t *target) {
   return NULL;
 }
 
+/* Resolve the shared item-name contract used by sys introspection calls. */
+static bool lc_sys_resolve_itemname(RuntimeContext *ctx, const VALUE_t *name,
+                                    char *fullname) {
+  if (!name || !fullname) return false;
+  if (name->type == VALUE_str) {
+    return canonicalize_itemname(name->s, ctx ? ctx->current_item : NULL,
+                                 fullname);
+  }
+  if (name->type == VALUE_itemref) {
+    const char *path = sin_itemref_path(name->itemref);
+    return path && canonicalize_itemname(path, NULL, fullname);
+  }
+  return false;
+}
+
+static void lc_sys_report_strict_contract(RuntimeContext *ctx,
+                                          const char *detail) {
+  if (!ctx || !ctx->strict_runtime_contracts) return;
+  set_error_item(itemstore_root(ctx->itemstore), ERR_RUNTIME_INVALIDARGS,
+                 detail, ctx->current_item);
+}
+
 int64_t lc_sys_wall_milliseconds(int64_t seconds, int64_t microseconds) {
   int64_t fraction = microseconds / INT64_C(1000);
   int64_t fraction_seconds = fraction / INT64_C(1000);
@@ -366,16 +390,15 @@ uint8_t *lc_sys_calleritem(RuntimeContext *ctx, uint8_t *nextop,
 uint8_t *lc_sys_itemtype(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   VALUE_t itemname = pop_stack(ctx->vm->stack);
-  if (!lc_value_is_type(itemname, VALUE_str)) {
+  if (itemname.type != VALUE_str && itemname.type != VALUE_itemref) {
     value_free(&itemname);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "sys.itemtype item name must be a string");
+        "sys.itemtype item name must be a string or item reference");
   }
 
   VALUE_t result = VALUE_NIL;
   char fullname[MAX_ITEM_NAME];
-  ITEM_t *current_item = ctx ? ctx->current_item : NULL;
-  if (canonicalize_itemname(itemname.s, current_item, fullname)) {
+  if (lc_sys_resolve_itemname(ctx, &itemname, fullname)) {
     ITEM_t *target = find_item(itemstore_root(ctx->itemstore), fullname);
     result = lc_sys_string_copy(lc_sys_item_type_name(target));
   }
@@ -387,16 +410,15 @@ uint8_t *lc_sys_childcount(RuntimeContext *ctx, uint8_t *nextop,
                            ITEM_t *item) {
   (void)item;
   VALUE_t itemname = pop_stack(ctx->vm->stack);
-  if (!lc_value_is_type(itemname, VALUE_str)) {
+  if (itemname.type != VALUE_str && itemname.type != VALUE_itemref) {
     value_free(&itemname);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "sys.childcount item name must be a string");
+        "sys.childcount item name must be a string or item reference");
   }
 
   VALUE_t result = VALUE_NIL;
   char fullname[MAX_ITEM_NAME];
-  ITEM_t *current_item = ctx ? ctx->current_item : NULL;
-  if (canonicalize_itemname(itemname.s, current_item, fullname)) {
+  if (lc_sys_resolve_itemname(ctx, &itemname, fullname)) {
     ITEM_t *target = find_item(itemstore_root(ctx->itemstore), fullname);
     if (target) {
       result = (VALUE_t){VALUE_int,
@@ -413,16 +435,16 @@ uint8_t *lc_sys_paramcount(RuntimeContext *ctx, uint8_t *nextop,
   if (!ctx || !ctx->vm || !ctx->vm->stack) return nextop;
 
   VALUE_t itemname = pop_stack(ctx->vm->stack);
-  if (!lc_value_is_type(itemname, VALUE_str)) {
+  if (itemname.type != VALUE_str && itemname.type != VALUE_itemref) {
     value_free(&itemname);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "sys.paramcount item name must be a string");
+        "sys.paramcount item name must be a string or item reference");
   }
 
   VALUE_t result = VALUE_NIL;
   char fullname[MAX_ITEM_NAME];
-  if (itemstore_root(ctx->itemstore) && canonicalize_itemname(itemname.s, ctx->current_item,
-                                             fullname)) {
+  if (itemstore_root(ctx->itemstore) && lc_sys_resolve_itemname(ctx, &itemname,
+                                                                  fullname)) {
     ITEM_t *target = find_item(itemstore_root(ctx->itemstore), fullname);
     const uint8_t *bytecode = target ? item_bytecode(target) : NULL;
     uint32_t bytecode_len = target ? item_bytecode_length(target) : 0;
@@ -440,15 +462,15 @@ uint8_t *lc_sys_source(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (!ctx || !ctx->vm || !ctx->vm->stack) return nextop;
 
   VALUE_t itemname = pop_stack(ctx->vm->stack);
-  if (!lc_value_is_type(itemname, VALUE_str)) {
+  if (itemname.type != VALUE_str && itemname.type != VALUE_itemref) {
     value_free(&itemname);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "sys.source item name must be a string");
+        "sys.source item name must be a string or item reference");
   }
 
   char fullname[MAX_ITEM_NAME];
   if (!itemstore_root(ctx->itemstore) ||
-      !canonicalize_itemname(itemname.s, ctx->current_item, fullname)) {
+      !lc_sys_resolve_itemname(ctx, &itemname, fullname)) {
     value_free(&itemname);
     return lc_sys_return_nil(ctx, nextop);
   }
@@ -473,6 +495,163 @@ uint8_t *lc_sys_source(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   set_error_item(itemstore_root(ctx->itemstore), ERR_RUNTIME_SOURCE, error_detail,
                  ctx->current_item);
   return lc_sys_return(ctx, nextop, lc_sys_string_copy(""));
+}
+
+static ITEM_t *lc_sys_reference_target(RuntimeContext *ctx, const VALUE_t *ref,
+                                       char *fullname) {
+  if (!ctx || !ref || ref->type != VALUE_itemref ||
+      !lc_sys_resolve_itemname(ctx, ref, fullname)) return NULL;
+  return find_item(itemstore_root(ctx->itemstore), fullname);
+}
+
+static bool lc_sys_schedule_code_call(RuntimeContext *ctx, uint8_t *nextop,
+                                       ITEM_t *target, size_t supplied) {
+  if (!ctx || !ctx->vm || !ctx->vm->stack || !ctx->vm->callstack || !target ||
+      item_kind(target) != ITEM_code) return false;
+  const uint8_t *bytecode = item_bytecode(target);
+  uint32_t bytecode_len = item_bytecode_length(target);
+  if (!bytecode || bytecode_len < 2u) return false;
+  size_t params = bytecode[1];
+  if (ctx->vm->callstack->current >= ctx->vm->callstack->max) return false;
+  if (params > supplied && params - supplied >
+      (size_t)(ctx->vm->stack->max - ctx->vm->stack->current)) {
+    return false;
+  }
+  while (supplied > params) {
+    VALUE_t discarded = pop_stack(ctx->vm->stack);
+    value_free(&discarded);
+    lc_sys_report_strict_contract(ctx,
+        "sys.call discarded extra argument for target item");
+    supplied--;
+  }
+  while (supplied < params) {
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    supplied++;
+  }
+  push_callstack(ctx->vm, ctx->current_item, nextop, (uint8_t)params,
+                 (uint8_t *)ctx->decoder.frame_start,
+                 (uint8_t *)ctx->decoder.frame_end);
+  ctx->pending_call_item = target;
+  return true;
+}
+
+uint8_t *lc_sys_itemref(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  VALUE_t name = pop_stack(ctx->vm->stack);
+  if (name.type != VALUE_str) {
+    value_free(&name);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "sys.itemref name must be a string");
+  }
+  char fullname[MAX_ITEM_NAME];
+  VALUE_t result = VALUE_NIL;
+  if (lc_sys_resolve_itemname(ctx, &name, fullname)) {
+    SIN_ITEMREF_t *ref = sin_itemref_create(fullname);
+    if (ref) result = (VALUE_t){VALUE_itemref, {.itemref = ref}};
+  }
+  value_free(&name);
+  return lc_sys_return(ctx, nextop, result);
+}
+
+uint8_t *lc_sys_itemname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  VALUE_t ref = pop_stack(ctx->vm->stack);
+  if (ref.type != VALUE_itemref) {
+    value_free(&ref);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "sys.itemname reference must be an item reference");
+  }
+  const char *path = sin_itemref_path(ref.itemref);
+  VALUE_t result = path ? lc_sys_string_copy(path) : VALUE_NIL;
+  value_free(&ref);
+  return lc_sys_return(ctx, nextop, result);
+}
+
+uint8_t *lc_sys_fetch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  VALUE_t ref = pop_stack(ctx->vm->stack);
+  if (ref.type != VALUE_itemref) {
+    value_free(&ref);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "sys.fetch reference must be an item reference");
+  }
+  char fullname[MAX_ITEM_NAME];
+  ITEM_t *target = lc_sys_reference_target(ctx, &ref, fullname);
+  VALUE_t result = VALUE_NIL;
+  if (target && item_kind(target) == ITEM_value) {
+    const VALUE_t *stored = item_value(target);
+    if (stored) (void)value_clone_fallible(stored, &result);
+  } else if (target && item_kind(target) == ITEM_code) {
+    if (lc_sys_schedule_code_call(ctx, nextop, target, 0u)) {
+      value_free(&ref);
+      return NULL;
+    }
+  }
+  value_free(&ref);
+  return lc_sys_return(ctx, nextop, result);
+}
+
+uint8_t *lc_sys_call(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  VALUE_t arguments = pop_stack(ctx->vm->stack);
+  VALUE_t ref = pop_stack(ctx->vm->stack);
+  if (ref.type != VALUE_itemref || arguments.type != VALUE_list || !arguments.list) {
+    VALUE_t bad[] = {ref, arguments};
+    lc_cleanup_values(bad, 2);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "sys.call requires an item reference and a list");
+  }
+  char fullname[MAX_ITEM_NAME];
+  ITEM_t *target = lc_sys_reference_target(ctx, &ref, fullname);
+  size_t count = sin_list_count(arguments.list);
+  bool prepared = target && item_kind(target) == ITEM_code;
+  VALUE_t result = VALUE_NIL;
+  if (prepared) {
+    /* List order is preserved by pushing each element from left to right. */
+    size_t pushed = 0;
+    const uint8_t *bytecode = item_bytecode(target);
+    size_t params = bytecode && item_bytecode_length(target) >= 2u
+        ? bytecode[1] : 0u;
+    size_t effective = count < params ? count : params;
+    prepared = bytecode && item_bytecode_length(target) >= 2u &&
+        params <= (size_t)(ctx->vm->stack->max - ctx->vm->stack->current);
+    while (pushed < effective) {
+      const VALUE_t *source = sin_list_get(arguments.list, pushed);
+      VALUE_t clone = VALUE_NIL;
+      if (!source || !value_clone_fallible(source, &clone)) {
+        while (pushed > 0u) {
+          VALUE_t dropped = pop_stack(ctx->vm->stack);
+          value_free(&dropped);
+          pushed--;
+        }
+        prepared = false;
+        break;
+      }
+      push_stack(ctx->vm->stack, clone);
+      pushed++;
+    }
+    if (prepared) {
+      if (count > effective) {
+        lc_sys_report_strict_contract(ctx,
+            "sys.call discarded extra argument for target item");
+      }
+      prepared = lc_sys_schedule_code_call(ctx, nextop, target, effective);
+    }
+    if (!prepared) {
+      while (pushed > 0u) {
+        VALUE_t dropped = pop_stack(ctx->vm->stack);
+        value_free(&dropped);
+        pushed--;
+      }
+    } else {
+      value_free(&ref);
+      value_free(&arguments);
+      return NULL;
+    }
+  }
+  value_free(&ref);
+  value_free(&arguments);
+  return lc_sys_return(ctx, nextop, result);
 }
 
 uint8_t *lc_sys_rootcount(RuntimeContext *ctx, uint8_t *nextop,
@@ -658,30 +837,32 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 }
 
 uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   VALUE_t itemname = pop_stack(ctx->vm->stack);
-  if (!lc_value_is_type(itemname, VALUE_str)) {
+  if (itemname.type != VALUE_str && itemname.type != VALUE_itemref) {
     value_free(&itemname);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_FALSE,
-        "sys.exists item name must be a string");
+        "sys.exists item name must be a string or item reference");
   }
 
   char fullname[MAX_ITEM_NAME];
-  bool exists = canonicalize_itemname(itemname.s, item, fullname) &&
+  bool exists = lc_sys_resolve_itemname(ctx, &itemname, fullname) &&
       find_item(itemstore_root(ctx->itemstore), fullname) != NULL;
   value_free(&itemname);
   return lc_sys_return(ctx, nextop, exists ? VALUE_TRUE : VALUE_FALSE);
 }
 
 uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   VALUE_t itemname = pop_stack(ctx->vm->stack);
-  if (!lc_value_is_type(itemname, VALUE_str)) {
+  if (itemname.type != VALUE_str && itemname.type != VALUE_itemref) {
     value_free(&itemname);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "sys.delete item name must be a string");
+        "sys.delete item name must be a string or item reference");
   }
 
   char fullname[MAX_ITEM_NAME];
-  if (canonicalize_itemname(itemname.s, item, fullname)) {
+  if (lc_sys_resolve_itemname(ctx, &itemname, fullname)) {
     (void)item_delete(itemstore_root(ctx->itemstore), fullname);
   }
   value_free(&itemname);
@@ -689,19 +870,20 @@ uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 }
 
 uint8_t *lc_sys_nthname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
   VALUE_t index = pop_stack(ctx->vm->stack);
   VALUE_t itemname = pop_stack(ctx->vm->stack);
-  if (!lc_value_is_type(itemname, VALUE_str) ||
+  if ((itemname.type != VALUE_str && itemname.type != VALUE_itemref) ||
       !lc_value_is_type(index, VALUE_int) || index.i < 0) {
     value_free(&index);
     value_free(&itemname);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "sys.nthname requires a string item name and non-negative integer index");
+        "sys.nthname requires a string or item reference and non-negative integer index");
   }
 
   VALUE_t result = VALUE_NIL;
   char fullname[MAX_ITEM_NAME];
-  if (canonicalize_itemname(itemname.s, item, fullname)) {
+  if (lc_sys_resolve_itemname(ctx, &itemname, fullname)) {
     ITEM_t *parent = find_item(itemstore_root(ctx->itemstore), fullname);
     if (parent) {
       ITEM_t *child = item_child_at(parent, (size_t)index.i);

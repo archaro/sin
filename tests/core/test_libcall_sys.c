@@ -18,6 +18,7 @@
 #include "vm.h"
 #include "memory.h"
 #include "runtime_value.h"
+#include "itemref.h"
 #include "string_limits.h"
 #include "version.h"
 
@@ -63,6 +64,10 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_nthname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_itemref(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_itemname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_fetch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_call(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_rootname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_capitalise(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_upper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -218,6 +223,142 @@ void test_sys_item_libcalls(void) {
   ASSERT_EQ_INT(0, ret.i);
   assert_invalid_args_detail_contains("sys.exists");
 
+  /* Phase 7 reference conversion and weak resolution contract. */
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("parent.first")}});
+  (void)lc_sys_itemref(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_itemref, ret.type);
+  ASSERT_TRUE(strcmp(sin_itemref_path(ret.itemref), "parent.first") == 0);
+  VALUE_t ref = ret;
+  push_stack(config.vm->stack, value_clone(&ref));
+  (void)lc_sys_itemname(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  VALUE_t name = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, name.type);
+  ASSERT_TRUE(strcmp(name.s, "parent.first") == 0);
+  value_free(&name);
+  push_stack(config.vm->stack, value_clone(&ref));
+  (void)lc_sys_exists(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(1, ret.i);
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "parent.first",
+                              (VALUE_t){VALUE_int, {.i = 9}}));
+  push_stack(config.vm->stack, ref);
+  (void)lc_sys_fetch(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(9, ret.i);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("parent.first")}});
+  (void)lc_sys_itemref(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  ref = pop_stack(config.vm->stack);
+  (void)item_delete(itemstore_root(config.itemstore_ctx), "parent.first");
+  push_stack(config.vm->stack, ref);
+  (void)lc_sys_exists(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+
+  teardown_libcall_runtime();
+}
+
+void test_sys_itemref_contracts(void) {
+  setup_libcall_runtime();
+  RuntimeContext *ctx = test_ctx();
+  ITEM_t *caller = test_item_set_value(itemstore_root(config.itemstore_ctx),
+                                       "scope.caller", (VALUE_t){VALUE_int, {.i = 1}});
+  ASSERT_NOT_NULL(caller);
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx),
+                                      "scope.caller.child", VALUE_TRUE));
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx),
+                                      "scope.caller.to_delete", VALUE_TRUE));
+  uint8_t *code = malloc(3u);
+  ASSERT_NOT_NULL(code);
+  code[0] = 0; code[1] = 1; code[2] = (uint8_t)'h';
+  ASSERT_NOT_NULL(test_item_set_code(itemstore_root(config.itemstore_ctx),
+                                     "scope.caller.fn", 3u, code));
+  ctx->current_item = caller;
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(".target")}});
+  (void)lc_sys_itemref(ctx, NULL, caller);
+  VALUE_t ref = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_itemref, ref.type);
+  ASSERT_TRUE(strcmp(sin_itemref_path(ref.itemref), "scope.caller.target") == 0);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_sys_itemname(ctx, NULL, caller);
+  VALUE_t invalid = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, invalid.type);
+  assert_invalid_args_detail_contains("sys.itemname");
+  ITEM_t *error_item = find_item(itemstore_root(config.itemstore_ctx), "error.item");
+  ASSERT_NOT_NULL(error_item);
+  ASSERT_EQ_INT(VALUE_str, item_value(error_item)->type);
+  ASSERT_TRUE(strcmp(item_value(error_item)->s, "scope.caller") == 0);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_sys_itemref(ctx, NULL, caller);
+  invalid = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, invalid.type);
+  assert_invalid_args_detail_contains("sys.itemref");
+  ASSERT_TRUE(strcmp(item_value(error_item)->s, "scope.caller") == 0);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  (void)lc_sys_fetch(ctx, NULL, caller);
+  invalid = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, invalid.type);
+  assert_invalid_args_detail_contains("sys.fetch");
+  ASSERT_TRUE(strcmp(item_value(error_item)->s, "scope.caller") == 0);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 2}});
+  (void)lc_sys_call(ctx, NULL, caller);
+  invalid = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, invalid.type);
+  assert_invalid_args_detail_contains("sys.call");
+  ASSERT_TRUE(strcmp(item_value(error_item)->s, "scope.caller") == 0);
+
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("scope.caller")}});
+  (void)lc_sys_itemref(ctx, NULL, caller);
+  VALUE_t caller_ref = pop_stack(config.vm->stack);
+  push_stack(config.vm->stack, value_clone(&caller_ref));
+  (void)lc_sys_exists(ctx, NULL, caller);
+  invalid = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, invalid.type);
+  ASSERT_EQ_INT(1, invalid.i);
+  push_stack(config.vm->stack, value_clone(&caller_ref));
+  (void)lc_sys_childcount(ctx, NULL, caller);
+  invalid = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, invalid.type);
+  ASSERT_EQ_INT(3, invalid.i);
+  push_stack(config.vm->stack, value_clone(&caller_ref));
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  (void)lc_sys_nthname(ctx, NULL, caller);
+  invalid = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, invalid.type);
+  ASSERT_TRUE(strcmp(invalid.s, "child") == 0);
+  value_free(&invalid);
+  push_stack(config.vm->stack, value_clone(&caller_ref));
+  (void)lc_sys_itemtype(ctx, NULL, caller);
+  invalid = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, invalid.type);
+  ASSERT_TRUE(strcmp(invalid.s, "int") == 0);
+  value_free(&invalid);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("scope.caller.fn")}});
+  (void)lc_sys_itemref(ctx, NULL, caller);
+  VALUE_t fnref = pop_stack(config.vm->stack);
+  push_stack(config.vm->stack, value_clone(&fnref));
+  (void)lc_sys_paramcount(ctx, NULL, caller);
+  invalid = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, invalid.type);
+  ASSERT_EQ_INT(1, invalid.i);
+  value_free(&fnref);
+  value_free(&caller_ref);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("scope.caller.to_delete")}});
+  (void)lc_sys_itemref(ctx, NULL, caller);
+  fnref = pop_stack(config.vm->stack);
+  push_stack(config.vm->stack, value_clone(&fnref));
+  (void)lc_sys_delete(ctx, NULL, caller);
+  invalid = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, invalid.type);
+  ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "scope.caller.to_delete") == NULL);
+  value_free(&fnref);
+  value_free(&ref);
   teardown_libcall_runtime();
 }
 void test_sys_persistence_libcalls(void) {
@@ -915,6 +1056,14 @@ void test_sys_source_libcall(void) {
   ASSERT_TRUE(owned_first.s != owned_second.s);
   value_free(&owned_first);
   value_free(&owned_second);
+
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("source.scope.runner.target")}});
+  (void)lc_sys_itemref(&ctx, NULL, runner);
+  VALUE_t target_ref = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_itemref, target_ref.type);
+  VALUE_t owned_ref_source = call_sys_name(lc_sys_source, &ctx, target_ref);
+  assert_string_return(owned_ref_source, exact_source);
 
   VALUE_t result = call_sys_name(lc_sys_source, &ctx,
       (VALUE_t){VALUE_str, {.s = strdup(".empty")}});

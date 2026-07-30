@@ -15,8 +15,8 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 |-----------|-------|-------------------------|
 | core      |   122 | `tests/core/`           |
 | compiler  |    34 | `tests/compiler/`       |
-| runtime   |    88 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**244**|                         |
+| runtime   |    90 | `tests/core/`, `tests/interpreter/` |
+| **Total** |**246**|                         |
 
 ## core
 
@@ -192,7 +192,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 ## runtime
 
-The runtime suite contains 88 tests registered in `runtime_tests[]`.
+The runtime suite contains 90 tests registered in `runtime_tests[]`.
 Twelve tests come
 from `tests/core/test_value_behavior.c` and exercise the decoder, interpreter
 contracts, and strict-validation machinery directly. The remaining tests cover
@@ -267,6 +267,12 @@ integration, and an opt-in performance guard.
         executing-item provenance, and prior-error preservation
       - defensive no-crash behavior for invalid direct C-level calls without a
         root, VM, or stack
+    - `test_sys_itemref_contracts`
+      - item-reference conversion, weak resolution, wrong-type diagnostics,
+        and migrated name-call acceptance
+    - `test_sys_itemref_dynamic_calls`
+      - code-target fetch/call transfer, parameter padding, nested calls,
+        list return propagation, and VM cleanup
     - `test_sys_caller_paramcount_libcalls`
       - direct-entry nil, two- and three-level caller selection, return
         restoration, owned strings, defensive missing context, and prior-error

@@ -54,8 +54,8 @@ Executable list literals evaluate elements left-to-right. Prefixing an item
 expression with `&` builds an owning canonical item reference without fetching
 the target.
 
-Planned calls are `sys.itemref{"fred"}` (string to reference or nil),
+Item-reference calls are `sys.itemref{"fred"}` (string to reference or nil),
 `sys.itemname{@ref}`, `sys.fetch{@ref}`, and
 `sys.call{@ref,@arguments}`. Existing name-taking sys calls (including exists,
-itemtype, childcount, paramcount, source, and delete) will share a resolver and
+itemtype, childcount, paramcount, source, and delete) share a resolver and
 accept strings or references where sensible. Strings remain strings.

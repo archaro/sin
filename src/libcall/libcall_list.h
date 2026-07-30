@@ -29,6 +29,10 @@
   X("sys",  "calleritem",  1, 18, 0, lc_sys_calleritem) \
   X("sys",  "paramcount",  1, 19, 1, lc_sys_paramcount) \
   X("sys",  "source",      1, 20, 1, lc_sys_source) \
+  X("sys",  "itemref",     1, 21, 1, lc_sys_itemref) \
+  X("sys",  "itemname",    1, 22, 1, lc_sys_itemname) \
+  X("sys",  "fetch",       1, 23, 1, lc_sys_fetch) \
+  X("sys",  "call",        1, 24, 2, lc_sys_call) \
   X("list", "length",      5,  0, 1, lc_list_length) \
   X("list", "get",         5,  1, 2, lc_list_get) \
   X("list", "append",      5,  2, 2, lc_list_append) \

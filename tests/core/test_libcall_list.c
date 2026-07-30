@@ -65,7 +65,7 @@ void test_list_libcall_registry_contract(void) {
                      lc_list_set, lc_list_concat, lc_list_slice};
   for (size_t i = 0; i < 6; ++i) {
     ASSERT_TRUE(libcall_lookup_token("list", names[i], &token, &args));
-    ASSERT_EQ_INT(21 + i, token);
+    ASSERT_EQ_INT(25 + i, token);
     ASSERT_EQ_INT(arities[i], args);
     ASSERT_EQ_INT(5, libcalls[token].lib_index);
     ASSERT_EQ_INT(i, libcalls[token].call_index);
