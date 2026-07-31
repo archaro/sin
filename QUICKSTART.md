@@ -16,6 +16,7 @@ This builds:
 - `sin` (runtime engine)
 - `scomp` (standalone compiler)
 - `sdiss` (standalone disassembler)
+- `sconv` (itemstore converter)
 
 ## Run the chat server example
 

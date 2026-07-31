@@ -99,6 +99,17 @@ bool save_itemstore(const char *filename, ITEM_t *root);
 ITEM_t *load_itemstore_with_options(const char *filename, bool strict_validation);
 ITEM_t *load_itemstore(const char *filename);
 
+typedef enum {
+  ITEMSTORE_CONVERT_SUCCESS,
+  ITEMSTORE_CONVERT_TARGET_EXISTS,
+  ITEMSTORE_CONVERT_SAME_FILE,
+  ITEMSTORE_CONVERT_FAILURE
+} ITEMSTORE_CONVERT_RESULT_e;
+
+ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
+    const char *input_filename, const char *output_filename,
+    ITEMSTORE_DURABILITY_e durability, bool replace);
+
 // Child-container internals.
 ITEM_CHILDREN_t *item_children_create_runtime(void);
 ITEM_CHILDREN_t *item_children_create_loaded(uint32_t expected_children);

@@ -9,15 +9,21 @@ nested rendering, escaping, explicit failure statuses, and debug truncation.
 This document maps major subsystems to concrete test entry points so reviewers
 can quickly verify what is covered and what remains intentionally out of scope.
 
+`test_sconv_v1_to_v2_preserves_code`, `test_sconv_v2_canonical_and_invocation_modes`,
+`test_sconv_collisions_aliases_and_replace`, and
+`test_sconv_rejects_bad_inputs_and_durability_failure` exercise converter
+argument parsing, v1/v2 canonical conversion, atomic publication modes,
+durability selection, malformed headers, and same-file safety.
+
 The unified test harness (`tests/shared/test_harness.c`) builds a single
 `tests/test-suite` binary that registers three logical suites:
 
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
-| core      |   123 | `tests/core/`           |
+| core      |   131 | `tests/core/`           |
 | compiler  |    34 | `tests/compiler/`       |
 | runtime   |    90 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**247**|                         |
+| **Total** |**255**|                         |
 
 ## core
 
@@ -48,7 +54,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `run_suite(...)`
     - Per-test and per-suite elapsed-time reporting
     - Assertion-failure suite/test context via `tests/test_assert.h`
-    - Core suite registration (`core_tests[]` with 123 entries)
+    - Core suite registration (`core_tests[]` with 131 entries)
     - Suite registration validation rejects null/duplicate test entries
       before execution.
 - **Fixture contract integrity / regeneration policy**

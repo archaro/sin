@@ -153,6 +153,10 @@ void test_save_itemstore_preserves_existing_file_on_failure(void);
 void test_save_itemsource_reports_write_and_close_failure(void);
 void test_itemstore_durability_modes(void);
 void test_itemstore_large_load_presizes_child_storage(void);
+void test_sconv_v1_to_v2_preserves_code(void);
+void test_sconv_v2_canonical_and_invocation_modes(void);
+void test_sconv_collisions_aliases_and_replace(void);
+void test_sconv_rejects_bad_inputs_and_durability_failure(void);
 void test_libcall_registry_roundtrip(void);
 void test_runtime_init_validates_libcalls_once(void);
 void test_libcall_registry_init_failure_has_no_partial_state(void);
@@ -411,6 +415,10 @@ static const test_case_t core_tests[] = {
     {"test_save_itemsource_reports_write_and_close_failure", test_save_itemsource_reports_write_and_close_failure},
     {"test_itemstore_durability_modes", test_itemstore_durability_modes},
     {"test_itemstore_large_load_presizes_child_storage", test_itemstore_large_load_presizes_child_storage},
+    {"test_sconv_v1_to_v2_preserves_code", test_sconv_v1_to_v2_preserves_code},
+    {"test_sconv_v2_canonical_and_invocation_modes", test_sconv_v2_canonical_and_invocation_modes},
+    {"test_sconv_collisions_aliases_and_replace", test_sconv_collisions_aliases_and_replace},
+    {"test_sconv_rejects_bad_inputs_and_durability_failure", test_sconv_rejects_bad_inputs_and_durability_failure},
     {"test_relative_item_leading_dot_parse_accepts_deref_chain", test_relative_item_leading_dot_parse_accepts_deref_chain},
     {"test_relative_item_leading_dot_nested_relative_deref_layers", test_relative_item_leading_dot_nested_relative_deref_layers},
     {"test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed", test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed},

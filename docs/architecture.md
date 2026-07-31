@@ -16,6 +16,7 @@ The main command entry points are:
 - `src/scomp.c`: compiler CLI.
 - `src/sdiss.c`: bytecode disassembler CLI.
 - `src/sin.c`: runtime/game executable CLI.
+- `src/sconv.c`: itemstore conversion CLI.
 
 The shared implementation is built into `lib/libsinshared.a` and linked into
 those tools and the test harnesses.
@@ -145,7 +146,7 @@ runtime interpreter but not on compiler internals.
 
 ### Application Entry Points
 
-Files: `src/scomp.c`, `src/sdiss.c`, `src/sin.c`, `src/config.h`,
+Files: `src/scomp.c`, `src/sdiss.c`, `src/sin.c`, `src/sconv.c`, `src/config.h`,
 `src/version.h`.
 
 Ownership: CLI argument handling, program startup/shutdown, version constants,

@@ -122,7 +122,8 @@ TEST_CORE_SOURCES := \
 	$(TEST_DIR)/core/test_relative_item_leading_dot.c \
 	$(TEST_DIR)/core/test_stack_frames.c \
 	$(TEST_DIR)/core/test_value_behavior.c \
-	$(TEST_DIR)/core/test_list.c
+	$(TEST_DIR)/core/test_list.c \
+	$(TEST_DIR)/core/test_sconv.c
 TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_emitbc_header.c \
 	$(TEST_DIR)/compiler/test_emitbc_opcode_map.c \
@@ -167,7 +168,7 @@ LEXER_SOURCES := $(SRC_DIR)/compiler/lexer.l
 LEXER_C := $(GENERATED_DIR)/lexer.c
 LEXER_GENERATED := $(LEXER_C)
 
-PROGRAMS := scomp sdiss sin
+PROGRAMS := scomp sdiss sin sconv
 PROGRAM_OBJECTS := $(PROGRAMS:%=$(OBJ_DIR)/%.o)
 
 # Dependency files
@@ -203,7 +204,7 @@ sanitize:
 help:
 	@printf '%s\n' \
 		'Build targets:' \
-		'  all              Build scomp, sdiss, and sin; default BUILD=debug' \
+		'  all              Build scomp, sdiss, sin, and sconv; default BUILD=debug' \
 		'  debug            Clean, then build all with BUILD=debug' \
 		'  release          Clean, then build all with BUILD=release' \
 		'  sanitize         Clean, then build all with BUILD=sanitize and ASan/UBSan' \
@@ -246,7 +247,7 @@ $(LIB): $(LIB_OBJECTS)
 	rm -f $@
 	ar rcs $@ $^
 
-scomp sdiss sin: %: $(OBJ_DIR)/%.o $(LIB) FORCE_BUILD
+scomp sdiss sin sconv: %: $(OBJ_DIR)/%.o $(LIB) FORCE_BUILD
 	$(CC) -o $@ $(filter-out FORCE_BUILD,$^) $(LDFLAGS) $(LIBS)
 
 FORCE_BUILD:
@@ -305,7 +306,7 @@ test-asan: clean
 test-lsan: clean
 	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=1" $(MAKE) BUILD=sanitize STRICT_WARNINGS=1 test
 
-$(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin FORCE_BUILD
+$(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin sconv FORCE_BUILD
 	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
 $(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/net/network.c $(SRC_DIR)/net/network.h FORCE_BUILD

@@ -46,6 +46,7 @@ static void assert_cli_metadata_case(const char *tool, const char *flag,
   char *argv[] = {"./scomp", (char *)flag, NULL};
   if (strcmp(tool, "sin") == 0) argv[0] = "./sin";
   else if (strcmp(tool, "sdiss") == 0) argv[0] = "./sdiss";
+  else if (strcmp(tool, "sconv") == 0) argv[0] = "./sconv";
 
   TestProcessResult result = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(argv, 0, &result));
@@ -74,10 +75,11 @@ static void test_shared_argv_capture_stdin_eof(void) {
 }
 
 void test_cli_metadata_stdout_stderr_and_status(void) {
-  const char *tools[] = {"sin", "scomp", "sdiss"};
+  const char *tools[] = {"sin", "scomp", "sdiss", "sconv"};
   const char *usage[] = {"Syntax: sin <options>",
                          "scomp <input file> <output file>",
-                         "Usage: sdiss -o <object file>"};
+                         "Usage: sdiss -o <object file>",
+                         "sconv <input itemstore> <output itemstore>"};
   char expected_version[64];
 
   for (size_t i = 0; i < sizeof(tools) / sizeof(tools[0]); i++) {
@@ -108,11 +110,17 @@ static void test_compiler_cli_help_inventory_and_missing_arguments(void) {
   assert_cli_metadata_case("sdiss", "--help", 0, "--quiet", NULL, NULL, 0, 1);
   assert_cli_metadata_case("sdiss", "--help", 0, "--verbose", NULL, NULL, 0, 1);
 
+  assert_cli_metadata_case("sconv", "--help", 0, "--itemstore-durability", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("sconv", "--help", 0, "--replace", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("sconv", "--help", 0, "--quiet", NULL, NULL, 0, 1);
+  assert_cli_metadata_case("sconv", "--help", 0, "--verbose", NULL, NULL, 0, 1);
   assert_cli_metadata_case("scomp", "--input", 1, NULL, NULL,
                            "invalid option", 1, 0);
   assert_cli_metadata_case("scomp", "--output", 1, NULL, NULL,
                            "invalid option", 1, 0);
   assert_cli_metadata_case("sdiss", "--object", 1, NULL, NULL,
+                           "invalid option", 1, 0);
+  assert_cli_metadata_case("sconv", "--input", 1, NULL, NULL,
                            "invalid option", 1, 0);
 }
 

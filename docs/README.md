@@ -12,8 +12,8 @@ kept in sync with the source files named in each document.
   writing Sinistra code.
 - [`libcalls.md`](libcalls.md): library-call reference derived from
   `src/libcall/libcall_list.h`.
-- [`tools.md`](tools.md): command-line reference for `sin`, `scomp`, and
-  `sdiss`.
+- [`tools.md`](tools.md): command-line reference for `sin`, `scomp`, `sdiss`,
+  and `sconv`.
 - [`troubleshooting.md`](troubleshooting.md): compiler diagnostics, runtime
   error items, logging, and safe local-state recovery.
 - [`bytecode.md`](bytecode.md): bytecode encoding reference derived from

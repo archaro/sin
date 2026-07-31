@@ -16,6 +16,7 @@
 #else
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #endif
 
 #include "config.h"
@@ -642,6 +643,85 @@ ITEM_t *load_itemstore_with_options(const char *filename,
            filename);
   }
   return root;
+}
+
+static bool itemstore_paths_identify_same_file(const char *input_filename,
+                                               const char *output_filename) {
+#ifdef _WIN32
+  struct _stat input_stat;
+  struct _stat output_stat;
+  if (_stat(input_filename, &input_stat) != 0
+      || _stat(output_filename, &output_stat) != 0) return false;
+  return input_stat.st_dev == output_stat.st_dev
+      && input_stat.st_ino == output_stat.st_ino;
+#else
+  struct stat input_stat;
+  struct stat output_stat;
+  if (stat(input_filename, &input_stat) != 0
+      || stat(output_filename, &output_stat) != 0) return false;
+  return input_stat.st_dev == output_stat.st_dev
+      && input_stat.st_ino == output_stat.st_ino;
+#endif
+}
+
+ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
+    const char *input_filename, const char *output_filename,
+    ITEMSTORE_DURABILITY_e durability, bool replace) {
+  bool same_file = input_filename != NULL && output_filename != NULL
+      && itemstore_paths_identify_same_file(input_filename, output_filename);
+  if (input_filename == NULL || output_filename == NULL || same_file) {
+    if (same_file) {
+      logerr("Input and output itemstores identify the same file.\n");
+      return ITEMSTORE_CONVERT_SAME_FILE;
+    }
+    logerr("Input and output itemstore paths are required.\n");
+    return ITEMSTORE_CONVERT_FAILURE;
+  }
+
+  FILE *file = fopen(input_filename, "rb");
+  if (file == NULL) {
+    logerr("Failed to open itemstore '%s' for reading: %s\n",
+           input_filename, strerror(errno));
+    return ITEMSTORE_CONVERT_FAILURE;
+  }
+
+  ITEMSTORE_READ_CTX_t ctx = itemstore_read_context(input_filename, 0);
+  ctx.strict_validation = false;
+  ITEM_t *root = NULL;
+  uint16_t version = 0;
+  bool valid = read_itemstore_header(file, input_filename, &version);
+  if (valid) root = itemstore_read_record_for_version(version, file, NULL, &ctx);
+  if (root != NULL) {
+    int trailing = fgetc(file);
+    if (trailing != EOF || ferror(file)) {
+      logerr("Corrupt itemstore '%s': trailing data after the root record.\n",
+             input_filename);
+      destroy_item(root);
+      root = NULL;
+    }
+  }
+  if (fclose(file) != 0) {
+    logerr("Failed to close itemstore '%s' after reading: %s\n",
+           input_filename, strerror(errno));
+    if (root != NULL) destroy_item(root);
+    return ITEMSTORE_CONVERT_FAILURE;
+  }
+  if (root == NULL) {
+    logerr("Failed to load itemstore '%s': invalid or truncated data.\n",
+           input_filename);
+    return ITEMSTORE_CONVERT_FAILURE;
+  }
+
+  ITEMSTORE_SAVE_RESULT_e save_result = replace
+      ? (save_itemstore_with_options(output_filename, root, durability)
+             ? ITEMSTORE_SAVE_SUCCESS : ITEMSTORE_SAVE_FAILURE)
+      : save_itemstore_no_replace(output_filename, root, durability);
+  destroy_item(root);
+  if (save_result == ITEMSTORE_SAVE_SUCCESS) return ITEMSTORE_CONVERT_SUCCESS;
+  if (save_result == ITEMSTORE_SAVE_TARGET_EXISTS) {
+    return ITEMSTORE_CONVERT_TARGET_EXISTS;
+  }
+  return ITEMSTORE_CONVERT_FAILURE;
 }
 
 ITEM_t *load_itemstore(const char *filename) {

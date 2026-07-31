@@ -1,7 +1,32 @@
 # Sinistra Tool Reference
 
 This page documents the command-line tools built by the top-level `Makefile`:
-`sin`, `scomp`, and `sdiss`.
+`sin`, `scomp`, `sdiss`, and `sconv`.
+
+## `sconv`
+
+`sconv` converts v1 or v2 itemstores to canonical v2 format using atomic
+publication.
+
+```sh
+sconv <input itemstore> <output itemstore>
+sconv -i <input itemstore> -o <output itemstore> [options]
+```
+
+| Option | Description |
+| --- | --- |
+| `-h`, `--help` | Print help and exit successfully. |
+| `--version` | Print the converter version. |
+| `-i <file>`, `--input <file>` | Input itemstore path. |
+| `-o <file>`, `--output <file>` | Output itemstore path. |
+| `-d full|fast`, `--itemstore-durability full|fast` | Select full (default) or fast publication durability. |
+| `--replace` | Atomically replace an existing output. |
+| `-q`, `--quiet` / `-v`, `--verbose` | Control progress messages. |
+
+Both v1 and v2 inputs are accepted and always rewritten as canonical v2;
+embedded code bytes are preserved opaquely. Input and output must be distinct
+filesystem objects. Existing outputs are preserved unless `--replace` is
+specified, and malformed, unversioned, or unknown-version inputs are rejected.
 
 ## `scomp`
 

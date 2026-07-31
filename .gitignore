@@ -7,6 +7,7 @@
 /scomp
 /sin
 /sdiss
+/sconv
 tests/test-suite
 tests/network/test-network
 tests/network/test-chat-smoke
