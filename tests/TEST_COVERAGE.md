@@ -4,7 +4,8 @@ Value behavior coverage includes opaque item-reference lifecycle, ownership,
 canonical-path equality, truthiness, and formatting contracts.
 Immutable list coverage is in `tests/core/test_list.c`, including owned-element
 consumption, tail/tree boundaries, persistent updates, depth/count limits, and
-allocation-failure cleanup.
+allocation-failure cleanup. `test_list_rendering_contract` covers deterministic
+nested rendering, escaping, explicit failure statuses, and debug truncation.
 This document maps major subsystems to concrete test entry points so reviewers
 can quickly verify what is covered and what remains intentionally out of scope.
 
@@ -13,10 +14,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
-| core      |   122 | `tests/core/`           |
+| core      |   123 | `tests/core/`           |
 | compiler  |    34 | `tests/compiler/`       |
 | runtime   |    90 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**246**|                         |
+| **Total** |**247**|                         |
 
 ## core
 
@@ -47,7 +48,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `run_suite(...)`
     - Per-test and per-suite elapsed-time reporting
     - Assertion-failure suite/test context via `tests/test_assert.h`
-    - Core suite registration (`core_tests[]` with 120 entries)
+    - Core suite registration (`core_tests[]` with 123 entries)
     - Suite registration validation rejects null/duplicate test entries
       before execution.
 - **Fixture contract integrity / regeneration policy**

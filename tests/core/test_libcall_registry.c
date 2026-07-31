@@ -22,6 +22,8 @@
 #include "version.h"
 
 #include "network.h"
+#include "list.h"
+#include "itemref.h"
 
 uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -136,6 +138,18 @@ static void assert_net_write_output(VALUE_t out, const char *expected) {
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   ASSERT_TRUE(strcmp(telnet_capture, expected) == 0);
+}
+
+static void assert_net_write_render_failure(VALUE_t out) {
+  reset_telnet_capture();
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  push_stack(config.vm->stack, out);
+  (void)lc_net_write(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  ASSERT_EQ_INT(0, telnet_capture_len);
 }
 
 static uint8_t *test_noop_libcall(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -626,6 +640,33 @@ void test_libcall_output_formats_values(void) {
   for (size_t i = 0; i < sizeof(net_cases) / sizeof(net_cases[0]); i++) {
     assert_net_write_output(net_cases[i].value, net_cases[i].expected);
   }
+
+  VALUE_t aggregate_parts[] = {
+    (VALUE_t){VALUE_str, {.s = strdup("text")}},
+    VALUE_NIL,
+    (VALUE_t){VALUE_itemref, {.itemref = sin_itemref_create("root.child")}}
+  };
+  SIN_LIST_t *aggregate_list = sin_list_build_owned(aggregate_parts, 3);
+  ASSERT_NOT_NULL(aggregate_list);
+  VALUE_t aggregate = {VALUE_list, {.list = aggregate_list}};
+  const char *aggregate_expected = "#[\"text\", nil, &root.child]";
+  assert_sys_log_output(value_clone(&aggregate), aggregate_expected);
+  assert_net_write_output(value_clone(&aggregate), aggregate_expected);
+  push_stack(config.vm->stack, value_clone(&aggregate));
+  (void)lc_str_valtostr(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  VALUE_t aggregate_text = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, aggregate_text.type);
+  ASSERT_TRUE(strcmp(aggregate_text.s, aggregate_expected) == 0);
+  value_free(&aggregate_text);
+  sin_list_release(aggregate_list);
+
+  VALUE_t malformed_part = {VALUE_list, {.list = NULL}};
+  SIN_LIST_t *malformed_list = sin_list_build_owned(&malformed_part, 1);
+  ASSERT_NOT_NULL(malformed_list);
+  VALUE_t malformed = {VALUE_list, {.list = malformed_list}};
+  assert_sys_log_output(value_clone(&malformed), "<value-render-error>");
+  assert_net_write_render_failure(value_clone(&malformed));
+  sin_list_release(malformed_list);
 
   teardown_libcall_runtime();
 }

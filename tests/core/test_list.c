@@ -6,6 +6,7 @@
 #include "test_assert.h"
 #include "value.h"
 #include "itemref.h"
+#include "string_limits.h"
 
 static SIN_LIST_t *make_int_list(size_t count) {
   VALUE_t *values = count == 0 ? NULL : calloc(count, sizeof(*values));
@@ -33,7 +34,7 @@ void test_list_basic_ownership_and_access(void) {
   ASSERT_TRUE(strcmp(value_type_name(VALUE_list), "list") == 0);
   char debug[32];
   ASSERT_TRUE(strcmp(value_debug_string(&empty_value, debug, sizeof(debug)),
-                     "<list:0>") == 0);
+                     "#[]") == 0);
   char text[16];
   const char *borrowed = NULL;
   size_t length = 0;
@@ -76,6 +77,121 @@ void test_list_basic_ownership_and_access(void) {
   value_free(&moved);
   sin_list_release(small);
   free(values);
+}
+
+void test_list_rendering_contract(void) {
+  char *text = NULL;
+  size_t length = 0;
+  SIN_LIST_t *empty = sin_list_build_owned(NULL, 0);
+  VALUE_t empty_value = {VALUE_list, {.list = empty}};
+  ASSERT_NOT_NULL(empty);
+  ASSERT_EQ_INT(VALUE_TEXT_OK, value_render_text(
+      &empty_value, VALUE_TEXT_NIL_LITERAL, &text, &length));
+  ASSERT_TRUE(strcmp(text, "#[]") == 0);
+  free(text);
+  VALUE_t nested = {VALUE_str, {.s = strdup("\"\\\n\t\r\b\f\001\177")}};
+  SIN_ITEMREF_t *ref = sin_itemref_create("players.fred");
+  VALUE_t inner_elem = {VALUE_int, {.i = 7}};
+  SIN_LIST_t *inner = sin_list_build_owned(&inner_elem, 1);
+  ASSERT_NOT_NULL(ref);
+  ASSERT_NOT_NULL(inner);
+  VALUE_t elems[] = {
+    nested, VALUE_NIL, VALUE_TRUE,
+    (VALUE_t){VALUE_float, {.f = 3.5}},
+    (VALUE_t){VALUE_itemref, {.itemref = ref}},
+    (VALUE_t){VALUE_list, {.list = sin_list_retain(inner)}}
+  };
+  SIN_LIST_t *list = sin_list_build_owned(elems, 6);
+  VALUE_t value = {VALUE_list, {.list = list}};
+  ASSERT_NOT_NULL(list);
+  ASSERT_EQ_INT(VALUE_TEXT_OK, value_render_text(
+      &value, VALUE_TEXT_NIL_LITERAL, &text, &length));
+  ASSERT_TRUE(strcmp(text, "#[\"\\\"\\\\\\n\\t\\r\\b\\f\\x01\\x7F\", nil, true, 3.5, &players.fred, #[7]]") == 0);
+  char debug_full[256];
+  ASSERT_TRUE(strcmp(value_debug_string(&value, debug_full,
+                                        sizeof(debug_full)), text) == 0);
+  free(text);
+  ASSERT_EQ_INT(VALUE_TEXT_NIL, value_render_text(
+      &VALUE_NIL, VALUE_TEXT_NIL_OMIT, &text, &length));
+  ASSERT_EQ_INT(VALUE_TEXT_OK, value_render_text(
+      &(VALUE_t){VALUE_str, {.s = "plain"}}, VALUE_TEXT_NIL_LITERAL,
+      &text, &length));
+  ASSERT_TRUE(strcmp(text, "plain") == 0);
+  free(text);
+  ASSERT_EQ_INT(VALUE_TEXT_MALFORMED, value_render_text(
+      &(VALUE_t){VALUE_list, {.list = NULL}}, VALUE_TEXT_NIL_LITERAL,
+      &text, &length));
+  ASSERT_EQ_INT(VALUE_TEXT_MALFORMED, value_render_text(
+      &(VALUE_t){VALUE_itemref, {.itemref = NULL}}, VALUE_TEXT_NIL_LITERAL,
+      &text, &length));
+  VALUE_t unknown = {(VALUE_e)99, {.i = 0}};
+  ASSERT_EQ_INT(VALUE_TEXT_UNKNOWN_TYPE, value_render_text(
+      &unknown, VALUE_TEXT_NIL_LITERAL, &text, &length));
+  SIN_LIST_t *unknown_list = sin_list_build_owned(&unknown, 1);
+  VALUE_t unknown_value = {VALUE_list, {.list = unknown_list}};
+  ASSERT_NOT_NULL(unknown_list);
+  ASSERT_EQ_INT(VALUE_TEXT_UNKNOWN_TYPE, value_render_text(
+      &unknown_value, VALUE_TEXT_NIL_LITERAL, &text, &length));
+  sin_list_release(unknown_list);
+  char *growth_text = malloc(96);
+  ASSERT_NOT_NULL(growth_text);
+  memset(growth_text, 'g', 95);
+  growth_text[95] = '\0';
+  VALUE_t growth_elem = {VALUE_str, {.s = growth_text}};
+  SIN_LIST_t *growth_list = sin_list_build_owned(&growth_elem, 1);
+  VALUE_t growth_value = {VALUE_list, {.list = growth_list}};
+  ASSERT_NOT_NULL(growth_list);
+  alloc_test_fail_after(1);
+  ASSERT_EQ_INT(VALUE_TEXT_ALLOCATION_ERROR, value_render_text(
+      &growth_value, VALUE_TEXT_NIL_LITERAL, &text, &length));
+  ASSERT_TRUE(text == NULL);
+  alloc_test_fail_after(-1);
+  sin_list_release(growth_list);
+  VALUE_t depth_value = VALUE_NIL;
+  for (size_t depth = 0; depth < SIN_LIST_MAX_DEPTH; depth++) {
+    SIN_LIST_t *depth_list = sin_list_build_owned(&depth_value, 1);
+    ASSERT_NOT_NULL(depth_list);
+    depth_value = (VALUE_t){VALUE_list, {.list = depth_list}};
+  }
+  ASSERT_EQ_INT(SIN_LIST_MAX_DEPTH, sin_list_depth(depth_value.list));
+  ASSERT_EQ_INT(VALUE_TEXT_OK, value_render_text(
+      &depth_value, VALUE_TEXT_NIL_LITERAL, &text, &length));
+  free(text);
+  SIN_LIST_t *depth_seed = sin_list_build_owned(NULL, 0);
+  ASSERT_NOT_NULL(depth_seed);
+  SIN_LIST_t *too_deep = sin_list_append(depth_seed, &depth_value);
+  ASSERT_TRUE(too_deep == NULL);
+  sin_list_release(depth_seed);
+  value_free(&depth_value);
+  char debug[8];
+  ASSERT_TRUE(strcmp(value_debug_string(&value, debug, sizeof(debug)),
+                     "<trunc>") == 0);
+  size_t long_len = SIN_MAX_STRING_BYTES;
+  char *long_text = malloc(long_len + 1u);
+  ASSERT_NOT_NULL(long_text);
+  memset(long_text, '"', long_len);
+  long_text[long_len] = '\0';
+  VALUE_t long_elem = {VALUE_str, {.s = long_text}};
+  SIN_LIST_t *long_list = sin_list_build_owned(&long_elem, 1);
+  VALUE_t long_value = {VALUE_list, {.list = long_list}};
+  ASSERT_NOT_NULL(long_list);
+  ASSERT_EQ_INT(VALUE_TEXT_OUTPUT_LIMIT, value_render_text(
+      &long_value, VALUE_TEXT_NIL_LITERAL, &text, &length));
+  ASSERT_TRUE(text == NULL);
+  sin_list_release(long_list);
+  VALUE_t alloc_elem = {VALUE_int, {.i = 1}};
+  SIN_LIST_t *alloc_list = sin_list_build_owned(&alloc_elem, 1);
+  VALUE_t alloc_value = {VALUE_list, {.list = alloc_list}};
+  ASSERT_NOT_NULL(alloc_list);
+  alloc_test_fail_after(0);
+  ASSERT_EQ_INT(VALUE_TEXT_ALLOCATION_ERROR, value_render_text(
+      &alloc_value, VALUE_TEXT_NIL_LITERAL, &text, &length));
+  ASSERT_TRUE(text == NULL);
+  alloc_test_fail_after(-1);
+  sin_list_release(alloc_list);
+  sin_list_release(inner);
+  sin_list_release(empty);
+  sin_list_release(list);
 }
 
 void test_list_boundaries_persistence_and_equality(void) {

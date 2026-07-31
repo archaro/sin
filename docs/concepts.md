@@ -272,7 +272,7 @@ The `str` library contains libcalls which operate on or produce string values:
 `str.contains{<text>, <needle>}` returns whether `needle` occurs in `text`.  
 `str.startswith{<text>, <prefix>}` and `str.endswith{<text>, <suffix>}` test string prefixes and suffixes.  
 `str.eqcasei{<left>, <right>}` compares strings with ASCII case folding.  
-`str.valtostr{<expr>}` converts a value to a string, passing strings through unchanged.  
+`str.valtostr{<expr>}` converts a value to a string, passing strings through unchanged. Lists render source-like, for example `#["text", nil, &root.child]`; item references use `&canonical.path`, and nested strings escape quotes, backslashes, and control bytes. Rendering failures return `nil`.
 `str.replace{<text>, <old>, <new>}` replaces all occurrences of `old` in `text` with `new`.  
 `str.repeat{<text>, <count>}` repeats `text` `count` times.  
 `str.padleft{<text>, <width>}` and `str.padright{<text>, <width>}` pad text with spaces up to `width`.  

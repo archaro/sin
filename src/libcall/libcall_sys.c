@@ -700,15 +700,13 @@ uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
 
   VALUE_t val = pop_stack(ctx->vm->stack);
-  char buffer[VALUE_PLAIN_TEXT_BUFFER_SIZE];
-  const char *text = NULL;
+  char *rendered = NULL;
   size_t text_length = 0;
-  VALUE_text_result_e result = value_plain_text(
-      &val, VALUE_TEXT_NIL_OMIT, buffer, sizeof(buffer), &text, &text_length);
-  (void)text_length;
+  VALUE_text_result_e result = value_render_text(
+      &val, VALUE_TEXT_NIL_OMIT, &rendered, &text_length);
   switch (result) {
     case VALUE_TEXT_OK:
-      logmsg("%s", text);
+      logmsg("%.*s", (int)text_length, rendered);
       break;
     case VALUE_TEXT_NIL:
       break;
@@ -717,9 +715,13 @@ uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       break;
     case VALUE_TEXT_BUFFER_TOO_SMALL:
     case VALUE_TEXT_FORMAT_ERROR:
-      logmsg("<float-format-error>");
+    case VALUE_TEXT_ALLOCATION_ERROR:
+    case VALUE_TEXT_OUTPUT_LIMIT:
+    case VALUE_TEXT_MALFORMED:
+      logmsg("<value-render-error>");
       break;
   }
+  free(rendered);
   FREE_STR(val);
   return lc_sys_return_nil(ctx, nextop);
 }

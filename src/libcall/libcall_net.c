@@ -129,14 +129,18 @@ uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   bool sent = true;
-  char buffer[VALUE_PLAIN_TEXT_BUFFER_SIZE];
-  const char *text = NULL;
+  char *rendered = NULL;
   size_t text_length = 0;
-  VALUE_text_result_e result = value_plain_text(
-      &out, VALUE_TEXT_NIL_OMIT, buffer, sizeof(buffer), &text, &text_length);
+  VALUE_text_result_e result = value_render_text(
+      &out, VALUE_TEXT_NIL_OMIT, &rendered, &text_length);
   if (result == VALUE_TEXT_OK) {
-    sent = lc_net_send_text(linep, line_index, text, text_length);
+    sent = lc_net_send_text(linep, line_index, rendered, text_length);
+  } else if (result == VALUE_TEXT_NIL) {
+    sent = true;
+  } else {
+    sent = false;
   }
+  free(rendered);
   FREE_STR(out);
 
   if (!sent || linep->status == LINE_disconnecting) {

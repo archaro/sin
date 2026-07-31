@@ -456,26 +456,17 @@ uint8_t *lc_str_valtostr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (top->type == VALUE_str) return nextop;
 
   VALUE_t val = pop_stack(ctx->vm->stack);
-  char buffer[VALUE_PLAIN_TEXT_BUFFER_SIZE];
-  const char *text = NULL;
+  char *text = NULL;
   size_t text_length = 0;
-  VALUE_text_result_e result = value_plain_text(
-      &val, VALUE_TEXT_NIL_LITERAL, buffer, sizeof(buffer), &text,
-      &text_length);
+  VALUE_text_result_e result = value_render_text(
+      &val, VALUE_TEXT_NIL_LITERAL, &text, &text_length);
   if (result != VALUE_TEXT_OK) {
     value_free(&val);
     push_stack(ctx->vm->stack, VALUE_NIL);
     return nextop;
   }
-  char *out = malloc(text_length + 1);
-  if (!out) {
-    value_free(&val);
-    push_stack(ctx->vm->stack, VALUE_NIL);
-    return nextop;
-  }
-  memcpy(out, text, text_length + 1);
   value_free(&val);
-  push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = out}});
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = text}});
   return nextop;
 }
 

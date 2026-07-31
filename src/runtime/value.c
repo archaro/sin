@@ -17,11 +17,126 @@
 #include "itemref.h"
 #include "list.h"
 #include "memory.h"
+#include "strbuilder.h"
 
 const VALUE_t VALUE_NIL = {.type = VALUE_nil, .i = 0};
 const VALUE_t VALUE_TRUE = {.type = VALUE_bool, .i = 1};
 const VALUE_t VALUE_FALSE = {.type = VALUE_bool, .i = 0};
 const VALUE_t VALUE_ZERO = {.type = VALUE_int, .i = 0};
+
+static VALUE_text_result_e value_render_append(
+    SIN_STRBUILDER_t *sb, const VALUE_t *value,
+    VALUE_text_nil_policy_e nil_policy, size_t depth, bool aggregate);
+static bool value_render_string(SIN_STRBUILDER_t *sb, const char *s,
+                                bool quoted) {
+  if (!s) s = "";
+  if (quoted && !sin_sb_append_bytes(sb, "\"", 1)) return false;
+  for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+    unsigned char c = *p;
+    if (!quoted && !sin_sb_append_bytes(sb, (const char *)p, 1)) return false;
+    if (!quoted) continue;
+    const char *esc = NULL;
+    switch (c) {
+      case '"': esc = "\\\""; break;
+      case '\\': esc = "\\\\"; break;
+      case '\n': esc = "\\n"; break;
+      case '\t': esc = "\\t"; break;
+      case '\r': esc = "\\r"; break;
+      case '\b': esc = "\\b"; break;
+      case '\f': esc = "\\f"; break;
+    }
+    if (esc) {
+      if (!sin_sb_append_cstr(sb, esc)) return false;
+    } else if (c < 0x20u || c == 0x7fu) {
+      char hex[5];
+      (void)snprintf(hex, sizeof(hex), "\\x%02X", c);
+      if (!sin_sb_append_bytes(sb, hex, 4)) return false;
+    } else if (!sin_sb_append_bytes(sb, (const char *)p, 1)) return false;
+  }
+  return !quoted || sin_sb_append_bytes(sb, "\"", 1);
+}
+static VALUE_text_result_e value_render_append(
+    SIN_STRBUILDER_t *sb, const VALUE_t *value,
+    VALUE_text_nil_policy_e nil_policy, size_t depth, bool aggregate) {
+  if (!value) return VALUE_TEXT_MALFORMED;
+  char formatted[128];
+  switch (value->type) {
+    case VALUE_str:
+      return value_render_string(sb, value->s, aggregate)
+          ? VALUE_TEXT_OK : VALUE_TEXT_FORMAT_ERROR;
+    case VALUE_nil:
+      if (!aggregate && nil_policy == VALUE_TEXT_NIL_OMIT)
+        return VALUE_TEXT_OK;
+      return sin_sb_append_cstr(sb, "nil")
+          ? VALUE_TEXT_OK : VALUE_TEXT_FORMAT_ERROR;
+    case VALUE_int:
+      (void)snprintf(formatted, sizeof(formatted), "%" PRId64, value->i);
+      return sin_sb_append_cstr(sb, formatted)
+          ? VALUE_TEXT_OK : VALUE_TEXT_FORMAT_ERROR;
+    case VALUE_bool:
+      return sin_sb_append_cstr(sb, value->i ? "true" : "false")
+          ? VALUE_TEXT_OK : VALUE_TEXT_FORMAT_ERROR;
+    case VALUE_float:
+      if (!sin_format_binary64_buf(value->f, formatted, sizeof(formatted))) {
+        return VALUE_TEXT_FORMAT_ERROR;
+      }
+      return sin_sb_append_cstr(sb, formatted)
+          ? VALUE_TEXT_OK : VALUE_TEXT_FORMAT_ERROR;
+    case VALUE_itemref: {
+      const char *path = value->itemref ? sin_itemref_path(value->itemref) : NULL;
+      if (!path) return VALUE_TEXT_MALFORMED;
+      return sin_sb_append_cstr(sb, "&") && sin_sb_append_cstr(sb, path)
+          ? VALUE_TEXT_OK : VALUE_TEXT_FORMAT_ERROR;
+    }
+    case VALUE_list: {
+      if (!value->list || depth >= SIN_LIST_MAX_DEPTH)
+        return VALUE_TEXT_MALFORMED;
+      if (!sin_sb_append_cstr(sb, "#[")) return VALUE_TEXT_FORMAT_ERROR;
+      size_t count = sin_list_count(value->list);
+      for (size_t i = 0; i < count; i++) {
+        const VALUE_t *elem = sin_list_get(value->list, i);
+        if (!elem) return VALUE_TEXT_MALFORMED;
+        if (i && !sin_sb_append_cstr(sb, ", ")) return VALUE_TEXT_FORMAT_ERROR;
+        VALUE_text_result_e child = value_render_append(
+            sb, elem, VALUE_TEXT_NIL_LITERAL, depth + 1u, true);
+        if (child != VALUE_TEXT_OK) return child;
+      }
+      return sin_sb_append_cstr(sb, "]")
+          ? VALUE_TEXT_OK : VALUE_TEXT_FORMAT_ERROR;
+    }
+    default: return VALUE_TEXT_UNKNOWN_TYPE;
+  }
+}
+VALUE_text_result_e value_render_text(const VALUE_t *value,
+                                      VALUE_text_nil_policy_e nil_policy,
+                                      char **text, size_t *text_length) {
+  if (!text || !text_length) return VALUE_TEXT_FORMAT_ERROR;
+  *text = NULL;
+  *text_length = 0;
+  if (!value ||
+      (nil_policy != VALUE_TEXT_NIL_OMIT &&
+       nil_policy != VALUE_TEXT_NIL_LITERAL))
+    return VALUE_TEXT_FORMAT_ERROR;
+  if (value->type == VALUE_nil && nil_policy == VALUE_TEXT_NIL_OMIT)
+    return VALUE_TEXT_NIL;
+  SIN_STRBUILDER_t sb;
+  if (!sin_sb_init(&sb, 64u, SIN_MAX_STRING_BYTES))
+    return VALUE_TEXT_ALLOCATION_ERROR;
+  VALUE_text_result_e render = value_render_append(
+      &sb, value, nil_policy, 0, false);
+  if (render != VALUE_TEXT_OK) {
+    VALUE_text_result_e result = render;
+    if (render == VALUE_TEXT_FORMAT_ERROR) {
+      if (sb.limit_exceeded) result = VALUE_TEXT_OUTPUT_LIMIT;
+      else if (sb.failed) result = VALUE_TEXT_ALLOCATION_ERROR;
+    }
+    sin_sb_dispose(&sb);
+    return result;
+  }
+  *text = sin_sb_take(&sb);
+  *text_length = strlen(*text);
+  return VALUE_TEXT_OK;
+}
 
 uint64_t value_float_to_bits(double value) {
   uint64_t bits;
@@ -537,6 +652,22 @@ const char *value_debug_string(const VALUE_t *value, char *buffer, size_t buffer
   if (!buffer || buffer_size == 0) return "";
   if (!value) {
     snprintf(buffer, buffer_size, "<null>");
+    return buffer;
+  }
+  if (value->type == VALUE_list || value->type == VALUE_itemref) {
+    char *rendered = NULL;
+    size_t length = 0;
+    VALUE_text_result_e result = value_render_text(value, VALUE_TEXT_NIL_LITERAL,
+                                                   &rendered, &length);
+    const char *marker = "<value-render-error>";
+    if (result == VALUE_TEXT_OK && length < buffer_size) {
+      memcpy(buffer, rendered, length + 1u);
+      free(rendered);
+      return buffer;
+    }
+    if (result == VALUE_TEXT_OK) marker = "<trunc>";
+    (void)snprintf(buffer, buffer_size, "%s", marker);
+    free(rendered);
     return buffer;
   }
   switch (value->type) {

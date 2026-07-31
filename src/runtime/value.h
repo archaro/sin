@@ -44,7 +44,10 @@ typedef enum { VALUE_TEXT_OK,
                VALUE_TEXT_NIL,
                VALUE_TEXT_BUFFER_TOO_SMALL,
                VALUE_TEXT_FORMAT_ERROR,
-               VALUE_TEXT_UNKNOWN_TYPE
+               VALUE_TEXT_UNKNOWN_TYPE,
+               VALUE_TEXT_ALLOCATION_ERROR,
+               VALUE_TEXT_OUTPUT_LIMIT,
+               VALUE_TEXT_MALFORMED
              } VALUE_text_result_e;
 
 typedef enum { VALUE_TEXT_NIL_OMIT,
@@ -64,6 +67,15 @@ typedef struct {
     SIN_LIST_t *list;
   };
 } VALUE_t;
+
+/*
+ * Allocate deterministic user-visible text for a borrowed value. On success,
+ * text owns a NUL-terminated allocation which the caller must free. On every
+ * other result, text is NULL and text_length is zero.
+ */
+VALUE_text_result_e value_render_text(const VALUE_t *value,
+                                      VALUE_text_nil_policy_e nil_policy,
+                                      char **text, size_t *text_length);
 
 #ifndef VALUE_INTERNAL
 extern VALUE_t VALUE_NIL;

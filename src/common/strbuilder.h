@@ -13,6 +13,7 @@ typedef struct {
   size_t len;
   size_t max_len;
   bool failed;
+  bool limit_exceeded;
 } SIN_STRBUILDER_t;
 
 static inline bool sin_sb_init(SIN_STRBUILDER_t *sb, size_t initial_cap, size_t max_len) {
@@ -20,12 +21,13 @@ static inline bool sin_sb_init(SIN_STRBUILDER_t *sb, size_t initial_cap, size_t 
   if (alloc_add_overflow(max_len, 1u, &max_cap)) return false;
   if (initial_cap == 0) initial_cap = 1;
   if (initial_cap > max_cap) initial_cap = max_cap;
-  sb->buf = malloc(initial_cap);
+  sb->buf = alloc_malloc(initial_cap);
   if (!sb->buf) {
     sb->cap = 0;
     sb->len = 0;
     sb->max_len = max_len;
     sb->failed = true;
+    sb->limit_exceeded = false;
     return false;
   }
   sb->buf[0] = '\0';
@@ -33,6 +35,7 @@ static inline bool sin_sb_init(SIN_STRBUILDER_t *sb, size_t initial_cap, size_t 
   sb->len = 0;
   sb->max_len = max_len;
   sb->failed = false;
+  sb->limit_exceeded = false;
   return true;
 }
 
@@ -43,16 +46,24 @@ static inline void sin_sb_dispose(SIN_STRBUILDER_t *sb) {
   sb->len = 0;
   sb->max_len = 0;
   sb->failed = false;
+  sb->limit_exceeded = false;
 }
 
 static inline bool sin_sb_ensure(SIN_STRBUILDER_t *sb, size_t add_len) {
   size_t new_len = 0;
   size_t needed = 0;
   size_t max_cap = 0;
-  if (sb->failed ||
-      alloc_add_overflow(sb->len, add_len, &new_len) ||
-      new_len > sb->max_len ||
-      alloc_add_overflow(new_len, 1u, &needed) ||
+  if (sb->failed) return false;
+  if (alloc_add_overflow(sb->len, add_len, &new_len)) {
+    sb->failed = true;
+    return false;
+  }
+  if (new_len > sb->max_len) {
+    sb->failed = true;
+    sb->limit_exceeded = true;
+    return false;
+  }
+  if (alloc_add_overflow(new_len, 1u, &needed) ||
       alloc_add_overflow(sb->max_len, 1u, &max_cap)) {
     sb->failed = true;
     return false;
@@ -69,12 +80,10 @@ static inline bool sin_sb_ensure(SIN_STRBUILDER_t *sb, size_t add_len) {
     sb->failed = true;
     return false;
   }
-  char *new_buf = realloc(sb->buf, new_cap);
-  if (!new_buf) {
+  if (!alloc_grow_array((void **)&sb->buf, new_cap, sizeof(*sb->buf))) {
     sb->failed = true;
     return false;
   }
-  sb->buf = new_buf;
   sb->cap = new_cap;
   return true;
 }
