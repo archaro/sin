@@ -153,7 +153,7 @@ LIB_OBJECTS := $(OBJ_DIR)/common/log.o $(OBJ_DIR)/common/memory.o $(OBJ_DIR)/com
                $(OBJ_DIR)/compiler/ir.o $(OBJ_DIR)/compiler/lower.o $(OBJ_DIR)/compiler/compiler_context.o $(OBJ_DIR)/compiler/compiler_pipeline.o $(OBJ_DIR)/compiler/emitbc.o \
                $(OBJ_DIR)/compiler/compdiag.o $(OBJ_DIR)/common/error.o $(OBJ_DIR)/common/util.o $(OBJ_DIR)/libcall/libcall_sys.o $(OBJ_DIR)/libcall/libcall_task.o $(OBJ_DIR)/libcall/libcall_net.o $(OBJ_DIR)/libcall/libcall_str.o $(OBJ_DIR)/libcall/libcall_list.o $(OBJ_DIR)/libcall/libcall_registry.o $(OBJ_DIR)/libcall/libcall_table.o \
                $(OBJ_DIR)/runtime/stack.o $(OBJ_DIR)/runtime/value.o $(OBJ_DIR)/runtime/list.o $(OBJ_DIR)/runtime/itemref.o $(OBJ_DIR)/itemstore/item_hash.o $(OBJ_DIR)/itemstore/item_tree.o $(OBJ_DIR)/itemstore/item_registry.o $(OBJ_DIR)/itemstore/item_persist.o $(OBJ_DIR)/itemstore/item_source_persist.o $(OBJ_DIR)/itemstore/item_error.o \
-               $(OBJ_DIR)/runtime/vm.o $(OBJ_DIR)/runtime/task.o $(OBJ_DIR)/runtime/runtime_decode.o $(OBJ_DIR)/runtime/runtime_value.o $(OBJ_DIR)/runtime/runtime_item_ops.o $(OBJ_DIR)/runtime/runtime_opcode.o $(OBJ_DIR)/runtime/interpret.o \
+               $(OBJ_DIR)/itemstore/item_persist_v1.o $(OBJ_DIR)/runtime/vm.o $(OBJ_DIR)/runtime/task.o $(OBJ_DIR)/runtime/runtime_decode.o $(OBJ_DIR)/runtime/runtime_value.o $(OBJ_DIR)/runtime/runtime_item_ops.o $(OBJ_DIR)/runtime/runtime_opcode.o $(OBJ_DIR)/runtime/interpret.o \
                $(OBJ_DIR)/net/network.o $(OBJ_DIR)/net/libtelnet.o
 
 # Parser files for library

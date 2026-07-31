@@ -23,7 +23,7 @@
 #include "memory.h"
 #include "log.h"
 #include "item_internal.h"
-#include "bytecode_verify.h"
+#include "item_persist_internal.h"
 #include "string_limits.h"
 
 // The configuration object, defined in src/sin.c
@@ -93,6 +93,11 @@ void itemstore_set_load_constructor_failure_hook_for_tests(
   load_constructor_failure_hook = hook;
 }
 
+ITEMSTORE_LOAD_CONSTRUCTOR_FAILURE_HOOK_t
+itemstore_load_constructor_failure_hook(void) {
+  return load_constructor_failure_hook;
+}
+
 static ITEMSTORE_DIRECTORY_SYNC_HOOK_t directory_sync_hook =
     itemstore_default_directory_sync_hook;
 
@@ -117,36 +122,6 @@ bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability) {
 /* The on-disk contract is documented in docs/itemstore-format.md. */
 #define ITEMSTORE_V1_MAGIC "SINITEM"
 #define ITEMSTORE_V1_MAGIC_SIZE ((uint32_t)sizeof(ITEMSTORE_V1_MAGIC))
-#define ITEMSTORE_V1_FORMAT_VERSION ((uint16_t)1u)
-
-typedef uint8_t ITEMSTORE_ITEM_TAG_t;
-enum {
-  ITEMSTORE_ITEM_TAG_VALUE = 1,
-  ITEMSTORE_ITEM_TAG_CODE = 2
-};
-
-typedef uint8_t ITEMSTORE_VALUE_TAG_t;
-enum {
-  ITEMSTORE_VALUE_TAG_INT = 0,
-  ITEMSTORE_VALUE_TAG_FLOAT = 1,
-  ITEMSTORE_VALUE_TAG_STRING = 2,
-  ITEMSTORE_VALUE_TAG_NIL = 3,
-  ITEMSTORE_VALUE_TAG_BOOL = 4
-};
-
-#define ITEMSTORE_MAX_CHILDREN_PER_ITEM 250u
-#define ITEMSTORE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
-
-typedef struct {
-  size_t depth;
-  size_t max_depth;
-  uint32_t max_children_per_item;
-  uint32_t max_string_len;
-  uint32_t max_bytecode_len;
-  const char *filename;
-  bool strict_validation;
-} ITEMSTORE_READ_CTX_t;
-
 static bool write_bytes(FILE *file, const void *data, size_t length,
                         const char *context) {
   if (length == 0) return true;
@@ -249,8 +224,8 @@ static FILE *create_temp_itemstore(const char *filename, char **temp_path_out) {
   return file;
 }
 
-static bool read_bytes(FILE *file, void *data, size_t length,
-                       const char *context) {
+bool itemstore_read_bytes(FILE *file, void *data, size_t length,
+                          const char *context) {
   if (length == 0) return true;
 
   size_t bytes_read = fread(data, 1, length, file);
@@ -297,20 +272,20 @@ static bool write_u64_le(FILE *file, uint64_t value, const char *context) {
   return write_bytes(file, bytes, sizeof(bytes), context);
 }
 
-static bool read_u8(FILE *file, uint8_t *value, const char *context) {
-  return read_bytes(file, value, sizeof(*value), context);
+bool itemstore_read_u8(FILE *file, uint8_t *value, const char *context) {
+  return itemstore_read_bytes(file, value, sizeof(*value), context);
 }
 
-static bool read_u16_le(FILE *file, uint16_t *value, const char *context) {
+bool itemstore_read_u16_le(FILE *file, uint16_t *value, const char *context) {
   uint8_t bytes[2];
-  if (!read_bytes(file, bytes, sizeof(bytes), context)) return false;
+  if (!itemstore_read_bytes(file, bytes, sizeof(bytes), context)) return false;
   *value = (uint16_t)(((uint16_t)bytes[0]) | ((uint16_t)bytes[1] << 8));
   return true;
 }
 
-static bool read_u32_le(FILE *file, uint32_t *value, const char *context) {
+bool itemstore_read_u32_le(FILE *file, uint32_t *value, const char *context) {
   uint8_t bytes[4];
-  if (!read_bytes(file, bytes, sizeof(bytes), context)) return false;
+  if (!itemstore_read_bytes(file, bytes, sizeof(bytes), context)) return false;
   *value = 0;
   for (size_t i = 0; i < sizeof(bytes); i++) {
     *value |= (uint32_t)bytes[i] << (i * 8);
@@ -318,9 +293,9 @@ static bool read_u32_le(FILE *file, uint32_t *value, const char *context) {
   return true;
 }
 
-static bool read_u64_le(FILE *file, uint64_t *value, const char *context) {
+bool itemstore_read_u64_le(FILE *file, uint64_t *value, const char *context) {
   uint8_t bytes[8];
-  if (!read_bytes(file, bytes, sizeof(bytes), context)) return false;
+  if (!itemstore_read_bytes(file, bytes, sizeof(bytes), context)) return false;
   *value = 0;
   for (size_t i = 0; i < sizeof(bytes); i++) {
     *value |= (uint64_t)bytes[i] << (i * 8);
@@ -356,10 +331,10 @@ bool write_item(FILE *file, ITEM_t *item) {
     return false;
   }
 
-  ITEMSTORE_ITEM_TAG_t item_tag;
+  ITEMSTORE_V1_ITEM_TAG_t item_tag;
   switch (item->type) {
-    case ITEM_value: item_tag = ITEMSTORE_ITEM_TAG_VALUE; break;
-    case ITEM_code: item_tag = ITEMSTORE_ITEM_TAG_CODE; break;
+    case ITEM_value: item_tag = ITEMSTORE_V1_ITEM_TAG_VALUE; break;
+    case ITEM_code: item_tag = ITEMSTORE_V1_ITEM_TAG_CODE; break;
     default:
       logerr("Failed to write itemstore item '%s': unsupported item type %d.\n",
              item->name, item->type);
@@ -368,13 +343,13 @@ bool write_item(FILE *file, ITEM_t *item) {
   if (!write_u8(file, item_tag, "item type tag")) return false;
 
   if (item->type == ITEM_value) {
-    ITEMSTORE_VALUE_TAG_t value_tag;
+    ITEMSTORE_V1_VALUE_TAG_t value_tag;
     switch (item->value.type) {
-      case VALUE_nil: value_tag = ITEMSTORE_VALUE_TAG_NIL; break;
-      case VALUE_int: value_tag = ITEMSTORE_VALUE_TAG_INT; break;
-      case VALUE_float: value_tag = ITEMSTORE_VALUE_TAG_FLOAT; break;
-      case VALUE_str: value_tag = ITEMSTORE_VALUE_TAG_STRING; break;
-      case VALUE_bool: value_tag = ITEMSTORE_VALUE_TAG_BOOL; break;
+      case VALUE_nil: value_tag = ITEMSTORE_V1_VALUE_TAG_NIL; break;
+      case VALUE_int: value_tag = ITEMSTORE_V1_VALUE_TAG_INT; break;
+      case VALUE_float: value_tag = ITEMSTORE_V1_VALUE_TAG_FLOAT; break;
+      case VALUE_str: value_tag = ITEMSTORE_V1_VALUE_TAG_STRING; break;
+      case VALUE_bool: value_tag = ITEMSTORE_V1_VALUE_TAG_BOOL; break;
       case VALUE_itemref:
       case VALUE_list:
       default:
@@ -609,8 +584,8 @@ ITEMSTORE_SAVE_RESULT_e save_itemstore_no_replace(
                              ITEMSTORE_PUBLISH_NO_REPLACE);
 }
 
-static ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,
-                                                   size_t depth) {
+ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,
+                                            size_t depth) {
   ITEMSTORE_READ_CTX_t ctx = {
     .depth = depth,
     .max_depth = ITEM_MAX_DEPTH,
@@ -623,217 +598,14 @@ static ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,
   return ctx;
 }
 
-/* Payload ownership remains here until make_item() accepts the record. */
-static void free_unowned_item_payload(ITEM_e type, VALUE_t *value,
-                                      uint8_t *bytecode) {
-  if (type == ITEM_value) value_free(value);
-  else free(bytecode);
-}
-
-static ITEM_t *read_item_record(FILE *file, ITEM_t *parent,
-                                ITEMSTORE_READ_CTX_t *ctx) {
-  char name[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
-  uint8_t name_len;
-  uint8_t item_tag;
-  uint8_t value_tag;
-  uint64_t raw_value;
-  uint32_t numchildren;
-  uint8_t *bytecode = NULL;
-  uint32_t bytecode_len = 0;
-  VALUE_t itemval = {VALUE_nil, {0}};
-
-  if (ctx->depth > ctx->max_depth) {
-    logerr("Corrupt itemstore '%s': item depth %zu exceeds maximum %zu.\n",
-           ctx->filename, ctx->depth, ctx->max_depth);
-    return NULL;
+ITEM_t *itemstore_read_record_for_version(
+    uint16_t version, FILE *file, ITEM_t *parent, ITEMSTORE_READ_CTX_t *ctx) {
+  if (version == ITEMSTORE_V1_FORMAT_VERSION) {
+    return itemstore_read_v1_record(file, parent, ctx);
   }
-
-  if (!read_u8(file, &name_len, "item name length")) return NULL;
-  if (name_len > ITEM_MAX_LAYER_NAME_LENGTH) {
-    logerr("Corrupt itemstore '%s': item name length %u exceeds %u bytes "
-           "at depth %zu.\n", ctx->filename, name_len,
-           ITEM_MAX_LAYER_NAME_LENGTH, ctx->depth);
-    return NULL;
-  }
-  if (!read_bytes(file, name, name_len, "item name")) return NULL;
-  if (memchr(name, '\0', name_len) != NULL) {
-    logerr("Corrupt itemstore '%s': item name contains an embedded NUL at "
-           "depth %zu.\n", ctx->filename, ctx->depth);
-    return NULL;
-  }
-  name[name_len] = '\0';
-  if (parent != NULL && !is_valid_layer(name)) {
-    logerr("Corrupt itemstore '%s': invalid item layer name '%s' at depth "
-           "%zu.\n", ctx->filename, name, ctx->depth);
-    return NULL;
-  }
-  if (parent != NULL && item_children_lookup(parent->children, name) != NULL) {
-    logerr("Corrupt itemstore '%s': duplicate child name '%s' at depth %zu.\n",
-           ctx->filename, name, ctx->depth);
-    return NULL;
-  }
-
-  if (!read_u8(file, &item_tag, "item type tag")) return NULL;
-  ITEM_e type;
-  switch (item_tag) {
-    case ITEMSTORE_ITEM_TAG_VALUE: type = ITEM_value; break;
-    case ITEMSTORE_ITEM_TAG_CODE: type = ITEM_code; break;
-    default:
-      logerr("Corrupt itemstore '%s': unsupported item type tag %u for '%s'.\n",
-             ctx->filename, item_tag, name);
-      return NULL;
-  }
-
-  if (type == ITEM_value) {
-    if (!read_u8(file, &value_tag, "value type tag")) return NULL;
-    switch (value_tag) {
-      case ITEMSTORE_VALUE_TAG_NIL: itemval.type = VALUE_nil; break;
-      case ITEMSTORE_VALUE_TAG_INT: itemval.type = VALUE_int; break;
-      case ITEMSTORE_VALUE_TAG_FLOAT: itemval.type = VALUE_float; break;
-      case ITEMSTORE_VALUE_TAG_STRING: itemval.type = VALUE_str; break;
-      case ITEMSTORE_VALUE_TAG_BOOL: itemval.type = VALUE_bool; break;
-      default:
-        logerr("Corrupt itemstore '%s': unsupported value type tag %u for "
-               "'%s'.\n", ctx->filename, value_tag, name);
-        return NULL;
-    }
-
-    switch (itemval.type) {
-      case VALUE_nil:
-        break;
-      case VALUE_int:
-        if (!read_u64_le(file, &raw_value, "integer payload")) return NULL;
-        memcpy(&itemval.i, &raw_value, sizeof(itemval.i));
-        break;
-      case VALUE_float:
-        if (!read_u64_le(file, &itemval.f_bits, "float payload")) return NULL;
-        break;
-      case VALUE_str:
-      {
-        uint32_t length;
-        if (!read_u32_le(file, &length, "string length")) return NULL;
-        if (length > ctx->max_string_len) {
-          logerr("Corrupt itemstore '%s': string length %u for '%s' exceeds "
-                 "maximum %u.\n", ctx->filename, length, name,
-                 ctx->max_string_len);
-          return NULL;
-        }
-        itemval.s = malloc((size_t)length + 1);
-        if (!itemval.s) {
-          logerr("Failed to load itemstore '%s': cannot allocate %u bytes "
-                 "for string item '%s'.\n", ctx->filename, length, name);
-          return NULL;
-        }
-        if (!read_bytes(file, itemval.s, length, "string payload")) {
-          goto fail_before_item;
-        }
-        itemval.s[length] = '\0';
-        break;
-      }
-      case VALUE_bool:
-      {
-        uint8_t boolean;
-        if (!read_u8(file, &boolean, "boolean payload")) return NULL;
-        if (boolean > 1) {
-          logerr("Corrupt itemstore '%s': invalid boolean payload %u for "
-                 "'%s'.\n", ctx->filename, boolean, name);
-          return NULL;
-        }
-        itemval.i = boolean;
-        break;
-      case VALUE_itemref:
-      case VALUE_list:
-      default:
-        goto fail_before_item;
-    }
-    }
-  } else {
-    if (!read_u32_le(file, &bytecode_len, "bytecode length")) return NULL;
-    if (bytecode_len > ctx->max_bytecode_len) {
-      logerr("Corrupt itemstore '%s': bytecode length %u for '%s' exceeds "
-             "maximum %u.\n", ctx->filename, bytecode_len, name,
-             ctx->max_bytecode_len);
-      return NULL;
-    }
-    if (bytecode_len > 0) {
-      bytecode = malloc(bytecode_len);
-      if (!bytecode) {
-        logerr("Failed to load itemstore '%s': cannot allocate %u bytes for "
-               "bytecode item '%s'.\n", ctx->filename, bytecode_len, name);
-        return NULL;
-      }
-      if (!read_bytes(file, bytecode, bytecode_len, "bytecode payload")) {
-        goto fail_before_item;
-      }
-    }
-
-    if (ctx->strict_validation) {
-      BC_VerifyOptions verify_options = bc_verify_strict_options();
-      BC_VerifyResult verify = bc_verify_bytecode(bytecode, bytecode_len,
-                                                  name, &verify_options);
-      if (verify.status != BC_VERIFY_OK) {
-        logerr("Corrupt itemstore '%s': bytecode verification failed for "
-               "'%s': %s\n", ctx->filename, name,
-               verify.diagnostic.message);
-        goto fail_before_item;
-      }
-    }
-  }
-
-  if (!read_u32_le(file, &numchildren, "child count")) {
-    goto fail_before_item;
-  }
-  if (numchildren > ctx->max_children_per_item) {
-    logerr("Corrupt itemstore '%s': child count %u for '%s' exceeds maximum "
-           "%u.\n", ctx->filename, numchildren, name,
-           ctx->max_children_per_item);
-    goto fail_before_item;
-  }
-
-  if (bytecode_len > (uint32_t)INT_MAX) {
-    logerr("Corrupt itemstore '%s': bytecode length %u for '%s' exceeds "
-           "platform item length limit.\n", ctx->filename, bytecode_len, name);
-    goto fail_before_item;
-  }
-
-  /* Keep payload ownership here until construction succeeds.  The
-   * constructor is allowed to clean up the placeholder payload on failure,
-   * while the loaded payload is adopted only by a fully constructed item. */
-  VALUE_t constructor_value = itemval;
-  uint8_t *constructor_bytecode = NULL;
-  if (type == ITEM_value && constructor_value.type == VALUE_str) {
-    constructor_value.s = NULL;
-  }
-  ITEM_t *item = NULL;
-  if (load_constructor_failure_hook == NULL
-      || !load_constructor_failure_hook(name)) {
-    item = make_loaded_item(name, parent, type, constructor_value,
-                            constructor_bytecode, (int)bytecode_len,
-                            numchildren);
-  }
-  if (item == NULL) goto fail_before_item;
-
-  if (type == ITEM_value) {
-    item->value = itemval;
-    itemval = (VALUE_t){VALUE_nil, {0}};
-  } else {
-    item->bytecode = bytecode;
-    bytecode = NULL;
-  }
-
-  for (uint32_t i = 0; i < numchildren; i++) {
-    ctx->depth++;
-    ITEM_t *child = read_item_record(file, item, ctx);
-    ctx->depth--;
-    if (!child) {
-      detach_item_and_destroy(item);
-      return NULL;
-    }
-  }
-  return item;
-
-fail_before_item:
-  free_unowned_item_payload(type, &itemval, bytecode);
+  logerr("Unsupported itemstore version in '%s': found %u, supported "
+         "version is %u.\n", ctx->filename, version,
+         ITEMSTORE_V1_FORMAT_VERSION);
   return NULL;
 }
 
@@ -844,14 +616,15 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent) {
     depth++;
   }
   ITEMSTORE_READ_CTX_t ctx = itemstore_read_context("<stream>", depth);
-  return read_item_record(file, parent, &ctx);
+  return itemstore_read_v1_record(file, parent, &ctx);
 }
 
-static bool read_itemstore_header(FILE *file, const char *filename) {
+static bool read_itemstore_header(FILE *file, const char *filename,
+                                  uint16_t *version_out) {
   uint8_t magic[ITEMSTORE_V1_MAGIC_SIZE];
   uint16_t version;
 
-  if (!read_bytes(file, magic, sizeof(magic), "file-header magic")) {
+  if (!itemstore_read_bytes(file, magic, sizeof(magic), "file-header magic")) {
     logerr("Corrupt itemstore '%s': truncated file header magic.\n", filename);
     return false;
   }
@@ -859,17 +632,12 @@ static bool read_itemstore_header(FILE *file, const char *filename) {
     logerr("Corrupt itemstore '%s': invalid itemstore magic.\n", filename);
     return false;
   }
-  if (!read_u16_le(file, &version, "file-header version")) {
+  if (!itemstore_read_u16_le(file, &version, "file-header version")) {
     logerr("Corrupt itemstore '%s': truncated file header version.\n",
            filename);
     return false;
   }
-  if (version != ITEMSTORE_V1_FORMAT_VERSION) {
-    logerr("Unsupported itemstore version in '%s': found %u, supported "
-           "version is %u.\n", filename, version,
-           ITEMSTORE_V1_FORMAT_VERSION);
-    return false;
-  }
+  *version_out = version;
   return true;
 }
 
@@ -885,8 +653,9 @@ ITEM_t *load_itemstore_with_options(const char *filename,
   ITEMSTORE_READ_CTX_t ctx = itemstore_read_context(filename, 0);
   ctx.strict_validation = strict_validation;
   ITEM_t *root = NULL;
-  if (read_itemstore_header(file, filename)) {
-    root = read_item_record(file, NULL, &ctx);
+  uint16_t version = 0;
+  if (read_itemstore_header(file, filename, &version)) {
+    root = itemstore_read_record_for_version(version, file, NULL, &ctx);
   }
   if (root != NULL) {
     int trailing = fgetc(file);

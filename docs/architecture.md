@@ -84,12 +84,17 @@ Key entry points:
 ### Itemstore
 
 Files: `src/itemstore/item.h`, `src/itemstore/item_internal.h`,
+`src/itemstore/item_persist_internal.h`,
 `src/itemstore/item_hash.c`, `src/itemstore/item_tree.c`,
 `src/itemstore/item_registry.c`, `src/itemstore/item_persist.c`,
+`src/itemstore/item_persist_v1.c`,
 `src/itemstore/item_source_persist.c`, and `src/itemstore/item_error.c`. There
 is no `item.c`; the public API lives in `item.h`, while the implementation is
-intentionally split by concern. Binary itemstore encoding, loading, durability,
-and publication live in `item_persist.c`; source-sidecar text I/O and its test
+intentionally split by concern. Shared binary itemstore I/O, header/version
+dispatch, loading lifecycle, durability, and publication live in
+`item_persist.c`; the narrow persistence interfaces are in
+`item_persist_internal.h`; the frozen v1 record/value codec is implemented in
+`item_persist_v1.c`; source-sidecar text I/O and its test
 hooks live in `item_source_persist.c`.
 Child lookup and insertion-order storage are encapsulated by the opaque
 container implemented in `item_hash.c`; other itemstore modules use its
