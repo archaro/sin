@@ -25,6 +25,7 @@
 #include "item_internal.h"
 #include "item_persist_internal.h"
 #include "string_limits.h"
+#include "list.h"
 
 // The configuration object, defined in src/sin.c
 extern CONFIG_t config;
@@ -122,8 +123,8 @@ bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability) {
 /* The on-disk contract is documented in docs/itemstore-format.md. */
 #define ITEMSTORE_V1_MAGIC "SINITEM"
 #define ITEMSTORE_V1_MAGIC_SIZE ((uint32_t)sizeof(ITEMSTORE_V1_MAGIC))
-static bool write_bytes(FILE *file, const void *data, size_t length,
-                        const char *context) {
+bool itemstore_write_bytes(FILE *file, const void *data, size_t length,
+                           const char *context) {
   if (length == 0) return true;
 
   size_t written = fwrite(data, 1, length, file);
@@ -244,32 +245,32 @@ bool itemstore_read_bytes(FILE *file, void *data, size_t length,
   return false;
 }
 
-static bool write_u8(FILE *file, uint8_t value, const char *context) {
-  return write_bytes(file, &value, sizeof(value), context);
+bool itemstore_write_u8(FILE *file, uint8_t value, const char *context) {
+  return itemstore_write_bytes(file, &value, sizeof(value), context);
 }
 
-static bool write_u16_le(FILE *file, uint16_t value, const char *context) {
+bool itemstore_write_u16_le(FILE *file, uint16_t value, const char *context) {
   uint8_t bytes[2] = {
     (uint8_t)(value & UINT16_C(0xff)),
     (uint8_t)((value >> 8) & UINT16_C(0xff))
   };
-  return write_bytes(file, bytes, sizeof(bytes), context);
+  return itemstore_write_bytes(file, bytes, sizeof(bytes), context);
 }
 
-static bool write_u32_le(FILE *file, uint32_t value, const char *context) {
+bool itemstore_write_u32_le(FILE *file, uint32_t value, const char *context) {
   uint8_t bytes[4];
   for (size_t i = 0; i < sizeof(bytes); i++) {
     bytes[i] = (uint8_t)((value >> (i * 8)) & UINT32_C(0xff));
   }
-  return write_bytes(file, bytes, sizeof(bytes), context);
+  return itemstore_write_bytes(file, bytes, sizeof(bytes), context);
 }
 
-static bool write_u64_le(FILE *file, uint64_t value, const char *context) {
+bool itemstore_write_u64_le(FILE *file, uint64_t value, const char *context) {
   uint8_t bytes[8];
   for (size_t i = 0; i < sizeof(bytes); i++) {
     bytes[i] = (uint8_t)((value >> (i * 8)) & UINT64_C(0xff));
   }
-  return write_bytes(file, bytes, sizeof(bytes), context);
+  return itemstore_write_bytes(file, bytes, sizeof(bytes), context);
 }
 
 bool itemstore_read_u8(FILE *file, uint8_t *value, const char *context) {
@@ -326,8 +327,8 @@ bool write_item(FILE *file, ITEM_t *item) {
            item->name);
     return false;
   }
-  if (!write_u8(file, (uint8_t)name_len, "item name length")
-      || !write_bytes(file, item->name, name_len, "item name")) {
+  if (!itemstore_write_u8(file, (uint8_t)name_len, "item name length")
+      || !itemstore_write_bytes(file, item->name, name_len, "item name")) {
     return false;
   }
 
@@ -340,63 +341,12 @@ bool write_item(FILE *file, ITEM_t *item) {
              item->name, item->type);
       return false;
   }
-  if (!write_u8(file, item_tag, "item type tag")) return false;
+  if (!itemstore_write_u8(file, item_tag, "item type tag")) return false;
 
   if (item->type == ITEM_value) {
-    ITEMSTORE_V1_VALUE_TAG_t value_tag;
-    switch (item->value.type) {
-      case VALUE_nil: value_tag = ITEMSTORE_V1_VALUE_TAG_NIL; break;
-      case VALUE_int: value_tag = ITEMSTORE_V1_VALUE_TAG_INT; break;
-      case VALUE_float: value_tag = ITEMSTORE_V1_VALUE_TAG_FLOAT; break;
-      case VALUE_str: value_tag = ITEMSTORE_V1_VALUE_TAG_STRING; break;
-      case VALUE_bool: value_tag = ITEMSTORE_V1_VALUE_TAG_BOOL; break;
-      case VALUE_itemref:
-      case VALUE_list:
-      default:
-        logerr("Failed to write itemstore item '%s': unsupported value type "
-               "%d.\n", item->name, item->value.type);
-        return false;
-    }
-    if (!write_u8(file, value_tag, "value type tag")) return false;
-
-    switch (item->value.type) {
-      case VALUE_nil:
-        break;
-      case VALUE_int:
-      {
-        uint64_t payload;
-        memcpy(&payload, &item->value.i, sizeof(payload));
-        if (!write_u64_le(file, payload,
-                          "integer payload")) return false;
-        break;
-      }
-      case VALUE_float:
-        if (!write_u64_le(file, item->value.f_bits,
-                          "float payload")) return false;
-        break;
-      case VALUE_str:
-      {
-        size_t length = strlen(item->value.s);
-        if (length > SIN_MAX_STRING_BYTES) {
-          logerr("Failed to write itemstore string payload for '%s': length "
-                 "%zu exceeds maximum %zu.\n", item->name, length,
-                 SIN_MAX_STRING_BYTES);
-          return false;
-        }
-        if (!write_u32_le(file, (uint32_t)length, "string length")
-            || !write_bytes(file, item->value.s, length, "string payload")) {
-          return false;
-        }
-        break;
-      }
-      case VALUE_bool:
-        if (!write_u8(file, item->value.i ? 1u : 0u,
-                      "boolean payload")) return false;
-        break;
-      case VALUE_itemref:
-      case VALUE_list:
-      default:
-        return false;
+    if (!itemstore_write_v2_value(file, &item->value, 0)) {
+      logerr("Failed to write malformed value item '%s'.\n", item->name);
+      return false;
     }
   } else if (item->type == ITEM_code) {
     if (item->bytecode_len > ITEMSTORE_MAX_BYTECODE_LEN) {
@@ -410,8 +360,8 @@ bool write_item(FILE *file, ITEM_t *item) {
              "bytecode is NULL.\n", item->name, item->bytecode_len);
       return false;
     }
-    if (!write_u32_le(file, item->bytecode_len, "bytecode length")) return false;
-    if (!write_bytes(file, item->bytecode, item->bytecode_len,
+    if (!itemstore_write_u32_le(file, item->bytecode_len, "bytecode length")) return false;
+    if (!itemstore_write_bytes(file, item->bytecode, item->bytecode_len,
                      "bytecode payload")) return false;
   }
 
@@ -422,7 +372,7 @@ bool write_item(FILE *file, ITEM_t *item) {
            ITEMSTORE_MAX_CHILDREN_PER_ITEM);
     return false;
   }
-  if (!write_u32_le(file, (uint32_t)numchildren, "child count")) return false;
+  if (!itemstore_write_u32_le(file, (uint32_t)numchildren, "child count")) return false;
 
   for (size_t i = 0; i < numchildren; i++) {
     if (!write_item(file, item_children_at(item->children, i))) return false;
@@ -472,9 +422,9 @@ static ITEMSTORE_SAVE_RESULT_e itemstore_save_core(
   if (file == NULL) return ITEMSTORE_SAVE_FAILURE;
   temp_needs_cleanup = true;
 
-  if (!write_bytes(file, ITEMSTORE_V1_MAGIC, ITEMSTORE_V1_MAGIC_SIZE,
+  if (!itemstore_write_bytes(file, ITEMSTORE_V1_MAGIC, ITEMSTORE_V1_MAGIC_SIZE,
                    "file-header magic")
-      || !write_u16_le(file, ITEMSTORE_V1_FORMAT_VERSION,
+      || !itemstore_write_u16_le(file, ITEMSTORE_V2_FORMAT_VERSION,
                        "file-header version")
       || !write_item(file, root)) {
     goto cleanup;
@@ -593,7 +543,8 @@ ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,
     .max_string_len = (uint32_t)SIN_MAX_STRING_BYTES,
     .max_bytecode_len = ITEMSTORE_MAX_BYTECODE_LEN,
     .filename = filename,
-    .strict_validation = false
+    .strict_validation = false,
+    .aggregate_budget = SIN_LIST_MAX_ELEMENTS
   };
   return ctx;
 }
@@ -603,9 +554,12 @@ ITEM_t *itemstore_read_record_for_version(
   if (version == ITEMSTORE_V1_FORMAT_VERSION) {
     return itemstore_read_v1_record(file, parent, ctx);
   }
+  if (version == ITEMSTORE_V2_FORMAT_VERSION) {
+    return itemstore_read_v2_record(file, parent, ctx);
+  }
   logerr("Unsupported itemstore version in '%s': found %u, supported "
          "version is %u.\n", ctx->filename, version,
-         ITEMSTORE_V1_FORMAT_VERSION);
+         ITEMSTORE_V2_FORMAT_VERSION);
   return NULL;
 }
 
@@ -616,7 +570,8 @@ ITEM_t *read_item(FILE *file, ITEM_t *parent) {
     depth++;
   }
   ITEMSTORE_READ_CTX_t ctx = itemstore_read_context("<stream>", depth);
-  return itemstore_read_v1_record(file, parent, &ctx);
+  return itemstore_read_record_for_version(ITEMSTORE_V2_FORMAT_VERSION,
+                                           file, parent, &ctx);
 }
 
 static bool read_itemstore_header(FILE *file, const char *filename,
@@ -655,7 +610,11 @@ ITEM_t *load_itemstore_with_options(const char *filename,
   ITEM_t *root = NULL;
   uint16_t version = 0;
   if (read_itemstore_header(file, filename, &version)) {
-    root = itemstore_read_record_for_version(version, file, NULL, &ctx);
+    if (version == ITEMSTORE_V2_FORMAT_VERSION) {
+      root = itemstore_read_record_for_version(version, file, NULL, &ctx);
+    } else {
+      logerr("Unsupported runtime itemstore version in '%s': found %u.\n", filename, version);
+    }
   }
   if (root != NULL) {
     int trailing = fgetc(file);

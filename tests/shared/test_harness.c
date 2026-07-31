@@ -125,6 +125,10 @@ void test_itemstore_benchmarks(void);
 void test_get_itemname_root_item(void);
 void test_loaded_zero_child_item_can_gain_runtime_child(void);
 void test_itemstore_value_and_code_roundtrip(void);
+void test_itemstore_v2_lists_and_itemrefs_roundtrip(void);
+void test_itemstore_v2_all_values_fixture(void);
+void test_itemstore_v2_malformed_value_table(void);
+void test_itemstore_v2_budget_and_malformed_save(void);
 void test_loaded_itemstore_mutation_roundtrip(void);
 void test_load_itemstore_handles_constructor_failure_with_children(void);
 void test_item_set_code_rejects_inuse_replacement(void);
@@ -379,6 +383,10 @@ static const test_case_t core_tests[] = {
     {"test_get_itemname_root_item", test_get_itemname_root_item},
     {"test_loaded_zero_child_item_can_gain_runtime_child", test_loaded_zero_child_item_can_gain_runtime_child},
     {"test_itemstore_value_and_code_roundtrip", test_itemstore_value_and_code_roundtrip},
+    {"test_itemstore_v2_lists_and_itemrefs_roundtrip", test_itemstore_v2_lists_and_itemrefs_roundtrip},
+    {"test_itemstore_v2_all_values_fixture", test_itemstore_v2_all_values_fixture},
+    {"test_itemstore_v2_malformed_value_table", test_itemstore_v2_malformed_value_table},
+    {"test_itemstore_v2_budget_and_malformed_save", test_itemstore_v2_budget_and_malformed_save},
     {"test_loaded_itemstore_mutation_roundtrip", test_loaded_itemstore_mutation_roundtrip},
     {"test_load_itemstore_handles_constructor_failure_with_children", test_load_itemstore_handles_constructor_failure_with_children},
     {"test_item_set_code_rejects_inuse_replacement", test_item_set_code_rejects_inuse_replacement},

@@ -1,10 +1,17 @@
 # Sinistra Itemstore File Format
 
 This document is the canonical reference for the on-disk itemstore format.
-The current format version is `1`. Compatibility is guaranteed only for
-versioned itemstores beginning with v1.
+The current runtime format version is `2`. Version 1 decoding remains an
+internal conversion-only path; the normal runtime loader rejects v1.
 
-Itemstore v1 was stabilised at Sinistra release 0.5.
+Itemstore v1 was stabilised at Sinistra release 0.5. V2 retains all v1 scalar,
+code, and record bytes and adds list (tag 5) and item-reference (tag 6)
+payloads.
+
+V2 list payloads are a `uint32` element count followed by recursively encoded
+values. Item references are a `uint16` byte length followed by a canonical
+root-relative dot-separated path without a leading dot. Lists are serialized
+by value; pointer identity and persistent-vector internals are never written.
 
 ## Encoding conventions
 
@@ -26,7 +33,7 @@ Any bytes after the root record make the file invalid.
 | Offset | Size | Field | Required value |
 | ---: | ---: | --- | --- |
 | 0 | 8 | Magic | `53 49 4e 49 54 45 4d 00` (`SINITEM` followed by NUL) |
-| 8 | 2 | Format version | Little-endian `uint16`, currently `1` |
+| 8 | 2 | Format version | Little-endian `uint16`, currently `2` |
 | 10 | variable | Root item | One item record as described below |
 
 A short header, incorrect magic, or unsupported version is rejected before
@@ -70,10 +77,18 @@ A value item begins with a one-byte value-kind tag:
 | 2 | String | Four-byte `uint32` byte length, then that many bytes |
 | 3 | Nil | No payload |
 | 4 | Boolean | One byte: `0` for false or `1` for true |
+| 5 | List | Four-byte element count, then recursively encoded values |
+| 6 | Item reference | Two-byte path length, then canonical root-relative path bytes |
 
 Other value-kind tags and boolean bytes greater than `1` are invalid. String
 payloads do not include a terminator. Sinistra strings are C-string based, so
 writers should not place embedded NUL bytes in string payloads.
+
+V2 adds value tags `5` (list) and `6` (item reference). Lists may contain at
+most 1,048,576 elements and nest at most 64 levels. A file-wide aggregate
+budget of 1,048,576 list elements applies across all records. References must
+be 1..`MAX_ITEM_NAME - 1` bytes, contain at most `ITEM_MAX_DEPTH` valid layers,
+and contain no empty, leading-dot, trailing-dot, or embedded-NUL layer.
 
 ### Code item payload
 
@@ -83,7 +98,8 @@ that many bytecode bytes. The bytecode itself is defined in
 
 ## Validation limits
 
-The v1 reader and writer enforce these limits:
+The v2 reader and writer enforce these limits (v1 uses the scalar subset and
+is retained only for internal conversion decoding):
 
 | Property | Limit |
 | --- | ---: |
@@ -123,7 +139,7 @@ not covered by the itemstore durability mode.
 ## Save and replacement behavior
 
 `itemstore_save()` creates an exclusive, collision-resistant temporary file
-beside the destination, writes the v1 stream to it, flushes and closes it, and
+beside the destination, writes the v2 stream to it, flushes and closes it, and
 then renames it over the destination. A pre-existing temporary file is never
 opened with truncation or replaced. The `--itemstore-durability` startup option
 controls synchronization:
@@ -154,12 +170,14 @@ and all required durability steps succeed.
 
 ## Versioning
 
-Readers accept only the version they implement. A future incompatible layout
-must use a new header version and update this document. Version 1 does not
-provide migration from the earlier unversioned raw layout.
+The normal runtime reader accepts only version 2 and the writer always emits
+version 2. The internal dispatcher retains the frozen version 1 decoder for
+the future `sconv` conversion tool; it is not exposed as automatic runtime
+migration and does not rewrite embedded bytecode. A future incompatible
+layout must use a new header version and update this document.
 
 The itemstore version describes the container's wire structure, not the
 compatibility of bytecode payloads stored in code items. Prerelease bytecode is
 release-local and may be rejected by a newer runtime even when the surrounding
-itemstore remains structurally valid version 1. Retain source and recompile code
+itemstore remains structurally valid version 2. Retain source and recompile code
 items for the current build; the runtime does not migrate embedded bytecode.

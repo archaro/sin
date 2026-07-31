@@ -10,11 +10,15 @@
 #include "config.h"
 #include "item.h"
 #include "item_internal.h"
+#include "item_persist_internal.h"
 #include "runtime_item_ops.h"
+#include "list.h"
+#include "itemref.h"
 #define get_itemstore_topology_revision() itemstore_topology_revision(itemstore_owner(root))
 #define get_itemstore_payload_revision() itemstore_payload_revision(itemstore_owner(root))
 #include "string_limits.h"
 #include "test_assert.h"
+#include "memory.h"
 
 extern CONFIG_t config;
 
@@ -26,10 +30,12 @@ enum {
   WIRE_VALUE_FLOAT = 1,
   WIRE_VALUE_STRING = 2,
   WIRE_VALUE_NIL = 3,
-  WIRE_VALUE_BOOL = 4
+  WIRE_VALUE_BOOL = 4,
+  WIRE_VALUE_LIST = 5,
+  WIRE_VALUE_ITEMREF = 6
 };
 
-#define WIRE_VERSION 1u
+#define WIRE_VERSION 2u
 #define WIRE_MAX_DEPTH ITEM_MAX_DEPTH
 #define WIRE_MAX_CHILDREN 250u
 #define WIRE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
@@ -152,6 +158,13 @@ static void put_code_record_prefix(FILE *file, const char *name,
   put_u32_le(file, child_count);
 }
 
+static void put_value_record_prefix(FILE *file, const char *name, uint8_t tag,
+                                    uint32_t child_count) {
+  put_record_prefix(file, name, WIRE_ITEM_VALUE);
+  put_u8(file, tag);
+  put_u32_le(file, child_count);
+}
+
 static FILE *new_fixture(char path[]) {
   int fd = mkstemp(path);
   ASSERT_TRUE(fd >= 0);
@@ -215,7 +228,8 @@ static bool fail_loaded_item_constructor(const char *name) {
              sizeof constructor_names[constructor_attempts], "%s", name);
   }
   constructor_attempts++;
-  return strcmp(name, "bad") == 0 || strcmp(name, "bad_code") == 0;
+  return strcmp(name, "bad") == 0 || strcmp(name, "bad_code") == 0 ||
+         strcmp(name, "bad_ref") == 0;
 }
 
 static int fail_source_write(const char *source, FILE *file) {
@@ -369,6 +383,426 @@ void test_itemstore_value_and_code_roundtrip(void) {
   destroy_item(loaded);
   destroy_item(root);
   ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_itemstore_v2_lists_and_itemrefs_roundtrip(void) {
+  char path[] = "/tmp/sin-itemstore-v2-XXXXXX";
+  int fd = mkstemp(path);
+  ASSERT_TRUE(fd >= 0);
+  ASSERT_EQ_INT(0, close(fd));
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  VALUE_t nested_elems[1] = {{VALUE_int, {.i = 7}}};
+  SIN_LIST_t *nested = sin_list_build_owned(nested_elems, 1);
+  ASSERT_NOT_NULL(nested);
+  VALUE_t outer_elems[2] = {{VALUE_list, {.list = nested}},
+                            {VALUE_list, {.list = sin_list_retain(nested)}}};
+  SIN_LIST_t *outer = sin_list_build_owned(outer_elems, 2);
+  ASSERT_NOT_NULL(outer);
+  ASSERT_NOT_NULL(test_item_set_value(root, "list",
+                                      (VALUE_t){VALUE_list, {.list = outer}}));
+  SIN_ITEMREF_t *ref = sin_itemref_create("foo.bar");
+  ASSERT_NOT_NULL(ref);
+  ASSERT_NOT_NULL(test_item_set_value(
+      root, "ref", (VALUE_t){VALUE_itemref, {.itemref = ref}}));
+  ASSERT_TRUE(save_itemstore(path, root));
+  FILE *wire = fopen(path, "rb");
+  ASSERT_NOT_NULL(wire);
+  uint8_t header[10];
+  ASSERT_EQ_INT(10, fread(header, 1, sizeof header, wire));
+  static const uint8_t expected_header[10] = {'S', 'I', 'N', 'I', 'T',
+                                              'E', 'M', 0,   2,   0};
+  ASSERT_TRUE(memcmp(header, expected_header, sizeof header) == 0);
+  ASSERT_EQ_INT(0, fclose(wire));
+  destroy_item(root);
+  root = load_itemstore(path);
+  ASSERT_NOT_NULL(root);
+  ITEM_t *li = find_item(root, "list");
+  ASSERT_NOT_NULL(li);
+  ASSERT_EQ_INT(VALUE_list, li->value.type);
+  ASSERT_EQ_INT(2, sin_list_count(li->value.list));
+  ASSERT_EQ_INT(VALUE_list, sin_list_get(li->value.list, 0)->type);
+  ASSERT_EQ_INT(VALUE_list, sin_list_get(li->value.list, 1)->type);
+  ASSERT_EQ_INT(1, sin_list_count(sin_list_get(li->value.list, 0)->list));
+  ASSERT_EQ_INT(7, sin_list_get(sin_list_get(li->value.list, 0)->list, 0)->i);
+  ASSERT_EQ_INT(7, sin_list_get(sin_list_get(li->value.list, 1)->list, 0)->i);
+  ASSERT_TRUE(sin_list_equal(sin_list_get(li->value.list, 0)->list,
+                             sin_list_get(li->value.list, 1)->list));
+  ITEM_t *ri = find_item(root, "ref");
+  ASSERT_NOT_NULL(ri);
+  ASSERT_EQ_INT(VALUE_itemref, ri->value.type);
+  ASSERT_TRUE(strcmp("foo.bar", sin_itemref_path(ri->value.itemref)) == 0);
+  destroy_item(root);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_itemstore_v2_all_values_fixture(void) {
+  char path[] = "/tmp/sin-itemstore-v2-values-XXXXXX";
+  FILE *file = new_fixture(path);
+  static const uint8_t code[] = {0x01, 0x02, 0x03};
+  put_header(file, 2);
+  put_nil_record_prefix(file, "root", 7);
+  put_value_record_prefix(file, "nil", WIRE_VALUE_NIL, 0);
+  put_record_prefix(file, "bool", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_BOOL);
+  put_u8(file, 1);
+  put_u32_le(file, 0);
+  put_record_prefix(file, "int", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_INT);
+  put_u64_le(file, 42);
+  put_u32_le(file, 0);
+  put_record_prefix(file, "float", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_FLOAT);
+  put_u64_le(file, UINT64_C(0x3ff0000000000000));
+  put_u32_le(file, 0);
+  put_string_record_prefix(file, "str", "hello", 0);
+  put_code_record_prefix(file, "code", code, sizeof code, 0);
+  put_record_prefix(file, "list", WIRE_ITEM_VALUE);
+  put_u8(file, 5);
+  put_u32_le(file, 2);
+  put_u8(file, WIRE_VALUE_INT);
+  put_u64_le(file, 7);
+  put_u8(file, WIRE_VALUE_LIST);
+  put_u32_le(file, 1);
+  put_u8(file, WIRE_VALUE_ITEMREF);
+  put_u16_le(file, 7);
+  put_bytes(file, "foo.bar", 7);
+  put_u32_le(file, 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  ITEM_t *root = load_itemstore(path);
+  ASSERT_NOT_NULL(root);
+  ASSERT_EQ_INT(VALUE_nil, find_item(root, "nil")->value.type);
+  ASSERT_EQ_INT(1, find_item(root, "bool")->value.i);
+  ASSERT_EQ_INT(42, find_item(root, "int")->value.i);
+  ASSERT_EQ_INT(VALUE_float, find_item(root, "float")->value.type);
+  ASSERT_TRUE(find_item(root, "float")->value.f_bits ==
+              UINT64_C(0x3ff0000000000000));
+  ASSERT_TRUE(strcmp(find_item(root, "str")->value.s, "hello") == 0);
+  ASSERT_EQ_INT(ITEM_code, find_item(root, "code")->type);
+  ASSERT_EQ_INT(sizeof code, find_item(root, "code")->bytecode_len);
+  ASSERT_TRUE(memcmp(code, find_item(root, "code")->bytecode, sizeof code) ==
+              0);
+  ASSERT_EQ_INT(2, sin_list_count(find_item(root, "list")->value.list));
+  ASSERT_EQ_INT(VALUE_int,
+                sin_list_get(find_item(root, "list")->value.list, 0)->type);
+  ASSERT_EQ_INT(7, sin_list_get(find_item(root, "list")->value.list, 0)->i);
+  ASSERT_EQ_INT(VALUE_list,
+                sin_list_get(find_item(root, "list")->value.list, 1)->type);
+  ASSERT_EQ_INT(
+      1, sin_list_count(
+             sin_list_get(find_item(root, "list")->value.list, 1)->list));
+  ASSERT_EQ_INT(
+      VALUE_itemref,
+      sin_list_get(sin_list_get(find_item(root, "list")->value.list, 1)->list,
+                   0)
+          ->type);
+  ASSERT_TRUE(
+      strcmp(
+          "foo.bar",
+          sin_itemref_path(
+              sin_list_get(
+                  sin_list_get(find_item(root, "list")->value.list, 1)->list, 0)
+          ->itemref)) == 0);
+  char roundtrip_path[] = "/tmp/sin-itemstore-v2-values-roundtrip-XXXXXX";
+  FILE *roundtrip_file = new_fixture(roundtrip_path);
+  ASSERT_EQ_INT(0, fclose(roundtrip_file));
+  ASSERT_TRUE(save_itemstore(roundtrip_path, root));
+  FILE *original_file = fopen(path, "rb");
+  roundtrip_file = fopen(roundtrip_path, "rb");
+  ASSERT_NOT_NULL(original_file);
+  ASSERT_NOT_NULL(roundtrip_file);
+  ASSERT_EQ_INT(0, fseek(original_file, 0, SEEK_END));
+  ASSERT_EQ_INT(0, fseek(roundtrip_file, 0, SEEK_END));
+  long original_size = ftell(original_file);
+  long roundtrip_size = ftell(roundtrip_file);
+  ASSERT_TRUE(original_size >= 0 && roundtrip_size == original_size);
+  ASSERT_EQ_INT(0, fseek(original_file, 0, SEEK_SET));
+  ASSERT_EQ_INT(0, fseek(roundtrip_file, 0, SEEK_SET));
+  uint8_t *original_bytes = malloc((size_t)original_size);
+  uint8_t *roundtrip_bytes = malloc((size_t)roundtrip_size);
+  ASSERT_NOT_NULL(original_bytes);
+  ASSERT_NOT_NULL(roundtrip_bytes);
+  ASSERT_EQ_INT(original_size,
+                (long)fread(original_bytes, 1, (size_t)original_size,
+                             original_file));
+  ASSERT_EQ_INT(roundtrip_size,
+                (long)fread(roundtrip_bytes, 1, (size_t)roundtrip_size,
+                             roundtrip_file));
+  ASSERT_TRUE(memcmp(original_bytes, roundtrip_bytes,
+                     (size_t)original_size) == 0);
+  free(original_bytes);
+  free(roundtrip_bytes);
+  ASSERT_EQ_INT(0, fclose(original_file));
+  ASSERT_EQ_INT(0, fclose(roundtrip_file));
+  destroy_item(root);
+  ASSERT_EQ_INT(0, unlink(path));
+  ASSERT_EQ_INT(0, unlink(roundtrip_path));
+}
+
+void test_itemstore_v2_malformed_value_table(void) {
+  enum malformed_case {
+    BAD_UNKNOWN,
+    BAD_REF_ZERO,
+    BAD_REF_LEADING,
+    BAD_REF_TRAILING,
+    BAD_REF_EMPTY,
+    BAD_REF_CHAR,
+    BAD_REF_DEPTH,
+    BAD_REF_NUL,
+    BAD_REF_TRUNC_LEN,
+    BAD_REF_TRUNC_PATH,
+    BAD_LIST_COUNT,
+    BAD_LIST_TAG,
+    BAD_LIST_INT,
+    BAD_LIST_NESTING
+  };
+  static const enum malformed_case cases[] = {
+      BAD_UNKNOWN,       BAD_REF_ZERO,       BAD_REF_LEADING, BAD_REF_TRAILING,
+      BAD_REF_EMPTY,     BAD_REF_CHAR,       BAD_REF_DEPTH,   BAD_REF_NUL,
+      BAD_REF_TRUNC_LEN, BAD_REF_TRUNC_PATH, BAD_LIST_COUNT,  BAD_LIST_TAG,
+      BAD_LIST_INT,      BAD_LIST_NESTING};
+  for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+    char path[] = "/tmp/sin-itemstore-v2-bad-XXXXXX";
+    FILE *file = new_fixture(path);
+    put_header(file, 2);
+    put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+    if (cases[i] == BAD_UNKNOWN) {
+      put_u8(file, 9);
+      put_u32_le(file, 0);
+    } else if (cases[i] >= BAD_REF_ZERO && cases[i] <= BAD_REF_TRUNC_PATH) {
+      put_u8(file, WIRE_VALUE_ITEMREF);
+      if (cases[i] == BAD_REF_TRUNC_LEN) {
+        put_u8(file, 1);
+      } else if (cases[i] == BAD_REF_TRUNC_PATH) {
+        put_u16_le(file, 7);
+        put_bytes(file, "foo", 3);
+      } else if (cases[i] == BAD_REF_ZERO) {
+        put_u16_le(file, 0);
+      } else if (cases[i] == BAD_REF_LEADING) {
+        put_u16_le(file, 4);
+        put_bytes(file, ".foo", 4);
+      } else if (cases[i] == BAD_REF_TRAILING) {
+        put_u16_le(file, 4);
+        put_bytes(file, "foo.", 4);
+      } else if (cases[i] == BAD_REF_EMPTY) {
+        put_u16_le(file, 8);
+        put_bytes(file, "foo..bar", 8);
+      } else if (cases[i] == BAD_REF_CHAR) {
+        put_u16_le(file, 5);
+        put_bytes(file, "foo-$", 5);
+      } else if (cases[i] == BAD_REF_DEPTH) {
+        put_u16_le(file, 17);
+        put_bytes(file, "a.b.c.d.e.f.g.h.i", 17);
+      } else {
+        put_u16_le(file, 3);
+        put_bytes(file, "a\0b", 3);
+      }
+    } else {
+      put_u8(file, WIRE_VALUE_LIST);
+      if (cases[i] == BAD_LIST_COUNT) {
+        put_u8(file, 1);
+      } else if (cases[i] == BAD_LIST_TAG) {
+        put_u32_le(file, 1);
+      } else if (cases[i] == BAD_LIST_INT) {
+        put_u32_le(file, 1);
+        put_u8(file, WIRE_VALUE_INT);
+        put_u32_le(file, 1);
+      } else {
+        put_u32_le(file, 1);
+        for (size_t depth = 0; depth < 65; depth++) {
+          put_u8(file, WIRE_VALUE_LIST);
+          put_u32_le(file, 1);
+        }
+        put_u8(file, WIRE_VALUE_NIL);
+      }
+    }
+    if (cases[i] != BAD_REF_TRUNC_LEN && cases[i] != BAD_REF_TRUNC_PATH &&
+        cases[i] != BAD_LIST_COUNT && cases[i] != BAD_LIST_TAG &&
+        cases[i] != BAD_LIST_INT && cases[i] != BAD_LIST_NESTING) {
+      put_u32_le(file, 0);
+    }
+    ASSERT_EQ_INT(0, fclose(file));
+    ASSERT_TRUE(load_itemstore(path) == NULL);
+    ASSERT_EQ_INT(0, unlink(path));
+  }
+  {
+    char path[] = "/tmp/sin-itemstore-v2-list-count-XXXXXX";
+    FILE *file = new_fixture(path);
+    put_header(file, 2);
+    put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+    put_u8(file, WIRE_VALUE_LIST);
+    put_u32_le(file, SIN_LIST_MAX_ELEMENTS + 1u);
+    ASSERT_EQ_INT(0, fclose(file));
+    ASSERT_TRUE(load_itemstore(path) == NULL);
+    ASSERT_EQ_INT(0, unlink(path));
+  }
+  char path[] = "/tmp/sin-itemstore-v2-trailing-XXXXXX";
+  FILE *file = new_fixture(path);
+  put_header(file, 2);
+  put_nil_record_prefix(file, "root", 0);
+  put_u8(file, 0xff);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_TRUE(load_itemstore(path) == NULL);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_itemstore_v2_budget_and_malformed_save(void) {
+  char path[] = "/tmp/sin-itemstore-v2-budget-XXXXXX";
+  FILE *file = new_fixture(path);
+  put_header(file, 2);
+  put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+  put_u8(file, 5);
+  put_u32_le(file, 2);
+  put_u8(file, WIRE_VALUE_NIL);
+  put_u8(file, WIRE_VALUE_NIL);
+  put_u32_le(file, 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  file = fopen(path, "rb");
+  ASSERT_NOT_NULL(file);
+  uint8_t header[10];
+  ASSERT_EQ_INT(10, fread(header, 1, 10, file));
+  ITEMSTORE_READ_CTX_t ctx = itemstore_read_context(path, 0);
+  ctx.aggregate_budget = 1;
+  ASSERT_TRUE(itemstore_read_record_for_version(2, file, NULL, &ctx) == NULL);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_EQ_INT(0, unlink(path));
+  char badpath[] = "/tmp/sin-itemstore-v2-save-XXXXXX";
+  file = new_fixture(badpath);
+  static const uint8_t sentinel[] = {'k', 'e', 'e', 'p'};
+  put_bytes(file, sentinel, sizeof sentinel);
+  ASSERT_EQ_INT(0, fclose(file));
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  ASSERT_NOT_NULL(
+      test_item_set_value(root, "bad", (VALUE_t){VALUE_list, {.list = NULL}}));
+  ASSERT_TRUE(!save_itemstore(badpath, root));
+  destroy_item(root);
+  file = fopen(badpath, "rb");
+  ASSERT_NOT_NULL(file);
+  uint8_t actual[sizeof sentinel];
+  ASSERT_EQ_INT(sizeof actual, fread(actual, 1, sizeof actual, file));
+  ASSERT_TRUE(memcmp(actual, sentinel, sizeof actual) == 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_EQ_INT(0, unlink(badpath));
+
+  badpath[0] = '\0';
+  snprintf(badpath, sizeof badpath, "/tmp/sin-itemstore-v2-ref-XXXXXX");
+  file = new_fixture(badpath);
+  put_bytes(file, sentinel, sizeof sentinel);
+  ASSERT_EQ_INT(0, fclose(file));
+  root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  ASSERT_NOT_NULL(test_item_set_value(
+      root, "bad", (VALUE_t){VALUE_itemref, {.itemref = NULL}}));
+  ASSERT_TRUE(!save_itemstore(badpath, root));
+  destroy_item(root);
+  file = fopen(badpath, "rb");
+  ASSERT_NOT_NULL(file);
+  ASSERT_EQ_INT(sizeof actual, fread(actual, 1, sizeof actual, file));
+  ASSERT_TRUE(memcmp(actual, sentinel, sizeof actual) == 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_EQ_INT(0, unlink(badpath));
+
+  /* Exercise each v2-owned allocation failure directly; hooks are reset
+     immediately so later assertions cannot inherit the failure budget. */
+  uint8_t header_bytes[10];
+  ITEMSTORE_READ_CTX_t alloc_ctx;
+  {
+    char alloc_path[] = "/tmp/sin-itemstore-v2-alloc-XXXXXX";
+    file = new_fixture(alloc_path);
+    put_header(file, 2);
+    put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+    put_u8(file, WIRE_VALUE_ITEMREF);
+    put_u16_le(file, 3);
+    put_bytes(file, "a.b", 3);
+    put_u32_le(file, 0);
+    ASSERT_EQ_INT(0, fclose(file));
+    file = fopen(alloc_path, "rb");
+    ASSERT_NOT_NULL(file);
+    ASSERT_EQ_INT(10, fread(header_bytes, 1, sizeof header_bytes, file));
+    alloc_ctx = itemstore_read_context(alloc_path, 0);
+    alloc_test_fail_after(0);
+    ASSERT_TRUE(itemstore_read_record_for_version(2, file, NULL, &alloc_ctx) ==
+                NULL);
+    alloc_test_fail_after(-1);
+    ASSERT_EQ_INT(0, fclose(file));
+    ASSERT_EQ_INT(0, unlink(alloc_path));
+  }
+  {
+    char alloc_path[] = "/tmp/sin-itemstore-v2-list-alloc-XXXXXX";
+    file = new_fixture(alloc_path);
+    put_header(file, 2);
+    put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+    put_u8(file, WIRE_VALUE_LIST);
+    put_u32_le(file, 1);
+    put_u8(file, WIRE_VALUE_NIL);
+    put_u32_le(file, 0);
+    ASSERT_EQ_INT(0, fclose(file));
+    file = fopen(alloc_path, "rb");
+    ASSERT_NOT_NULL(file);
+    ASSERT_EQ_INT(10, fread(header_bytes, 1, sizeof header_bytes, file));
+    alloc_ctx = itemstore_read_context(alloc_path, 0);
+    alloc_test_fail_after(0);
+    ASSERT_TRUE(itemstore_read_record_for_version(2, file, NULL, &alloc_ctx) ==
+                NULL);
+    alloc_test_fail_after(-1);
+    ASSERT_EQ_INT(0, fclose(file));
+    ASSERT_EQ_INT(0, unlink(alloc_path));
+  }
+  {
+    char alloc_path[] = "/tmp/sin-itemstore-v2-partial-XXXXXX";
+    file = new_fixture(alloc_path);
+    put_header(file, 2);
+    put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+    put_u8(file, WIRE_VALUE_LIST);
+    put_u32_le(file, 2);
+    put_u8(file, WIRE_VALUE_STRING);
+    put_u32_le(file, 1);
+    put_u8(file, 'x');
+    put_u8(file, WIRE_VALUE_STRING);
+    put_u32_le(file, 1);
+    put_u8(file, 'y');
+    put_u32_le(file, 0);
+    ASSERT_EQ_INT(0, fclose(file));
+    file = fopen(alloc_path, "rb");
+    ASSERT_NOT_NULL(file);
+    ASSERT_EQ_INT(10, fread(header_bytes, 1, sizeof header_bytes, file));
+    alloc_ctx = itemstore_read_context(alloc_path, 0);
+    alloc_test_fail_after(3);
+    ASSERT_TRUE(itemstore_read_record_for_version(2, file, NULL, &alloc_ctx) ==
+                NULL);
+    alloc_test_fail_after(-1);
+    ASSERT_EQ_INT(0, fclose(file));
+    ASSERT_EQ_INT(0, unlink(alloc_path));
+  }
+
+  {
+    char constructor_path[] =
+        "/tmp/sin-itemstore-list-ref-constructor-failure-XXXXXX";
+    FILE *constructor_file = new_fixture(constructor_path);
+    put_header(constructor_file, WIRE_VERSION);
+    put_nil_record_prefix(constructor_file, "root", 2);
+    put_record_prefix(constructor_file, "list", WIRE_ITEM_VALUE);
+    put_u8(constructor_file, WIRE_VALUE_LIST);
+    put_u32_le(constructor_file, 1);
+    put_u8(constructor_file, WIRE_VALUE_STRING);
+    put_u32_le(constructor_file, 3);
+    put_bytes(constructor_file, "one", 3);
+    put_u32_le(constructor_file, 0);
+    put_record_prefix(constructor_file, "bad_ref", WIRE_ITEM_VALUE);
+    put_u8(constructor_file, WIRE_VALUE_ITEMREF);
+    put_u16_le(constructor_file, 3);
+    put_bytes(constructor_file, "a.b", 3);
+    put_u32_le(constructor_file, 0);
+    ASSERT_EQ_INT(0, fclose(constructor_file));
+    constructor_attempts = 0;
+    itemstore_set_load_constructor_failure_hook_for_tests(
+        fail_loaded_item_constructor);
+    ASSERT_TRUE(load_itemstore(constructor_path) == NULL);
+    itemstore_set_load_constructor_failure_hook_for_tests(NULL);
+    ASSERT_EQ_INT(3, constructor_attempts);
+    ASSERT_EQ_INT(0, unlink(constructor_path));
+  }
 }
 
 void test_loaded_itemstore_mutation_roundtrip(void) {
@@ -1102,7 +1536,7 @@ void test_load_itemstore_handles_constructor_failure_with_children(void) {
 void test_itemstore_loads_generated_v1_wire_fixture(void) {
   char path[] = "/tmp/sin-itemstore-wire-XXXXXX";
   FILE *file = new_fixture(path);
-  put_header(file, WIRE_VERSION);
+  put_header(file, 1);
   put_nil_record_prefix(file, "root", 6);
 
   put_nil_record_prefix(file, "nil", 0);
@@ -1136,7 +1570,13 @@ void test_itemstore_loads_generated_v1_wire_fixture(void) {
   ASSERT_EQ_INT(0, fclose(file));
 
   ITEM_t *loaded = load_itemstore(path);
+  ASSERT_TRUE(loaded == NULL);
+  file = fopen(path, "rb"); ASSERT_NOT_NULL(file);
+  uint8_t header[10]; ASSERT_EQ_INT(10, fread(header, 1, sizeof header, file));
+  ITEMSTORE_READ_CTX_t ctx = itemstore_read_context(path, 0);
+  loaded = itemstore_read_record_for_version(1, file, NULL, &ctx);
   ASSERT_NOT_NULL(loaded);
+  ASSERT_EQ_INT(0, fclose(file));
   ITEM_t *item = find_item(loaded, "nil");
   ASSERT_NOT_NULL(item);
   ASSERT_EQ_INT(VALUE_nil, item->value.type);
@@ -1157,7 +1597,7 @@ void test_itemstore_loads_generated_v1_wire_fixture(void) {
   ASSERT_EQ_INT(sizeof(bytecode), item->bytecode_len);
   ASSERT_TRUE(memcmp(bytecode, item->bytecode, sizeof(bytecode)) == 0);
 
-  destroy_item(loaded);
+  detach_item_and_destroy(loaded);
   ASSERT_EQ_INT(0, unlink(path));
 }
 

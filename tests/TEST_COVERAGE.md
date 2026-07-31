@@ -121,6 +121,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `test_save_itemstore_preserves_existing_file_on_failure`
     - `test_itemstore_durability_modes`
     - `test_itemstore_large_load_presizes_child_storage`
+    - `test_itemstore_v2_lists_and_itemrefs_roundtrip`
+    - `test_itemstore_v2_all_values_fixture`
+    - `test_itemstore_v2_malformed_value_table`
+    - `test_itemstore_v2_budget_and_malformed_save`
     - Loaded itemstore mutation after persistence: root-level children, nested
       children, code items, deletion, reinsertion, and ordered name enumeration
       before and after a second save/load cycle.
