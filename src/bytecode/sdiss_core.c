@@ -101,8 +101,10 @@ static void print_operand_line(SDissState *state, const BC_Instruction *inst) {
     case IR_OP_DEC_LOCAL:
       outln(state, "%s %u\n", inst->mnemonic, (unsigned int)inst->operand.value.u8);
       break;
-    case IR_OP_LIBCALL_TOKEN:
-      outln(state, "LIBCALL_TOKEN %u\n", (unsigned int)inst->operand.value.u8);
+    case IR_OP_LIBCALL:
+      outln(state, "LIBCALL %u,%u\n",
+            (unsigned int)(inst->operand.value.u16 >> 8),
+            (unsigned int)(inst->operand.value.u16 & 0xffu));
       break;
     case IR_OP_CALL:
       outln(state, "CALL ARGC %u\n", (unsigned int)inst->operand.value.u16);

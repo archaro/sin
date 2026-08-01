@@ -132,8 +132,11 @@ networking, and compiler pipeline only when the primitive requires it.
 
 Key entry points:
 
-- `libcall_lookup_token()` for compiler lowering.
-- `libcall_func_token()` for runtime dispatch.
+- `libcall_lookup_pair()` for compiler lowering.
+
+Compiler lowering and runtime dispatch use the permanent `(library index,
+call index)` pair ABI; registry APIs are pair-based and do not expose
+positional tokens. `libcall_func_pair()` resolves runtime dispatch directly.
 - Handler functions named `lc_<library>_<name>`.
 
 ### Networking

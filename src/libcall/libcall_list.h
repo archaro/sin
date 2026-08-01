@@ -7,6 +7,8 @@
 // One source of truth for libcall metadata and handler symbols.
 // Columns: libname, callname, lib_index, call_index, args, handler
 // Keep sys first, then sort libraries by name and calls by call_index.
+// Numeric (lib_index, call_index) pairs are permanent ABI identifiers. Retired
+// pairs are reserved and must never be reused.
 #define LIBCALL_LIST(X) \
   X("sys",  "backup",      1,  0, 0, lc_sys_backup) \
   X("sys",  "log",         1,  1, 1, lc_sys_log) \

@@ -255,10 +255,9 @@ integration, and an opt-in performance guard.
 - **Libcall registry lifecycle and safety contracts**
   - `tests/core/test_libcall_registry.c`
     - `test_libcall_registry_roundtrip`
-      - `sys.save` package index, call index, arity, token, and handler mapping
-      - canonical `sys`-first library grouping, alphabetical remaining
-        libraries, ascending per-library call indices, and representative
-        token/arity/handler round trips.
+      - complete frozen manifest of every registered name, library index, call
+        index, arity, and handler, with textual-name and pair round trips
+      - unknown-name and sparse-pair rejection checks
     - `test_runtime_init_validates_libcalls_once`
     - `test_libcall_registry_init_failure_has_no_partial_state`
     - `test_libcall_registry_lifecycle_reinit_sequence`
@@ -493,7 +492,7 @@ scope rejection, nearest-loop lowering, and runtime behavior in both loop
 forms, including DO-WHILE condition targeting.
 
 List libcall coverage (`tests/core/test_libcall_list.c`) checks canonical
-registry token, arity, and handler mappings, valid immutable operations and
+permanent pair, arity, and handler mappings, valid immutable operations and
 input preservation, empty and range behavior, owned nested-list and
 item-reference results, diagnostic provenance, and source-level dispatch of all
 six `list.*` calls.

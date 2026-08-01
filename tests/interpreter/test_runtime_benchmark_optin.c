@@ -650,10 +650,10 @@ static uint64_t bench_interpreter_ops(InterpreterBenchmark_t *benchmark,
 }
 
 void test_runtime_benchmark_optin(void) {
-  uint8_t token = 0;
+  uint8_t lib_index = 0, call_index = 0;
   uint8_t args = 0;
-  ASSERT_TRUE(libcall_lookup_token("str", "upper", &token, &args));
-  ASSERT_NOT_NULL(libcall_func_token(token));
+  ASSERT_TRUE(libcall_lookup_pair("str", "upper", &lib_index, &call_index, &args));
+  ASSERT_NOT_NULL(libcall_func_pair(lib_index, call_index));
 
   const int lookup_iters = 150000;
   const int dispatch_iters = 3000000;
@@ -661,10 +661,11 @@ void test_runtime_benchmark_optin(void) {
 
   uint64_t t0 = now_ns();
   for (int i = 0; i < lookup_iters; i++) {
-    uint8_t tk = 0;
+    uint8_t li = 0, ci = 0;
     uint8_t ar = 0;
-    int ok = libcall_lookup_token("str", "upper", &tk, &ar);
-    sink ^= (uintptr_t)tk;
+    int ok = libcall_lookup_pair("str", "upper", &li, &ci, &ar);
+    sink ^= (uintptr_t)li;
+    sink ^= (uintptr_t)ci;
     sink ^= (uintptr_t)ar;
     ASSERT_TRUE(ok);
   }
@@ -672,7 +673,7 @@ void test_runtime_benchmark_optin(void) {
 
   uint64_t t2 = now_ns();
   for (int i = 0; i < dispatch_iters; i++) {
-    OP_t fn = libcall_func_token(token);
+    OP_t fn = libcall_func_pair(lib_index, call_index);
     sink ^= (uintptr_t)fn;
     ASSERT_NOT_NULL(fn);
   }
@@ -683,9 +684,9 @@ void test_runtime_benchmark_optin(void) {
   uint64_t lookup_per_op = lookup_total / (uint64_t)lookup_iters;
   uint64_t dispatch_per_op = dispatch_total / (uint64_t)dispatch_iters;
 
-  printf("[bench] lookup_token(str.upper): total=%llu ns iters=%d per_op=%llu ns\n",
+  printf("[bench] lookup_pair(str.upper): total=%llu ns iters=%d per_op=%llu ns\n",
          (unsigned long long)lookup_total, lookup_iters, (unsigned long long)lookup_per_op);
-  printf("[bench] dispatch_token(str.upper): total=%llu ns iters=%d per_op=%llu ns\n",
+  printf("[bench] dispatch_pair(str.upper): total=%llu ns iters=%d per_op=%llu ns\n",
          (unsigned long long)dispatch_total, dispatch_iters, (unsigned long long)dispatch_per_op);
 
   const size_t sample_count = 5;

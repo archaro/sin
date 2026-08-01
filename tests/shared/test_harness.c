@@ -161,6 +161,7 @@ void test_sconv_collisions_aliases_and_replace(void);
 void test_sconv_rejects_bad_inputs_and_durability_failure(void);
 void test_sin_itemstore_version_policy(void);
 void test_libcall_registry_roundtrip(void);
+void test_emitbc_libcall_pair_bytes(void);
 void test_runtime_init_validates_libcalls_once(void);
 void test_libcall_registry_init_failure_has_no_partial_state(void);
 void test_libcall_registry_lifecycle_reinit_sequence(void);
@@ -332,6 +333,7 @@ void test_runtime_benchmark_optin(void);
 
 void test_runtime_decode_requires_frame_bounds(void);
 void test_interpreter_truncated_single_byte_operands(void);
+void test_interpreter_truncated_libcall_pair_preserves_vm_frames(void);
 void test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error(void);
 void test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error(void);
 void test_strict_runtime_contracts_default_preserves_fetch_argument_drops(void);
@@ -485,6 +487,7 @@ static const test_case_t core_tests[] = {
 };
 
 static const test_case_t compiler_tests[] = {
+    {"test_emitbc_libcall_pair_bytes", test_emitbc_libcall_pair_bytes},
     {"test_emitbc_header", test_emitbc_header},
     {"test_sdiss_legacy_and_v1_headers_report_absolute_offsets", test_sdiss_legacy_and_v1_headers_report_absolute_offsets},
     {"test_emitbc_opcode_map", test_emitbc_opcode_map},
@@ -528,6 +531,7 @@ static const test_case_t compiler_tests[] = {
 static const test_case_t runtime_tests[] = {
     {"test_runtime_decode_requires_frame_bounds", test_runtime_decode_requires_frame_bounds},
     {"test_interpreter_truncated_single_byte_operands", test_interpreter_truncated_single_byte_operands},
+    {"test_interpreter_truncated_libcall_pair_preserves_vm_frames", test_interpreter_truncated_libcall_pair_preserves_vm_frames},
     {"test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error",
      test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error},
     {"test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error",

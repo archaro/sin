@@ -341,14 +341,23 @@ void test_bytecode_verify_jumps_and_stack_flow(void) {
                        BC_VERIFY_ERROR, "branch_stack_mismatch",
                        "conflicting stack depths");
 
-  const uint8_t libcall_underflow[] = {0, 0, 'M', 1, 'h'};
+  const uint8_t libcall_underflow[] = {0, 0, 'M', 1, 1, 'h'};
   assert_verify_status(libcall_underflow, sizeof(libcall_underflow),
                        BC_VERIFY_ERROR, "libcall_underflow",
                        "stack underflow");
 
-  const uint8_t valid_libcall[] = {0, 0, 'l', 1, 0, 'x', 'M', 1, 'h'};
+  const uint8_t valid_libcall[] = {0, 0, 'l', 1, 0, 'x', 'M', 1, 1, 'h'};
   assert_verify_status(valid_libcall, sizeof(valid_libcall), BC_VERIFY_OK,
                        "valid_libcall", NULL);
+  const uint8_t libcall_missing_both[] = {0, 0, 'M'};
+  assert_verify_status(libcall_missing_both, sizeof(libcall_missing_both), BC_VERIFY_ERROR,
+                       "libcall_missing_both", "truncated");
+  const uint8_t libcall_missing_call[] = {0, 0, 'M', 1};
+  assert_verify_status(libcall_missing_call, sizeof(libcall_missing_call), BC_VERIFY_ERROR,
+                       "libcall_missing_call", "truncated");
+  const uint8_t libcall_unknown[] = {0, 0, 'M', 5, 255, 'h'};
+  assert_verify_status(libcall_unknown, sizeof(libcall_unknown), BC_VERIFY_ERROR,
+                       "libcall_unknown", "unknown libcall pair");
 
   /* The conditional jump targets a reachable RETURN after an earlier HALT. */
   const uint8_t jump_after_terminator[] = {

@@ -1213,7 +1213,18 @@ void test_value_comparison_unsupported_ordering_is_false(void) {
 void test_interpreter_truncated_single_byte_operands(void) {
   setup_runtime();
   assert_truncated_bytecode_for_opcode("test.truncated_getlocal", 'e', "LOAD_LOCAL");
-  assert_truncated_bytecode_for_opcode("test.truncated_libcall_token", 'M', "LIBCALL_TOKEN");
+  assert_truncated_bytecode_for_opcode("test.truncated_libcall", 'M', "LIBCALL");
+  teardown_runtime();
+}
+
+void test_interpreter_truncated_libcall_pair_preserves_vm_frames(void) {
+  setup_runtime();
+  const uint8_t code[] = {0, 0, 'M', 1};
+  VALUE_t result = run_code("test.truncated_libcall_pair", code, sizeof(code));
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error_code_and_detail(ERR_RUNTIME_BYTECODE, "truncated LIBCALL");
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
   teardown_runtime();
 }
 

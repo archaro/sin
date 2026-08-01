@@ -93,12 +93,35 @@ void test_sdiss_malformed_fixture_reports_verifier_diagnostic(void) {
   ASSERT_TRUE(strstr(output, "truncated") != NULL);
   ASSERT_TRUE(strstr(output, "Disassembly aborted due to malformed bytecode") != NULL);
   remove(tmp_path);
+  struct MalformedCase {
+    const uint8_t *bytes;
+    size_t length;
+    const char *diagnostic;
+  };
+  const uint8_t truncated[] = {0x00, 0x00, 'M', 0x01};
+  const uint8_t unknown[] = {0x00, 0x00, 'M', 0xff, 0xff, 'h'};
+  const struct MalformedCase cases[] = {
+      {truncated, sizeof(truncated), "truncated LIBCALL"},
+      {unknown, sizeof(unknown), "unknown libcall pair (255,255)"},
+  };
+
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+    char pair_output[4096] = {0};
+    SdissCapture capture = {pair_output, 0, sizeof(pair_output)};
+    SDissOptions options = {.raw = 0, .no_header = 1};
+    SDissResult result = sdiss_disassemble_bytes(cases[i].bytes,
+                                                  (uint32_t)cases[i].length,
+                                                  &options, capture_sdiss,
+                                                  &capture);
+    ASSERT_TRUE(result.status != BC_VERIFY_OK);
+    ASSERT_TRUE(strstr(result.diagnostic.message, cases[i].diagnostic) != NULL);
+  }
 }
 
 void test_sdiss_reads_compiler_operand_widths(void) {
   const uint8_t bytes[] = {
       0x00, 0x00, /* locals/params */
-      'M', 0x09, /* LIBCALL_TOKEN id=9 */
+      'M', 0x01, 0x01, /* LIBCALL pair sys.log */
       'F', 0x02, 0x00, /* CALL argc=2 */
       'h'};
 
@@ -118,7 +141,7 @@ void test_sdiss_reads_compiler_operand_widths(void) {
   ASSERT_TRUE(WIFEXITED(rc));
   ASSERT_EQ_INT(0, WEXITSTATUS(rc));
 
-  ASSERT_TRUE(strstr(output, "LIBCALL_TOKEN 9") != NULL);
+  ASSERT_TRUE(strstr(output, "LIBCALL 1,1") != NULL);
   ASSERT_TRUE(strstr(output, "CALL ARGC 2") != NULL);
   ASSERT_TRUE(strstr(output, "unknown=0") != NULL);
 

@@ -57,19 +57,18 @@ static void assert_invalid_list_call(OP_t handler, VALUE_t *args,
 }
 
 void test_list_libcall_registry_contract(void) {
-  uint8_t token = 0;
+  uint8_t lib_index = 0, call_index = 0;
   uint8_t args = 0;
   const char *names[] = {"length", "get", "append", "set", "concat", "slice"};
   const uint8_t arities[] = {1, 2, 2, 3, 2, 3};
   OP_t handlers[] = {lc_list_length, lc_list_get, lc_list_append,
                      lc_list_set, lc_list_concat, lc_list_slice};
   for (size_t i = 0; i < 6; ++i) {
-    ASSERT_TRUE(libcall_lookup_token("list", names[i], &token, &args));
-    ASSERT_EQ_INT(25 + i, token);
+    ASSERT_TRUE(libcall_lookup_pair("list", names[i], &lib_index, &call_index, &args));
+    ASSERT_EQ_INT(5, lib_index);
+    ASSERT_EQ_INT(i, call_index);
     ASSERT_EQ_INT(arities[i], args);
-    ASSERT_EQ_INT(5, libcalls[token].lib_index);
-    ASSERT_EQ_INT(i, libcalls[token].call_index);
-    ASSERT_TRUE(libcalls[token].func == handlers[i]);
+    ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == handlers[i]);
   }
 }
 

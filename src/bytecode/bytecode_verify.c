@@ -144,7 +144,7 @@ static const char *bc_disassembly_mnemonic(IR_Op op) {
     case IR_OP_JUMP: return "JUMP";
     case IR_OP_JUMP_IF_FALSE: return "JUMP IF FALSE";
     case IR_OP_CALL: return "CALL";
-    case IR_OP_LIBCALL_TOKEN: return "LIBCALL_TOKEN";
+    case IR_OP_LIBCALL: return "LIBCALL";
     case IR_OP_ITEM_BEGIN: return "BEGIN ITEM ASSEMBLY";
     case IR_OP_ITEM_BEGIN_REL: return "BEGIN RELATIVE ITEM ASSEMBLY";
     case IR_OP_ITEM_PUSH_LAYER: return "LAYER";
@@ -186,7 +186,7 @@ static BC_StackEffect bc_base_stack_effect(IR_Op op) {
     case IR_OP_PUSH_STRING: case IR_OP_PUSH_NIL: case IR_OP_LOAD_LOCAL: case IR_OP_ITEM_BEGIN:
     case IR_OP_ITEM_BEGIN_REL:
       return (BC_StackEffect){0, 1, false};
-    case IR_OP_LIBCALL_TOKEN:
+    case IR_OP_LIBCALL:
       return (BC_StackEffect){0, 1, true};
     case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV: case IR_OP_MOD:
     case IR_OP_EQ: case IR_OP_NEQ: case IR_OP_LT: case IR_OP_GT:
@@ -290,9 +290,9 @@ BC_StackEffect bc_opcode_stack_effect(const BC_OpcodeSchema *schema,
     effect.pops = (int)operand_u32 + 1;
     effect.operand_dependent = false;
   } else if (schema && schema->ir &&
-             schema->ir->op == IR_OP_LIBCALL_TOKEN) {
+             schema->ir->op == IR_OP_LIBCALL) {
     uint8_t args = 0;
-    if (libcall_token_arg_count((uint8_t)operand_u32, &args)) {
+    if (libcall_pair_arg_count((uint8_t)(operand_u32 >> 8), (uint8_t)operand_u32, &args)) {
       effect.pops = args;
     }
     effect.operand_dependent = false;
@@ -613,10 +613,25 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u32);
       return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     case IR_OP_PUSH_BOOL:
-    case IR_OP_LIBCALL_TOKEN:
+    case IR_OP_LIBCALL:
       if (!bc_need(d, *cursor, 1, op, schema->name)) return 0;
       operand.kind = BC_OPERAND_U8; operand.offset = bc_offset(d, *cursor); operand.width = 1; operand.value.u8 = **cursor;
-      if (schema->op == IR_OP_LIBCALL_TOKEN) operand_u32 = **cursor;
+      if (schema->op == IR_OP_LIBCALL) {
+        operand_u32 = (uint32_t)**cursor << 8;
+        (*cursor)++;
+        if (!bc_need(d, *cursor, 1, op, schema->name)) return 0;
+        operand_u32 |= **cursor;
+        operand.kind = BC_OPERAND_U16;
+        operand.width = 2;
+        operand.value.u16 = (uint16_t)operand_u32;
+        if (!libcall_pair_arg_count((uint8_t)(operand_u32 >> 8),
+                                    (uint8_t)operand_u32, NULL)) {
+          char detail[64];
+          snprintf(detail, sizeof(detail), "unknown libcall pair (%u,%u)",
+                   (unsigned)(operand_u32 >> 8), (unsigned)(operand_u32 & 0xffu));
+          return bc_fail(d, start, op, detail);
+        }
+      }
       (*cursor)++;
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u32);
       return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);

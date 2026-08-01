@@ -26,7 +26,7 @@ static void test_ir_validate_ok_case(void) {
 
   int32_t done = ir_new_label(unit);
 
-  t_emit(unit, (IR_Inst){.op = IR_OP_LIBCALL_TOKEN, .a = 1});
+  t_emit(unit, (IR_Inst){.op = IR_OP_LIBCALL, .a = 1, .b = 0});
   t_emit(unit, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = 1});
   t_emit(unit, (IR_Inst){.op = IR_OP_CALL, .a = 2});
   t_emit(unit, (IR_Inst){.op = IR_OP_JUMP, .a = done});
@@ -78,8 +78,8 @@ static void test_ir_validate_negative_arity_rejected(void) {
   ir_destroy_unit(unit);
 
   unit = t_new_unit();
-  t_emit(unit, (IR_Inst){.op = IR_OP_LIBCALL_TOKEN, .a = -2});
-  assert_validate_error(unit, 0, ERR_COMP_SYNTAX, "negative token");
+  t_emit(unit, (IR_Inst){.op = IR_OP_LIBCALL, .a = -2, .b = 0});
+  assert_validate_error(unit, 0, ERR_COMP_SYNTAX, "invalid pair");
   ir_destroy_unit(unit);
 }
 

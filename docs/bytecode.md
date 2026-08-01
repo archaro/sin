@@ -44,7 +44,7 @@ SIN_LIST_MAX_ELEMENTS. One-byte fields are unchanged.
 * **Opcode bytes** are single-byte character symbols. For example, `p` is
   `IR_OP_PUSH_INT` and `h` is `IR_OP_HALT`.
 * **One-byte immediates** (`u8`) follow the opcode directly and are used for
-  local indexes, boolean values, libcall tokens, and item layer lengths.
+  local indexes, boolean values, libcall pair indices, and item layer lengths.
 * **Two-byte immediates** (`u16` or signed `i16`) follow the opcode directly.
   Strings and embedded source blocks use unsigned 16-bit lengths. Jumps use a
   signed 16-bit relative offset.
@@ -116,7 +116,7 @@ arguments as described below.
 | `F` | `IR_OP_ITEM_DEREF`, `IR_OP_CALL` | `u16 argument_count` | Fetch item contents or call a code item; see below. |
 | `I` | `IR_OP_ITEM_BEGIN` | item layers until `E` | Begin absolute item-name assembly. |
 | `L` | `IR_OP_ITEM_PUSH_LAYER` | `u8 length`, bytes | Inside item assembly, append a literal layer name. |
-| `M` | `IR_OP_LIBCALL_TOKEN` | `u8 token` | Dispatch a prevalidated library-call registry token. |
+| `M` | `IR_OP_LIBCALL` | `u8 library, u8 call` | Dispatch a permanent library-call pair. |
 | `N` | `IR_OP_PUSH_NIL` | none | Push the canonical nil value. |
 | `R` | `IR_OP_ITEM_BEGIN_REL` | item layers until `E` | Begin relative item-name assembly using the current item as context. |
 | `V` | `IR_OP_ITEM_PUSH_DEREF_LOCAL` | `u8 local_index` | Inside a `D` dereference payload, turn the addressed local value into a layer name. |
@@ -212,3 +212,9 @@ change set:
    changed rows, then include those commands in the change summary.
 5. Treat v1 bytecode as portable; legacy unversioned input remains a
    pre-v1 little-endian migration format.
+
+## Libcall opcode ABI
+
+Opcode `M` is followed by two bytes: library index, then call index. The pair
+is permanent and is resolved through the libcall registry; unknown pairs are
+invalid bytecode.

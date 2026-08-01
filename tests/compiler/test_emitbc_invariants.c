@@ -73,7 +73,7 @@ static void test_emitbc_op_class_invariants(void) {
   assert_class_layout((IR_Inst){.op = IR_OP_PUSH_STRING, .imm = (int64_t)(intptr_t)"abc"}, 6, 0, 0);
   assert_class_layout((IR_Inst){.op = IR_OP_ADD}, 1, 0, 0);
   assert_class_layout((IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = 4}, 2, 1, 0);
-  assert_class_layout((IR_Inst){.op = IR_OP_LIBCALL_TOKEN, .a = 1}, 2, 1, 0);
+  assert_class_layout((IR_Inst){.op = IR_OP_LIBCALL, .a = 1, .b = 0}, 3, 2, 1);
   assert_class_layout((IR_Inst){.op = IR_OP_CALL, .a = 2}, 3, 2, 0);
   assert_class_layout((IR_Inst){.op = IR_OP_JUMP}, 3, 2, 1);
   assert_class_layout((IR_Inst){.op = IR_OP_JUMP_IF_FALSE}, 3, 2, 1);
@@ -103,7 +103,7 @@ static void emit_random_program(IR_Unit *u, uint32_t *seed, int count) {
       case 1: t_emit(u, (IR_Inst){.op = IR_OP_PUSH_FLOAT, .imm = (int64_t)r}); break;
       case 2: t_emit(u, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = (int32_t)(r % 8u)}); break;
       case 3: t_emit(u, (IR_Inst){.op = IR_OP_PUSH_BOOL, .a = (int32_t)(r & 1u)}); break;
-      case 4: t_emit(u, (IR_Inst){.op = IR_OP_LIBCALL_TOKEN, .a = (int32_t)(r % 4u)}); break;
+      case 4: t_emit(u, (IR_Inst){.op = IR_OP_LIBCALL, .a = 1, .b = (int32_t)(r % 4u)}); break;
       case 5: t_emit(u, (IR_Inst){.op = IR_OP_INC_LOCAL, .a = (int32_t)(r % 8u)}); break;
     }
   }

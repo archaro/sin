@@ -61,7 +61,7 @@ typedef enum {
   IR_OP_ITEM_SAVE,
 
   IR_OP_CALL,
-  IR_OP_LIBCALL_TOKEN,
+  IR_OP_LIBCALL,
   IR_OP_ITEM_SAVE_CODE,
 
   /* Keep new operations appended after the formerly last opcode. */

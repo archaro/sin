@@ -54,7 +54,7 @@ void test_emitbc_all_ir_ops_accounted_for(void) {
       {IR_OP_ITEM_DEREF, 'F', 1},
       {IR_OP_ITEM_SAVE, 'C', 1},
       {IR_OP_CALL, 'F', 0},
-      {IR_OP_LIBCALL_TOKEN, 'M', 1},
+      {IR_OP_LIBCALL, 'M', 1},
       {IR_OP_ITEM_SAVE_CODE, 'B', 1},
       {IR_OP_BUILD_LIST, '[', 1},
       {IR_OP_MAKE_ITEMREF, '&', 1},

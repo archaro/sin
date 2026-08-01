@@ -26,6 +26,12 @@
 #include "itemref.h"
 
 uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_list_length(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_list_get(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_list_append(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_list_set(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_list_concat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_list_slice(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_thisid(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -42,6 +48,8 @@ uint8_t *lc_net_connected(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_address(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_backup(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_shutdown(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_sys_abort(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_save(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_thisitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_sys_parentitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -157,172 +165,96 @@ static uint8_t *test_noop_libcall(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *
   return nextop;
 }
 void test_libcall_registry_roundtrip(void) {
+  struct manifest { const char *lib, *call; uint8_t li, ci, args; OP_t fn; };
+  static const struct manifest manifest[] = {
+      {"sys", "backup", 1, 0, 0, lc_sys_backup},
+      {"sys", "log", 1, 1, 1, lc_sys_log},
+      {"sys", "shutdown", 1, 2, 0, lc_sys_shutdown},
+      {"sys", "abort", 1, 3, 0, lc_sys_abort},
+      {"sys", "compile", 1, 4, 1, lc_sys_compile},
+      {"sys", "exists", 1, 5, 1, lc_sys_exists},
+      {"sys", "delete", 1, 6, 1, lc_sys_delete},
+      {"sys", "nthname", 1, 7, 2, lc_sys_nthname},
+      {"sys", "rootname", 1, 8, 1, lc_sys_rootname},
+      {"sys", "save", 1, 9, 0, lc_sys_save},
+      {"sys", "thisitem", 1, 10, 0, lc_sys_thisitem},
+      {"sys", "parentitem", 1, 11, 0, lc_sys_parentitem},
+      {"sys", "itemtype", 1, 12, 1, lc_sys_itemtype},
+      {"sys", "childcount", 1, 13, 1, lc_sys_childcount},
+      {"sys", "rootcount", 1, 14, 0, lc_sys_rootcount},
+      {"sys", "version", 1, 15, 0, lc_sys_version},
+      {"sys", "now", 1, 16, 0, lc_sys_now},
+      {"sys", "monotime", 1, 17, 0, lc_sys_monotime},
+      {"sys", "calleritem", 1, 18, 0, lc_sys_calleritem},
+      {"sys", "paramcount", 1, 19, 1, lc_sys_paramcount},
+      {"sys", "source", 1, 20, 1, lc_sys_source},
+      {"sys", "itemref", 1, 21, 1, lc_sys_itemref},
+      {"sys", "itemname", 1, 22, 1, lc_sys_itemname},
+      {"sys", "fetch", 1, 23, 1, lc_sys_fetch},
+      {"sys", "call", 1, 24, 2, lc_sys_call},
+      {"list", "length", 5, 0, 1, lc_list_length},
+      {"list", "get", 5, 1, 2, lc_list_get},
+      {"list", "append", 5, 2, 2, lc_list_append},
+      {"list", "set", 5, 3, 3, lc_list_set},
+      {"list", "concat", 5, 4, 2, lc_list_concat},
+      {"list", "slice", 5, 5, 3, lc_list_slice},
+      {"net", "input", 3, 0, 0, lc_net_input},
+      {"net", "write", 3, 1, 2, lc_net_write},
+      {"net", "ditch", 3, 2, 1, lc_net_ditch},
+      {"net", "flush", 3, 3, 1, lc_net_flush},
+      {"net", "echo", 3, 4, 1, lc_net_echo},
+      {"net", "maxlines", 3, 5, 0, lc_net_maxlines},
+      {"net", "connected", 3, 6, 1, lc_net_connected},
+      {"net", "address", 3, 7, 1, lc_net_address},
+      {"str", "capitalise", 4, 0, 1, lc_str_capitalise},
+      {"str", "upper", 4, 1, 1, lc_str_upper},
+      {"str", "lower", 4, 2, 1, lc_str_lower},
+      {"str", "len", 4, 3, 1, lc_str_len},
+      {"str", "trim", 4, 4, 1, lc_str_trim},
+      {"str", "ltrim", 4, 5, 1, lc_str_ltrim},
+      {"str", "rtrim", 4, 6, 1, lc_str_rtrim},
+      {"str", "substr", 4, 7, 3, lc_str_substr},
+      {"str", "find", 4, 8, 2, lc_str_find},
+      {"str", "contains", 4, 9, 2, lc_str_contains},
+      {"str", "startswith", 4, 10, 2, lc_str_startswith},
+      {"str", "endswith", 4, 11, 2, lc_str_endswith},
+      {"str", "eqcasei", 4, 12, 2, lc_str_eqcasei},
+      {"str", "valtostr", 4, 13, 1, lc_str_valtostr},
+      {"str", "replace", 4, 14, 3, lc_str_replace},
+      {"str", "repeat", 4, 15, 2, lc_str_repeat},
+      {"str", "padleft", 4, 16, 2, lc_str_padleft},
+      {"str", "padright", 4, 17, 2, lc_str_padright},
+      {"task", "newgametask", 2, 0, 3, lc_task_newgametask},
+      {"task", "killtask", 2, 1, 1, lc_task_killtask},
+      {"task", "thisid", 2, 2, 0, lc_task_thisid},
+      {"task", "exists", 2, 3, 1, lc_task_exists},
+      {"task", "count", 2, 4, 0, lc_task_count},
+      {NULL, NULL, 0, 0, 0, NULL},
+  };
+  uint8_t li = 0, ci = 0, args = 0;
   libcall_reset_registry_for_tests();
   ASSERT_TRUE(libcall_init_registry());
   ASSERT_TRUE(libcall_validate_registry());
-
-  const char *previous_libname = NULL;
-  int previous_call_index = -1;
-  for (size_t i = 0; libcalls[i].libname != NULL; i++) {
-    if (previous_libname &&
-        strcmp(previous_libname, libcalls[i].libname) != 0) {
-      if (strcmp(previous_libname, "sys") != 0) {
-        ASSERT_TRUE(strcmp(previous_libname, libcalls[i].libname) < 0);
-      }
-      ASSERT_TRUE(strcmp(libcalls[i].libname, "sys") != 0);
-      previous_call_index = -1;
-    }
-    ASSERT_TRUE(libcalls[i].call_index > previous_call_index);
-    previous_libname = libcalls[i].libname;
-    previous_call_index = libcalls[i].call_index;
+  for (size_t i = 0; manifest[i].lib != NULL; i++) {
+    li = 0;
+    ci = 0;
+    args = 0;
+    ASSERT_TRUE(libcall_lookup_pair(manifest[i].lib, manifest[i].call, &li, &ci, &args));
+    ASSERT_EQ_INT(manifest[i].li, li);
+    ASSERT_EQ_INT(manifest[i].ci, ci);
+    ASSERT_EQ_INT(manifest[i].args, args);
+    ASSERT_TRUE(libcall_func_pair(li, ci) == manifest[i].fn);
+    args = 0;
+    ASSERT_TRUE(libcall_pair_arg_count(li, ci, &args));
+    ASSERT_EQ_INT(manifest[i].args, args);
   }
+  ASSERT_TRUE(!libcall_lookup_pair("missing", "missing", &li, &ci, &args));
+  static const struct { uint8_t li, ci, args; } sparse = {255, 255, 0};
+  ASSERT_TRUE(libcall_func_pair(sparse.li, sparse.ci) == NULL);
+  args = sparse.args;
+  ASSERT_TRUE(!libcall_pair_arg_count(sparse.li, sparse.ci, &args));
+  ASSERT_TRUE(!libcall_pair_arg_count(5, 255, &args));
 
-  uint8_t token = 0;
-  uint8_t args = 0;
-  ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
-  ASSERT_EQ_INT(1, args);
-
-  ASSERT_NOT_NULL(libcall_func_token(token));
-  args = 0;
-  ASSERT_TRUE(libcall_token_arg_count(token, &args));
-  ASSERT_EQ_INT(1, args);
-  ASSERT_TRUE(libcall_func_token(255) == NULL);
-  ASSERT_TRUE(!libcall_token_arg_count(255, &args));
-
-  ASSERT_TRUE(libcall_lookup_token("sys", "save", &token, &args));
-  ASSERT_EQ_INT(9, token);
-  ASSERT_EQ_INT(0, args);
-  ASSERT_TRUE(libcall_func_token(token) == lc_sys_save);
-  ASSERT_EQ_INT(1, libcalls[token].lib_index);
-  ASSERT_EQ_INT(9, libcalls[token].call_index);
-  ASSERT_EQ_INT(0, libcalls[token].args);
-  ASSERT_TRUE(libcalls[token].func == lc_sys_save);
-
-  ASSERT_TRUE(libcall_lookup_token("net", "echo", &token, &args));
-  ASSERT_EQ_INT(1, args);
-  ASSERT_EQ_INT(3, libcalls[token].lib_index);
-  ASSERT_EQ_INT(4, libcalls[token].call_index);
-  ASSERT_TRUE(libcalls[token].func == lc_net_echo);
-
-  ASSERT_TRUE(libcall_lookup_token("net", "maxlines", &token, &args));
-  ASSERT_EQ_INT(36, token);
-  ASSERT_EQ_INT(0, args);
-  ASSERT_EQ_INT(3, libcalls[token].lib_index);
-  ASSERT_EQ_INT(5, libcalls[token].call_index);
-  ASSERT_TRUE(libcalls[token].func == lc_net_maxlines);
-
-  ASSERT_TRUE(libcall_lookup_token("net", "connected", &token, &args));
-  ASSERT_EQ_INT(37, token);
-  ASSERT_EQ_INT(1, args);
-  ASSERT_EQ_INT(3, libcalls[token].lib_index);
-  ASSERT_EQ_INT(6, libcalls[token].call_index);
-  ASSERT_TRUE(libcalls[token].func == lc_net_connected);
-
-  ASSERT_TRUE(libcall_lookup_token("net", "address", &token, &args));
-  ASSERT_EQ_INT(38, token);
-  ASSERT_EQ_INT(1, args);
-  ASSERT_EQ_INT(3, libcalls[token].lib_index);
-  ASSERT_EQ_INT(7, libcalls[token].call_index);
-  ASSERT_TRUE(libcalls[token].func == lc_net_address);
-
-  const struct {
-    const char *name;
-    uint8_t token;
-    int call_index;
-    uint8_t arity;
-    OP_t handler;
-  } sys_introspection_calls[] = {
-    {"thisitem", 10, 10, 0, lc_sys_thisitem},
-    {"parentitem", 11, 11, 0, lc_sys_parentitem},
-    {"itemtype", 12, 12, 1, lc_sys_itemtype},
-    {"childcount", 13, 13, 1, lc_sys_childcount},
-    {"rootcount", 14, 14, 0, lc_sys_rootcount},
-    {"version", 15, 15, 0, lc_sys_version},
-    {"now", 16, 16, 0, lc_sys_now},
-    {"monotime", 17, 17, 0, lc_sys_monotime},
-    {"calleritem", 18, 18, 0, lc_sys_calleritem},
-    {"paramcount", 19, 19, 1, lc_sys_paramcount},
-    {"source", 20, 20, 1, lc_sys_source},
-    {"itemref", 21, 21, 1, lc_sys_itemref},
-    {"itemname", 22, 22, 1, lc_sys_itemname},
-    {"fetch", 23, 23, 1, lc_sys_fetch},
-    {"call", 24, 24, 2, lc_sys_call},
-  };
-  for (size_t i = 0; i < sizeof(sys_introspection_calls) /
-                              sizeof(sys_introspection_calls[0]); i++) {
-    const uint8_t expected_token = sys_introspection_calls[i].token;
-    token = 0;
-    args = 255;
-    ASSERT_TRUE(libcall_lookup_token("sys", sys_introspection_calls[i].name,
-                                     &token, &args));
-    ASSERT_EQ_INT(expected_token, token);
-    ASSERT_EQ_INT(sys_introspection_calls[i].arity, args);
-    ASSERT_EQ_INT(1, libcalls[token].lib_index);
-    ASSERT_EQ_INT(sys_introspection_calls[i].call_index,
-                  libcalls[token].call_index);
-    ASSERT_EQ_INT(sys_introspection_calls[i].arity, libcalls[token].args);
-    ASSERT_TRUE(libcalls[token].func == sys_introspection_calls[i].handler);
-    ASSERT_TRUE(libcall_func_token(token) == sys_introspection_calls[i].handler);
-  }
-
-  const struct {
-    const char *name;
-    uint8_t token;
-    int call_index;
-    uint8_t arity;
-    OP_t handler;
-  } task_calls[] = {
-    {"newgametask", 57, 0, 3, lc_task_newgametask},
-    {"killtask", 58, 1, 1, lc_task_killtask},
-    {"thisid", 59, 2, 0, lc_task_thisid},
-    {"exists", 60, 3, 1, lc_task_exists},
-    {"count", 61, 4, 0, lc_task_count},
-  };
-  for (size_t i = 0; i < sizeof(task_calls) / sizeof(task_calls[0]); i++) {
-    token = 0;
-    args = 255;
-    ASSERT_TRUE(libcall_lookup_token("task", task_calls[i].name, &token,
-                                     &args));
-    ASSERT_EQ_INT(task_calls[i].token, token);
-    ASSERT_EQ_INT(task_calls[i].arity, args);
-    ASSERT_EQ_INT(2, libcalls[token].lib_index);
-    ASSERT_EQ_INT(task_calls[i].call_index, libcalls[token].call_index);
-    ASSERT_EQ_INT(task_calls[i].arity, libcalls[token].args);
-    ASSERT_TRUE(libcalls[token].func == task_calls[i].handler);
-    ASSERT_TRUE(libcall_func_token(token) == task_calls[i].handler);
-    args = 255;
-    ASSERT_TRUE(libcall_token_arg_count(token, &args));
-    ASSERT_EQ_INT(task_calls[i].arity, args);
-  }
-  ASSERT_TRUE(!libcall_lookup_token("missing", "missing", &token, &args));
-
-  ASSERT_TRUE(libcall_lookup_token("str", "valtostr", &token, &args));
-  ASSERT_EQ_INT(1, args);
-  ASSERT_NOT_NULL(libcall_func_token(token));
-  ASSERT_TRUE(libcall_lookup_token("str", "replace", &token, &args));
-  ASSERT_EQ_INT(3, args);
-  ASSERT_NOT_NULL(libcall_func_token(token));
-  ASSERT_TRUE(libcall_lookup_token("str", "repeat", &token, &args));
-  ASSERT_EQ_INT(2, args);
-  ASSERT_NOT_NULL(libcall_func_token(token));
-  ASSERT_TRUE(libcall_lookup_token("str", "padleft", &token, &args));
-  ASSERT_EQ_INT(2, args);
-  ASSERT_NOT_NULL(libcall_func_token(token));
-  ASSERT_TRUE(libcall_lookup_token("str", "padright", &token, &args));
-  ASSERT_EQ_INT(2, args);
-  ASSERT_NOT_NULL(libcall_func_token(token));
-  ASSERT_TRUE(libcall_lookup_token("net", "flush", &token, &args));
-  ASSERT_EQ_INT(34, token);
-  ASSERT_EQ_INT(1, args);
-  ASSERT_NOT_NULL(libcall_func_token(token));
-
-  alloc_test_fail_after(0);
-  token = 0;
-  args = 0;
-  ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
-  ASSERT_EQ_INT(1, args);
-  ASSERT_TRUE(!libcall_lookup_token("missing", "missing", &token, &args));
-  alloc_test_fail_after(-1);
 }
 
 void test_runtime_init_validates_libcalls_once(void) {
@@ -372,26 +304,26 @@ void test_libcall_registry_init_failure_has_no_partial_state(void) {
   ASSERT_TRUE(reached_success);
   alloc_test_fail_after(-1);
 
-  uint8_t token = 0;
+  uint8_t li = 0, ci = 0;
   uint8_t args = 0;
-  ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
+  ASSERT_TRUE(libcall_lookup_pair("sys", "log", &li, &ci, &args));
   ASSERT_EQ_INT(1, args);
 }
 
 void test_libcall_registry_lifecycle_reinit_sequence(void) {
-  uint8_t token = 0;
+  uint8_t li = 0, ci = 0;
   uint8_t args = 0;
 
   libcall_reset_registry_for_tests();
   ASSERT_TRUE(libcall_init_registry());
-  ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
+  ASSERT_TRUE(libcall_lookup_pair("sys", "log", &li, &ci, &args));
   ASSERT_EQ_INT(1, args);
 
   libcall_free_registry();
-  ASSERT_TRUE(!libcall_lookup_token("doesnot", "exist", &token, &args));
+  ASSERT_TRUE(!libcall_lookup_pair("doesnot", "exist", &li, &ci, &args));
 
   ASSERT_TRUE(libcall_init_registry());
-  ASSERT_TRUE(libcall_lookup_token("sys", "log", &token, &args));
+  ASSERT_TRUE(libcall_lookup_pair("sys", "log", &li, &ci, &args));
   ASSERT_EQ_INT(1, args);
 }
 
@@ -406,7 +338,7 @@ void test_libcall_registry_repeated_teardown_is_safe(void) {
 }
 
 void test_missing_libcall_is_null_and_interpret_deterministic(void) {
-  ASSERT_TRUE(libcall_func_token(255) == NULL);
+  ASSERT_TRUE(libcall_func_pair(255, 255) == NULL);
 
   memset(&config, 0, sizeof(config));
   init_errmsg();
@@ -417,7 +349,7 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
 
   uint8_t template_bytecode[] = {
     0x00, 0x00,
-    'M', 255,
+    'M', 255, 255,
     'h'
   };
   uint8_t *bytecode = malloc(sizeof(template_bytecode));
@@ -435,11 +367,11 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
   ITEM_t *err_item = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err_item);
   ASSERT_EQ_INT(VALUE_int, item_value(err_item)->type);
-  ASSERT_EQ_INT(ERR_RUNTIME_INVLIB, item_value(err_item)->i);
+  ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, item_value(err_item)->i);
   ITEM_t *err_msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(err_msg);
   ASSERT_EQ_INT(VALUE_str, item_value(err_msg)->type);
-  ASSERT_TRUE(strstr(item_value(err_msg)->s, "Unknown libcall token 255") != NULL);
+  ASSERT_TRUE(strstr(item_value(err_msg)->s, "unknown libcall pair (255,255)") != NULL);
   ASSERT_EQ_INT(-1, config.vm->stack->current);
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
 
@@ -448,37 +380,38 @@ void test_missing_libcall_is_null_and_interpret_deterministic(void) {
 }
 
 void test_default_libcall_wrappers_lazy_init_after_reset(void) {
-  uint8_t token = 0;
+  uint8_t li = 0, ci = 0;
   uint8_t args = 0;
 
   libcall_reset_registry_for_tests();
-  ASSERT_TRUE(libcall_lookup_token("str", "upper", &token, &args));
+  ASSERT_TRUE(libcall_lookup_pair("str", "upper", &li, &ci, &args));
   ASSERT_EQ_INT(1, args);
-  ASSERT_NOT_NULL(libcall_func_token(token));
+  ASSERT_NOT_NULL(libcall_func_pair(li, ci));
 
   libcall_free_registry();
   args = 0;
-  ASSERT_TRUE(libcall_token_arg_count(token, &args));
+  ASSERT_TRUE(libcall_pair_arg_count(li, ci, &args));
   ASSERT_EQ_INT(1, args);
-  ASSERT_NOT_NULL(libcall_func_token(token));
-  ASSERT_TRUE(!libcall_lookup_token("missing", "missing", &token, &args));
+  ASSERT_NOT_NULL(libcall_func_pair(li, ci));
+  ASSERT_TRUE(!libcall_lookup_pair("missing", "missing", &li, &ci, &args));
 }
 
 void test_libcall_registry_self_check_invalid_entries(void) {
-  const LIBCALL_t null_name[] = {{NULL, "x", 1, 0, 0, test_noop_libcall}, {NULL,NULL,-1,-1,0,NULL}};
+  const LIBCALL_t null_name[] = {{NULL, "x", 1, 0, 0, test_noop_libcall}, {NULL,NULL,0,0,0,NULL}};
   ASSERT_TRUE(!libcall_registry_self_check(null_name, false));
 
-  const LIBCALL_t bad_args[] = {{"sys", "x", 1, 0, 255, test_noop_libcall}, {NULL,NULL,-1,-1,0,NULL}};
+  const LIBCALL_t bad_args[] = {{"sys", "x", 1, 0, 255, test_noop_libcall}, {NULL,NULL,0,0,0,NULL}};
   ASSERT_TRUE(!libcall_registry_self_check(bad_args, false));
 
-  const LIBCALL_t dup_num[] = {{"sys","a",1,1,0,test_noop_libcall},{"sys","b",1,1,0,test_noop_libcall},{NULL,NULL,-1,-1,0,NULL}};
+  const LIBCALL_t dup_num[] = {{"sys","a",1,1,0,test_noop_libcall},{"sys","b",1,1,0,test_noop_libcall},{NULL,NULL,0,0,0,NULL}};
   ASSERT_TRUE(!libcall_registry_self_check(dup_num, false));
 
-  const LIBCALL_t dup_text[] = {{"sys","a",1,1,0,test_noop_libcall},{"sys","a",1,2,0,test_noop_libcall},{NULL,NULL,-1,-1,0,NULL}};
+  const LIBCALL_t dup_text[] = {{"sys","a",1,1,0,test_noop_libcall},{"sys","a",1,2,0,test_noop_libcall},{NULL,NULL,0,0,0,NULL}};
   ASSERT_TRUE(!libcall_registry_self_check(dup_text, false));
 
-  const LIBCALL_t gap_lib[] = {{"sys","a",1,0,0,test_noop_libcall},{"net","b",3,0,0,test_noop_libcall},{NULL,NULL,-1,-1,0,NULL}};
-  ASSERT_TRUE(!libcall_registry_self_check(gap_lib, false));
+  const LIBCALL_t gap_lib[] = {{"sys","a",1,0,0,test_noop_libcall},{"net","b",3,0,0,test_noop_libcall},{NULL,NULL,0,0,0,NULL}};
+  ASSERT_TRUE(libcall_registry_self_check(gap_lib, false));
+  ASSERT_TRUE(!libcall_func_pair(5, 255));
 }
 
 void test_libcall_invalid_arg_branches_return_contracts(void) {

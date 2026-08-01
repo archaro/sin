@@ -146,3 +146,10 @@ disconnecting or empty line returns `false` and sets the network error item.
 | `str.startswith{text, prefix}` | `str` | `startswith` | 2 | `text` and `prefix` must evaluate to strings. | `true` when `text` starts with `prefix`, case-sensitively; otherwise `false`. Empty `prefix` matches. | Consumes both arguments. | Invalid argument types set the runtime invalid-arguments error and return `false`. | `str.startswith{"look north", "look"};` |
 | `str.endswith{text, suffix}` | `str` | `endswith` | 2 | `text` and `suffix` must evaluate to strings. | `true` when `text` ends with `suffix`, case-sensitively; otherwise `false`. Empty `suffix` matches. | Consumes both arguments. | Invalid argument types set the runtime invalid-arguments error and return `false`. | `str.endswith{"read sign", "sign"};` |
 | `str.eqcasei{left, right}` | `str` | `eqcasei` | 2 | `left` and `right` must evaluate to strings. | `true` when the strings are equal after ASCII case folding; otherwise `false`. | Consumes both arguments. | Invalid argument types set the runtime invalid-arguments error and return `false`. | `str.eqcasei{"Look", "look"};` |
+
+## Permanent identifiers
+
+Each libcall has a permanent `(library index, call index)` pair from
+`libcall_list.h`. Retired pairs remain reserved and are never reused. Registry
+lookups return both indices and arity, and runtime dispatch resolves the pair
+directly.

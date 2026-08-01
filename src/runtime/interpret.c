@@ -715,15 +715,17 @@ uint8_t *op_logicalor(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
-uint8_t *op_libcall_token(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  uint8_t token;
-  nextop = decode_next(ctx, bc_read_u8(&ctx->decoder, nextop, &token, "OP_LIBCALL"));
+uint8_t *op_libcall(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  uint8_t lib_index, call_index;
+  nextop = decode_next(ctx, bc_read_u8(&ctx->decoder, nextop, &lib_index, "OP_LIBCALL"));
   if (!nextop) return NULL;
-  logverbose("Calling libcall token %d.\n", token);
-  OP_t libcall = libcall_registry_func_token(ctx->libcalls, token);
+  nextop = decode_next(ctx, bc_read_u8(&ctx->decoder, nextop, &call_index, "OP_LIBCALL"));
+  if (!nextop) return NULL;
+  logverbose("Calling libcall pair (%u,%u).\n", lib_index, call_index);
+  OP_t libcall = libcall_registry_func_pair(ctx->libcalls, lib_index, call_index);
   if (!libcall) {
-    char detail[64];
-    snprintf(detail, sizeof(detail), "Unknown libcall token %u", token);
+    char detail[96];
+    snprintf(detail, sizeof(detail), "Unknown libcall pair (%u,%u)", lib_index, call_index);
     logerr("%s.\n", detail);
     set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_INVLIB,
                            detail, ctx ? ctx->current_item : NULL);

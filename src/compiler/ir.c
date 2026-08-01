@@ -311,11 +311,11 @@ int8_t ir_validate_diag(IR_Unit* unit, uint32_t local_count, char **errdetail, C
                                    i, inst->a, (unsigned)SIN_LIST_MAX_ELEMENTS);
         }
         break;
-      case IR_OP_LIBCALL_TOKEN:
-        if (inst->a < 0) {
+      case IR_OP_LIBCALL:
+        if (inst->a < 0 || inst->a > UINT8_MAX || inst->b < 0 || inst->b > UINT8_MAX) {
           return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
-                                   "Instruction %zu (LIBCALL_TOKEN) has negative token %d.",
-                                   i, inst->a);
+                                   "Instruction %zu (LIBCALL) has invalid pair (%d,%d).",
+                                   i, inst->a, inst->b);
         }
         break;
       default:

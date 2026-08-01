@@ -210,6 +210,14 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
           return errnum;
         }
         break;
+      case VALIDATE_LIBCALL_PAIR:
+        if (in->a < 0 || in->a > UINT8_MAX || in->b < 0 || in->b > UINT8_MAX) {
+          free(pos);
+          int8_t errnum = ERR_NOERROR;
+          compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "%s pair out of range: lib=%d call=%d", meta->name, in->a, in->b);
+          return errnum;
+        }
+        break;
       case VALIDATE_LABEL_ID:
       case VALIDATE_NON_NULL_IMM:
       case VALIDATE_EMBEDDED_INDEX:
@@ -238,8 +246,10 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case IR_OP_INC_LOCAL:
       case IR_OP_DEC_LOCAL:
       case IR_OP_ITEM_PUSH_DEREF_LOCAL:
-      case IR_OP_LIBCALL_TOKEN:
         if (!bw_write_u8(&w, (uint8_t)in->a)) goto oom;
+        break;
+      case IR_OP_LIBCALL:
+        if (!bw_write_u8(&w, (uint8_t)in->a) || !bw_write_u8(&w, (uint8_t)in->b)) goto oom;
         break;
       case IR_OP_CALL:
         if (!bw_write_u16(&w, (uint16_t)in->a)) goto oom;

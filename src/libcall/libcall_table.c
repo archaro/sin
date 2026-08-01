@@ -13,7 +13,7 @@
 
 const LIBCALL_t libcalls[] = {
   LIBCALL_LIST(LIBCALL_TABLE_ENTRY)
-  {NULL, NULL, -1, -1, 0, NULL}  // End marker
+  {NULL, NULL, 0, 0, 0, NULL}  // End marker
 };
 
 #undef LIBCALL_TABLE_ENTRY
