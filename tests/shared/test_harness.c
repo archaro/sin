@@ -302,6 +302,8 @@ void test_bytecode_verify_jumps_and_stack_flow(void);
 void test_bytecode_verify_nesting_and_vm_stack_limits(void);
 void test_bytecode_verify_pipeline_fixture_bytecode(void);
 void test_bytecode_verify_compiler_emitted_bytecode(void);
+void test_bytecode_wire_boundary_vectors(void);
+void test_bytecode_wire_subsystems_agree(void);
 void test_pipeline_golden(void);
 void test_pipeline_large_local_lookup_duplicate(void);
 void test_pipeline_source_golden(void);
@@ -507,6 +509,8 @@ static const test_case_t compiler_tests[] = {
     {"test_bytecode_verify_nesting_and_vm_stack_limits", test_bytecode_verify_nesting_and_vm_stack_limits},
     {"test_bytecode_verify_pipeline_fixture_bytecode", test_bytecode_verify_pipeline_fixture_bytecode},
     {"test_bytecode_verify_compiler_emitted_bytecode", test_bytecode_verify_compiler_emitted_bytecode},
+    {"test_bytecode_wire_boundary_vectors", test_bytecode_wire_boundary_vectors},
+    {"test_bytecode_wire_subsystems_agree", test_bytecode_wire_subsystems_agree},
     {"test_pipeline_golden", test_pipeline_golden},
     {"test_pipeline_large_local_lookup_duplicate", test_pipeline_large_local_lookup_duplicate},
     {"test_pipeline_source_golden", test_pipeline_source_golden},

@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "bytecode_verify.h"
+#include "bytecode_wire.h"
 #include "compiler/compdiag.h"
 #include "compiler/ir/opcode_schema.h"
 #include "error.h"
@@ -51,35 +52,35 @@ static int bw_write_u8(BC_Writer *w, uint8_t v) {
 }
 static int bw_write_u16(BC_Writer *w, uint16_t v) {
   if (!bw_ensure(w, sizeof(v))) return 0;
-  memcpy(w->out->nextbyte, &v, sizeof(v));
+  bc_wire_store_u16(w->out->nextbyte, v);
   w->out->nextbyte += sizeof(v);
   w->used += sizeof(v);
   return 1;
 }
 static int bw_write_u32(BC_Writer *w, uint32_t v) {
   if (!bw_ensure(w, sizeof(v))) return 0;
-  memcpy(w->out->nextbyte, &v, sizeof(v));
+  bc_wire_store_u32(w->out->nextbyte, v);
   w->out->nextbyte += sizeof(v);
   w->used += sizeof(v);
   return 1;
 }
 static int bw_write_i16(BC_Writer *w, int16_t v) {
   if (!bw_ensure(w, sizeof(v))) return 0;
-  memcpy(w->out->nextbyte, &v, sizeof(v));
+  bc_wire_store_i16(w->out->nextbyte, v);
   w->out->nextbyte += sizeof(v);
   w->used += sizeof(v);
   return 1;
 }
 static int bw_write_u64_payload(BC_Writer *w, uint64_t v) {
   if (!bw_ensure(w, sizeof(v))) return 0;
-  memcpy(w->out->nextbyte, &v, sizeof(v));
+  bc_wire_store_u64(w->out->nextbyte, v);
   w->out->nextbyte += sizeof(v);
   w->used += sizeof(v);
   return 1;
 }
 static int bw_write_i64(BC_Writer *w, int64_t v) {
   uint64_t payload;
-  memcpy(&payload, &v, sizeof(payload));
+  payload = (uint64_t)v;
   return bw_write_u64_payload(w, payload);
 }
 static int bw_write_f64_bits(BC_Writer *w, uint64_t bits) {

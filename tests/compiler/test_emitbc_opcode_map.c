@@ -8,6 +8,7 @@
 #include "test_helpers.h"
 #include "compiler/compiler_pipeline.h"
 #include "bytecode_format.h"
+#include "bytecode_wire.h"
 
 typedef struct {
   const char *name;
@@ -204,11 +205,19 @@ void test_emitbc_push_float_immediate_layout(void) {
       UINT64_C(0x7ff8000000000042), /* quiet NaN */
       UINT64_C(0xc006000000000000), /* -2.75 */
   };
+  const uint8_t expected_values[][8] = {
+      {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x3f},
+      {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80},
+      {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x7f},
+      {0x42, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x7f},
+      {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0xc0},
+  };
 
   IR_Unit *unit = t_new_unit();
   ASSERT_NOT_NULL(unit);
   for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
-    t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_FLOAT, .imm = (int64_t)values[i]});
+    t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_FLOAT,
+                           .imm = bc_wire_i64_from_bits(values[i])});
   }
   t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
 
@@ -225,11 +234,9 @@ void test_emitbc_push_float_immediate_layout(void) {
 
   size_t pos = BC_V1_HEADER_SIZE;
   for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
-    uint8_t expected[sizeof(values[i])];
-    memcpy(expected, &values[i], sizeof(expected));
     ASSERT_EQ_INT('P', out.bytecode[pos++]);
-    ASSERT_TRUE(memcmp(out.bytecode + pos, expected, sizeof(expected)) == 0);
-    pos += sizeof(expected);
+    ASSERT_TRUE(memcmp(out.bytecode + pos, expected_values[i], 8) == 0);
+    pos += 8;
   }
   ASSERT_EQ_INT('h', out.bytecode[pos++]);
   ASSERT_EQ_INT((int)pos, (int)(out.nextbyte - out.bytecode));
@@ -245,6 +252,13 @@ void test_emitbc_push_int_immediate_layout(void) {
       -1,
       INT64_C(0x0102030405060708),
       INT64_C(-9223372036854775807) - INT64_C(1),
+  };
+  const uint8_t expected_values[][8] = {
+      {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+      {0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+      {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+      {0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01},
+      {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80},
   };
 
   IR_Unit *unit = t_new_unit();
@@ -267,11 +281,9 @@ void test_emitbc_push_int_immediate_layout(void) {
 
   size_t pos = BC_V1_HEADER_SIZE;
   for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
-    uint8_t expected[sizeof(values[i])];
-    memcpy(expected, &values[i], sizeof(expected));
     ASSERT_EQ_INT('p', out.bytecode[pos++]);
-    ASSERT_TRUE(memcmp(out.bytecode + pos, expected, sizeof(expected)) == 0);
-    pos += sizeof(expected);
+    ASSERT_TRUE(memcmp(out.bytecode + pos, expected_values[i], 8) == 0);
+    pos += 8;
   }
   ASSERT_EQ_INT('h', out.bytecode[pos++]);
   ASSERT_EQ_INT((int)pos, (int)(out.nextbyte - out.bytecode));

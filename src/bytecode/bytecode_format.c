@@ -1,4 +1,5 @@
 #include "bytecode_format.h"
+#include "bytecode_wire.h"
 
 BC_FormatStatus bc_decode_header(const uint8_t *bytecode, uint32_t length,
                                  BC_FormatHeader *out) {
@@ -17,7 +18,7 @@ BC_FormatStatus bc_decode_header(const uint8_t *bytecode, uint32_t length,
       h.status = BC_FORMAT_INVALID;
       goto done;
     }
-    h.version = (uint16_t)bytecode[4] | ((uint16_t)bytecode[5] << 8);
+    h.version = bc_wire_load_u16(bytecode + 4);
     if (h.version != BC_V1_VERSION) {
       h.status = BC_FORMAT_UNSUPPORTED_VERSION;
       goto done;
@@ -48,8 +49,7 @@ void bc_encode_v1_header(uint8_t header[BC_V1_HEADER_SIZE], uint8_t locals,
   header[1] = BC_V1_RESERVED_PARAMS;
   header[2] = BC_V1_MAGIC_S;
   header[3] = BC_V1_MAGIC_B;
-  header[4] = (uint8_t)(BC_V1_VERSION & 0xffu);
-  header[5] = (uint8_t)((BC_V1_VERSION >> 8) & 0xffu);
+  bc_wire_store_u16(header + 4, BC_V1_VERSION);
   header[6] = locals;
   header[7] = params;
 }

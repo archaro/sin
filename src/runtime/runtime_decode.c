@@ -3,6 +3,7 @@
 // Licensed under the MIT License - see LICENSE file for details.
 
 #include "runtime_decode.h"
+#include "bytecode_wire.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -46,47 +47,41 @@ RuntimeDecodeStatus require_bytes(const RuntimeDecoder *decoder, uint8_t *nextop
 RuntimeDecodeStatus bc_read_u8(const RuntimeDecoder *decoder, uint8_t *nextop, uint8_t *out, const char *opname) {
   RuntimeDecodeStatus status = require_bytes(decoder, nextop, sizeof(*out), opname);
   if (!runtime_decode_status_ok(status)) return status;
-  memcpy(out, nextop, sizeof(*out));
+  *out = *nextop;
   return runtime_decode_ok(nextop + sizeof(*out));
 }
 
 RuntimeDecodeStatus bc_read_u16(const RuntimeDecoder *decoder, uint8_t *nextop, uint16_t *out, const char *opname) {
   RuntimeDecodeStatus status = require_bytes(decoder, nextop, sizeof(*out), opname);
   if (!runtime_decode_status_ok(status)) return status;
-  memcpy(out, nextop, sizeof(*out));
+  *out = bc_wire_load_u16(nextop);
   return runtime_decode_ok(nextop + sizeof(*out));
 }
 
 RuntimeDecodeStatus bc_read_u32(const RuntimeDecoder *decoder, uint8_t *nextop, uint32_t *out, const char *opname) {
   RuntimeDecodeStatus status = require_bytes(decoder, nextop, 4, opname);
   if (!runtime_decode_status_ok(status)) return status;
-  *out = (uint32_t)nextop[0] | ((uint32_t)nextop[1] << 8) |
-         ((uint32_t)nextop[2] << 16) | ((uint32_t)nextop[3] << 24);
+  *out = bc_wire_load_u32(nextop);
   return runtime_decode_ok(nextop + 4);
 }
 
 RuntimeDecodeStatus bc_read_i16(const RuntimeDecoder *decoder, uint8_t *nextop, int16_t *out, const char *opname) {
   RuntimeDecodeStatus status = require_bytes(decoder, nextop, sizeof(*out), opname);
   if (!runtime_decode_status_ok(status)) return status;
-  memcpy(out, nextop, sizeof(*out));
+  *out = bc_wire_load_i16(nextop);
   return runtime_decode_ok(nextop + sizeof(*out));
 }
 
 RuntimeDecodeStatus bc_read_u64_payload(const RuntimeDecoder *decoder, uint8_t *nextop, uint64_t *out, const char *opname) {
   RuntimeDecodeStatus status = require_bytes(decoder, nextop, sizeof(*out), opname);
   if (!runtime_decode_status_ok(status)) return status;
-  // Bytecode operands are byte-packed and commonly unaligned after a
-  // one-byte opcode. Keep this as memcpy rather than a uint64_t pointer cast:
-  // typed loads would have undefined behavior under C alignment/aliasing rules
-  // and may trap on stricter architectures.
-  memcpy(out, nextop, sizeof(*out));
+  *out = bc_wire_load_u64(nextop);
   return runtime_decode_ok(nextop + sizeof(*out));
 }
 
 RuntimeDecodeStatus bc_read_i64(const RuntimeDecoder *decoder, uint8_t *nextop, int64_t *out, const char *opname) {
-  uint64_t payload;
-  RuntimeDecodeStatus status = bc_read_u64_payload(decoder, nextop, &payload, opname);
+  RuntimeDecodeStatus status = require_bytes(decoder, nextop, sizeof(*out), opname);
   if (!runtime_decode_status_ok(status)) return status;
-  memcpy(out, &payload, sizeof(*out));
-  return status;
+  *out = bc_wire_load_i64(nextop);
+  return runtime_decode_ok(nextop + sizeof(*out));
 }

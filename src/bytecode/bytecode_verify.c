@@ -1,4 +1,5 @@
 #include "bytecode_verify.h"
+#include "bytecode_wire.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -346,10 +347,6 @@ static int bc_validate_local_index(BC_Decoder *d, const uint8_t *p,
   return bc_fail(d, p, opcode, msg);
 }
 
-static uint16_t bc_read_u16_le(const uint8_t *p) {
-  return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
-}
-
 static int bc_record_jump(BC_Decoder *d, const uint8_t *operand_start,
                           uint8_t opcode) {
   if (!d->options.validate_control_flow) return 1;
@@ -362,10 +359,10 @@ static int bc_record_jump(BC_Decoder *d, const uint8_t *operand_start,
     }
     d->jump_capacity = (uint32_t)new_capacity;
   }
-  uint16_t raw = bc_read_u16_le(operand_start);
+  uint16_t raw = bc_wire_load_u16(operand_start);
   d->jumps[d->jump_count++] = (BC_JumpRef){
       .offset = bc_offset(d, operand_start),
-      .relative = (int16_t)raw,
+      .relative = bc_wire_i16_from_bits(raw),
       .opcode = opcode,
   };
   return 1;
@@ -462,7 +459,7 @@ static int bc_verify_stack_flow(BC_Decoder *d, uint8_t params) {
     }
     if (meta->op == IR_OP_HALT) continue;
     if (meta->op == IR_OP_JUMP || meta->op == IR_OP_JUMP_IF_FALSE) {
-      int16_t rel = (int16_t)meta->operand_u32;
+      int16_t rel = bc_wire_i16_from_bits((uint16_t)meta->operand_u32);
       uint32_t operand_offset = offset + 1;
       uint32_t target = (uint32_t)((int64_t)operand_offset + rel);
       if (!bc_enqueue_stack_depth(d, depths, work, &work_count, target, out_depth,
@@ -636,15 +633,18 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
     }
     case IR_OP_CALL:
       if (!bc_need(d, *cursor, 2, op, schema->name)) return 0;
-      operand_u32 = bc_read_u16_le(*cursor);
+      operand_u32 = bc_wire_load_u16(*cursor);
       operand.kind = BC_OPERAND_U16; operand.offset = bc_offset(d, *cursor); operand.width = 2; operand.value.u16 = (uint16_t)operand_u32;
       *cursor += 2;
       break;
     case IR_OP_JUMP: case IR_OP_JUMP_IF_FALSE: {
       if (!bc_need(d, *cursor, 2, op, schema->name)) return 0;
       const uint8_t *operand_start = *cursor;
-      operand_u32 = bc_read_u16_le(*cursor);
-      operand.kind = BC_OPERAND_I16; operand.offset = bc_offset(d, *cursor); operand.width = 2; operand.value.i16 = (int16_t)operand_u32;
+      operand.value.i16 = bc_wire_load_i16(*cursor);
+      operand_u32 = bc_wire_load_u16(*cursor);
+      operand.kind = BC_OPERAND_I16;
+      operand.offset = bc_offset(d, *cursor);
+      operand.width = 2;
       if (ctx == BC_CTX_STMT && !bc_record_jump(d, operand_start, op)) return 0;
       *cursor += 2;
       break;
@@ -653,14 +653,15 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
     case IR_OP_PUSH_FLOAT:
       if (!bc_need(d, *cursor, 8, op, schema->name)) return 0;
       operand.offset = bc_offset(d, *cursor); operand.width = 8;
-      memcpy(&operand.value.u64, *cursor, 8);
+      if (schema->op == IR_OP_PUSH_INT) operand.value.i64 = bc_wire_load_i64(*cursor);
+      else operand.value.u64 = bc_wire_load_u64(*cursor);
       operand.kind = schema->op == IR_OP_PUSH_INT ? BC_OPERAND_I64 : BC_OPERAND_F64_BITS;
       *cursor += 8;
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u32);
       return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     case IR_OP_PUSH_STRING: {
       if (!bc_need(d, *cursor, 2, op, "length")) return 0;
-      uint16_t len = bc_read_u16_le(*cursor);
+      uint16_t len = bc_wire_load_u16(*cursor);
       const uint8_t *data_start = *cursor + 2;
       *cursor += 2;
       if (!bc_need(d, *cursor, len, op, schema->name)) return 0;
@@ -678,7 +679,7 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
         while (1) {
           if (!bc_need(d, *cursor, 2, op,
                        "embedded parameter length")) return 0;
-          uint16_t param_len = bc_read_u16_le(*cursor);
+          uint16_t param_len = bc_wire_load_u16(*cursor);
           *cursor += 2;
           if (param_len == 0) break;
           if (param_count >= BC_MAX_ASSIGNCODE_PARAMS) {
@@ -697,7 +698,7 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
         }
       }
       if (!bc_need(d, *cursor, 2, op, "embedded source length")) return 0;
-      uint16_t len = bc_read_u16_le(*cursor);
+      uint16_t len = bc_wire_load_u16(*cursor);
       *cursor += 2;
       const uint8_t *data_start = *cursor;
       if (!bc_need(d, *cursor, len, op, "embedded source")) return 0;
@@ -723,7 +724,7 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
     }
     case IR_OP_BUILD_LIST: {
       if (!bc_need(d, *cursor, 4, op, schema->name)) return 0;
-      uint32_t count = (uint32_t)(*cursor)[0] | ((uint32_t)(*cursor)[1] << 8) | ((uint32_t)(*cursor)[2] << 16) | ((uint32_t)(*cursor)[3] << 24);
+      uint32_t count = bc_wire_load_u32(*cursor);
       if (count > SIN_LIST_MAX_ELEMENTS) return bc_fail(d, start, op, "list count exceeds maximum");
       operand.kind = BC_OPERAND_U32; operand.offset = bc_offset(d, *cursor); operand.width = 4; operand.value.u32 = count; operand_u32 = count; *cursor += 4;
       bc_record_instruction_meta(d, start, *cursor, op, schema->op, operand_u32);

@@ -4,6 +4,7 @@
 // Licensed under the MIT License - see LICENSE file for details.
 
 #include "compiler/lower.h"
+#include "bytecode_wire.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -275,7 +276,8 @@ static void lower_value_expr(LOWER_CTX *ctx, AS_NODE *node) {
       lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = value->value.i});
       return;
     case V_FLOAT:
-      lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_FLOAT, .imm = (int64_t)value->value.f_bits});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_FLOAT,
+                                .imm = bc_wire_i64_from_bits(value->value.f_bits)});
       return;
     case V_BOOLTRUE:
     case V_BOOLFALSE:

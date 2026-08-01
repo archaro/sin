@@ -5,10 +5,10 @@ The IR opcode metadata in `src/compiler/ir/opcode_schema.def` is the source of
 truth for opcode symbols, operand kinds, size policies, validators, and runtime
 handler requirements.
 
-Bytecode is an internal, release-local format. Newly compiled code uses
-bytecode format v1. Legacy unversioned blocks are accepted temporarily as
-pre-0.8 migration input and begin with the two-byte locals/parameters header;
-they will be converted by the eventual `sconv` migration tool.
+Newly compiled code uses bytecode format v1. Legacy unversioned blocks are
+accepted temporarily as pre-v1 little-endian migration input and begin with
+the two-byte locals/parameters header; they will be converted by the eventual
+`sconv` migration tool.
 
 ## Code block layout
 
@@ -31,16 +31,15 @@ use their two-byte header and begin execution at offset 2.
 
 ## Encoding conventions
 
-Unless an opcode description says otherwise, numeric immediates are written in
-the platform representation used by the C emitter and interpreter. The compiler
-centralizes fixed-width writes through helpers for `uint8_t`, `uint16_t`,
-`int16_t`, `int64_t`, and raw `uint64_t` payloads; the interpreter uses matching
-fixed-width read helpers. Multi-byte helpers copy bytes with `memcpy` rather
-than pointer casts, so unaligned instruction streams are safe while preserving
-the existing byte-for-byte format. Current encodings are therefore little-endian
-on supported little-endian builds, and persisted bytecode is portable only across
-platforms with the same integer widths, two's-complement signed representation,
-and byte order assumptions.
+All multi-byte unsigned values are fixed-width little-endian. Signed i16 jumps
+and i64 integer literals use two's-complement bit patterns in little-endian
+order. Float operands are little-endian IEEE 754 binary64 payload bits,
+preserving signed zero, infinities, and NaN payloads. Jump offsets are measured
+from the start of their two-byte offset field and remain in INT16_MIN..INT16_MAX.
+Locals, parameters, and item-layer lengths are u8; string, parameter-name, and
+embedded-source lengths are u16 with values capped by SIN_MAX_STRING_BYTES.
+List counts are encoded u32 while runtime lists remain capped by
+SIN_LIST_MAX_ELEMENTS. One-byte fields are unchanged.
 
 * **Opcode bytes** are single-byte character symbols. For example, `p` is
   `IR_OP_PUSH_INT` and `h` is `IR_OP_HALT`.
@@ -211,5 +210,5 @@ change set:
    symbol, especially `F`.
 4. Run the opcode schema, emitter, and compiler pipeline tests that cover the
    changed rows, then include those commands in the change summary.
-5. Treat changed bytecode as release-local and document that affected programs
-   must be recompiled from source.
+5. Treat v1 bytecode as portable; legacy unversioned input remains a
+   pre-v1 little-endian migration format.

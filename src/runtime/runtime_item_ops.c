@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "runtime_item_ops.h"
+#include "bytecode_wire.h"
 #include "compiler/compiler_pipeline.h"
 #include "error.h"
 #include "log.h"
@@ -91,7 +92,7 @@ bool decode_assigncode_params(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_I
   while (1) {
     REQUIRE_BYTES(*opcodep, 2, "OP_ASSIGNCODEITEM param-len");
     uint16_t param_len = 0;
-    memcpy(&param_len, *opcodep, 2);
+    param_len = bc_wire_load_u16(*opcodep);
     *opcodep += 2;
     if (param_len == 0) break;
     if (in->param_count >= MAX_ASSIGNCODE_PARAMS) return false;
@@ -117,7 +118,7 @@ bool decode_assigncode_params(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_I
 
 bool decode_assigncode_source(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_INPUT_t *in) {
   REQUIRE_BYTES(*opcodep, 2, "OP_ASSIGNCODEITEM source-len");
-  memcpy(&in->source_len, *opcodep, 2);
+  in->source_len = bc_wire_load_u16(*opcodep);
   *opcodep += 2;
   REQUIRE_BYTES(*opcodep, in->source_len, "OP_ASSIGNCODEITEM source-bytes");
   in->source = malloc((size_t)in->source_len + 1);

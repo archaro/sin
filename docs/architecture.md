@@ -52,7 +52,8 @@ Key entry points:
 
 ### Bytecode and Disassembly
 
-Files: `src/bytecode/bytecode_format.*`, `src/bytecode/bytecode_verify.*`, `src/bytecode/sdiss_core.*`.
+Files: `src/bytecode/bytecode_format.*`, `src/bytecode/bytecode_verify.*`,
+`src/bytecode/bytecode_wire.*`, `src/bytecode/sdiss_core.*`.
 
 Ownership: bytecode validation and bytecode-to-text disassembly. These modules
 may depend on common support and shared opcode/runtime metadata, but should not

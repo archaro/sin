@@ -5,6 +5,7 @@
 #include "sdiss_core.h"
 
 #include <math.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -67,9 +68,7 @@ static void print_escaped_bytes(SDissState *state, const uint8_t *data, size_t l
 static void print_operand_line(SDissState *state, const BC_Instruction *inst) {
   switch (inst->schema->op) {
     case IR_OP_PUSH_INT: {
-      int64_t v;
-      memcpy(&v, &inst->operand.value.u64, sizeof(v));
-      outln(state, "INTEGER %ld\n", (long)v);
+      outln(state, "INTEGER %" PRId64 "\n", inst->operand.value.i64);
       break;
     }
     case IR_OP_PUSH_FLOAT: {
