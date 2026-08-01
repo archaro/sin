@@ -120,6 +120,8 @@ Options:
 
 `sin` requires an object file even when an itemstore already exists: the object
 is executed as the bootstrap code before the optional network loop starts.
+Bootstrap objects supplied to `sin` must use bytecode-v1; recompile older
+bootstrap objects with `scomp` before running them.
 At the default log level, `sin` reports lifecycle events such as itemstore
 loading, source-root selection, listener startup, connection changes, and
 shutdown. VM execution traces, boot return values, task return values, and

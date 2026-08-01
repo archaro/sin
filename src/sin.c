@@ -28,6 +28,7 @@
 #include "stack.h"
 #include "interpret.h"
 #include "runtime_value.h"
+#include "bytecode_format.h"
 
 static volatile sig_atomic_t recovery_pending;
 static bool runtime_signal_shutdown;
@@ -373,6 +374,14 @@ static SinParseResult parse_sin_options(int argc, char **argv,
         }
         if (new_filesize > UINT32_MAX) {
           logerr("Input file is too large to interpret: %s\n", optarg);
+          free(new_bytecode);
+          return EXIT_FAILURE;
+        }
+        BC_FormatHeader header;
+        bc_decode_header(new_bytecode, (uint32_t)new_filesize, &header);
+        if (header.legacy) {
+          logerr("Bootstrap object '%s' is unversioned; recompile with scomp.\n",
+                 optarg);
           free(new_bytecode);
           return EXIT_FAILURE;
         }

@@ -110,6 +110,22 @@ void test_sin_itemstore_version_policy(void) {
   char object_path[96];
   ASSERT_EQ_INT(0, test_make_temp_path("sin-policy-object", object_path,
                                        sizeof(object_path)));
+  size_t legacy_length = 0;
+  uint8_t *legacy = load_hex_fixture(
+      "tests/fixtures/bytecode-migration/legacy-0.7.1.hex", &legacy_length);
+  ASSERT_NOT_NULL(legacy);
+  write_bytes(object_path, legacy, legacy_length);
+  free(legacy);
+  char *legacy_argv[] = {"./sin", "--loadonly", "--itemstore", path,
+                         "--srcroot", "tests/fixtures", "--object",
+                         object_path, NULL};
+  ASSERT_EQ_INT(0, test_run_argv_capture(legacy_argv, 0, &result));
+  ASSERT_EQ_INT(1, result.exit_code);
+  ASSERT_TRUE(strstr(result.stderr_text, "unversioned") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "recompile with scomp") != NULL);
+  test_process_result_free(&result);
+  ASSERT_EQ_INT(0, unlink(object_path));
+
   size_t object_length = 0;
   uint8_t *object = load_hex_fixture("tests/fixtures/nil_literal.hex",
                                      &object_length);
