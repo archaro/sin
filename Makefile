@@ -135,6 +135,7 @@ TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_emitbc_post_verify.c \
 	$(TEST_DIR)/compiler/test_bytecode_verify.c \
 	$(TEST_DIR)/compiler/test_bytecode_wire.c \
+	$(TEST_DIR)/compiler/test_bytecode_convert.c \
 	$(TEST_DIR)/compiler/test_pipeline_golden.c \
 	$(TEST_DIR)/compiler/test_pipeline_source_golden.c \
 	$(TEST_DIR)/compiler/test_pipeline_negative_matrix.c \
@@ -152,7 +153,7 @@ TEST_SOURCES := $(TEST_SHARED_SOURCES) $(TEST_CORE_SOURCES) $(TEST_COMPILER_SOUR
 
 # Library of shared functions
 LIB := $(LIB_DIR)/libsinshared.a
-LIB_OBJECTS := $(OBJ_DIR)/common/log.o $(OBJ_DIR)/common/memory.o $(OBJ_DIR)/common/cli_io.o $(OBJ_DIR)/bytecode/bytecode_wire.o $(OBJ_DIR)/bytecode/bytecode_format.o $(OBJ_DIR)/bytecode/bytecode_verify.o $(OBJ_DIR)/bytecode/sdiss_core.o $(OBJ_DIR)/common/floatconv.o $(OBJ_DIR)/parser.o \
+LIB_OBJECTS := $(OBJ_DIR)/common/log.o $(OBJ_DIR)/common/memory.o $(OBJ_DIR)/common/cli_io.o $(OBJ_DIR)/bytecode/bytecode_wire.o $(OBJ_DIR)/bytecode/bytecode_format.o $(OBJ_DIR)/bytecode/bytecode_verify.o $(OBJ_DIR)/bytecode/bytecode_convert.o $(OBJ_DIR)/bytecode/sdiss_core.o $(OBJ_DIR)/common/floatconv.o $(OBJ_DIR)/parser.o \
                $(OBJ_DIR)/lexer.o $(OBJ_DIR)/compiler/absyn.o $(OBJ_DIR)/compiler/semant.o \
                $(OBJ_DIR)/compiler/ir.o $(OBJ_DIR)/compiler/lower.o $(OBJ_DIR)/compiler/compiler_context.o $(OBJ_DIR)/compiler/compiler_pipeline.o $(OBJ_DIR)/compiler/emitbc.o \
                $(OBJ_DIR)/compiler/compdiag.o $(OBJ_DIR)/common/error.o $(OBJ_DIR)/common/util.o $(OBJ_DIR)/libcall/libcall_sys.o $(OBJ_DIR)/libcall/libcall_task.o $(OBJ_DIR)/libcall/libcall_net.o $(OBJ_DIR)/libcall/libcall_str.o $(OBJ_DIR)/libcall/libcall_list.o $(OBJ_DIR)/libcall/libcall_registry.o $(OBJ_DIR)/libcall/libcall_table.o \

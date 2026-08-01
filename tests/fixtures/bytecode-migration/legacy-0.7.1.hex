@@ -1,0 +1,5 @@
+# SOT: historical 0.7.1 bytecode | regen: manual
+# locals=1 params=0; entry j reaches final h. The unreachable block exercises
+# fixed-width operands, nested item/deref data, embedded source, legacy M, and
+# a backward jump over M (operand-relative displacements: +0x35 and -49).
+0100 6A3500 700000000000000000 500000000000000000 6C0300616263 5B01000000 494C017844560045425000000300737263 4D00 6ACFFF 68

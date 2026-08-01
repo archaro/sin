@@ -8,6 +8,9 @@ This page documents the command-line tools built by the top-level `Makefile`:
 `sconv` converts v1 or v2 itemstores to canonical v2 format using atomic
 publication.
 
+The input and output paths must be distinct. Existing outputs are preserved
+unless `--replace` is supplied.
+
 ```sh
 sconv <input itemstore> <output itemstore>
 sconv -i <input itemstore> -o <output itemstore> [options]
@@ -23,10 +26,11 @@ sconv -i <input itemstore> -o <output itemstore> [options]
 | `--replace` | Atomically replace an existing output. |
 | `-q`, `--quiet` / `-v`, `--verbose` | Control progress messages. |
 
-Both v1 and v2 inputs are accepted and always rewritten as canonical v2;
-embedded code bytes are preserved opaquely. Input and output must be distinct
-filesystem objects. Existing outputs are preserved unless `--replace` is
-specified, and malformed, unversioned, or unknown-version inputs are rejected.
+Both v1 and v2 inputs are accepted and always rewritten as canonical v2. Every
+code item is strictly verified; unversioned 0.7.1 code is migrated to v1,
+including legacy libcall tokens and relocated jumps. Conversion prepares all
+code items before publication, so a failed item leaves an existing output
+unchanged even with `--replace`.
 
 ## `scomp`
 

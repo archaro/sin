@@ -20,6 +20,10 @@ This directory and related `examples/` artifacts define golden fixtures used by 
    - Source of truth: commented, hand-authored hex files.
    - Regeneration: remove comment lines and decode with `sed '/^[[:space:]]*#/d' <seed>.hex | xxd -r -p > tests/fuzz/corpus/sin-object/<seed>.itemstore`; `make seed-fuzz-sin-object-corpus` performs this workflow alongside existing source seeds.
 
+   Bytecode migration seeds live in `bytecode-migration/`; they are hand-authored
+   historical 0.7.1 and v1 samples and are regenerated manually when the wire
+   contract changes.
+
 4. **Generated object artifacts** (`*.generated.obj` / `*.reference.obj`)
    - Purpose: test-owned temporary outputs used by compiler golden comparisons.
    - Source of truth: `./scomp` output from the paired `.src` source at test time.

@@ -53,6 +53,7 @@ Key entry points:
 ### Bytecode and Disassembly
 
 Files: `src/bytecode/bytecode_format.*`, `src/bytecode/bytecode_verify.*`,
+`src/bytecode/bytecode_convert.*`,
 `src/bytecode/bytecode_wire.*`, `src/bytecode/sdiss_core.*`.
 
 Ownership: bytecode validation and bytecode-to-text disassembly. These modules
@@ -62,6 +63,7 @@ invoke runtime execution.
 Key entry points:
 
 - `bc_verify_bytecode()` from `src/bytecode/bytecode_verify.h`.
+- `bc_convert_latest()` from `src/bytecode/bytecode_convert.h`.
 - `sdiss_*` APIs from `src/bytecode/sdiss_core.h`.
 
 ### Runtime VM

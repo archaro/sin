@@ -156,7 +156,8 @@ void test_save_itemstore_preserves_existing_file_on_failure(void);
 void test_save_itemsource_reports_write_and_close_failure(void);
 void test_itemstore_durability_modes(void);
 void test_itemstore_large_load_presizes_child_storage(void);
-void test_sconv_v1_to_v2_preserves_code(void);
+void test_sconv_v1_to_v2_migrates_legacy_code(void);
+void test_sconv_mixed_code_tree_and_failure_atomicity(void);
 void test_sconv_v2_canonical_and_invocation_modes(void);
 void test_sconv_collisions_aliases_and_replace(void);
 void test_sconv_rejects_bad_inputs_and_durability_failure(void);
@@ -306,6 +307,11 @@ void test_bytecode_verify_pipeline_fixture_bytecode(void);
 void test_bytecode_verify_compiler_emitted_bytecode(void);
 void test_bytecode_wire_boundary_vectors(void);
 void test_bytecode_wire_subsystems_agree(void);
+void test_bytecode_convert_legacy_and_v1(void);
+void test_bytecode_convert_malformed_matrix(void);
+void test_bytecode_convert_v1_idempotent(void);
+void test_bytecode_convert_legacy_token_boundaries(void);
+void test_bytecode_convert_allocation_failures(void);
 void test_pipeline_golden(void);
 void test_pipeline_large_local_lookup_duplicate(void);
 void test_pipeline_source_golden(void);
@@ -324,6 +330,7 @@ void test_sys_itemref_dynamic_calls(void);
 /* Runtime component tests. */
 void test_interpret_semantics_golden(void);
 void test_interpret_legacy_and_v1_headers_execute_equivalently(void);
+void test_interpret_legacy_conversion_semantics(void);
 void test_runtime_jump_diagnostic_uses_absolute_header_offset(void);
 void test_interpret_result_semantics(void);
 void test_runtime_build_list_allocation_failure_consumes_inputs(void);
@@ -427,7 +434,8 @@ static const test_case_t core_tests[] = {
     {"test_save_itemsource_reports_write_and_close_failure", test_save_itemsource_reports_write_and_close_failure},
     {"test_itemstore_durability_modes", test_itemstore_durability_modes},
     {"test_itemstore_large_load_presizes_child_storage", test_itemstore_large_load_presizes_child_storage},
-    {"test_sconv_v1_to_v2_preserves_code", test_sconv_v1_to_v2_preserves_code},
+    {"test_sconv_v1_to_v2_migrates_legacy_code", test_sconv_v1_to_v2_migrates_legacy_code},
+    {"test_sconv_mixed_code_tree_and_failure_atomicity", test_sconv_mixed_code_tree_and_failure_atomicity},
     {"test_sconv_v2_canonical_and_invocation_modes", test_sconv_v2_canonical_and_invocation_modes},
     {"test_sconv_collisions_aliases_and_replace", test_sconv_collisions_aliases_and_replace},
     {"test_sconv_rejects_bad_inputs_and_durability_failure", test_sconv_rejects_bad_inputs_and_durability_failure},
@@ -516,6 +524,11 @@ static const test_case_t compiler_tests[] = {
     {"test_bytecode_verify_compiler_emitted_bytecode", test_bytecode_verify_compiler_emitted_bytecode},
     {"test_bytecode_wire_boundary_vectors", test_bytecode_wire_boundary_vectors},
     {"test_bytecode_wire_subsystems_agree", test_bytecode_wire_subsystems_agree},
+    {"test_bytecode_convert_legacy_and_v1", test_bytecode_convert_legacy_and_v1},
+    {"test_bytecode_convert_malformed_matrix", test_bytecode_convert_malformed_matrix},
+    {"test_bytecode_convert_v1_idempotent", test_bytecode_convert_v1_idempotent},
+    {"test_bytecode_convert_legacy_token_boundaries", test_bytecode_convert_legacy_token_boundaries},
+    {"test_bytecode_convert_allocation_failures", test_bytecode_convert_allocation_failures},
     {"test_pipeline_golden", test_pipeline_golden},
     {"test_pipeline_large_local_lookup_duplicate", test_pipeline_large_local_lookup_duplicate},
     {"test_pipeline_source_golden", test_pipeline_source_golden},
@@ -548,6 +561,7 @@ static const test_case_t runtime_tests[] = {
     {"test_strict_validation_rejects_null_bytecode", test_strict_validation_rejects_null_bytecode},
     {"test_interpret_semantics_golden", test_interpret_semantics_golden},
     {"test_interpret_legacy_and_v1_headers_execute_equivalently", test_interpret_legacy_and_v1_headers_execute_equivalently},
+    {"test_interpret_legacy_conversion_semantics", test_interpret_legacy_conversion_semantics},
     {"test_runtime_jump_diagnostic_uses_absolute_header_offset", test_runtime_jump_diagnostic_uses_absolute_header_offset},
     {"test_interpret_result_semantics", test_interpret_result_semantics},
     {"test_runtime_build_list_allocation_failure_consumes_inputs", test_runtime_build_list_allocation_failure_consumes_inputs},

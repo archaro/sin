@@ -1,0 +1,4 @@
+# SOT: exact expected conversion of legacy-0.7.1.hex | regen: manual
+# M expands from 2 to 3 bytes; entry jump becomes +0x36 and backward jump -50
+# (0xffce), using operand-relative displacements.
+00ff534201000100 6A3600 700000000000000000 500000000000000000 6C0300616263 5B01000000 494C017844560045425000000300737263 4D0100 6ACEFF 68

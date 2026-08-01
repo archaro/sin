@@ -24,6 +24,7 @@
 #include "memory.h"
 #include "log.h"
 #include "item_internal.h"
+#include "bytecode_convert.h"
 #include "item_persist_internal.h"
 #include "string_limits.h"
 #include "list.h"
@@ -715,6 +716,74 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
            input_filename);
     return ITEMSTORE_CONVERT_FAILURE;
   }
+
+  /* Prepare every code payload before mutating the loaded tree or publishing
+   * the destination.  This keeps conversion failure atomic. */
+  typedef struct Prepared {
+    ITEM_t *item;
+    uint8_t *data;
+    uint32_t len;
+  } Prepared;
+  Prepared *prepared = NULL;
+  size_t prepared_count = 0;
+  size_t prepared_cap = 0;
+  ITEM_t **stack = NULL;
+  size_t stack_count = 0;
+  size_t stack_cap = 0;
+  if (!alloc_grow_array_capacity((void **)&stack, &stack_cap, 1u,
+                                 sizeof *stack)) {
+    destroy_item(root);
+    return ITEMSTORE_CONVERT_FAILURE;
+  }
+  stack[stack_count++] = root;
+  while (stack_count > 0) {
+    ITEM_t *item = stack[--stack_count];
+    if (item->type == ITEM_code) {
+      BC_ConvertResult converted =
+          bc_convert_latest(item->bytecode, item->bytecode_len);
+      if (converted.status != BC_CONVERT_SUCCESS) {
+        logerr("Failed to migrate bytecode item '%s' (status %d).\n",
+               item->name, (int)converted.status);
+        for (size_t i = 0; i < prepared_count; i++) free(prepared[i].data);
+        free(prepared);
+        free(stack);
+        destroy_item(root);
+        return ITEMSTORE_CONVERT_FAILURE;
+      }
+      if (prepared_count == prepared_cap &&
+          !alloc_grow_array_capacity((void **)&prepared, &prepared_cap,
+                                     prepared_count + 1u,
+                                     sizeof *prepared)) {
+        free(converted.data);
+        for (size_t i = 0; i < prepared_count; i++) free(prepared[i].data);
+        free(prepared);
+        free(stack);
+        destroy_item(root);
+        return ITEMSTORE_CONVERT_FAILURE;
+      }
+      prepared[prepared_count++] =
+          (Prepared){item, converted.data, converted.length};
+    }
+    for (size_t i = 0; i < item_children_count(item->children); i++) {
+      if (stack_count == stack_cap &&
+          !alloc_grow_array_capacity((void **)&stack, &stack_cap,
+                                     stack_count + 1u, sizeof *stack)) {
+        for (size_t j = 0; j < prepared_count; j++) free(prepared[j].data);
+        free(prepared);
+        free(stack);
+        destroy_item(root);
+        return ITEMSTORE_CONVERT_FAILURE;
+      }
+      stack[stack_count++] = item_children_at(item->children, i);
+    }
+  }
+  for (size_t i = 0; i < prepared_count; i++) {
+    free(prepared[i].item->bytecode);
+    prepared[i].item->bytecode = prepared[i].data;
+    prepared[i].item->bytecode_len = prepared[i].len;
+  }
+  free(prepared);
+  free(stack);
 
   ITEMSTORE_SAVE_RESULT_e save_result = replace
       ? (save_itemstore_with_options(output_filename, root, durability)

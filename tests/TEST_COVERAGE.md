@@ -9,11 +9,17 @@ nested rendering, escaping, explicit failure statuses, and debug truncation.
 This document maps major subsystems to concrete test entry points so reviewers
 can quickly verify what is covered and what remains intentionally out of scope.
 
-`test_sconv_v1_to_v2_preserves_code`, `test_sconv_v2_canonical_and_invocation_modes`,
+`test_sconv_v1_to_v2_migrates_legacy_code`, `test_sconv_mixed_code_tree_and_failure_atomicity`,
+`test_sconv_v2_canonical_and_invocation_modes`,
 `test_sconv_collisions_aliases_and_replace`, and
 `test_sconv_rejects_bad_inputs_and_durability_failure` exercise converter
 argument parsing, v1/v2 canonical conversion, atomic publication modes,
 durability selection, malformed headers, and same-file safety.
+
+Bytecode migration coverage includes historical fixed-width/nested/embedded
+operands, permanent libcall-pair widening and jump relocation, strict output
+verification, v1 byte-idempotence, malformed-input rejection, and mixed-tree
+atomic publication checks.
 
 Phase 13 adds the two-run `list-itemref-persist` interpreter golden, three
 itemstore hex seed classes (v1, valid nested-list/reference v2, malformed

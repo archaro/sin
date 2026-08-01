@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "bytecode_verify.h"
 #include "error.h"
 #include "item_internal.h"
 #include "itemref.h"
@@ -49,7 +50,7 @@ static void write_v1_value(FILE *f, const char *name, int64_t value) {
   write_u32(f, 0);
 }
 
-void test_sconv_v1_to_v2_preserves_code(void) {
+void test_sconv_v1_to_v2_migrates_legacy_code(void) {
   char input[64], output[64];
   temp_path(input, sizeof input, "sconv-v1");
   temp_path(output, sizeof output, "sconv-out");
@@ -67,8 +68,8 @@ void test_sconv_v1_to_v2_preserves_code(void) {
   put_u8(f, 7);
   ASSERT_EQ_INT(7, fwrite("program", 1, 7, f));
   put_u8(f, 2);
-  write_u32(f, 3);
-  ASSERT_EQ_INT(3, fwrite("\0\0X", 1, 3, f));
+  write_u32(f, 6);
+  ASSERT_EQ_INT(6, fwrite("\1\0b\1Qh", 1, 6, f));
   write_u32(f, 0);
   ASSERT_EQ_INT(0, fclose(f));
   ASSERT_EQ_INT(
@@ -94,9 +95,87 @@ void test_sconv_v1_to_v2_preserves_code(void) {
   ASSERT_EQ_INT(VALUE_int, first->value.type);
   ASSERT_EQ_INT(7, first->value.i);
   ASSERT_TRUE(strcmp(program->name, "program") == 0);
-  ASSERT_EQ_INT(3, program->bytecode_len);
-  ASSERT_TRUE(memcmp(program->bytecode, "\0\0X", 3) == 0);
+  ASSERT_EQ_INT(12, program->bytecode_len);
+  ASSERT_TRUE(memcmp(program->bytecode, "\0\xffSB\1\0\1\0b\1Qh", 12) == 0);
   destroy_item(loaded);
+  ASSERT_EQ_INT(0, unlink(input));
+  ASSERT_EQ_INT(0, unlink(output));
+}
+
+void test_sconv_mixed_code_tree_and_failure_atomicity(void) {
+  char input[64], output[64];
+  temp_path(input, sizeof input, "sconv-mixed");
+  temp_path(output, sizeof output, "sconv-mixed-out");
+  const uint8_t legacy[] = {1, 0, 'b', 1, 'Q', 'h'};
+  const uint8_t v1[] = {0, 0xff, 'S', 'B', 1, 0, 1, 0, 'b', 1, 'Q', 'h'};
+  ITEM_t *source = make_root_item("root");
+  ASSERT_NOT_NULL(source);
+  uint8_t *legacy_copy = malloc(sizeof legacy);
+  uint8_t *v1_copy = malloc(sizeof v1);
+  ASSERT_NOT_NULL(legacy_copy);
+  ASSERT_NOT_NULL(v1_copy);
+  memcpy(legacy_copy, legacy, sizeof legacy);
+  memcpy(v1_copy, v1, sizeof v1);
+  ASSERT_NOT_NULL(make_item("legacy", source, ITEM_code, VALUE_NIL, legacy_copy,
+                            sizeof legacy));
+  ASSERT_NOT_NULL(
+      make_item("versioned", source, ITEM_code, VALUE_NIL, v1_copy, sizeof v1));
+  ASSERT_TRUE(
+      save_itemstore_with_options(input, source, ITEMSTORE_DURABLE_FAST));
+  destroy_item(source);
+  ASSERT_EQ_INT(
+      ITEMSTORE_CONVERT_SUCCESS,
+      itemstore_convert(input, output, ITEMSTORE_DURABLE_FAST, false));
+  ITEM_t *root = load_itemstore_with_options(output, false);
+  ASSERT_NOT_NULL(root);
+  ITEM_t *legacy_item = find_item(root, "legacy");
+  ITEM_t *versioned_item = find_item(root, "versioned");
+  ASSERT_NOT_NULL(legacy_item);
+  ASSERT_NOT_NULL(versioned_item);
+  ASSERT_EQ_INT(12, legacy_item->bytecode_len);
+  ASSERT_EQ_INT(12, versioned_item->bytecode_len);
+  ASSERT_TRUE(memcmp(legacy_item->bytecode, versioned_item->bytecode, 12) == 0);
+  BC_VerifyOptions strict = bc_verify_strict_options();
+  ASSERT_EQ_INT(BC_VERIFY_OK, bc_verify_bytecode(legacy_item->bytecode,
+                                                 legacy_item->bytecode_len,
+                                                 "legacy output", &strict)
+                                  .status);
+  ASSERT_EQ_INT(BC_VERIFY_OK, bc_verify_bytecode(versioned_item->bytecode,
+                                                 versioned_item->bytecode_len,
+                                                 "v1 output", &strict)
+                                  .status);
+  destroy_item(root);
+
+  FILE *f = fopen(output, "wb");
+  ASSERT_NOT_NULL(f);
+  ASSERT_EQ_INT(8, fwrite("sentinel", 1, 8, f));
+  ASSERT_EQ_INT(0, fclose(f));
+  /* An unrecognized opcode in one sibling must not publish partial results. */
+  source = make_root_item("root");
+  ASSERT_NOT_NULL(source);
+  legacy_copy = malloc(sizeof legacy);
+  ASSERT_NOT_NULL(legacy_copy);
+  memcpy(legacy_copy, legacy, sizeof legacy);
+  uint8_t *invalid = malloc(3);
+  ASSERT_NOT_NULL(invalid);
+  memcpy(invalid, "!h\0", 3);
+  ASSERT_NOT_NULL(
+      make_item("invalid", source, ITEM_code, VALUE_NIL, invalid, 2));
+  /* Invalid is inserted first so LIFO traversal processes valid first and
+   * proves prepared successful data is discarded after the later failure. */
+  ASSERT_NOT_NULL(make_item("valid", source, ITEM_code, VALUE_NIL, legacy_copy,
+                            sizeof legacy));
+  ASSERT_TRUE(
+      save_itemstore_with_options(input, source, ITEMSTORE_DURABLE_FAST));
+  destroy_item(source);
+  ASSERT_EQ_INT(ITEMSTORE_CONVERT_FAILURE,
+                itemstore_convert(input, output, ITEMSTORE_DURABLE_FAST, true));
+  f = fopen(output, "rb");
+  ASSERT_NOT_NULL(f);
+  char sentinel[8];
+  ASSERT_EQ_INT(8, fread(sentinel, 1, 8, f));
+  ASSERT_EQ_INT(0, fclose(f));
+  ASSERT_TRUE(memcmp(sentinel, "sentinel", 8) == 0);
   ASSERT_EQ_INT(0, unlink(input));
   ASSERT_EQ_INT(0, unlink(output));
 }
@@ -120,10 +199,10 @@ void test_sconv_v2_canonical_and_invocation_modes(void) {
   ASSERT_NOT_NULL(make_item("payload", root, ITEM_value,
                             (VALUE_t){.type = VALUE_list, .list = list}, NULL,
                             0));
-  uint8_t *code = malloc(3);
+  uint8_t *code = malloc(9);
   ASSERT_NOT_NULL(code);
-  memcpy(code, "\0\0Z", 3);
-  ASSERT_NOT_NULL(make_item("program", root, ITEM_code, VALUE_NIL, code, 3));
+  memcpy(code, "\0\xffSB\1\0\0\0h", 9);
+  ASSERT_NOT_NULL(make_item("program", root, ITEM_code, VALUE_NIL, code, 9));
   ASSERT_TRUE(save_itemstore_with_options(input, root, ITEMSTORE_DURABLE_FAST));
   destroy_item(root);
   char *missing_argv[] = {"./sconv", "-i", input, NULL};

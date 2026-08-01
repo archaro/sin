@@ -8,6 +8,7 @@
 
 #include "config.h"
 #include "compiler/compiler_pipeline.h"
+#include "bytecode_convert.h"
 #include "error.h"
 #include "interpret.h"
 #include "item.h"
@@ -639,6 +640,49 @@ void test_interpret_legacy_and_v1_headers_execute_equivalently(void) {
   value_free(&av); value_free(&bv);
   runtime_destroy(&ctx);
   teardown_result_semantics_runtime();
+}
+
+void test_interpret_legacy_conversion_semantics(void) {
+  const uint8_t legacy[] = {1, 0, 'b', 1, 'Q', 'h'};
+  VALUE_t direct;
+  VALUE_t converted_value;
+
+  setup_result_semantics_runtime();
+  uint8_t *direct_bytes = malloc(sizeof legacy);
+  ASSERT_NOT_NULL(direct_bytes);
+  memcpy(direct_bytes, legacy, sizeof legacy);
+  ITEM_t *direct_item = test_item_set_code(
+      itemstore_root(config.itemstore_ctx), "legacy_direct", sizeof legacy,
+      direct_bytes);
+  ASSERT_NOT_NULL(direct_item);
+  RuntimeContext direct_ctx;
+  runtime_context_init(&direct_ctx, config.vm);
+  direct_ctx.itemstore = config.itemstore_ctx;
+  direct = interpret(&direct_ctx, direct_item);
+  runtime_destroy(&direct_ctx);
+  teardown_result_semantics_runtime();
+
+  BC_ConvertResult conversion = bc_convert_latest(legacy, sizeof legacy);
+  ASSERT_EQ_INT(BC_CONVERT_SUCCESS, conversion.status);
+  setup_result_semantics_runtime();
+  ITEM_t *converted_item = test_item_set_code(
+      itemstore_root(config.itemstore_ctx), "legacy_converted",
+      (uint32_t)conversion.length, conversion.data);
+  ASSERT_NOT_NULL(converted_item);
+  conversion.data = NULL;
+  RuntimeContext converted_ctx;
+  runtime_context_init(&converted_ctx, config.vm);
+  converted_ctx.itemstore = config.itemstore_ctx;
+  converted_value = interpret(&converted_ctx, converted_item);
+  runtime_destroy(&converted_ctx);
+  teardown_result_semantics_runtime();
+
+  ASSERT_EQ_INT(VALUE_bool, direct.type);
+  ASSERT_EQ_INT(VALUE_bool, converted_value.type);
+  ASSERT_EQ_INT(direct.i ? 1 : 0, converted_value.i ? 1 : 0);
+  value_free(&direct);
+  value_free(&converted_value);
+  bc_convert_result_free(&conversion);
 }
 
 void test_runtime_jump_diagnostic_uses_absolute_header_offset(void) {

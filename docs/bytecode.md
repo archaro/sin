@@ -5,10 +5,10 @@ The IR opcode metadata in `src/compiler/ir/opcode_schema.def` is the source of
 truth for opcode symbols, operand kinds, size policies, validators, and runtime
 handler requirements.
 
-Newly compiled code uses bytecode format v1. Legacy unversioned blocks are
-accepted temporarily as pre-v1 little-endian migration input and begin with
-the two-byte locals/parameters header; they will be converted by the eventual
-`sconv` migration tool.
+Newly compiled code uses bytecode format v1. Bytecode v1 and later versions are
+retained as the compatibility contract. The unversioned 0.7.1 little-endian
+layout is supported only as a one-time migration bridge in `sconv`; it has no
+ongoing compatibility promise.
 
 ## v1 compatibility contract
 

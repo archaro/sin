@@ -76,6 +76,8 @@ void test_fixture_policy_declared_goldens_exist(void) {
       {"itemstore_v1_valid_hex", "tests/fixtures/itemstore/v1-valid.hex", "SOT: hand-authored v1 itemstore wire seed | regen: sed '/^[[:space:]]*#/d' tests/fixtures/itemstore/v1-valid.hex | xxd -r -p"},
       {"itemstore_v2_nested_ref_valid_hex", "tests/fixtures/itemstore/v2-nested-ref-valid.hex", "SOT: hand-authored v2 nested list/reference wire seed | regen: sed '/^[[:space:]]*#/d' tests/fixtures/itemstore/v2-nested-ref-valid.hex | xxd -r -p"},
       {"itemstore_v2_nested_recursive_malformed_hex", "tests/fixtures/itemstore/v2-nested-recursive-malformed.hex", "SOT: hand-authored malformed v2 recursive-list wire seed | regen: sed '/^[[:space:]]*#/d' tests/fixtures/itemstore/v2-nested-recursive-malformed.hex | xxd -r -p"},
+      {"bytecode_migration_legacy_hex", "tests/fixtures/bytecode-migration/legacy-0.7.1.hex", "SOT: historical 0.7.1 bytecode | regen: manual"},
+      {"bytecode_migration_v1_hex", "tests/fixtures/bytecode-migration/v1.hex", "SOT: exact expected conversion of legacy-0.7.1.hex | regen: manual"},
   };
 
   static const FixtureEntry interpret_output_fixtures[] = {
