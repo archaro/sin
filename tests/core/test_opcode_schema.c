@@ -15,6 +15,12 @@ void test_opcode_schema_consistency(void) {
     ASSERT_TRUE(meta->size_policy >= SIZE_FIXED_0 && meta->size_policy <= SIZE_ITEM_SAVE_CODE);
     ASSERT_TRUE(meta->validator >= VALIDATE_NONE && meta->validator <= VALIDATE_EMBEDDED_INDEX);
     ASSERT_TRUE(meta->operand_kind >= OPERAND_NONE && meta->operand_kind <= OPERAND_EMBEDDED_ID);
+    ASSERT_TRUE(meta->stack_pops >= 0 && meta->stack_pushes >= 0);
+    ASSERT_TRUE(meta->stack_policy >= IR_STACK_FIXED && meta->stack_policy <= IR_STACK_BUILD_LIST);
+    ASSERT_TRUE(meta->control_class >= IR_CONTROL_STRAIGHT && meta->control_class <= IR_CONTROL_IR_ONLY);
+    const BC_OpcodeSchema *bc = bc_opcode_for_ir(meta->op);
+    ASSERT_NOT_NULL(bc);
+    ASSERT_EQ_INT(meta->stack_policy != IR_STACK_FIXED, bc->stack_effect.operand_dependent);
     if (meta->requires_runtime_handler) ASSERT_NOT_NULL(meta->runtime_handler_name);
     else ASSERT_TRUE(meta->runtime_handler_name == NULL);
     if (meta->op == IR_OP_LABEL) ASSERT_EQ_INT(0, meta->encoded_symbol);

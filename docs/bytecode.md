@@ -10,6 +10,14 @@ accepted temporarily as pre-v1 little-endian migration input and begin with
 the two-byte locals/parameters header; they will be converted by the eventual
 `sconv` migration tool.
 
+## v1 compatibility contract
+
+The v1 opcode ABI is frozen. Encoded bytes, operand layouts, context validity,
+stack effects, and control/termination classes are immutable. Bytes not assigned
+by the frozen manifest are reserved and invalid; removing an operation leaves
+its byte reserved forever. Any new or changed instruction requires a newer
+bytecode version rather than editing the v1 manifest.
+
 ## Code block layout
 
 Every newly compiled code item starts with an eight-byte self-identifying v1
@@ -74,8 +82,38 @@ SIN_LIST_MAX_ELEMENTS. One-byte fields are unchanged.
 
 ## Opcode reference
 
+Compiler source operands and arguments are evaluated left-to-right. Binary VM
+instructions consume the RHS from the top of the stack and the LHS immediately
+below it. `CALL`, `LIBCALL`, and `BUILD_LIST` have operand-dependent stack
+effects: calls consume the item name plus their argument count, libcalls consume
+the registered pair's argument count, and list construction consumes its
+encoded element count before pushing one result. `HALT` and `RETURN` terminate
+execution within the current instruction stream; jumps and conditional jumps
+are the only non-linear verifier control-flow edges (the shared `F` primitive
+may transfer to a callee as part of normal runtime execution).
+
 All opcodes are single-byte symbols. Some opcodes are followed by immediate
 arguments as described below.
+
+| Operation(s) | Stack (pops → pushes) | Control |
+| --- | --- | --- |
+| `HALT` | `0 → 0` | terminating |
+| `RETURN` | `1 → 0` | terminating |
+| `PUSH_INT`, `PUSH_FLOAT`, `PUSH_BOOL`, `PUSH_STRING`, `PUSH_NIL`, `LOAD_LOCAL`, `ITEM_BEGIN`, `ITEM_BEGIN_REL` | `0 → 1` | straight-line |
+| `ADD`, `SUB`, `MUL`, `DIV`, `MOD`, `EQ`, `NEQ`, `LT`, `GT`, `LE`, `GE`, `AND`, `OR` | `2 → 1` | straight-line |
+| `NEG`, `NOT`, `ITEM_DEREF`, `MAKE_ITEMREF` | `1 → 1` | straight-line |
+| `DISCARD`, `STORE_LOCAL`, `ITEM_SAVE_CODE` | `1 → 0` | straight-line |
+| `JUMP_IF_FALSE` | `1 → 0` | conditional branch |
+| `INC_LOCAL`, `DEC_LOCAL` | `0 → 0` | straight-line |
+| `JUMP` | `0 → 0` | jump |
+| `ITEM_PUSH_LAYER`, `ITEM_PUSH_DEREF`, `ITEM_PUSH_DEREF_LOCAL`, `ITEM_END` | `0 → 0` | straight-line (encoded item-expression payload) |
+| `ITEM_SAVE` | `2 → 0` | straight-line |
+| `CALL` | `count + 1 → 1` | straight-line |
+| `LIBCALL` | `registered arity → 1` | straight-line |
+| `BUILD_LIST` | `count → 1` | straight-line |
+
+Rows without an opcode-specific error clause have no opcode-specific runtime
+error. Malformed or truncated encodings are verifier errors.
 
 | Opcode | IR opcode(s) | Immediate bytes | Description |
 | --- | --- | --- | --- |

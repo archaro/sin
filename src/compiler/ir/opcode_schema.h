@@ -45,6 +45,21 @@ typedef enum {
   VALIDATE_EMBEDDED_INDEX
 } IR_Validator;
 
+typedef enum {
+  IR_STACK_FIXED = 0,
+  IR_STACK_CALL,
+  IR_STACK_LIBCALL,
+  IR_STACK_BUILD_LIST
+} IR_StackPolicy;
+
+typedef enum {
+  IR_CONTROL_STRAIGHT = 0,
+  IR_CONTROL_JUMP,
+  IR_CONTROL_CONDITIONAL,
+  IR_CONTROL_TERMINATING,
+  IR_CONTROL_IR_ONLY
+} IR_ControlClass;
+
 typedef struct {
   IR_Op op;
   const char *name;
@@ -54,6 +69,10 @@ typedef struct {
   IR_SizePolicy size_policy;
   IR_Validator validator;
   const char *runtime_handler_name;
+  int8_t stack_pops;
+  int8_t stack_pushes;
+  IR_StackPolicy stack_policy;
+  IR_ControlClass control_class;
 } IR_OpSchema;
 
 extern const IR_OpSchema g_ir_opcode_schema[];

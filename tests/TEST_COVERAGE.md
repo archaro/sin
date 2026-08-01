@@ -179,6 +179,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   - `tests/compiler/test_emitbc_all_ir_ops_accounted_for.c`
     - `test_emitbc_all_ir_ops_accounted_for` (inventory guard for
       IR-op/schema coverage drift)
+  - `tests/compiler/test_bytecode_v1_abi.c`
+    - independent frozen v1 opcode bytes, operand encodings, contexts, stack
+      effects, control classes, dynamic CALL/LIBCALL/BUILD_LIST effects, and
+      shared `F`
   - `tests/compiler/test_bytecode_verify.c`
     - full-buffer terminator decoding, malformed later bytes, RETURN stack
       underflow, post-terminator jump targets, and conflicting reachable

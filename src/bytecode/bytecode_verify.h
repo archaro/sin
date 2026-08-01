@@ -49,6 +49,7 @@ typedef struct {
   bool valid_in_item_expression;
   bool valid_in_dereference;
   BC_StackEffect stack_effect;
+  IR_ControlClass control_flow;
   bool terminates;
   bool valid_top_level;
   bool item_assembly_only;

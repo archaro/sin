@@ -96,6 +96,7 @@ void test_sem_local_limit_255_is_accepted(void);
 void test_sem_local_limit_over_255_fails_deterministically(void);
 void test_ir_validate(void);
 void test_opcode_schema_consistency(void);
+void test_bytecode_v1_abi_manifest(void);
 void test_bytecode_verify_item_expression_streams(void);
 void test_bytecode_verify_local_index_bounds(void);
 void test_bytecode_verify_jump_targets(void);
@@ -491,6 +492,7 @@ static const test_case_t compiler_tests[] = {
     {"test_emitbc_header", test_emitbc_header},
     {"test_sdiss_legacy_and_v1_headers_report_absolute_offsets", test_sdiss_legacy_and_v1_headers_report_absolute_offsets},
     {"test_emitbc_opcode_map", test_emitbc_opcode_map},
+    {"test_bytecode_v1_abi_manifest", test_bytecode_v1_abi_manifest},
     {"test_emitbc_lists_and_itemrefs_emission", test_emitbc_lists_and_itemrefs_emission},
     {"test_emitbc_push_int_immediate_layout", test_emitbc_push_int_immediate_layout},
     {"test_emitbc_push_float_immediate_layout", test_emitbc_push_float_immediate_layout},

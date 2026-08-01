@@ -190,7 +190,9 @@ item data. Crossings between them should be explicit. Examples:
   `sys`, `task`, `net`, `str`, and `list` handlers in their respective files.
 - Keep low-level, itemstore, task, stack, value, and libcall tests under
   `tests/core/` (including `test_libcall_sys_compile.c`, the runtime
-  integration coverage for `sys.compile`); compiler and disassembler tests under `tests/compiler/`; and
+  integration coverage for `sys.compile`); compiler and disassembler tests under
+  `tests/compiler/` (including `test_bytecode_v1_abi.c`, the independent frozen
+  opcode ABI oracle); and
   interpreter semantic/stress/benchmark tests under `tests/interpreter/`.
 - The dedicated network harnesses live under `tests/network/`: one uses local
   libuv/libtelnet stubs and the other runs the chat example over localhost.

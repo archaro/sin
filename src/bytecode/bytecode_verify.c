@@ -180,40 +180,6 @@ static BC_OperandKind bc_operand_encoding_from_ir(const IR_OpSchema *s) {
   return BC_OPERAND_NONE;
 }
 
-static BC_StackEffect bc_base_stack_effect(IR_Op op) {
-  switch (op) {
-    case IR_OP_PUSH_INT: case IR_OP_PUSH_FLOAT: case IR_OP_PUSH_BOOL:
-    case IR_OP_PUSH_STRING: case IR_OP_PUSH_NIL: case IR_OP_LOAD_LOCAL: case IR_OP_ITEM_BEGIN:
-    case IR_OP_ITEM_BEGIN_REL:
-      return (BC_StackEffect){0, 1, false};
-    case IR_OP_LIBCALL:
-      return (BC_StackEffect){0, 1, true};
-    case IR_OP_ADD: case IR_OP_SUB: case IR_OP_MUL: case IR_OP_DIV: case IR_OP_MOD:
-    case IR_OP_EQ: case IR_OP_NEQ: case IR_OP_LT: case IR_OP_GT:
-    case IR_OP_LE: case IR_OP_GE: case IR_OP_AND: case IR_OP_OR:
-      return (BC_StackEffect){2, 1, false};
-    case IR_OP_NEG: case IR_OP_NOT:
-    case IR_OP_ITEM_DEREF:
-      return (BC_StackEffect){1, 1, false};
-    case IR_OP_RETURN:
-      return (BC_StackEffect){1, 0, false};
-    case IR_OP_DISCARD:
-    case IR_OP_STORE_LOCAL: case IR_OP_JUMP_IF_FALSE:
-    case IR_OP_ITEM_SAVE_CODE:
-      return (BC_StackEffect){1, 0, false};
-    case IR_OP_BUILD_LIST:
-      return (BC_StackEffect){0, 1, true};
-    case IR_OP_MAKE_ITEMREF:
-      return (BC_StackEffect){1, 1, false};
-    case IR_OP_ITEM_SAVE:
-      return (BC_StackEffect){2, 0, false};
-    case IR_OP_CALL:
-      return (BC_StackEffect){1, 1, true};
-    default:
-      return (BC_StackEffect){0, 0, false};
-  }
-}
-
 static bool bc_valid_context(IR_Op op, BC_Context ctx) {
   switch (op) {
     case IR_OP_ITEM_PUSH_LAYER:
@@ -241,8 +207,10 @@ static BC_OpcodeSchema bc_make_schema(const IR_OpSchema *s) {
     out.valid_in_statement = bc_valid_context(s->op, BC_CONTEXT_STATEMENT);
     out.valid_in_item_expression = bc_valid_context(s->op, BC_CONTEXT_ITEM_EXPRESSION);
     out.valid_in_dereference = bc_valid_context(s->op, BC_CONTEXT_DEREFERENCE);
-    out.stack_effect = bc_base_stack_effect(s->op);
-    out.terminates = s->op == IR_OP_HALT || s->op == IR_OP_RETURN;
+    out.stack_effect = (BC_StackEffect){s->stack_pops, s->stack_pushes,
+                                        s->stack_policy != IR_STACK_FIXED};
+    out.control_flow = s->control_class;
+    out.terminates = out.control_flow == IR_CONTROL_TERMINATING;
     out.valid_top_level = out.valid_in_statement;
     out.item_assembly_only = out.valid_in_item_expression || out.valid_in_dereference;
   }
@@ -286,17 +254,18 @@ const char *bc_opcode_mnemonic(const BC_OpcodeSchema *schema) {
 BC_StackEffect bc_opcode_stack_effect(const BC_OpcodeSchema *schema,
                                       uint32_t operand_u32) {
   BC_StackEffect effect = schema ? schema->stack_effect : (BC_StackEffect){0, 0, false};
-  if (schema && schema->ir && schema->ir->op == IR_OP_CALL) {
+  if (schema && schema->ir && schema->ir->stack_policy == IR_STACK_CALL) {
     effect.pops = (int)operand_u32 + 1;
     effect.operand_dependent = false;
   } else if (schema && schema->ir &&
-             schema->ir->op == IR_OP_LIBCALL) {
+             schema->ir->stack_policy == IR_STACK_LIBCALL) {
     uint8_t args = 0;
     if (libcall_pair_arg_count((uint8_t)(operand_u32 >> 8), (uint8_t)operand_u32, &args)) {
       effect.pops = args;
     }
     effect.operand_dependent = false;
-  } else if (schema && schema->ir && schema->ir->op == IR_OP_BUILD_LIST) {
+  } else if (schema && schema->ir &&
+             schema->ir->stack_policy == IR_STACK_BUILD_LIST) {
     effect.pops = (int)operand_u32;
     effect.operand_dependent = false;
   }
@@ -448,7 +417,8 @@ static int bc_verify_stack_flow(BC_Decoder *d, uint8_t params) {
       free(work);
       return bc_fail(d, d->base + offset, meta->opcode, msg);
     }
-    if (meta->op == IR_OP_RETURN) {
+    const BC_OpcodeSchema *schema = bc_opcode_for_ir(meta->op);
+    if (schema && meta->op == IR_OP_RETURN) {
       if (in_depth != params + 1) {
         free(depths);
         free(work);
@@ -457,8 +427,9 @@ static int bc_verify_stack_flow(BC_Decoder *d, uint8_t params) {
       }
       continue;
     }
-    if (meta->op == IR_OP_HALT) continue;
-    if (meta->op == IR_OP_JUMP || meta->op == IR_OP_JUMP_IF_FALSE) {
+    if (schema && schema->control_flow == IR_CONTROL_TERMINATING) continue;
+    if (schema && (schema->control_flow == IR_CONTROL_JUMP ||
+                   schema->control_flow == IR_CONTROL_CONDITIONAL)) {
       int16_t rel = bc_wire_i16_from_bits((uint16_t)meta->operand_u32);
       uint32_t operand_offset = offset + 1;
       uint32_t target = (uint32_t)((int64_t)operand_offset + rel);
@@ -468,7 +439,7 @@ static int bc_verify_stack_flow(BC_Decoder *d, uint8_t params) {
         free(work);
         return 0;
       }
-      if (meta->op == IR_OP_JUMP) continue;
+      if (schema->control_flow == IR_CONTROL_JUMP) continue;
     }
     if (meta->next_offset < (uint32_t)(d->end - d->base)) {
       if (!bc_enqueue_stack_depth(d, depths, work, &work_count, meta->next_offset,

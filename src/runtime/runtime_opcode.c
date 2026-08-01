@@ -16,7 +16,7 @@
   DECLARE_RUNTIME_OPCODE_##REQUIRES_RUNTIME_HANDLER(handler_fn)
 #define DECLARE_RUNTIME_OPCODE_SELECT(REQUIRES_RUNTIME_HANDLER, handler_fn) \
   DECLARE_RUNTIME_OPCODE(REQUIRES_RUNTIME_HANDLER, handler_fn)
-#define OP(enum_name, encoded_symbol, requires_runtime_handler, operand_kind, size_policy, validator, handler_fn) \
+#define OP(enum_name, encoded_symbol, requires_runtime_handler, operand_kind, size_policy, validator, handler_fn, stack_meta, control_class) \
   DECLARE_RUNTIME_OPCODE_SELECT(requires_runtime_handler, handler_fn)
 #include "compiler/ir/opcode_schema.def"
 #undef OP
@@ -56,7 +56,7 @@ void runtime_opcode_bind_table(RuntimeContext *ctx) {
   BIND_RUNTIME_OPCODE_##REQUIRES_RUNTIME_HANDLER(opcode_byte, handler_fn)
 #define BIND_RUNTIME_OPCODE_SELECT(REQUIRES_RUNTIME_HANDLER, opcode_byte, handler_fn) \
   BIND_RUNTIME_OPCODE(REQUIRES_RUNTIME_HANDLER, opcode_byte, handler_fn)
-#define OP(enum_name, encoded_symbol, requires_runtime_handler, operand_kind, size_policy, validator, handler_fn) \
+#define OP(enum_name, encoded_symbol, requires_runtime_handler, operand_kind, size_policy, validator, handler_fn, stack_meta, control_class) \
   BIND_RUNTIME_OPCODE_SELECT(requires_runtime_handler, encoded_symbol, handler_fn)
 #include "compiler/ir/opcode_schema.def"
 #undef OP
