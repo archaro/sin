@@ -13,13 +13,12 @@
 #include "vm.h"
 #include "interpret.h"
 #include "runtime_context.h"
+#include "compiler/compiler_pipeline.h"
+#include "error.h"
 #include "list.h"
 #include "itemref.h"
 #include "item_persist_internal.h"
 #include "test_assert.h"
-
-extern uint8_t *op_build_list(RuntimeContext *ctx, uint8_t *nextop,
-                              ITEM_t *item);
 
 static uint64_t now_ns(void) {
   struct timespec ts;
@@ -74,31 +73,64 @@ static SIN_LIST_t *bench_make_list(size_t count) {
   return list;
 }
 
-static uint64_t bench_runtime_build_list(size_t count, size_t iters,
-                                         volatile uintptr_t *sink) {
+static ITEM_t *bench_compile_item(ITEMSTORE_t *store, const char *name,
+                                  const char *source, const char **params,
+                                  size_t param_count) {
+  OUTPUT_t *output = NULL;
+  char *errdetail = NULL;
+  int8_t rc = compile_source_to_bytecode_with_params(
+      source, strlen(source), params, param_count, &output, &errdetail);
+  if (rc != ERR_NOERROR) {
+    fprintf(stderr, "[benchmark compile] %s: %s\n", name,
+            errdetail == NULL ? "<no detail>" : errdetail);
+  }
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_NOT_NULL(output);
+  ASSERT_NOT_NULL(output->bytecode);
+  size_t length = (size_t)(output->nextbyte - output->bytecode);
+  ASSERT_TRUE(length <= UINT32_MAX);
+  uint8_t *bytecode = output->bytecode;
+  output->bytecode = NULL;
+  ITEM_t *item = item_set_code(itemstore_root(store), name,
+                               (uint32_t)length, bytecode).item;
+  free(output);
+  free(errdetail);
+  ASSERT_NOT_NULL(item);
+  return item;
+}
+
+static void bench_list_literal_source(char *source, size_t capacity,
+                                      size_t count) {
+  int written = snprintf(source, capacity, "return #[");
+  ASSERT_TRUE(written > 0 && (size_t)written < capacity);
+  size_t used = (size_t)written;
+  for (size_t i = 0; i < count; i++) {
+    written = snprintf(source + used, capacity - used, "%s%zu",
+                       i == 0 ? "" : ", ", i);
+    ASSERT_TRUE(written > 0 && (size_t)written < capacity - used);
+    used += (size_t)written;
+  }
+  written = snprintf(source + used, capacity - used, "];");
+  ASSERT_TRUE(written > 0 && (size_t)written < capacity - used);
+}
+
+static uint64_t bench_compiled_literal(ITEMSTORE_t *store, ITEM_t *item,
+                                       size_t iters,
+                                       volatile uintptr_t *sink) {
   VM_t *vm = make_vm();
   ASSERT_NOT_NULL(vm);
   RuntimeContext ctx;
   runtime_context_init(&ctx, vm);
-  uint8_t frame[4];
-  frame[0] = (uint8_t)(count & 0xffu);
-  frame[1] = (uint8_t)((count >> 8u) & 0xffu);
-  frame[2] = (uint8_t)((count >> 16u) & 0xffu);
-  frame[3] = (uint8_t)((count >> 24u) & 0xffu);
-  runtime_decoder_init(&ctx.decoder, frame, frame + sizeof(frame));
+  ctx.itemstore = store;
   uint64_t start = now_ns();
-  for (size_t n = 0; n < iters; n++) {
-    for (size_t i = 0; i < count; i++) {
-      push_stack(vm->stack, (VALUE_t){.type = VALUE_int, .i = (int64_t)i});
-    }
-    uint8_t *next = op_build_list(&ctx, frame, NULL);
-    ASSERT_TRUE(next == frame + sizeof(frame));
-    VALUE_t result = pop_stack(vm->stack);
+  for (size_t i = 0; i < iters; i++) {
+    VALUE_t result = interpret(&ctx, item);
     ASSERT_EQ_INT(VALUE_list, result.type);
     *sink ^= sin_list_count(result.list);
     value_free(&result);
   }
   uint64_t elapsed = now_ns() - start;
+  runtime_destroy(&ctx);
   destroy_vm(vm);
   return elapsed;
 }
@@ -318,25 +350,28 @@ static void run_extended_list_benchmarks(void) {
   sin_list_release(late);
   sin_list_release(equal_left);
   sin_list_release(equal_right);
+  ITEMSTORE_t *literal_store = itemstore_create("compiled-list-bench");
+  ASSERT_NOT_NULL(literal_store);
+  char literal_source[256];
+  bench_list_literal_source(literal_source, sizeof(literal_source), 33);
+  ITEM_t *literal_item = bench_compile_item(literal_store, "bench.literal",
+                                            literal_source, NULL, 0);
   uint64_t literal_samples[samples];
   for (size_t n = 0; n < samples; n++) {
-    literal_samples[n] = bench_runtime_build_list(33, iters, &sink);
+    literal_samples[n] = bench_compiled_literal(literal_store, literal_item,
+                                                 iters, &sink);
   }
   uint64_t literal_median = median_u64(literal_samples, samples);
-  printf("[bench][list] op=runtime_BUILD_LIST_literal size=33 median_ns=%llu ns/invocation=%llu\n",
+  printf("[bench][list] op=compiled_source_list_literal size=33 "
+         "median_ns=%llu ns/invocation=%llu\n",
          (unsigned long long)literal_median,
          (unsigned long long)(literal_median / iters));
+  itemstore_destroy(literal_store);
   printf("[bench][list] sink=%llu\n", (unsigned long long)sink);
 }
 
 static void run_extended_itemstore_benchmarks(void) {
   char path[] = "/tmp/sin-list-bench-XXXXXX";
-  int fd = mkstemp(path);
-  ASSERT_TRUE(fd >= 0);
-  int close_ok = close(fd) == 0;
-  int initial_unlink_ok = unlink(path) == 0 || errno == ENOENT;
-  ASSERT_TRUE(close_ok);
-  ASSERT_TRUE(initial_unlink_ok);
   ITEMSTORE_t *store = itemstore_create("list-bench");
   ASSERT_NOT_NULL(store);
   SIN_LIST_t *list = bench_make_list(33);
@@ -344,32 +379,68 @@ static void run_extended_itemstore_benchmarks(void) {
   ASSERT_NOT_NULL(item_set_value(itemstore_root(store), "payload", stored).item);
   uint64_t save_samples[3];
   uint64_t load_samples[3];
-  int save_ok = itemstore_save(path, store);
-  for (size_t i = 0; i < 3; i++) {
-    uint64_t start = now_ns();
-    int ok = itemstore_save(path, store);
-    save_samples[i] = now_ns() - start;
-    save_ok = save_ok && ok;
-  }
-  int load_ok = 1;
-  for (size_t i = 0; i < 3; i++) {
-    uint64_t start = now_ns();
-    ITEMSTORE_t *loaded = itemstore_load(path);
-    if (loaded == NULL) {
-      load_ok = 0;
-    } else {
-      itemstore_destroy(loaded);
+  int fd = mkstemp(path);
+  int setup_ok = fd >= 0;
+  int close_ok = 1;
+  int initial_unlink_ok = 1;
+  int save_ok = 0;
+  int load_ok = 0;
+  if (setup_ok) {
+    close_ok = close(fd) == 0;
+    initial_unlink_ok = unlink(path) == 0 || errno == ENOENT;
+    save_ok = itemstore_save(path, store);
+    for (size_t i = 0; i < 3; i++) {
+      uint64_t start = now_ns();
+      int ok = itemstore_save(path, store);
+      save_samples[i] = now_ns() - start;
+      save_ok = save_ok && ok;
     }
-    load_samples[i] = now_ns() - start;
+    load_ok = 1;
+    for (size_t i = 0; i < 3; i++) {
+      uint64_t start = now_ns();
+      ITEMSTORE_t *loaded = itemstore_load(path);
+      if (loaded == NULL) {
+        load_ok = 0;
+      } else {
+        itemstore_destroy(loaded);
+      }
+      load_samples[i] = now_ns() - start;
+    }
   }
-  printf("[bench][itemstore_v2] list33 save_median_ns=%llu load_median_ns=%llu\n",
-         (unsigned long long)median_u64(save_samples, 3),
-         (unsigned long long)median_u64(load_samples, 3));
   itemstore_destroy(store);
-  int final_unlink_ok = unlink(path) == 0 || errno == ENOENT;
+  int final_unlink_ok = !setup_ok || unlink(path) == 0 || errno == ENOENT;
+  if (setup_ok) {
+    printf("[bench][itemstore_v2] list33 save_median_ns=%llu "
+           "load_median_ns=%llu\n",
+           (unsigned long long)median_u64(save_samples, 3),
+           (unsigned long long)median_u64(load_samples, 3));
+  }
+  ASSERT_TRUE(setup_ok);
+  ASSERT_TRUE(close_ok);
+  ASSERT_TRUE(initial_unlink_ok);
   ASSERT_TRUE(final_unlink_ok);
   ASSERT_TRUE(save_ok);
   ASSERT_TRUE(load_ok);
+}
+
+static uint64_t bench_syscall(ITEMSTORE_t *store, ITEM_t *caller,
+                              int64_t expected, size_t iters) {
+  VM_t *vm = make_vm();
+  ASSERT_NOT_NULL(vm);
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, vm);
+  ctx.itemstore = store;
+  uint64_t start = now_ns();
+  for (size_t i = 0; i < iters; i++) {
+    VALUE_t result = interpret(&ctx, caller);
+    ASSERT_EQ_INT(VALUE_int, result.type);
+    ASSERT_EQ_INT((int)expected, (int)result.i);
+    value_free(&result);
+  }
+  uint64_t elapsed = now_ns() - start;
+  runtime_destroy(&ctx);
+  destroy_vm(vm);
+  return elapsed;
 }
 
 static void run_extended_itemref_and_syscall_benchmarks(void) {
@@ -407,29 +478,48 @@ static void run_extended_itemref_and_syscall_benchmarks(void) {
          (unsigned long long)(median_u64(resolve_samples, 3) / 1000u));
   sin_itemref_release(prepared);
   itemstore_destroy(store);
-  SIN_LIST_t *list = bench_make_list(8);
-  uint64_t transfer_samples[3];
-  for (size_t n = 0; n < 3; n++) {
-    uint64_t start = now_ns();
-    for (size_t i = 0; i < 1000; i++) {
-      for (size_t j = 0; j < sin_list_count(list); j++) {
-        VALUE_t clone = VALUE_NIL;
-        ASSERT_TRUE(value_clone_fallible(sin_list_get(list, j), &clone));
-        sink ^= (uintptr_t)clone.i;
-        value_free(&clone);
-      }
-    }
-    transfer_samples[n] = now_ns() - start;
+  ITEMSTORE_t *call_store = itemstore_create("sys-call-bench");
+  ASSERT_NOT_NULL(call_store);
+  const char *target_params[] = {
+      "@arg0", "@arg1", "@arg2", "@arg3",
+      "@arg4", "@arg5", "@arg6", "@arg7"
+  };
+  ITEM_t *target = bench_compile_item(call_store, "bench.target",
+                                       "return @arg7;", target_params, 8);
+  ITEM_t *zero = bench_compile_item(call_store, "bench.zero", "return 17;",
+                                    NULL, 0);
+  (void)target;
+  (void)zero;
+  char call_source[256];
+  bench_list_literal_source(call_source, sizeof(call_source), 8);
+  size_t call_source_length = strlen(call_source);
+  ASSERT_TRUE(call_source_length > 0);
+  call_source[call_source_length - 1] = '\0';
+  char caller_source[384];
+  int written = snprintf(caller_source, sizeof(caller_source),
+                         "return sys.call{&bench.target, %s};", call_source + 7);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(caller_source));
+  ITEM_t *caller = bench_compile_item(call_store, "bench.caller",
+                                      caller_source, NULL, 0);
+  ITEM_t *zero_caller = bench_compile_item(
+      call_store, "bench.zero_caller", "return sys.call{&bench.zero, #[]};",
+      NULL, 0);
+  uint64_t call_samples[3];
+  uint64_t zero_samples[3];
+  for (size_t i = 0; i < 3; i++) {
+    call_samples[i] = bench_syscall(call_store, caller, 7, 80);
+    zero_samples[i] = bench_syscall(call_store, zero_caller, 17, 80);
   }
-  printf("[bench][sys.call_transfer_proxy] list_element_lookup_clone "
-         "median_ns=%llu ns/list=%llu ns/element=%llu "
-         "(per list, %zu elements; not full sys.call)\n",
-         (unsigned long long)median_u64(transfer_samples, 3),
-         (unsigned long long)(median_u64(transfer_samples, 3) / 1000u),
-         (unsigned long long)(median_u64(transfer_samples, 3) /
-                              (1000u * sin_list_count(list))),
-         sin_list_count(list));
-  sin_list_release(list);
+  uint64_t call_median = median_u64(call_samples, 3);
+  uint64_t zero_median = median_u64(zero_samples, 3);
+  printf("[bench][sys.call] list8 median_ns=%llu ns/invocation=%llu "
+         "zero_arg median_ns=%llu ns/invocation=%llu ratio=%.3f\n",
+         (unsigned long long)call_median,
+         (unsigned long long)(call_median / 80u),
+         (unsigned long long)zero_median,
+         (unsigned long long)(zero_median / 80u),
+         zero_median == 0 ? 0.0 : (double)call_median / (double)zero_median);
+  itemstore_destroy(call_store);
   printf("[bench][itemref_syscall] sink=%llu\n", (unsigned long long)sink);
 }
 
