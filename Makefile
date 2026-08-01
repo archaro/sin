@@ -123,7 +123,8 @@ TEST_CORE_SOURCES := \
 	$(TEST_DIR)/core/test_stack_frames.c \
 	$(TEST_DIR)/core/test_value_behavior.c \
 	$(TEST_DIR)/core/test_list.c \
-	$(TEST_DIR)/core/test_sconv.c
+	$(TEST_DIR)/core/test_sconv.c \
+	$(TEST_DIR)/core/test_sin_itemstore_policy.c
 TEST_COMPILER_SOURCES := \
 	$(TEST_DIR)/compiler/test_emitbc_header.c \
 	$(TEST_DIR)/compiler/test_emitbc_opcode_map.c \

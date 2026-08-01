@@ -20,10 +20,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
-| core      |   131 | `tests/core/`           |
+| core      |   132 | `tests/core/`           |
 | compiler  |    34 | `tests/compiler/`       |
 | runtime   |    90 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**255**|                         |
+| **Total** |**256**|                         |
 
 ## core
 
@@ -54,7 +54,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `run_suite(...)`
     - Per-test and per-suite elapsed-time reporting
     - Assertion-failure suite/test context via `tests/test_assert.h`
-    - Core suite registration (`core_tests[]` with 131 entries)
+    - Core suite registration (`core_tests[]` with 132 entries)
     - Suite registration validation rejects null/duplicate test entries
       before execution.
 - **Fixture contract integrity / regeneration policy**
@@ -134,6 +134,11 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - Loaded itemstore mutation after persistence: root-level children, nested
       children, code items, deletion, reinsertion, and ordered name enumeration
       before and after a second save/load cycle.
+  - `tests/core/test_sin_itemstore_policy.c`
+    - `test_sin_itemstore_version_policy` covers process-level refusal and
+      byte-preservation for v1, unknown-version, invalid-magic, strict-validation
+      ordering, `--loadonly`, and option-parse failures; it also verifies a
+      missing store is created with a v2 header.
 - **Core value/float semantics**
   - `tests/core/test_value_behavior.c`
     - `test_value_push_float_interprets_binary64_payloads`

@@ -613,6 +613,10 @@ ITEM_t *load_itemstore_with_options(const char *filename,
   if (read_itemstore_header(file, filename, &version)) {
     if (version == ITEMSTORE_V2_FORMAT_VERSION) {
       root = itemstore_read_record_for_version(version, file, NULL, &ctx);
+    } else if (version == ITEMSTORE_V1_FORMAT_VERSION) {
+      logerr("Unsupported runtime itemstore version in '%s': found version 1; "
+             "required version 2. Convert it with: sconv '%s' '%s.v2'.\n",
+             filename, filename, filename);
     } else {
       logerr("Unsupported runtime itemstore version in '%s': found %u.\n", filename, version);
     }

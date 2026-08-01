@@ -1,0 +1,141 @@
+#include <errno.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "item.h"
+#include "test_assert.h"
+#include "test_helpers.h"
+
+static void write_bytes(const char *path, const uint8_t *bytes, size_t length) {
+  FILE *file = fopen(path, "wb");
+  ASSERT_NOT_NULL(file);
+  ASSERT_EQ_INT((int)length, (int)fwrite(bytes, 1, length, file));
+  ASSERT_EQ_INT(0, fclose(file));
+}
+
+static uint8_t *read_bytes(const char *path, size_t *length_out) {
+  FILE *file = fopen(path, "rb");
+  ASSERT_NOT_NULL(file);
+  ASSERT_EQ_INT(0, fseek(file, 0, SEEK_END));
+  long size = ftell(file);
+  ASSERT_TRUE(size >= 0);
+  ASSERT_EQ_INT(0, fseek(file, 0, SEEK_SET));
+  uint8_t *bytes = malloc((size_t)size);
+  ASSERT_TRUE(size == 0 || bytes != NULL);
+  ASSERT_EQ_INT((int)size, (int)fread(bytes, 1, (size_t)size, file));
+  ASSERT_EQ_INT(0, fclose(file));
+  *length_out = (size_t)size;
+  return bytes;
+}
+
+static void assert_unchanged(const char *path, const uint8_t *expected,
+                             size_t expected_length) {
+  size_t actual_length = 0;
+  uint8_t *actual = read_bytes(path, &actual_length);
+  ASSERT_EQ_INT((int)expected_length, (int)actual_length);
+  ASSERT_TRUE(memcmp(expected, actual, expected_length) == 0);
+  free(actual);
+}
+
+static void run_rejected(const char *path, const uint8_t *bytes, size_t length,
+                         char *const argv[], const char *diagnostic) {
+  write_bytes(path, bytes, length);
+  TestProcessResult result = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(argv, 0, &result));
+  ASSERT_EQ_INT(1, result.exit_code);
+  ASSERT_NOT_NULL(diagnostic);
+  ASSERT_TRUE(strstr(result.stderr_text, diagnostic) != NULL);
+  if (strstr(diagnostic, "required version 2") != NULL) {
+    char output_path[128];
+    ASSERT_TRUE(snprintf(output_path, sizeof(output_path), "%s.v2", path) > 0);
+    ASSERT_TRUE(strstr(result.stderr_text, path) != NULL);
+    ASSERT_TRUE(strstr(result.stderr_text, output_path) != NULL);
+    errno = 0;
+    ASSERT_EQ_INT(-1, access(output_path, F_OK));
+    ASSERT_EQ_INT(ENOENT, errno);
+  }
+  test_process_result_free(&result);
+  assert_unchanged(path, bytes, length);
+}
+
+void test_sin_itemstore_version_policy(void) {
+  char path[96];
+  ASSERT_EQ_INT(0, test_make_temp_path("sin-policy-items", path, sizeof(path)));
+  const uint8_t v1[] = {'S','I','N','I','T','E','M','\0',1,0};
+  char *v1_argv[] = {"./sin", "--itemstore", path, NULL};
+  run_rejected(path, v1, sizeof(v1), v1_argv,
+               "found version 1; required version 2");
+
+  char *v1_loadonly[] = {"./sin", "--loadonly", "--itemstore", path, NULL};
+  run_rejected(path, v1, sizeof(v1), v1_loadonly,
+               "found version 1; required version 2");
+  char *v1_strict_after[] = {"./sin", "--itemstore", path,
+                             "--strict-validation", NULL};
+  run_rejected(path, v1, sizeof(v1), v1_strict_after,
+               "found version 1; required version 2");
+  char *v1_strict_before[] = {"./sin", "--strict-validation", "--itemstore",
+                              path, NULL};
+  run_rejected(path, v1, sizeof(v1), v1_strict_before,
+               "found version 1; required version 2");
+
+  const uint8_t unknown[] = {'S','I','N','I','T','E','M','\0',9,0,0x42};
+  char *unknown_argv[] = {"./sin", "--itemstore", path, NULL};
+  run_rejected(path, unknown, sizeof(unknown), unknown_argv,
+               "found 9");
+  const uint8_t invalid_magic[] = {'N','O','P','E','\0','\0','\0','\0',2,0};
+  run_rejected(path, invalid_magic, sizeof(invalid_magic), unknown_argv,
+               "invalid itemstore magic");
+  const uint8_t unversioned[] = {'S','I','N','I','T','E','M','\0'};
+  run_rejected(path, unversioned, sizeof(unversioned), unknown_argv,
+               "truncated file header version");
+
+  ITEMSTORE_t *store = itemstore_create("root");
+  ASSERT_NOT_NULL(store);
+  ASSERT_TRUE(itemstore_save(path, store));
+  itemstore_destroy(store);
+  size_t before_length = 0;
+  uint8_t *before = read_bytes(path, &before_length);
+  char *parse_failure[] = {"./sin", "--itemstore", path, "--not-an-option", NULL};
+  TestProcessResult result = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(parse_failure, 0, &result));
+  ASSERT_EQ_INT(1, result.exit_code);
+  test_process_result_free(&result);
+  assert_unchanged(path, before, before_length);
+  free(before);
+  ASSERT_EQ_INT(0, unlink(path));
+
+  char object_path[96];
+  ASSERT_EQ_INT(0, test_make_temp_path("sin-policy-object", object_path,
+                                       sizeof(object_path)));
+  size_t object_length = 0;
+  uint8_t *object = load_hex_fixture("tests/fixtures/nil_literal.hex",
+                                     &object_length);
+  ASSERT_NOT_NULL(object);
+  write_bytes(object_path, object, object_length);
+  free(object);
+  char *missing_argv[] = {"./sin", "--loadonly", "--itemstore", path,
+                          "--srcroot", "tests/fixtures", "--object",
+                          object_path, NULL};
+  ASSERT_EQ_INT(0, test_run_argv_capture(missing_argv, 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  test_process_result_free(&result);
+  size_t created_length = 0;
+  uint8_t *created = read_bytes(path, &created_length);
+  ASSERT_TRUE(created_length >= 10);
+  ASSERT_EQ_INT('S', created[0]);
+  ASSERT_EQ_INT('I', created[1]);
+  ASSERT_EQ_INT('N', created[2]);
+  ASSERT_EQ_INT('I', created[3]);
+  ASSERT_EQ_INT('T', created[4]);
+  ASSERT_EQ_INT('E', created[5]);
+  ASSERT_EQ_INT('M', created[6]);
+  ASSERT_EQ_INT(0, created[7]);
+  ASSERT_EQ_INT(2, created[8]);
+  ASSERT_EQ_INT(0, created[9]);
+  free(created);
+  ASSERT_EQ_INT(0, unlink(path));
+  ASSERT_EQ_INT(0, unlink(object_path));
+}
