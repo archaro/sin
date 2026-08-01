@@ -1,0 +1,5 @@
+# SOT: malformed v2 recursive-list truncation; regen: hand-authored hex, decode with xxd -r -p
+53494e4954454d000200
+04726f6f74010301000000
+0464617461010501000000
+0501000000

@@ -139,3 +139,16 @@ IPv6 listener attempts to use that same port. If optional IPv6 setup fails in
 the port-`0` path, `sin` reports the fallback and continues IPv4-only.
 Startup failures unwind initialized handles, tasks, runtime contexts, VMs,
 network line state, the loop, itemstore tree, and configuration strings.
+### Safe itemstore migration
+
+1. `sconv items.dat items-v2.dat`
+2. `printf 'return nil;\n' > /tmp/sin-migration-bootstrap.src`
+3. `./scomp /tmp/sin-migration-bootstrap.src /tmp/sin-migration-bootstrap.obj`
+4. `mkdir -p /tmp/sin-migration-srcroot`
+5. `./sin --loadonly -i items-v2.dat -s /tmp/sin-migration-srcroot -o /tmp/sin-migration-bootstrap.obj`
+6. After successful validation, an administrator-controlled sequence backs up
+   the old file and installs the validated output:
+   `mv items.dat items.dat.backup && mv items-v2.dat items.dat`.
+
+The final moves are administrator-controlled and occur only after validation;
+conversion never runs in place or replaces the old file automatically.

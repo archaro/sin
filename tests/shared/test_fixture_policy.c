@@ -68,10 +68,14 @@ void test_fixture_policy_declared_goldens_exist(void) {
       {"int_literal_src", "tests/fixtures/int_literal.src", "SOT: tests/fixtures/int_literal.src | regen: authored source fixture"},
       {"break_log_src", "tests/fixtures/interpret/break-log.src", "SOT: tests/fixtures/interpret/break-log.src | regen: authored source fixture"},
       {"continue_log_src", "tests/fixtures/interpret/continue-log.src", "SOT: tests/fixtures/interpret/continue-log.src | regen: authored source fixture"},
+      {"list_itemref_persist_src", "tests/fixtures/interpret/list-itemref-persist.src", "SOT: tests/fixtures/interpret/list-itemref-persist.src | regen: authored source fixture"},
   };
 
   static const FixtureEntry bytecode_hex_fixtures[] = {
       {"sdiss_basic_hex", "tests/fixtures/sdiss/basic.hex", "SOT: hand-authored disassembly sample | regen: manual update plus expected sync"},
+      {"itemstore_v1_valid_hex", "tests/fixtures/itemstore/v1-valid.hex", "SOT: hand-authored v1 itemstore wire seed | regen: sed '/^[[:space:]]*#/d' tests/fixtures/itemstore/v1-valid.hex | xxd -r -p"},
+      {"itemstore_v2_nested_ref_valid_hex", "tests/fixtures/itemstore/v2-nested-ref-valid.hex", "SOT: hand-authored v2 nested list/reference wire seed | regen: sed '/^[[:space:]]*#/d' tests/fixtures/itemstore/v2-nested-ref-valid.hex | xxd -r -p"},
+      {"itemstore_v2_nested_recursive_malformed_hex", "tests/fixtures/itemstore/v2-nested-recursive-malformed.hex", "SOT: hand-authored malformed v2 recursive-list wire seed | regen: sed '/^[[:space:]]*#/d' tests/fixtures/itemstore/v2-nested-recursive-malformed.hex | xxd -r -p"},
   };
 
   static const FixtureEntry interpret_output_fixtures[] = {
@@ -82,6 +86,7 @@ void test_fixture_policy_declared_goldens_exist(void) {
       {"sdiss_basic_expected", "tests/fixtures/sdiss/basic.expected.txt", "SOT: sdiss stdout for tests/fixtures/sdiss/basic.hex | regen: ./sdiss --no-header -o tests/fixtures/sdiss/basic.bin"},
       {"break_log_expected", "tests/fixtures/interpret/break-log.expected.txt", "SOT: runtime output contract for break-log | regen: ./scomp tests/fixtures/interpret/break-log.src tests/fixtures/interpret/break-log.generated.obj && ./sin -o tests/fixtures/interpret/break-log.generated.obj > tests/fixtures/interpret/break-log.expected.txt"},
       {"continue_log_expected", "tests/fixtures/interpret/continue-log.expected.txt", "SOT: runtime output contract for continue-log | regen: ./scomp tests/fixtures/interpret/continue-log.src tests/fixtures/interpret/continue-log.generated.obj && ./sin -o tests/fixtures/interpret/continue-log.generated.obj > tests/fixtures/interpret/continue-log.expected.txt"},
+      {"list_itemref_persist_expected", "tests/fixtures/interpret/list-itemref-persist.expected.txt", "SOT: runtime output contract for list-itemref-persist | regen: compile once, create temporary srcroot and itemstore, run './sin --loadonly -i <same-store> -s <same-srcroot> -o <object>' twice, normalize paths, and update expected sections manually"},
   };
 
   assert_no_duplicate_fixture_entries(source_fixtures,

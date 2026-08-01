@@ -13,6 +13,7 @@
 #include "config.h"
 #include "error.h"
 #include "item.h"
+#include "item_internal.h"
 #include "vm.h"
 
 CONFIG_t config;
@@ -44,6 +45,39 @@ static void fuzz_load_itemstore_bytes(const uint8_t *data, size_t size) {
   unlink(path);
 }
 
+static void fuzz_convert_itemstore_bytes(const uint8_t *data, size_t size) {
+  char input_path[] = "/tmp/sin-object-fuzz-convert-in-XXXXXX";
+  char output_path[] = "/tmp/sin-object-fuzz-convert-out-XXXXXX";
+  int input_fd = mkstemp(input_path);
+  int output_fd = mkstemp(output_path);
+  if (input_fd < 0 || output_fd < 0) {
+    if (input_fd >= 0) close(input_fd);
+    if (output_fd >= 0) close(output_fd);
+    unlink(input_path);
+    unlink(output_path);
+    return;
+  }
+  if (close(output_fd) != 0) {
+    close(input_fd);
+    unlink(input_path);
+    unlink(output_path);
+    return;
+  }
+  FILE *file = fdopen(input_fd, "wb");
+  if (file != NULL) {
+    bool write_ok = fwrite(data, 1, size, file) == size;
+    bool close_ok = fclose(file) == 0;
+    if (write_ok && close_ok) {
+      (void)itemstore_convert(input_path, output_path, ITEMSTORE_DURABLE_FAST,
+                              true);
+    }
+  } else {
+    close(input_fd);
+  }
+  unlink(input_path);
+  unlink(output_path);
+}
+
 int LLVMFuzzerInitialize(int *argc, char ***argv) {
   (void)argc;
   (void)argv;
@@ -61,6 +95,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
   config.strict_validation = true;
   fuzz_load_itemstore_bytes(data, size);
+  fuzz_convert_itemstore_bytes(data, size);
 
   if (size <= kMaxBytecodeProbeSize) {
     BC_VerifyOptions options = bc_verify_strict_options();

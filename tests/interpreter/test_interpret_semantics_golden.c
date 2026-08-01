@@ -27,6 +27,7 @@ typedef struct {
   const char *src_path;
   const char *fixture_path;
   const char *expected_code_items[2];
+  unsigned runs;
 } InterpretGoldenCase;
 
 static void normalize_runtime_path(char *text, const char *path,
@@ -139,55 +140,68 @@ static void run_case(const InterpretGoldenCase *tc) {
     "./sin", "--loadonly", "-i", itemstore_path, "-s", srcroot_path,
     "-o", generated_obj_path, NULL
   };
-  TestProcessResult generated = {0};
-  int run_capture_rc = test_run_argv_capture(run_argv, 2000, &generated);
-  ASSERT_EQ_INT(0, remove(generated_obj_path));
-  normalize_runtime_path(generated.stdout_text, srcroot_path, "srcroot");
-  normalize_runtime_path(generated.stdout_text, itemstore_path, "items.dat");
-  test_normalize_text(generated.stderr_text);
-  ASSERT_EQ_INT(0, run_capture_rc);
-  assert_persisted_code_items(tc, itemstore_path);
-  ASSERT_EQ_INT(0, remove(itemstore_path));
-  remove_persisted_source_files(tc, srcroot_path);
-  ASSERT_EQ_INT(0, rmdir(srcroot_path));
-  ASSERT_EQ_INT(0, rmdir(run_dir));
-
   char *fixture = test_read_text_file(tc->fixture_path);
   ASSERT_NOT_NULL(fixture);
   char *expected_stdout = test_extract_fixture_block(fixture, "===stdout===\n");
+  char *expected_stdout_second = test_extract_fixture_block(fixture, "===stdout_run2===\n");
   char *expected_stderr = test_extract_fixture_block(fixture, "===stderr===\n");
   char *expected_exit = test_extract_fixture_block(fixture, "===exit===\n");
   ASSERT_NOT_NULL(expected_stdout);
   ASSERT_NOT_NULL(expected_stderr);
   ASSERT_NOT_NULL(expected_exit);
   test_normalize_text(expected_stdout);
+  if (expected_stdout_second) test_normalize_text(expected_stdout_second);
   test_normalize_text(expected_stderr);
 
   TestProcessResult expected = {.stdout_text = expected_stdout,
                                 .stderr_text = expected_stderr,
                                 .exit_code = atoi(expected_exit)};
-  assert_run_matches(tc->name, "generated_obj", &generated, &expected);
+  unsigned runs = tc->runs == 0 ? 1u : tc->runs;
+  for (unsigned run = 0; run < runs; run++) {
+    TestProcessResult generated = {0};
+    int run_capture_rc = test_run_argv_capture(run_argv, 2000, &generated);
+    normalize_runtime_path(generated.stdout_text, srcroot_path, "srcroot");
+    normalize_runtime_path(generated.stdout_text, itemstore_path, "items.dat");
+    test_normalize_text(generated.stderr_text);
+    ASSERT_EQ_INT(0, run_capture_rc);
+    char variant[32];
+    ASSERT_TRUE(snprintf(variant, sizeof(variant), "generated_obj_run%u", run + 1u) > 0);
+    TestProcessResult expected_for_run = expected;
+    if (run > 0 && expected_stdout_second) {
+      expected_for_run.stdout_text = expected_stdout_second;
+    }
+    assert_run_matches(tc->name, variant, &generated, &expected_for_run);
+    test_process_result_free(&generated);
+  }
+  ASSERT_EQ_INT(0, remove(generated_obj_path));
+  assert_persisted_code_items(tc, itemstore_path);
+  ASSERT_EQ_INT(0, remove(itemstore_path));
+  remove_persisted_source_files(tc, srcroot_path);
+  ASSERT_EQ_INT(0, rmdir(srcroot_path));
+  ASSERT_EQ_INT(0, rmdir(run_dir));
 
-  test_process_result_free(&generated);
   test_process_result_free(&expected);
   free(expected_exit);
+  free(expected_stdout_second);
   free(fixture);
 }
 
 void test_interpret_semantics_golden(void) {
   const InterpretGoldenCase cases[] = {
       {"chat_boot", "examples/chat-boot.src",
-       "tests/fixtures/interpret/chat-boot.expected.txt", {NULL, NULL}},
+       "tests/fixtures/interpret/chat-boot.expected.txt", {NULL, NULL}, 0},
       {"chat_load", "examples/chat-load.src",
-       "tests/fixtures/interpret/chat-load.expected.txt", {"input", "docommand"}},
+       "tests/fixtures/interpret/chat-load.expected.txt", {"input", "docommand"}, 0},
       {"echo_boot", "examples/echo-boot.src",
-       "tests/fixtures/interpret/echo-boot.expected.txt", {NULL, NULL}},
+       "tests/fixtures/interpret/echo-boot.expected.txt", {NULL, NULL}, 0},
       {"echo_load", "examples/echo-load.src",
-       "tests/fixtures/interpret/echo-load.expected.txt", {"input", NULL}},
+       "tests/fixtures/interpret/echo-load.expected.txt", {"input", NULL}, 0},
       {"break_log", "tests/fixtures/interpret/break-log.src",
-       "tests/fixtures/interpret/break-log.expected.txt", {NULL, NULL}},
+       "tests/fixtures/interpret/break-log.expected.txt", {NULL, NULL}, 0},
       {"continue_log", "tests/fixtures/interpret/continue-log.src",
-       "tests/fixtures/interpret/continue-log.expected.txt", {NULL, NULL}},
+       "tests/fixtures/interpret/continue-log.expected.txt", {NULL, NULL}, 0},
+      {"list_itemref_persist", "tests/fixtures/interpret/list-itemref-persist.src",
+       "tests/fixtures/interpret/list-itemref-persist.expected.txt", {"target", "once"}, 2},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {

@@ -89,7 +89,7 @@ FUZZ_SDISS_CORPUS_DIR := $(FUZZ_DIR)/corpus/sdiss
 FUZZ_SIN_OBJECT_BIN := $(FUZZ_DIR)/fuzz_sin_object
 FUZZ_SIN_OBJECT_CORPUS_DIR := $(FUZZ_DIR)/corpus/sin-object
 FUZZ_BINS := $(FUZZ_BIN) $(FUZZ_SDISS_BIN) $(FUZZ_SIN_OBJECT_BIN)
-GENERATED_FUZZ_CORPUS := $(FUZZ_SDISS_CORPUS_DIR)/*.obj $(FUZZ_SIN_OBJECT_CORPUS_DIR)/*.obj
+GENERATED_FUZZ_CORPUS := $(FUZZ_SDISS_CORPUS_DIR)/*.obj $(FUZZ_SIN_OBJECT_CORPUS_DIR)/*.obj $(FUZZ_SIN_OBJECT_CORPUS_DIR)/*.itemstore
 FUZZ_SANITIZE_FLAGS := -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
 FUZZ_LINK_FLAGS := -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
 FUZZ_CFLAGS ?= $(CFLAGS) $(FUZZ_SANITIZE_FLAGS)
@@ -380,11 +380,24 @@ fuzz-sdiss: clean
 	@printf 'Built %s. Run with: %s %s\n' "$(FUZZ_SDISS_BIN)" "$(FUZZ_SDISS_BIN)" "$(FUZZ_SDISS_CORPUS_DIR)"
 
 seed-fuzz-sin-object-corpus: scomp
-	@mkdir -p $(FUZZ_SIN_OBJECT_CORPUS_DIR)
-	@for src in examples/chat-boot.src examples/chat-load.src examples/echo-boot.src examples/echo-load.src; do \
+	@set -eu; \
+	command -v "$(XXD)" >/dev/null 2>&1 || { \
+		printf 'Required fuzz corpus tool not found: %s\n' "$(XXD)" >&2; \
+		exit 1; \
+	}; \
+	mkdir -p $(FUZZ_SIN_OBJECT_CORPUS_DIR); \
+	for src in examples/chat-boot.src examples/chat-load.src examples/echo-boot.src examples/echo-load.src; do \
 		[ -e "$$src" ] || continue; \
 		obj="$(FUZZ_SIN_OBJECT_CORPUS_DIR)/$$(basename "$$src" .src).obj"; \
 		./scomp "$$src" "$$obj" >/dev/null 2>&1 || rm -f "$$obj"; \
+	done; \
+	for hex in $(TEST_DIR)/fixtures/itemstore/v1-valid.hex \
+		$(TEST_DIR)/fixtures/itemstore/v2-nested-ref-valid.hex \
+		$(TEST_DIR)/fixtures/itemstore/v2-nested-recursive-malformed.hex; do \
+		name="$$(basename "$$hex" .hex)"; \
+		sed '/^[[:space:]]*#/d' "$$hex" | "$(XXD)" -r -p \
+			> "$(FUZZ_SIN_OBJECT_CORPUS_DIR)/$$name.itemstore" || { \
+			printf 'Failed to seed fuzz corpus from %s\n' "$$hex" >&2; exit 1; }; \
 	done
 
 # Builds a libFuzzer harness for sin object/itemstore loading and strict bytecode validation.

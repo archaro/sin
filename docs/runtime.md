@@ -81,6 +81,12 @@ ownership transfers to the store; on validation or allocation failure, the
 caller retains ownership. Persist changes with `itemstore_save()`; its boolean
 result reports whether replacement and required durability steps completed.
 
+List roots are owned immutable values with structural sharing; derived updates
+do not mutate inputs. References own canonical paths rather than raw pointers,
+resolve afresh for each fetch/call, and remain values when dangling. Itemstore
+v2 serializes nested lists and references and restores them on reload without
+executing targets.
+
 Mutation results distinguish creation, replacement, deletion, missing names,
 invalid input, pinned items, and allocation failure. Payload ownership transfers
 only for successful creation or replacement; every failure leaves caller-owned

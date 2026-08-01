@@ -1,0 +1,3 @@
+# SOT: minimal valid v1 itemstore; regen: hand-authored hex, decode with xxd -r -p
+53494e4954454d000100
+04726f6f74010300000000

@@ -49,6 +49,10 @@ types return `nil` and report `ERR_RUNTIME_INVALIDARGS` with current-item
 provenance; negative or out-of-range values return `nil` without changing the
 error item.
 
+The `list.*` calls are immutable-list operations; combine them with
+`sys.itemref`, `sys.itemname`, `sys.fetch`, and `sys.call` when a list carries
+references that should be inspected or invoked explicitly.
+
 String values are limited by `SIN_MAX_STRING_BYTES` in
 `src/common/string_limits.h`, currently 65,535 bytes. String calls that would
 construct a larger result return `nil`.

@@ -13,6 +13,10 @@ When the runtime engine starts up, it first loads and executes the bootstrap cod
   other timer callbacks; a busy loop can delay it. The input item should call
   `net.input` to process network activity.
 
+## Lists and item references
+
+List literals evaluate left-to-right; bare code items execute while `&` creates an unresolved item-reference value. Immutable `list.append`, `list.set`, `list.concat`, and `list.slice` preserve their inputs and return derived lists. Example: `@r = &player; @xs = list.append{#[1, 2], @r};`.
+
 ## The Item ##
 
 The fundamental unit in Sinistra is the *item*.  An item can contain many things: integers, floats, strings, Boolean values or `nil`, or it can contain code.  A value item simply returns its value, whereas a code item executes its code and returns the result.  All items return a value (even if the value is `nil`).  Items can also call other items.

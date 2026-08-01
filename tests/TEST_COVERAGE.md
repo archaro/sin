@@ -15,6 +15,11 @@ can quickly verify what is covered and what remains intentionally out of scope.
 argument parsing, v1/v2 canonical conversion, atomic publication modes,
 durability selection, malformed headers, and same-file safety.
 
+Phase 13 adds the two-run `list-itemref-persist` interpreter golden, three
+itemstore hex seed classes (v1, valid nested-list/reference v2, malformed
+recursive-list v2), and sin-object fuzz coverage through converter
+version-dispatch in addition to runtime loading and raw bytecode verification.
+
 The unified test harness (`tests/shared/test_harness.c`) builds a single
 `tests/test-suite` binary that registers three logical suites:
 

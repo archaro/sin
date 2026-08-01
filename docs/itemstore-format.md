@@ -172,12 +172,17 @@ and all required durability steps succeed.
 
 The normal runtime reader accepts only version 2 and the writer always emits
 version 2. The internal dispatcher retains the frozen version 1 decoder for
-the future `sconv` conversion tool; it is not exposed as automatic runtime
-migration and does not rewrite embedded bytecode. A future incompatible
-layout must use a new header version and update this document.
+the explicit `sconv` migration path; runtime loading never auto-converts and
+does not rewrite embedded bytecode. A future incompatible layout must use a
+new header version and update this document.
 
 The itemstore version describes the container's wire structure, not the
 compatibility of bytecode payloads stored in code items. Prerelease bytecode is
 release-local and may be rejected by a newer runtime even when the surrounding
 itemstore remains structurally valid version 2. Retain source and recompile code
 items for the current build; the runtime does not migrate embedded bytecode.
+Version 2 values may be recursive lists and item references, for example
+`#[1, #[2], &player]`; references store canonical paths and do not execute on
+load. Migration is explicit: run `sconv` to a new output path, validate with a
+current bootstrap and `sin --loadonly`, then have an administrator back up/move
+the old store and rename the validated output.

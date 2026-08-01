@@ -216,3 +216,4 @@ make test-release
 make test-lsan
 FUZZ_SEED=1 FUZZ_ARTIFACT_DIR="$PWD/tests/fuzz/artifacts" make fuzz-smoke
 ```
+The sin-object fuzz harness exercises v2-only runtime loading, strict raw bytecode verification, and shared `itemstore_convert` version dispatch. Source-level list/item-reference persistence integration is owned by interpreter golden fixtures under `tests/fixtures/interpret/`.

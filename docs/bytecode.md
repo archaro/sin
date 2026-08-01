@@ -120,6 +120,13 @@ arguments as described below.
 | `V` | `IR_OP_ITEM_PUSH_DEREF_LOCAL` | `u8 local_index` | Inside a `D` dereference payload, turn the addressed local value into a layer name. |
 
 
+## List and reference opcodes
+
+`BUILD_LIST` consumes element values from the VM stack in source order
+(leftmost below later elements) and pushes one list value. `MAKE_ITEMREF`
+creates a canonical path reference without resolving or executing its target;
+resolution is deferred to the relevant `sys.*` call.
+
 ## Code item result semantics
 
 `IR_OP_HALT` terminates the current code item with `nil`, discarding any residual

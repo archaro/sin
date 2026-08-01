@@ -18,6 +18,13 @@ This builds:
 - `sdiss` (standalone disassembler)
 - `sconv` (itemstore converter)
 
+## Lists and references
+
+Lists and references are values: `@r = &player; @xs = list.append{#[1, 2], @r};`
+keeps the reference unresolved until explicit `sys.fetch{@r}` or
+`sys.call{@r, #[...]}`. See [`docs/concepts.md`](docs/concepts.md) and the safe
+migration sequence in [`docs/tools.md`](docs/tools.md).
+
 ## Run the chat server example
 
 The chat server is the more complete example, so this walkthrough uses the chat
