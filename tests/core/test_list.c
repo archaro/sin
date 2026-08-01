@@ -205,6 +205,11 @@ void test_list_boundaries_persistence_and_equality(void) {
   SIN_LIST_t *set;
   SIN_LIST_t *nested_set;
   SIN_LIST_t *height2;
+  SIN_LIST_t *concat_left;
+  SIN_LIST_t *concat_right;
+  SIN_LIST_t *concatenated;
+  bool saw_concat_failure = false;
+  bool saw_concat_success = false;
   VALUE_t value = {VALUE_int, {.i = 9999}};
   ASSERT_NOT_NULL(list31);
   ASSERT_NOT_NULL(list32);
@@ -253,6 +258,48 @@ void test_list_boundaries_persistence_and_equality(void) {
   ASSERT_EQ_INT(9999, sin_list_get(height2, 1024)->i);
   ASSERT_EQ_INT(9999, sin_list_get(height2, 1056)->i);
   ASSERT_TRUE(sin_list_equal(height2, height2));
+
+  concat_left = make_int_list(20);
+  concat_right = make_int_list(1050);
+  ASSERT_NOT_NULL(concat_left);
+  ASSERT_NOT_NULL(concat_right);
+  concatenated = sin_list_concat(concat_left, concat_right);
+  ASSERT_NOT_NULL(concatenated);
+  ASSERT_EQ_INT(1070, sin_list_count(concatenated));
+  ASSERT_EQ_INT(0, sin_list_get(concatenated, 0)->i);
+  ASSERT_EQ_INT(11, sin_list_get(concatenated, 31)->i);
+  ASSERT_EQ_INT(12, sin_list_get(concatenated, 32)->i);
+  ASSERT_EQ_INT(1035, sin_list_get(concatenated, 1055)->i);
+  ASSERT_EQ_INT(1036, sin_list_get(concatenated, 1056)->i);
+  ASSERT_EQ_INT(0, sin_list_get(concatenated, 20)->i);
+  ASSERT_EQ_INT(1049, sin_list_get(concatenated, 1069)->i);
+  sin_list_release(concatenated);
+  concatenated = sin_list_concat(concat_left, concat_left);
+  ASSERT_NOT_NULL(concatenated);
+  ASSERT_EQ_INT(40, sin_list_count(concatenated));
+  ASSERT_EQ_INT(19, sin_list_get(concatenated, 19)->i);
+  ASSERT_EQ_INT(0, sin_list_get(concatenated, 20)->i);
+  sin_list_release(concatenated);
+  /* 128 attempts reach allocations in the later full-tail promotions. */
+  for (long fail_at = 0; fail_at < 128; ++fail_at) {
+    alloc_test_fail_after(fail_at);
+    concatenated = sin_list_concat(concat_left, concat_right);
+    alloc_test_fail_after(-1);
+    if (concatenated) {
+      saw_concat_success = true;
+      sin_list_release(concatenated);
+    } else {
+      saw_concat_failure = true;
+    }
+    ASSERT_EQ_INT(20, sin_list_count(concat_left));
+    ASSERT_EQ_INT(1050, sin_list_count(concat_right));
+    ASSERT_EQ_INT(0, sin_list_get(concat_left, 0)->i);
+    ASSERT_EQ_INT(1049, sin_list_get(concat_right, 1049)->i);
+  }
+  ASSERT_TRUE(saw_concat_failure);
+  ASSERT_TRUE(saw_concat_success);
+  sin_list_release(concat_left);
+  sin_list_release(concat_right);
 
   sin_list_release(list31);
   sin_list_release(list32);

@@ -123,6 +123,45 @@ static SIN_LIST_NODE *leaf_clone_append(const SIN_LIST_NODE *old,
   return leaf;
 }
 
+/* Clone an existing tail and a borrowed source range into one leaf. */
+static SIN_LIST_NODE *leaf_clone_append_range(const SIN_LIST_NODE *old,
+                                              const SIN_LIST_t *source,
+                                              size_t start, size_t count) {
+  SIN_LIST_NODE *leaf;
+  size_t old_count = old ? old->slots : 0;
+  if (count == 0 || old_count + count > LIST_BRANCH ||
+      (old && !old->leaf) || !source)
+    return NULL;
+  leaf = alloc_calloc(1, sizeof(*leaf));
+  if (!leaf) return NULL;
+  leaf->refs = 1;
+  leaf->leaf = true;
+  leaf->slots = (unsigned)(old_count + count);
+  leaf->count = old_count + count;
+  leaf->depth = 1;
+  for (size_t i = 0; i < old_count; ++i) {
+    if (!value_clone_fallible(&old->data.values[i], &leaf->data.values[i])) {
+      node_release(leaf);
+      return NULL;
+    }
+    leaf->depth = max_depth(leaf->depth, value_depth(&leaf->data.values[i]));
+  }
+  for (size_t i = 0; i < count; ++i) {
+    const VALUE_t *value = sin_list_get(source, start + i);
+    if (!value || !value_clone_fallible(value, &leaf->data.values[old_count + i])) {
+      node_release(leaf);
+      return NULL;
+    }
+    leaf->depth = max_depth(leaf->depth,
+                            value_depth(&leaf->data.values[old_count + i]));
+  }
+  if (leaf->depth > SIN_LIST_MAX_DEPTH) {
+    node_release(leaf);
+    return NULL;
+  }
+  return leaf;
+}
+
 static SIN_LIST_NODE *leaf_clone_single(const VALUE_t *value) {
   SIN_LIST_NODE *leaf;
   if (!value) return NULL;
@@ -550,12 +589,60 @@ SIN_LIST_t *sin_list_concat(const SIN_LIST_t *left, const SIN_LIST_t *right) {
   if (right->count == 0) return sin_list_retain((SIN_LIST_t *)left);
   result = sin_list_retain((SIN_LIST_t *)left);
   if (!result) return NULL;
-  for (size_t i = 0; i < right->count; ++i) {
-    const VALUE_t *value = sin_list_get(right, i);
-    SIN_LIST_t *next = sin_list_append(result, value);
+  for (size_t i = 0; i < right->count;) {
+    SIN_LIST_NODE *root = NULL;
+    SIN_LIST_NODE *tail = NULL;
+    SIN_LIST_NODE *promoted = NULL;
+    size_t batch;
+    size_t new_tail_count;
+    SIN_LIST_t *next;
+
+    if (result->tail_count < LIST_BRANCH) {
+      batch = right->count - i;
+      if (batch > LIST_BRANCH - result->tail_count)
+        batch = LIST_BRANCH - result->tail_count;
+      tail = leaf_clone_append_range(result->tail, right, i, batch);
+      if (!tail) {
+        sin_list_release(result);
+        return NULL;
+      }
+      if (result->root && !node_retain(result->root)) {
+        node_release(tail);
+        sin_list_release(result);
+        return NULL;
+      }
+      root = result->root;
+      new_tail_count = result->tail_count + batch;
+    } else {
+      batch = right->count - i;
+      if (batch > LIST_BRANCH) batch = LIST_BRANCH;
+      if (!node_retain(result->tail)) {
+        sin_list_release(result);
+        return NULL;
+      }
+      promoted = result->tail;
+      tail = leaf_clone_append_range(NULL, right, i, batch);
+      if (!tail) {
+        node_release(promoted);
+        sin_list_release(result);
+        return NULL;
+      }
+      root = append_tree(result->root, promoted);
+      if (!root) {
+        node_release(tail);
+        sin_list_release(result);
+        return NULL;
+      }
+      new_tail_count = batch;
+    }
+    next = list_new(result->count + batch, new_tail_count, root, tail);
+    if (!next) {
+      sin_list_release(result);
+      return NULL;
+    }
     sin_list_release(result);
-    if (!next) return NULL;
     result = next;
+    i += batch;
   }
   return result;
 }
