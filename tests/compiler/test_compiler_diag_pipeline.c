@@ -426,8 +426,8 @@ static void test_compiler_pipeline_parameter_seeding(void) {
   ASSERT_NOT_NULL(out);
   ASSERT_TRUE(errdetail == NULL);
   ASSERT_TRUE(pipeline_output_size(out) >= 2);
-  ASSERT_EQ_INT(1, out->bytecode[0]);
-  ASSERT_EQ_INT(1, out->bytecode[1]);
+  ASSERT_EQ_INT(1, out->bytecode[6]);
+  ASSERT_EQ_INT(1, out->bytecode[7]);
   free_pipeline_output(out);
 
   out = (OUTPUT_t *)(uintptr_t)1;

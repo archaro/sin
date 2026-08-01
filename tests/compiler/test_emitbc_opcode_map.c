@@ -7,6 +7,7 @@
 #include "test_assert.h"
 #include "test_helpers.h"
 #include "compiler/compiler_pipeline.h"
+#include "bytecode_format.h"
 
 typedef struct {
   const char *name;
@@ -155,8 +156,8 @@ void test_emitbc_opcode_map(void) {
                  errdetail ? errdetail : "<no diagnostic>");
     }
     ASSERT_TRUE(errdetail == NULL);
-    ASSERT_TRUE((size_t)(out.nextbyte - out.bytecode) > 2 + tc->offset);
-    ASSERT_EQ_INT((int)tc->expected_opcode, out.bytecode[2 + tc->offset]);
+    ASSERT_TRUE((size_t)(out.nextbyte - out.bytecode) > BC_V1_HEADER_SIZE + tc->offset);
+    ASSERT_EQ_INT((int)tc->expected_opcode, out.bytecode[BC_V1_HEADER_SIZE + tc->offset]);
 
     free(out.bytecode);
     ir_destroy_unit(unit);
@@ -174,7 +175,7 @@ void test_emitbc_lists_and_itemrefs_emission(void) {
   size_t len = (size_t)(out->nextbyte - out->bytecode);
   size_t build = SIZE_MAX;
   size_t ref = SIZE_MAX;
-  for (size_t i = 2; i < len; i++) {
+  for (size_t i = BC_V1_HEADER_SIZE; i < len; i++) {
     if (out->bytecode[i] == '[') build = i;
     if (out->bytecode[i] == '&') ref = i;
   }
@@ -222,7 +223,7 @@ void test_emitbc_push_float_immediate_layout(void) {
   ASSERT_EQ_INT(0, rc);
   ASSERT_TRUE(errdetail == NULL);
 
-  size_t pos = 2;
+  size_t pos = BC_V1_HEADER_SIZE;
   for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
     uint8_t expected[sizeof(values[i])];
     memcpy(expected, &values[i], sizeof(expected));
@@ -264,7 +265,7 @@ void test_emitbc_push_int_immediate_layout(void) {
   ASSERT_EQ_INT(0, rc);
   ASSERT_TRUE(errdetail == NULL);
 
-  size_t pos = 2;
+  size_t pos = BC_V1_HEADER_SIZE;
   for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
     uint8_t expected[sizeof(values[i])];
     memcpy(expected, &values[i], sizeof(expected));
@@ -298,15 +299,15 @@ void test_emitbc_opcode_map_call_item_deref_alias_layout(void) {
   ASSERT_EQ_INT(0, rc);
   ASSERT_TRUE(errdetail == NULL);
 
-  /* header[2], ITEM_DEREF('F', argc=0), CALL('F', argc=2), HALT */
+  /* v1 header, ITEM_DEREF('F', argc=0), CALL('F', argc=2), HALT */
   ASSERT_TRUE((size_t)(out.nextbyte - out.bytecode) >= 9);
-  ASSERT_EQ_INT('F', out.bytecode[2]);
-  ASSERT_EQ_INT(0, out.bytecode[3]);
-  ASSERT_EQ_INT(0, out.bytecode[4]);
-  ASSERT_EQ_INT('F', out.bytecode[5]);
-  ASSERT_EQ_INT(2, out.bytecode[6]);
-  ASSERT_EQ_INT(0, out.bytecode[7]);
-  ASSERT_EQ_INT('h', out.bytecode[8]);
+  ASSERT_EQ_INT('F', out.bytecode[BC_V1_HEADER_SIZE]);
+  ASSERT_EQ_INT(0, out.bytecode[BC_V1_HEADER_SIZE + 1]);
+  ASSERT_EQ_INT(0, out.bytecode[BC_V1_HEADER_SIZE + 2]);
+  ASSERT_EQ_INT('F', out.bytecode[BC_V1_HEADER_SIZE + 3]);
+  ASSERT_EQ_INT(2, out.bytecode[BC_V1_HEADER_SIZE + 4]);
+  ASSERT_EQ_INT(0, out.bytecode[BC_V1_HEADER_SIZE + 5]);
+  ASSERT_EQ_INT('h', out.bytecode[BC_V1_HEADER_SIZE + 6]);
 
   free(out.bytecode);
   ir_destroy_unit(unit);

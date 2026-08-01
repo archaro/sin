@@ -40,13 +40,13 @@ static void test_emitbc_jump_forward_offsets(void) {
   ASSERT_EQ_INT(ERR_NOERROR, rc);
   ASSERT_TRUE(errdetail == NULL);
 
-  ASSERT_EQ_INT('j', out.bytecode[2]);
-  ASSERT_EQ_INT(0x0B, out.bytecode[3]);
-  ASSERT_EQ_INT(0x00, out.bytecode[4]);
+  ASSERT_EQ_INT('j', out.bytecode[8]);
+  ASSERT_EQ_INT(0x0B, out.bytecode[9]);
+  ASSERT_EQ_INT(0x00, out.bytecode[10]);
 
-  ASSERT_EQ_INT('k', out.bytecode[16]);
-  ASSERT_EQ_INT(0x02, out.bytecode[17]);
-  ASSERT_EQ_INT(0x00, out.bytecode[18]);
+  ASSERT_EQ_INT('k', out.bytecode[22]);
+  ASSERT_EQ_INT(0x02, out.bytecode[23]);
+  ASSERT_EQ_INT(0x00, out.bytecode[24]);
 
   free(out.bytecode);
   ir_destroy_unit(unit);
@@ -69,9 +69,9 @@ static void test_emitbc_jump_backward_offset_negative(void) {
   ASSERT_EQ_INT(ERR_NOERROR, rc);
   ASSERT_TRUE(errdetail == NULL);
 
-  ASSERT_EQ_INT('k', out.bytecode[11]);
-  ASSERT_EQ_INT(0xF6, out.bytecode[12]);
-  ASSERT_EQ_INT(0xFF, out.bytecode[13]);
+  ASSERT_EQ_INT('k', out.bytecode[17]);
+  ASSERT_EQ_INT(0xF6, out.bytecode[18]);
+  ASSERT_EQ_INT(0xFF, out.bytecode[19]);
 
   free(out.bytecode);
   ir_destroy_unit(unit);

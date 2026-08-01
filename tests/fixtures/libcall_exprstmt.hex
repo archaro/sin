@@ -1,4 +1,4 @@
-00 00          # header: locals=0 params=0
+00 ff 53 42 01 00 00 00  # v1 header: locals=0 params=0
 6c 05 00       # l: push literal len=5
 68 65 6c 6c 6f # "hello"
 4d 01          # M: call lib token(sys.log)

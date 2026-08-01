@@ -19,6 +19,8 @@
 #include "itemref.h"
 #include "memory.h"
 
+uint8_t *op_jump(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+
 extern CONFIG_t config;
 extern uint8_t *op_build_list(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
@@ -563,7 +565,7 @@ void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void) {
     const char *diagnostic;
   } cases[] = {
     {"short_header", short_header, sizeof(short_header),
-     "missing two-byte locals/params header"},
+     "truncated bytecode header"},
     {"truncated_operand", truncated_operand, sizeof(truncated_operand),
      "truncated LOAD_LOCAL"},
     {"missing_halt", missing_halt, sizeof(missing_halt),
@@ -606,5 +608,69 @@ void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void) {
       runtime_destroy(&ctx);
       teardown_result_semantics_runtime();
     }
+  }
+}
+
+void test_interpret_legacy_and_v1_headers_execute_equivalently(void) {
+  const uint8_t legacy[] = {1, 0, 'b', 1, 'Q', 'h'};
+  const uint8_t v1[] = {0, 0xff, 'S', 'B', 1, 0, 1, 0, 'b', 1, 'Q', 'h'};
+  setup_result_semantics_runtime();
+  uint8_t *legacy_copy = malloc(sizeof(legacy));
+  uint8_t *v1_copy = malloc(sizeof(v1));
+  ASSERT_NOT_NULL(legacy_copy);
+  ASSERT_NOT_NULL(v1_copy);
+  memcpy(legacy_copy, legacy, sizeof(legacy));
+  memcpy(v1_copy, v1, sizeof(v1));
+  ITEM_t *a = test_item_set_code(itemstore_root(config.itemstore_ctx),
+                                 "legacy_exec", sizeof(legacy), legacy_copy);
+  ASSERT_NOT_NULL(a);
+  ITEM_t *b = test_item_set_code(itemstore_root(config.itemstore_ctx),
+                                 "v1_exec", sizeof(v1), v1_copy);
+  ASSERT_NOT_NULL(b);
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemstore = config.itemstore_ctx;
+  VALUE_t av = interpret(&ctx, a);
+  VALUE_t bv = interpret(&ctx, b);
+  ASSERT_EQ_INT(VALUE_bool, av.type);
+  ASSERT_EQ_INT(VALUE_bool, bv.type);
+  ASSERT_TRUE(av.i == 1);
+  ASSERT_TRUE(bv.i == 1);
+  value_free(&av); value_free(&bv);
+  runtime_destroy(&ctx);
+  teardown_result_semantics_runtime();
+}
+
+void test_runtime_jump_diagnostic_uses_absolute_header_offset(void) {
+  const uint8_t legacy[] = {0, 0, 'j', 0xf6, 0xff, 'h'};
+  const uint8_t v1[] = {0, 0xff, 'S', 'B', 1, 0, 0, 0,
+                        'j', 0xf6, 0xff, 'h'};
+  const uint8_t *blocks[] = {legacy, v1};
+  const size_t lengths[] = {sizeof(legacy), sizeof(v1)};
+  const uint32_t expected_offsets[] = {3u, 9u};
+  for (size_t i = 0; i < 2; i++) {
+    setup_result_semantics_runtime();
+    uint8_t *copy = malloc(lengths[i]);
+    ASSERT_NOT_NULL(copy);
+    memcpy(copy, blocks[i], lengths[i]);
+    ITEM_t *item = test_item_set_code(itemstore_root(config.itemstore_ctx),
+                                      "jump_diag", (uint32_t)lengths[i], copy);
+    ASSERT_NOT_NULL(item);
+    RuntimeContext ctx;
+    runtime_context_init(&ctx, config.vm);
+    ctx.itemstore = config.itemstore_ctx;
+    ctx.current_item = item;
+    const uint8_t *base = item_bytecode(item);
+    runtime_decoder_init(&ctx.decoder, base + (i == 0 ? 2u : 8u),
+                         base + lengths[i]);
+    ASSERT_TRUE(op_jump(&ctx, (uint8_t *)base + expected_offsets[i], item) == NULL);
+    ITEM_t *message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
+    ASSERT_NOT_NULL(message);
+    ASSERT_TRUE(strstr(item_value(message)->s, "outside the bytecode frame") != NULL);
+    char offset[32];
+    snprintf(offset, sizeof(offset), "offset %u", expected_offsets[i]);
+    ASSERT_TRUE(strstr(item_value(message)->s, offset) != NULL);
+    runtime_destroy(&ctx);
+    teardown_result_semantics_runtime();
   }
 }

@@ -279,6 +279,7 @@ void test_list_limits_invalid_inputs_and_failures(void);
 
 /* Compiler component tests. */
 void test_emitbc_header(void);
+void test_sdiss_legacy_and_v1_headers_report_absolute_offsets(void);
 void test_emitbc_opcode_map(void);
 void test_emitbc_lists_and_itemrefs_emission(void);
 void test_emitbc_push_int_immediate_layout(void);
@@ -292,6 +293,7 @@ void test_emitbc_post_emission_verification(void);
 void test_bytecode_verify_policy_profiles(void);
 void test_bytecode_verify_analysis_storage_is_profile_scoped(void);
 void test_bytecode_verify_minimal_and_header_errors(void);
+void test_bytecode_format_header_variants(void);
 void test_bytecode_verify_opcode_terminators_and_complete_buffer(void);
 void test_bytecode_verify_truncated_operand_widths(void);
 void test_bytecode_verify_list_operations(void);
@@ -317,6 +319,8 @@ void test_sys_itemref_dynamic_calls(void);
 
 /* Runtime component tests. */
 void test_interpret_semantics_golden(void);
+void test_interpret_legacy_and_v1_headers_execute_equivalently(void);
+void test_runtime_jump_diagnostic_uses_absolute_header_offset(void);
 void test_interpret_result_semantics(void);
 void test_runtime_build_list_allocation_failure_consumes_inputs(void);
 void test_interpret_rejects_malformed_bytecode_before_execution(void);
@@ -480,6 +484,7 @@ static const test_case_t core_tests[] = {
 
 static const test_case_t compiler_tests[] = {
     {"test_emitbc_header", test_emitbc_header},
+    {"test_sdiss_legacy_and_v1_headers_report_absolute_offsets", test_sdiss_legacy_and_v1_headers_report_absolute_offsets},
     {"test_emitbc_opcode_map", test_emitbc_opcode_map},
     {"test_emitbc_lists_and_itemrefs_emission", test_emitbc_lists_and_itemrefs_emission},
     {"test_emitbc_push_int_immediate_layout", test_emitbc_push_int_immediate_layout},
@@ -493,6 +498,7 @@ static const test_case_t compiler_tests[] = {
     {"test_bytecode_verify_policy_profiles", test_bytecode_verify_policy_profiles},
     {"test_bytecode_verify_analysis_storage_is_profile_scoped", test_bytecode_verify_analysis_storage_is_profile_scoped},
     {"test_bytecode_verify_minimal_and_header_errors", test_bytecode_verify_minimal_and_header_errors},
+    {"test_bytecode_format_header_variants", test_bytecode_format_header_variants},
     {"test_bytecode_verify_opcode_terminators_and_complete_buffer", test_bytecode_verify_opcode_terminators_and_complete_buffer},
     {"test_bytecode_verify_truncated_operand_widths", test_bytecode_verify_truncated_operand_widths},
     {"test_bytecode_verify_list_operations", test_bytecode_verify_list_operations},
@@ -531,6 +537,8 @@ static const test_case_t runtime_tests[] = {
     {"test_strict_validation_runtime_opt_in", test_strict_validation_runtime_opt_in},
     {"test_strict_validation_rejects_null_bytecode", test_strict_validation_rejects_null_bytecode},
     {"test_interpret_semantics_golden", test_interpret_semantics_golden},
+    {"test_interpret_legacy_and_v1_headers_execute_equivalently", test_interpret_legacy_and_v1_headers_execute_equivalently},
+    {"test_runtime_jump_diagnostic_uses_absolute_header_offset", test_runtime_jump_diagnostic_uses_absolute_header_offset},
     {"test_interpret_result_semantics", test_interpret_result_semantics},
     {"test_runtime_build_list_allocation_failure_consumes_inputs", test_runtime_build_list_allocation_failure_consumes_inputs},
     {"test_interpret_rejects_malformed_bytecode_before_execution", test_interpret_rejects_malformed_bytecode_before_execution},

@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "compiler/ir/opcode_schema.h"
+#include "bytecode_format.h"
 
 #define BC_MAX_ITEM_EXPRESSION_DEPTH 8u
 
@@ -93,6 +94,10 @@ typedef struct {
 typedef struct {
   uint8_t locals;
   uint8_t params;
+  uint16_t version;
+  uint32_t instruction_offset;
+  const uint8_t *instructions;
+  bool legacy;
 } BC_BytecodeMetadata;
 
 typedef bool (*BC_DecodeInstructionCallback)(const BC_Instruction *instruction, void *ctx);

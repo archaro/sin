@@ -290,8 +290,8 @@ void test_sys_compile_libcall_runtime(void) {
   ASSERT_NOT_NULL(foo);
   ASSERT_EQ_INT(ITEM_code, item_kind(foo));
   ASSERT_NOT_NULL(item_bytecode(foo));
-  ASSERT_TRUE(item_bytecode_length(foo) >= 3u);
-  ASSERT_EQ_INT(1, item_bytecode(foo)[1]);
+  ASSERT_TRUE(item_bytecode_length(foo) >= 8u);
+  ASSERT_EQ_INT(1, item_bytecode(foo)[7]);
   assert_compile_success_bool("syscompile.observed = foo{10};");
   assert_int_item("syscompile.observed", 20);
 

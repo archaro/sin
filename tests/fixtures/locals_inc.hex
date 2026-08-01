@@ -1,4 +1,4 @@
-01 00          # header: locals=1 params=0
+00 ff 53 42 01 00 01 00  # v1 header: locals=1 params=0
 70             # p: push int
 01 00 00 00 00 00 00 00  # int64 1
 63 00          # c: store local 0

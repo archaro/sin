@@ -21,6 +21,7 @@
 #include "itemref.h"
 #include "list.h"
 #include "version.h"
+#include "bytecode_format.h"
 
 /* Test hook for controlling the timestamp used by sys.backup. */
 static const char *lc_sys_backup_test_timestamp;
@@ -450,9 +451,10 @@ uint8_t *lc_sys_paramcount(RuntimeContext *ctx, uint8_t *nextop,
     ITEM_t *target = find_item(itemstore_root(ctx->itemstore), fullname);
     const uint8_t *bytecode = target ? item_bytecode(target) : NULL;
     uint32_t bytecode_len = target ? item_bytecode_length(target) : 0;
+    BC_FormatHeader header;
     if (target && item_kind(target) == ITEM_code && bytecode &&
-        bytecode_len >= 2u) {
-      result = (VALUE_t){VALUE_int, {.i = (int64_t)bytecode[1]}};
+        bc_decode_header(bytecode, bytecode_len, &header) == BC_FORMAT_OK) {
+      result = (VALUE_t){VALUE_int, {.i = (int64_t)header.params}};
     }
   }
   value_free(&itemname);
@@ -512,8 +514,9 @@ static bool lc_sys_schedule_code_call(RuntimeContext *ctx, uint8_t *nextop,
       item_kind(target) != ITEM_code) return false;
   const uint8_t *bytecode = item_bytecode(target);
   uint32_t bytecode_len = item_bytecode_length(target);
-  if (!bytecode || bytecode_len < 2u) return false;
-  size_t params = bytecode[1];
+  BC_FormatHeader header;
+  if (!bytecode || bc_decode_header(bytecode, bytecode_len, &header) != BC_FORMAT_OK) return false;
+  size_t params = header.params;
   if (ctx->vm->callstack->current >= ctx->vm->callstack->max) return false;
   if (params > supplied && params - supplied >
       (size_t)(ctx->vm->stack->max - ctx->vm->stack->current)) {
@@ -612,11 +615,13 @@ uint8_t *lc_sys_call(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     /* List order is preserved by pushing each element from left to right. */
     size_t pushed = 0;
     const uint8_t *bytecode = item_bytecode(target);
-    size_t params = bytecode && item_bytecode_length(target) >= 2u
-        ? bytecode[1] : 0u;
+    BC_FormatHeader header;
+    bool header_ok = bytecode &&
+        bc_decode_header(bytecode, item_bytecode_length(target), &header) == BC_FORMAT_OK;
+    size_t params = header_ok ? header.params : 0u;
     size_t effective = count < params ? count : params;
-    prepared = bytecode && item_bytecode_length(target) >= 2u &&
-        params <= (size_t)(ctx->vm->stack->max - ctx->vm->stack->current);
+    prepared = header_ok && params <=
+        (size_t)(ctx->vm->stack->max - ctx->vm->stack->current);
     while (pushed < effective) {
       const VALUE_t *source = sin_list_get(arguments.list, pushed);
       VALUE_t clone = VALUE_NIL;

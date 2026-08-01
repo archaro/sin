@@ -102,6 +102,13 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     compdiag_set_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "null input");
     return errnum;
   }
+  if (param_count > local_count) {
+    int8_t errnum = ERR_NOERROR;
+    compdiag_set_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX,
+                           DIAG_PHASE_EMITBC, "emitbc",
+                           "parameter count exceeds local count");
+    return errnum;
+  }
 
   size_t pos_count = ir->function.count > 0 ? ir->function.count : 1;
   size_t *pos = NULL;
@@ -110,7 +117,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     compdiag_set_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "out of memory allocating position map");
     return errnum;
   }
-  size_t pc = 2;
+  size_t pc = BC_V1_HEADER_SIZE;
   for (size_t i = 0; i < ir->function.count; i++) {
     const IR_Inst *in = &ir->function.code[i];
     int isz = 0;
@@ -146,9 +153,11 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
   }
 
   BC_Writer w = {.out = out, .used = 0, .failed = 0};
-  if (!bw_ensure(&w, 2)) goto oom;
+  if (!bw_ensure(&w, BC_V1_HEADER_SIZE)) goto oom;
   out->nextbyte = out->bytecode;
-  if (!bw_write_u8(&w, local_count) || !bw_write_u8(&w, param_count)) goto oom;
+  uint8_t header[BC_V1_HEADER_SIZE];
+  bc_encode_v1_header(header, local_count, param_count);
+  if (!bw_write_bytes(&w, header, sizeof(header))) goto oom;
 
   for (size_t i = 0; i < ir->function.count; i++) {
     IR_Inst *in = &ir->function.code[i];

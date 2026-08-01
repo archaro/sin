@@ -114,8 +114,8 @@ void test_pipeline_large_local_lookup_duplicate(void) {
 
   size_t bytecode_len = (size_t)(out.nextbyte - out.bytecode);
   ASSERT_TRUE(bytecode_len >= 19);
-  ASSERT_EQ_INT(120, (int)out.bytecode[0]);
-  ASSERT_EQ_INT(0, (int)out.bytecode[1]);
+  ASSERT_EQ_INT(120, (int)out.bytecode[6]);
+  ASSERT_EQ_INT(0, (int)out.bytecode[7]);
 
   size_t halt = bytecode_len - 1;
   ASSERT_EQ_INT(bc_opcode_byte(IR_OP_PUSH_INT), out.bytecode[halt - 17]);

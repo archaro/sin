@@ -36,6 +36,7 @@ typedef struct {
   BC_VerifyOptions options;
   BC_VerifyResult result;
   uint8_t local_count;
+  uint32_t instruction_offset;
   bool validate_local_indices;
   bool *top_level_instruction_starts;
   uint32_t top_level_instruction_start_capacity;
@@ -419,8 +420,8 @@ static int bc_verify_stack_flow(BC_Decoder *d, uint8_t params) {
   }
   for (uint32_t i = 0; i < cap; i++) depths[i] = -1;
   uint32_t work_count = 0;
-  depths[2] = params;
-  work[work_count++] = 2;
+  depths[d->instruction_offset] = params;
+  work[work_count++] = d->instruction_offset;
 
   while (work_count > 0) {
     uint32_t offset = work[--work_count];
@@ -795,15 +796,24 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
     bc_fail(&d, NULL, 0, "null bytecode pointer");
     return d.result;
   }
-  if (bytecode_len < 2) {
-    bc_fail(&d, d.base, 0, "missing two-byte locals/params header");
+  BC_FormatHeader header;
+  BC_FormatStatus format_status = bc_decode_header(bytecode, bytecode_len, &header);
+  if (format_status != BC_FORMAT_OK) {
+    const char *reason = format_status == BC_FORMAT_TRUNCATED ? "truncated bytecode header" :
+      format_status == BC_FORMAT_UNSUPPORTED_VERSION ? "unsupported bytecode version" :
+      "invalid bytecode header";
+    bc_fail(&d, d.base, 0, reason);
     return d.result;
   }
-
-  uint8_t locals = bytecode[0];
-  uint8_t params = bytecode[1];
-  if (metadata) { metadata->locals = locals; metadata->params = params; }
+  uint8_t locals = header.locals;
+  uint8_t params = header.params;
+  if (metadata) {
+    metadata->locals = locals; metadata->params = params;
+    metadata->version = header.version; metadata->instruction_offset = header.instruction_offset;
+    metadata->instructions = header.instructions; metadata->legacy = header.legacy;
+  }
   d.local_count = locals;
+  d.instruction_offset = header.instruction_offset;
   d.validate_local_indices = d.options.validate_local_indices;
   if (params > locals) {
     bc_fail(&d, bytecode + 1, params, "parameter count exceeds local count");
@@ -828,7 +838,7 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
     return d.result;
   }
 
-  const uint8_t *cursor = bytecode + 2;
+  const uint8_t *cursor = header.instructions;
   uint8_t last_opcode = 0;
   uint32_t last_start = 0;
   while (cursor < d.end) {
@@ -847,7 +857,7 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
     }
   }
 
-  if (d.result.status != BC_VERIFY_ERROR && cursor > bytecode + 2 && last_opcode != 'h') {
+  if (d.result.status != BC_VERIFY_ERROR && cursor > header.instructions && last_opcode != 'h') {
     bc_fail(&d, d.base + last_start, last_opcode, "final physical instruction must be HALT");
   }
   if (d.result.status != BC_VERIFY_ERROR && d.options.validate_control_flow &&

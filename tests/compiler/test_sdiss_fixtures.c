@@ -140,3 +140,23 @@ void test_sdiss_lists_and_itemrefs_show_full_operands(void) {
   ASSERT_TRUE(strstr(output, "BUILD LIST COUNT 1025") != NULL);
   ASSERT_TRUE(strstr(output, "MAKE ITEMREF") != NULL);
 }
+
+void test_sdiss_legacy_and_v1_headers_report_absolute_offsets(void) {
+  const uint8_t legacy[] = {3, 1, 'b', 1, 'h'};
+  const uint8_t v1[] = {0, 0xff, 'S', 'B', 1, 0, 3, 1, 'b', 1, 'h'};
+  char legacy_out[4096] = {0};
+  char v1_out[4096] = {0};
+  SdissCapture lc = {legacy_out, 0, sizeof(legacy_out)};
+  SdissCapture vc = {v1_out, 0, sizeof(v1_out)};
+  SDissOptions options = {.raw = 0, .no_header = 0};
+  SDissResult lr = sdiss_disassemble_bytes(legacy, sizeof(legacy), &options, capture_sdiss, &lc);
+  SDissResult vr = sdiss_disassemble_bytes(v1, sizeof(v1), &options, capture_sdiss, &vc);
+  ASSERT_EQ_INT(BC_VERIFY_OK, lr.status);
+  ASSERT_EQ_INT(BC_VERIFY_OK, vr.status);
+  ASSERT_TRUE(strstr(legacy_out, "Local variables: 3") != NULL);
+  ASSERT_TRUE(strstr(v1_out, "Local variables: 3") != NULL);
+  ASSERT_TRUE(strstr(legacy_out, "(Of which, 1 are parameters.)") != NULL);
+  ASSERT_TRUE(strstr(v1_out, "(Of which, 1 are parameters.)") != NULL);
+  ASSERT_TRUE(strstr(legacy_out, "Byte 00002:") != NULL);
+  ASSERT_TRUE(strstr(v1_out, "Byte 00008:") != NULL);
+}

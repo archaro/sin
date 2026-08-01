@@ -1,4 +1,4 @@
-00 00          # header: locals=0 params=0
+00 ff 53 42 01 00 00 00  # v1 header: locals=0 params=0
 49             # I: item begin
 4c 03          # L: item layer len=3
 66 6f 6f       # "foo"

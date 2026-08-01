@@ -1,4 +1,4 @@
-00 00          # header: locals=0 params=0
+00 ff 53 42 01 00 00 00  # v1 header: locals=0 params=0
 6c             # l: push string
 02 00          # uint16 length=2
 68 69          # "hi"

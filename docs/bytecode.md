@@ -5,26 +5,29 @@ The IR opcode metadata in `src/compiler/ir/opcode_schema.def` is the source of
 truth for opcode symbols, operand kinds, size policies, validators, and runtime
 handler requirements.
 
-Bytecode is an internal, release-local format. Compatibility with bytecode
-emitted by an earlier prerelease, build, or release is not guaranteed. If a
-tool rejects bytecode produced by another version, recompile it from Sinistra
-source; there is no legacy-opcode compatibility layer or automatic bytecode
-migration.
+Bytecode is an internal, release-local format. Newly compiled code uses
+bytecode format v1. Legacy unversioned blocks are accepted temporarily as
+pre-0.8 migration input and begin with the two-byte locals/parameters header;
+they will be converted by the eventual `sconv` migration tool.
 
 ## Code block layout
 
-Every compiled code item starts with a two-byte header followed by the
-instruction stream.
+Every newly compiled code item starts with an eight-byte self-identifying v1
+header followed by the instruction stream.
 
 | Byte offset | Size | Field | Description |
 | --- | ---: | --- | --- |
-| 0 | 1 | locals count | Unsigned count of local slots used by this code block, including parameter slots. |
-| 1 | 1 | parameter count | Unsigned count of leading local slots populated from call arguments. |
-| 2 | to end | instruction stream | Encoded bytecode instructions for the interpreter to execute. |
+| 0 | 1 | reserved | `0x00`; paired with byte 1 this is invalid legacy metadata. |
+| 1 | 1 | reserved | `0xff`; invalid legacy parameter count. |
+| 2..3 | 2 | magic | ASCII `SB`. |
+| 4..5 | 2 | format version | Little-endian u16, currently `1`. |
+| 6 | 1 | locals count | Unsigned count of local slots, including parameter slots. |
+| 7 | 1 | parameter count | Unsigned count of leading local slots populated from arguments. |
+| 8 | to end | instruction stream | Encoded bytecode instructions. |
 
 The interpreter enters a code item by allocating `locals count - parameter count`
-additional local slots, recording the local and parameter counts, and beginning
-execution at byte offset 2.
+additional local slots and beginning execution at byte offset 8. Legacy blocks
+use their two-byte header and begin execution at offset 2.
 
 ## Encoding conventions
 

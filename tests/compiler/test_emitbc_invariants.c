@@ -7,6 +7,7 @@
 #include "compiler/ir.h"
 #include "test_assert.h"
 #include "test_helpers.h"
+#include "bytecode_format.h"
 
 enum { TEST_SEED = 0x5EED1234u };
 
@@ -48,14 +49,14 @@ static void assert_class_layout(IR_Inst inst, size_t expected_body_len, size_t e
   ASSERT_TRUE(errdetail == NULL);
 
   size_t len = (size_t)(out.nextbyte - out.bytecode);
-  ASSERT_EQ_INT(UINT8_MAX, out.bytecode[0]);
-  ASSERT_EQ_INT(UINT8_MAX, out.bytecode[1]);
-  ASSERT_EQ_INT(2 + expected_body_len + (inst.op == IR_OP_HALT ? 0 : 1), len);
+  ASSERT_EQ_INT(UINT8_MAX, out.bytecode[6]);
+  ASSERT_EQ_INT(UINT8_MAX, out.bytecode[7]);
+  ASSERT_EQ_INT(BC_V1_HEADER_SIZE + expected_body_len + (inst.op == IR_OP_HALT ? 0 : 1), len);
 
   if (expect_jump_width) {
     ASSERT_TRUE(len >= 5);
     /* jump offset is always 16-bit little-endian. */
-    (void)(out.bytecode[3] | (out.bytecode[4] << 8));
+    (void)(out.bytecode[BC_V1_HEADER_SIZE + 1] | (out.bytecode[BC_V1_HEADER_SIZE + 2] << 8));
   }
   if (expected_arity_bytes > 0) {
     ASSERT_TRUE(len >= 3 + expected_arity_bytes);
@@ -87,9 +88,9 @@ static void test_emitbc_op_class_invariants(void) {
   char *errdetail = NULL;
   ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 2, 2, &out, &errdetail));
   ASSERT_TRUE(errdetail == NULL);
-  ASSERT_EQ_INT(2, out.bytecode[0]);
-  ASSERT_EQ_INT(2, out.bytecode[1]);
-  ASSERT_EQ_INT(2 + 1 + 2 + 4 + 1, (size_t)(out.nextbyte - out.bytecode));
+  ASSERT_EQ_INT(2, out.bytecode[6]);
+  ASSERT_EQ_INT(2, out.bytecode[7]);
+  ASSERT_EQ_INT(BC_V1_HEADER_SIZE + 1 + 2 + 4 + 1, (size_t)(out.nextbyte - out.bytecode));
   free(out.bytecode);
   ir_destroy_unit(u);
 }

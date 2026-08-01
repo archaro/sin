@@ -32,6 +32,10 @@
 
 #define VM ctx->vm
 
+static bool runtime_code_header(ITEM_t *item, BC_FormatHeader *header) {
+  return item && bc_decode_header(item_bytecode(item), item_bytecode_length(item), header) == BC_FORMAT_OK;
+}
+
 typedef struct RuntimeRegistryNode {
   LibcallRegistry *registry;
   struct RuntimeRegistryNode *next;
@@ -227,6 +231,16 @@ static uint8_t *decode_next(RuntimeContext *ctx, RuntimeDecodeStatus status) {
   return report_decode_status(ctx, status) ? status.next : NULL;
 }
 
+static uint32_t runtime_absolute_offset(const RuntimeContext *ctx,
+                                       const uint8_t *pointer) {
+  const uint8_t *base = ctx && ctx->current_item
+      ? item_bytecode(ctx->current_item) : NULL;
+  uint32_t length = ctx && ctx->current_item
+      ? item_bytecode_length(ctx->current_item) : 0u;
+  if (!base || !pointer || pointer < base || pointer > base + length) return 0u;
+  return (uint32_t)(pointer - base);
+}
+
 static uint8_t *runtime_jump_target(RuntimeContext *ctx, uint8_t *origin,
                                     int16_t relative, const char *opname) {
   if (!ctx || !ctx->decoder.frame_start || !ctx->decoder.frame_end ||
@@ -241,7 +255,7 @@ static uint8_t *runtime_jump_target(RuntimeContext *ctx, uint8_t *origin,
     char detail[128];
     snprintf(detail, sizeof(detail), "%s target is outside the bytecode frame",
              opname);
-    uint32_t bytecode_offset = (uint32_t)origin_offset + 2u;
+    uint32_t bytecode_offset = runtime_absolute_offset(ctx, origin);
     set_runtime_bytecode_error(ctx, NULL, bytecode_offset, detail);
     return NULL;
   }
@@ -865,15 +879,16 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         }
         // Are there any arguments in excess of what this item takes?
         // If so, lose 'em.
-        const uint8_t *ibytecode = item_bytecode(i);
-        while (arg_count > ibytecode[1]) {
+        BC_FormatHeader iheader;
+        if (!runtime_code_header(i, &iheader)) { FREE_STR(itemname); return NULL; }
+        while (arg_count > iheader.params) {
           logverbose("Popping unneeded argument.\n");
           report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded extra argument for target item");
           throwaway_stack(VM->stack);
           arg_count--;
         }
         // Contrariwise, do we have fewer arguments than we should?
-        while (arg_count < ibytecode[1]) {
+        while (arg_count < iheader.params) {
           logverbose("Pushing additional nil-value argument.\n");
           push_stack(VM->stack, VALUE_NIL);
           arg_count++;
@@ -883,7 +898,7 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         // correctly adjusted to account for them at the top of the
         // current stack (they will be at the bottom of the frame for
         // the new item).
-        push_callstack(VM, item, nextop, ibytecode[1], (uint8_t *)ctx->decoder.frame_start, (uint8_t *)ctx->decoder.frame_end);
+        push_callstack(VM, item, nextop, iheader.params, (uint8_t *)ctx->decoder.frame_start, (uint8_t *)ctx->decoder.frame_end);
         // Invariant at call-entry:
         // - caller VM stack/base/locals/params are captured in callstack.
         // - caller continuation (item + nextop + bytecode bounds) is captured.
@@ -934,13 +949,13 @@ uint8_t *op_build_list(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   nextop = status.next;
   if (count > SIN_LIST_MAX_ELEMENTS) {
     set_runtime_bytecode_error(
-        ctx, NULL, (uint32_t)(nextop - ctx->decoder.frame_start) - 4u,
+        ctx, NULL, runtime_absolute_offset(ctx, nextop - 4u),
                                "BUILD_LIST count exceeds maximum");
     return NULL;
   }
   if ((size_t)count > (size_t)size_stack(VM->stack)) {
     set_runtime_bytecode_error(
-        ctx, NULL, (uint32_t)(nextop - ctx->decoder.frame_start) - 5u,
+        ctx, NULL, runtime_absolute_offset(ctx, nextop - 5u),
                                "BUILD_LIST stack underflow");
     return NULL;
   }
@@ -1276,10 +1291,12 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   bool current_frame_pinned = true;
   const uint8_t *current_code = item_bytecode(ctx->current_item);
   uint32_t current_code_len = item_bytecode_length(ctx->current_item);
-  VM->stack->current += current_code[0] - current_code[1];
-  VM->stack->locals = current_code[0];
-  VM->stack->params = current_code[1];
-  uint8_t *op = (uint8_t *)current_code + 2;
+  BC_FormatHeader current_header;
+  if (!runtime_code_header(ctx->current_item, &current_header)) goto interpretation_failure;
+  VM->stack->current += current_header.locals - current_header.params;
+  VM->stack->locals = current_header.locals;
+  VM->stack->params = current_header.params;
+  uint8_t *op = (uint8_t *)current_header.instructions;
   runtime_decoder_init(&ctx->decoder, op, (uint8_t *)current_code + current_code_len);
 
   while (true) {
@@ -1336,10 +1353,11 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
         current_frame_pinned = true;
         current_code = item_bytecode(ctx->current_item);
         current_code_len = item_bytecode_length(ctx->current_item);
-        VM->stack->current += current_code[0] - current_code[1];
-        VM->stack->locals = current_code[0];
-        VM->stack->params = current_code[1];
-        op = (uint8_t *)current_code + 2;
+        if (!runtime_code_header(ctx->current_item, &current_header)) goto interpretation_failure;
+        VM->stack->current += current_header.locals - current_header.params;
+        VM->stack->locals = current_header.locals;
+        VM->stack->params = current_header.params;
+        op = (uint8_t *)current_header.instructions;
         runtime_decoder_init(&ctx->decoder, op, (uint8_t *)current_code + current_code_len);
         continue;
       }

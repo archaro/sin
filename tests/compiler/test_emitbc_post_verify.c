@@ -18,9 +18,13 @@ static void assert_post_verify_failure(IR_Unit *unit, uint8_t local_count,
   char *errdetail = NULL;
   int8_t rc = t_emit_bytecode(unit, local_count, param_count, &out,
                               &errdetail);
+  if (rc == ERR_NOERROR) {
+    TEST_FAILF("expected emission failure containing: %s", expected_detail);
+  }
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "emitbc: bytecode verification failed") != NULL);
+  ASSERT_TRUE(strstr(errdetail, "emitbc: bytecode verification failed") != NULL ||
+              strstr(errdetail, "emitbc: parameter count exceeds local count") != NULL);
   ASSERT_TRUE(strstr(errdetail, expected_detail) != NULL);
 
   free(errdetail);

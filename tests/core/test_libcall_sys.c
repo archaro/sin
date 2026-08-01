@@ -21,6 +21,7 @@
 #include "itemref.h"
 #include "string_limits.h"
 #include "version.h"
+#include "bytecode_format.h"
 
 #include "network.h"
 
@@ -276,7 +277,7 @@ void test_sys_itemref_contracts(void) {
                                       "scope.caller.to_delete", VALUE_TRUE));
   uint8_t *code = malloc(3u);
   ASSERT_NOT_NULL(code);
-  code[0] = 0; code[1] = 1; code[2] = (uint8_t)'h';
+  code[0] = 1; code[1] = 1; code[2] = (uint8_t)'h';
   ASSERT_NOT_NULL(test_item_set_code(itemstore_root(config.itemstore_ctx),
                                      "scope.caller.fn", 3u, code));
   ctx->current_item = caller;
@@ -955,7 +956,12 @@ void test_sys_caller_paramcount_libcalls(void) {
       (VALUE_t){VALUE_str, {.s = strdup("params.scope.runner.multiple")}});
   ASSERT_EQ_INT(VALUE_int, result.type);
   ASSERT_EQ_INT(3, result.i);
-  ASSERT_EQ_INT(0, item_bytecode(zero_params)[1]);
+  BC_FormatHeader zero_header;
+  ASSERT_EQ_INT(BC_FORMAT_OK,
+                bc_decode_header(item_bytecode(zero_params),
+                                 item_bytecode_length(zero_params),
+                                 &zero_header));
+  ASSERT_EQ_INT(0, zero_header.params);
 
   static const char *const nil_names[] = {
     "invalid-name!", "params.missing", "params.value",

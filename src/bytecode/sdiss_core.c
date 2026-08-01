@@ -154,7 +154,7 @@ static bool on_instruction(const BC_Instruction *inst, void *ctx) {
   if (inst->context == BC_EVENT_CONTEXT_STMT && inst->schema->op != IR_OP_HALT) {
     state->result->instruction_count++;
   }
-  outln(state, "Byte %05u: ", inst->offset == 0 ? 0 : inst->offset - 1);
+  outln(state, "Byte %05u: ", inst->offset);
   print_operand_line(state, inst);
   print_raw(state, inst);
   if (state->options.raw) outln(state, "\n");

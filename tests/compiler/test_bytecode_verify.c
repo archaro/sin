@@ -123,12 +123,34 @@ void test_bytecode_verify_minimal_and_header_errors(void) {
   const uint8_t header_too_short[] = {0};
   assert_verify_status(header_too_short, sizeof(header_too_short),
                        BC_VERIFY_ERROR, "header_too_short",
-                       "missing two-byte locals/params header");
+                       "truncated bytecode header");
 
   const uint8_t params_exceed_locals[] = {0, 1, 'h'};
   assert_verify_status(params_exceed_locals, sizeof(params_exceed_locals),
                        BC_VERIFY_ERROR, "params_exceed_locals",
-                       "parameter count exceeds local count");
+                       "invalid bytecode header");
+}
+
+void test_bytecode_format_header_variants(void) {
+  const uint8_t v1[] = {0, 0xff, 'S', 'B', 1, 0, 3, 2, 'h'};
+  BC_FormatHeader h;
+  ASSERT_EQ_INT(BC_FORMAT_OK, bc_decode_header(v1, sizeof(v1), &h));
+  ASSERT_TRUE(!h.legacy); ASSERT_EQ_INT(1, h.version);
+  ASSERT_EQ_INT(3, h.locals); ASSERT_EQ_INT(2, h.params);
+  ASSERT_EQ_INT(8, h.instruction_offset); ASSERT_EQ_INT('h', *h.instructions);
+  const uint8_t legacy[] = {3, 2, 'h'};
+  ASSERT_EQ_INT(BC_FORMAT_OK, bc_decode_header(legacy, sizeof(legacy), &h));
+  ASSERT_TRUE(h.legacy); ASSERT_EQ_INT(2, h.instruction_offset);
+  const uint8_t trunc[] = {0, 0xff, 'S'};
+  ASSERT_EQ_INT(BC_FORMAT_TRUNCATED, bc_decode_header(trunc, sizeof(trunc), &h));
+  const uint8_t magic[] = {0, 0xff, 'X', 'B', 1, 0, 0, 0};
+  ASSERT_EQ_INT(BC_FORMAT_INVALID, bc_decode_header(magic, sizeof(magic), &h));
+  const uint8_t version[] = {0, 0xff, 'S', 'B', 2, 0, 0, 0};
+  ASSERT_EQ_INT(BC_FORMAT_UNSUPPORTED_VERSION, bc_decode_header(version, sizeof(version), &h));
+  const uint8_t bad_v1[] = {0, 0xff, 'S', 'B', 1, 0, 0, 1};
+  ASSERT_EQ_INT(BC_FORMAT_INVALID, bc_decode_header(bad_v1, sizeof(bad_v1), &h));
+  const uint8_t bad_legacy[] = {0, 1, 'h'};
+  ASSERT_EQ_INT(BC_FORMAT_INVALID, bc_decode_header(bad_legacy, sizeof(bad_legacy), &h));
 }
 
 void test_bytecode_verify_opcode_terminators_and_complete_buffer(void) {
@@ -411,6 +433,10 @@ void test_bytecode_verify_pipeline_fixture_bytecode(void) {
     ASSERT_NOT_NULL(bytes);
     BC_VerifyResult result = bc_verify_bytecode(bytes, (uint32_t)len,
                                                 cases[i].name, NULL);
+    if (result.status != BC_VERIFY_OK) {
+      TEST_FAILF("fixture %s failed verification: %s", cases[i].fixture_path,
+                 result.diagnostic.message);
+    }
     ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
     free(bytes);
   }
