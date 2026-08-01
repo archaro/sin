@@ -181,7 +181,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
 
 .PHONY: all lib clean help debug release sanitize FORCE_BUILD
-.PHONY: test test-network test-chat-smoke test-build-switch test-strict test-release test-warnings test-asan test-lsan
+.PHONY: test test-network test-chat-smoke test-build-switch test-strict test-benchmark test-release test-warnings test-asan test-lsan
 .PHONY: fuzz-build fuzz-corpora fuzz-smoke fuzz-smoke-run
 .PHONY: fuzz-scomp fuzz-sdiss fuzz-sin-object
 .PHONY: seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
@@ -218,6 +218,7 @@ help:
 		'  test-chat-smoke  Run the real chat example through localhost' \
 		'  test-build-switch Verify build variants can be switched without cleaning' \
 		'  test-strict      Run combined core/compiler/runtime suite with benchmark budgets enabled' \
+		'  test-benchmark   Run the opt-in extended benchmark matrix in an optimized build' \
 		'  test-release     Clean, rebuild, and test with BUILD=release and strict warnings' \
 		'  test-warnings    Clean, rebuild, and test with STRICT_WARNINGS=1' \
 		'  test-asan        Clean, rebuild, and test with BUILD=sanitize, leak checks off' \
@@ -294,6 +295,10 @@ test-build-switch:
 
 test-strict: $(TEST_BIN)
 	SIN_STRICT_BENCH=1 ./$(TEST_BIN)
+
+test-benchmark:
+	+$(MAKE) BUILD=release $(TEST_BIN)
+	SIN_EXTENDED_BENCH=1 SIN_BENCH_REPORT=1 ./$(TEST_BIN)
 
 test-warnings: clean
 	+$(MAKE) STRICT_WARNINGS=1 test

@@ -41,6 +41,20 @@ failures return `nil` without changing the error item. `append`, `set`, `concat`
 and `slice` return new lists. No
 mutable push/pop/insert/remove or extra indexing syntax is planned initially.
 
+### Performance measurements
+
+The representative list/item-reference matrix is opt-in: run `make
+test-benchmark` (or set `SIN_EXTENDED_BENCH=1 SIN_BENCH_REPORT=1` when running
+the optimized test binary). It reports representative medians: construct and
+clone/release at 0, 8, and 1024; random and sequential get, set, concat, and
+slice at 8 and 1024; append at 31→32, 32→33, 1055→1056, and 1056→1057;
+equal/early-unequal/late-unequal at 1024; a runtime `BUILD_LIST` literal of 33
+elements; itemstore v2 save/load; item-reference creation/resolution; and a
+list/element transfer proxy. Results are machine-dependent; compare medians
+and ratios rather than absolute budgets. Investigate a repeatable regression of
+3% or more across repeated optimized runs. Normal `make test` does not run or
+enforce the matrix.
+
 ## Item references
 
 `&fred` and dynamic paths such as `&players.[@index]` produce immutable,

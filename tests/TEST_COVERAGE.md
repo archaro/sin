@@ -407,6 +407,9 @@ integration, and an opt-in performance guard.
       `test_interpret_stress`
     - strict thresholds enabled with `SIN_STRICT_BENCH=1`; normal runs never
       enforce machine-dependent benchmark budgets
+    - extended list/itemstore/itemref/sys.call matrix enabled with
+      `SIN_EXTENDED_BENCH=1`; `SIN_BENCH_REPORT=1` replays captured benchmark
+      output on passing tests, and `make test-benchmark` runs it in `BUILD=release`
 - **Code-item results**
   - `tests/interpreter/test_interpret_semantics_golden.c`
     - explicit valued and bare returns, fallthrough `nil`, discarded final

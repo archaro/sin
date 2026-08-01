@@ -38,6 +38,8 @@ static jmp_buf test_failure_jmp;
 static bool test_failure_jmp_active = false;
 static char test_failure_message[1024];
 
+static int env_flag_enabled(const char *name);
+
 const char *test_harness_current_suite(void) { return current_suite_name; }
 const char *test_harness_current_test(void) { return current_test_name; }
 
@@ -780,6 +782,12 @@ static test_suite_summary_t run_suite(const char *suite_name, const test_case_t 
     }
     test_failure_jmp_active = false;
     capture_stop(&capture);
+
+    if (failed == 0 && env_flag_enabled("SIN_BENCH_REPORT") &&
+        strstr(cases[i].name, "benchmark") != NULL) {
+      replay_captured_stream("benchmark stdout", capture.stdout_file);
+      replay_captured_stream("benchmark stderr", capture.stderr_file);
+    }
 
     if (failed != 0) {
       harness_printf("[test-harness][%s][FAIL] index=%zu/%zu test=%s elapsed_ms=%.2f\n",
