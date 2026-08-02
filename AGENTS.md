@@ -41,8 +41,9 @@ For every native implementation, correction, or review agent:
 
 - Never pass the root conversation history: provide the minimum context
   necessary to implement the requested task.
-- Run tests in Luna (Low).  Return the result of the tests to the orchestrator.
-  If there are errors, return those too.
+- Run tests in `luna-test` (Luna, Low). Return the result of the tests to the
+  orchestrator. If there are errors, return those too. That agent executes and
+  reports only; it never edits files or diagnoses failures.
 
 For every implementation, correction, or review handoff:
 
