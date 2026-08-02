@@ -685,6 +685,39 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
   ASSERT_EQ_INT(0, fclose(file));
   ASSERT_EQ_INT(0, unlink(badpath));
 
+  char aggregate_path[] = "/tmp/sin-itemstore-v2-aggregate-XXXXXX";
+  file = new_fixture(aggregate_path);
+  static const uint8_t aggregate_sentinel[] = {'a', 'g', 'g'};
+  put_bytes(file, aggregate_sentinel, sizeof aggregate_sentinel);
+  ASSERT_EQ_INT(0, fclose(file));
+  root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  const size_t repeated_count = 600000u;
+  VALUE_t *elements = calloc(repeated_count, sizeof *elements);
+  ASSERT_NOT_NULL(elements);
+  for (size_t i = 0; i < repeated_count; ++i) {
+    elements[i] = (VALUE_t){VALUE_nil, {.i = 0}};
+  }
+  SIN_LIST_t *repeated = sin_list_build_owned(elements, repeated_count);
+  free(elements);
+  ASSERT_NOT_NULL(repeated);
+  ASSERT_NOT_NULL(test_item_set_value(
+      root, "first", (VALUE_t){VALUE_list, {.list = sin_list_retain(repeated)}}));
+  ASSERT_NOT_NULL(test_item_set_value(
+      root, "second", (VALUE_t){VALUE_list, {.list = sin_list_retain(repeated)}}));
+  sin_list_release(repeated);
+  ASSERT_TRUE(!save_itemstore(aggregate_path, root));
+  destroy_item(root);
+  file = fopen(aggregate_path, "rb");
+  ASSERT_NOT_NULL(file);
+  uint8_t aggregate_actual[sizeof aggregate_sentinel];
+  ASSERT_EQ_INT(sizeof aggregate_actual,
+                fread(aggregate_actual, 1, sizeof aggregate_actual, file));
+  ASSERT_TRUE(memcmp(aggregate_actual, aggregate_sentinel,
+                     sizeof aggregate_sentinel) == 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_EQ_INT(0, unlink(aggregate_path));
+
   badpath[0] = '\0';
   snprintf(badpath, sizeof badpath, "/tmp/sin-itemstore-v2-ref-XXXXXX");
   file = new_fixture(badpath);

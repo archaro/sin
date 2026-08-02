@@ -127,7 +127,7 @@ size_t item_children_ordered_capacity(const ITEM_CHILDREN_t *children);
 uint32_t murmur3_32(const char *key, size_t len, uint32_t seed);
 
 // Persistence internals.
-bool write_item(FILE *file, ITEM_t *item);
+bool write_item(FILE *file, ITEM_t *item, size_t *aggregate_budget);
 ITEM_t *read_item(FILE *file, ITEM_t *parent);
 
 // Allocator API.

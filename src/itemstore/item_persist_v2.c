@@ -42,8 +42,9 @@ static bool valid_ref_path(const char *path, size_t length) {
   return true;
 }
 
-bool itemstore_write_v2_value(FILE *file, const VALUE_t *value, size_t depth) {
-  if (file == NULL || value == NULL) {
+bool itemstore_write_v2_value(FILE *file, const VALUE_t *value, size_t depth,
+                              size_t *aggregate_budget) {
+  if (file == NULL || value == NULL || aggregate_budget == NULL) {
     return false;
   }
   switch (value->type) {
@@ -106,6 +107,11 @@ bool itemstore_write_v2_value(FILE *file, const VALUE_t *value, size_t depth) {
       if (count > SIN_LIST_MAX_ELEMENTS || count > UINT32_MAX) {
         return false;
       }
+      if (count > *aggregate_budget) {
+        logerr("Cannot write lists: aggregate element budget exceeded.\n");
+        return false;
+      }
+      *aggregate_budget -= count;
       if (!itemstore_write_u8(file, ITEMSTORE_V2_VALUE_TAG_LIST,
                               "value type tag") ||
           !itemstore_write_u32_le(file, (uint32_t)count,
@@ -114,7 +120,7 @@ bool itemstore_write_v2_value(FILE *file, const VALUE_t *value, size_t depth) {
       }
       for (size_t i = 0; i < count; i++) {
         if (!itemstore_write_v2_value(file, sin_list_get(value->list, i),
-                                      depth + 1u)) {
+                                      depth + 1u, aggregate_budget)) {
           return false;
         }
       }

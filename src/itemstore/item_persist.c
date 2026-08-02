@@ -306,7 +306,7 @@ bool itemstore_read_u64_le(FILE *file, uint64_t *value, const char *context) {
   return true;
 }
 
-bool write_item(FILE *file, ITEM_t *item) {
+bool write_item(FILE *file, ITEM_t *item, size_t *aggregate_budget) {
   size_t depth = 0;
   for (ITEM_t *ancestor = item->parent; ancestor != NULL;
        ancestor = ancestor->parent) {
@@ -346,7 +346,8 @@ bool write_item(FILE *file, ITEM_t *item) {
   if (!itemstore_write_u8(file, item_tag, "item type tag")) return false;
 
   if (item->type == ITEM_value) {
-    if (!itemstore_write_v2_value(file, &item->value, 0)) {
+    if (!itemstore_write_v2_value(file, &item->value, 0,
+                                  aggregate_budget)) {
       logerr("Failed to write malformed value item '%s'.\n", item->name);
       return false;
     }
@@ -377,7 +378,8 @@ bool write_item(FILE *file, ITEM_t *item) {
   if (!itemstore_write_u32_le(file, (uint32_t)numchildren, "child count")) return false;
 
   for (size_t i = 0; i < numchildren; i++) {
-    if (!write_item(file, item_children_at(item->children, i))) return false;
+    if (!write_item(file, item_children_at(item->children, i),
+                    aggregate_budget)) return false;
   }
   return true;
 }
@@ -419,6 +421,7 @@ static ITEMSTORE_SAVE_RESULT_e itemstore_save_core(
   ITEMSTORE_SAVE_RESULT_e result = ITEMSTORE_SAVE_FAILURE;
   bool published = false;
   bool temp_needs_cleanup = false;
+  size_t aggregate_budget = SIN_LIST_MAX_ELEMENTS;
 
   file = create_temp_itemstore(filename, &temp_path);
   if (file == NULL) return ITEMSTORE_SAVE_FAILURE;
@@ -428,7 +431,7 @@ static ITEMSTORE_SAVE_RESULT_e itemstore_save_core(
                    "file-header magic")
       || !itemstore_write_u16_le(file, ITEMSTORE_V2_FORMAT_VERSION,
                        "file-header version")
-      || !write_item(file, root)) {
+      || !write_item(file, root, &aggregate_budget)) {
     goto cleanup;
   }
 

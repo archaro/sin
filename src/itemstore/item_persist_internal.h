@@ -56,7 +56,8 @@ bool itemstore_write_u8(FILE *file, uint8_t value, const char *context);
 bool itemstore_write_u16_le(FILE *file, uint16_t value, const char *context);
 bool itemstore_write_u32_le(FILE *file, uint32_t value, const char *context);
 bool itemstore_write_u64_le(FILE *file, uint64_t value, const char *context);
-bool itemstore_write_v2_value(FILE *file, const VALUE_t *value, size_t depth);
+bool itemstore_write_v2_value(FILE *file, const VALUE_t *value, size_t depth,
+                              size_t *aggregate_budget);
 ITEM_t *itemstore_read_v1_record(FILE *file, ITEM_t *parent,
                                  ITEMSTORE_READ_CTX_t *ctx);
 ITEM_t *itemstore_read_v2_record(FILE *file, ITEM_t *parent,
