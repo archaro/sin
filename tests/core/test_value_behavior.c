@@ -26,6 +26,8 @@ extern uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop,
                                   ITEM_t *item);
 extern uint8_t *op_assignitem(RuntimeContext *ctx, uint8_t *nextop,
                               ITEM_t *item);
+extern uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop,
+                              ITEM_t *item);
 
 static void setup_runtime(void) {
   memset(&config, 0, sizeof(config));
@@ -1314,6 +1316,42 @@ void test_strict_runtime_contracts_default_preserves_fetch_argument_drops(void) 
   ASSERT_EQ_INT(VALUE_nil, result.type);
   assert_error_nil();
   teardown_runtime();
+}
+
+void test_value_item_fetch_discards_arguments_and_reports_strict_contract(void) {
+  for (int strict = 0; strict <= 1; ++strict) {
+    setup_runtime();
+    config.strict_runtime_contracts = strict != 0;
+    ITEM_t *target = test_item_set_value(
+        itemstore_root(config.itemstore_ctx), "value_target",
+        (VALUE_t){VALUE_str, {.s = strdup("stored")}});
+    ASSERT_NOT_NULL(target);
+
+    RuntimeContext ctx;
+    runtime_context_init(&ctx, config.vm);
+    ctx.itemstore = config.itemstore_ctx;
+    ctx.strict_runtime_contracts = config.strict_runtime_contracts;
+    uint8_t code[] = {1, 0};
+    runtime_decoder_init(&ctx.decoder, code, code + sizeof(code));
+    push_stack(config.vm->stack,
+               (VALUE_t){VALUE_str, {.s = strdup("argument")}});
+    push_stack(config.vm->stack,
+               (VALUE_t){VALUE_str, {.s = strdup("value_target")}});
+    uint8_t *next = op_fetchitem(&ctx, code, target);
+    ASSERT_TRUE(next == code + sizeof(code));
+    ASSERT_EQ_INT(0, config.vm->stack->current);
+    VALUE_t *result = peek_stack(config.vm->stack);
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ_INT(VALUE_str, result->type);
+    ASSERT_TRUE(strcmp(result->s, "stored") == 0);
+    if (strict) {
+      assert_strict_runtime_contract_detail("value target item");
+    } else {
+      ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
+      if (err != NULL) ASSERT_EQ_INT(VALUE_nil, item_value(err)->type);
+    }
+    teardown_runtime();
+  }
 }
 
 void test_strict_validation_alone_preserves_fetch_argument_drops(void) {

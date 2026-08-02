@@ -871,6 +871,13 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
       logverbose("Fetched item %s (called with %d arguments).\n", fullname, arg_count);
       // Just push the item value onto the stack.
       if (item_kind(i) == ITEM_value) {
+        while (arg_count > 0) {
+          logverbose("Discarding argument for value target item.\n");
+          report_strict_runtime_contract(ctx,
+              "OP_FETCHITEM discarded argument for value target item");
+          throwaway_stack(VM->stack);
+          arg_count--;
+        }
         const VALUE_t *iv = item_value(i);
         VALUE_t v = iv ? value_clone(iv) : VALUE_NIL;
         push_stack(VM->stack, v);

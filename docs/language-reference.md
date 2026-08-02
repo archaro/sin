@@ -176,7 +176,10 @@ relative to the executing item using the ordinary item-name rules.
   not rolled back when the result is discarded.
 - A **value item** is not executed. The call expression produces a clone of the
   stored value (including `nil`, lists, strings, and references). Supplied
-  arguments do not change that value.
+  arguments are evaluated for side effects, then discarded (and freed) before
+  the clone is pushed. The call always leaves exactly one result. Under
+  `--strict-runtime-contracts`, each discarded value-item argument records
+  `ERR_RUNTIME_INVALIDARGS`; default mode is silent.
 - A missing item, an invalid computed item name, or a target whose name has an
   invalid value produces `nil`. It is not an execution failure at the language
   level.
@@ -194,9 +197,9 @@ argument 2 to `@b`. The compiler's established encoded limits apply: the
 distinct local/parameter table and emitted parameter count are each limited to
 255 entries. No stronger limit rule is part of this reference.
 
-In default mode, discarded arguments for excess-argument, missing-target, and
-invalid-target calls are silent and the call keeps its normal value (`nil` for
-the latter two). With `--strict-runtime-contracts`, the same arguments are
+In default mode, discarded arguments for excess-argument, value-item,
+missing-target, and invalid-target calls are silent and the call keeps its
+normal value (`nil` for the latter two). With `--strict-runtime-contracts`, the same arguments are
 discarded and the same values are returned, but the runtime also records
 `ERR_RUNTIME_INVALIDARGS`, writes a diagnostic to `error.msg`, and logs the
 contract violation. Strict mode changes diagnostics, not stack/result

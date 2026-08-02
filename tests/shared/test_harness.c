@@ -346,6 +346,7 @@ void test_interpreter_truncated_libcall_pair_preserves_vm_frames(void);
 void test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error(void);
 void test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error(void);
 void test_strict_runtime_contracts_default_preserves_fetch_argument_drops(void);
+void test_value_item_fetch_discards_arguments_and_reports_strict_contract(void);
 void test_strict_validation_alone_preserves_fetch_argument_drops(void);
 void test_strict_runtime_contracts_reports_too_many_item_arguments(void);
 void test_strict_runtime_contracts_reports_invalid_item_name_arguments(void);
@@ -554,6 +555,7 @@ static const test_case_t runtime_tests[] = {
     {"test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error",
      test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error},
     {"test_strict_runtime_contracts_default_preserves_fetch_argument_drops", test_strict_runtime_contracts_default_preserves_fetch_argument_drops},
+    {"test_value_item_fetch_discards_arguments_and_reports_strict_contract", test_value_item_fetch_discards_arguments_and_reports_strict_contract},
     {"test_strict_validation_alone_preserves_fetch_argument_drops", test_strict_validation_alone_preserves_fetch_argument_drops},
     {"test_strict_runtime_contracts_reports_too_many_item_arguments", test_strict_runtime_contracts_reports_too_many_item_arguments},
     {"test_strict_runtime_contracts_reports_invalid_item_name_arguments", test_strict_runtime_contracts_reports_invalid_item_name_arguments},
