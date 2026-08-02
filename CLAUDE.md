@@ -12,7 +12,9 @@ re-derive repository structure, invariants, and gates from source on every task.
 4. This file — repository *knowledge*: architecture, invariants, ABI/wire
    contracts, limits, and change recipes.
 
-This file deliberately does **not** restate `AGENTS.md` process rules. When
+This file deliberately does **not** restate `AGENTS.md` process rules — notably
+the bounded Luna → Sol → root escalation ladder under *Implementation and
+escalation*, which is authoritative there and must not be copied here. When
 process and knowledge appear to conflict, `AGENTS.md` wins and this file is the
 thing to correct.
 

@@ -70,6 +70,19 @@ For non-trivial code changes:
    certainty, refer back to Luna for correction, with detailed and bounded
    instructions on what is wrong and what needs to be fixed.
 
+Escalation is bounded. Count the initial implementation as attempt 1:
+
+- Attempts 1 through 5 belong to Luna. Repeat step 4 for each correction.
+- If attempt 5 still fails root review, hand the task to Sol (`gpt-5.6-sol`)
+  with a fresh, self-contained handoff stating what Luna produced, which
+  acceptance criteria remain unmet, and the specific failures. Do not forward
+  Luna's transcript.
+- Sol gets at most two attempts, reviewed against the same criteria.
+- If Sol's second attempt still fails, the root implements the fix itself.
+
+Never restart the ladder for the same bounded task; re-scoping a failed task
+does not reset the count. A task that reaches the root stays with the root.
+
 The root may make tiny mechanical edits. Substantive implementation follows
 the model of Luna as code-monkey, irrespective of what the orchestration
 model is.
