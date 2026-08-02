@@ -127,32 +127,32 @@ statements never implicitly become an item's result.
 
 ## Values and operators ##
 
-### Numeric values ###
+The complete value model, truthiness rules, equality/ordering matrices, and
+arithmetic result contracts are maintained in the [canonical language
+reference](language-reference.md#values-and-operator-semantics). The summary
+here is intentionally introductory: there are seven runtime value types, and
+`+`, `-`, `*`, `/`, `%`, comparisons, `!`, `and`, and `or` do not perform
+general string/numeric/boolean coercion. In particular, `+` has the documented
+`nil`-as-zero special case. Invalid `/` has a compatibility split: a pair with
+no float operand produces integer zero, while an invalid pair containing a
+float produces `nil`.
 
-Integer literals are base-10 whole numbers. Float literals are base-10 decimal literals with digits on both sides of the decimal point, optionally followed by an exponent, for example `0.5`, `1.0`, `-0.0`, `1.25e2`, or `6.02E+23`. A token such as `42` remains an integer literal, while malformed decimal forms such as `1.` are rejected. Special spellings such as `nan`, `inf`, and `infinity` are not accepted as source literals, although arithmetic can still produce IEEE 754 infinities and NaNs at runtime.
-
-Sinistra floats are C `double` values and require IEEE 754 binary64 behavior: 53 bits of precision, binary radix, and the usual exponent range. Decimal float literals are converted with the C locale (`.` as the decimal separator) to the nearest binary64 value, including subnormal values, signed zero, and overflow to infinity when appropriate. Runtime arithmetic on floats follows the platform binary64 operations for addition, subtraction, multiplication, division, remainder, and unary negation.
-
-When an arithmetic or numeric comparison operation sees one integer and one float, the integer operand is promoted to binary64 and the result is a float for arithmetic, or a boolean for comparison. Integer-only arithmetic is checked before each operation; signed 64-bit overflow in `+`, `-`, `*`, `/`, or unary negation produces `nil` rather than wrapping, saturating, or trapping. Integer remainder `%` truncates toward zero and any nonzero result has the sign of the left operand. Integer division by zero produces integer `0`, while integer `%` by zero produces `nil`; float division uses IEEE 754 behavior such as infinities or NaN, and float `%` uses `fmod()` (including NaN for a floating zero divisor). Invalid non-numeric operands produce `nil` for arithmetic remainder. String concatenation with `+` is still string-only. The `+` operator also treats `nil` as integer `0`, so `nil + 7` is `7`; other arithmetic operators do not treat `nil` as numeric.
-
-Float equality and ordering use IEEE 754 comparison rules after any integer-to-float promotion. NaN is not equal to any value, including itself, so `NaN == NaN` is false and `NaN != NaN` is true when a NaN value is produced at runtime. Ordered comparisons involving NaN (`<`, `<=`, `>`, `>=`) are false. Positive and negative zero compare equal to each other and to integer `0`, but formatting preserves the sign: `+0.0` formats as `0.0` and `-0.0` formats as `-0.0`.
-
-Truthiness treats `+0.0` and `-0.0` as false. Every other float value is true, including infinities and NaN.
-
-Integer edge examples: `9223372036854775807 + 1`, `-9223372036854775808 - 1`, `3037000500 * 3037000500`, `-9223372036854775808 / -1`, and unary negation of `-9223372036854775808` all produce `nil` because they overflow signed 64-bit integer arithmetic. `5 / 0` produces integer `0`; `5 % 0` produces `nil`; `INT64_MIN % -1` produces integer `0`. `5.0 / 0.0` follows IEEE 754 and produces positive infinity, while floating `%` uses `fmod()` and `5.0 % 0.0` produces NaN.
-
-### Operators ###
-
-Arithmetic: `+`, `-`, `*`, `/`, `%` (same precedence and left associativity as `*` and `/`; integer arithmetic when both operands are integers; binary64 float arithmetic when either operand is a float).  The unary postfix operators `++` and `--` operate on local variables but not items, but note that these are statements, not expressions.  Thus the following is invalid:
+Arithmetic operators have the same precedence and left associativity as shown
+in the canonical reference. The unary postfix operators `++` and `--` operate
+on local variables but not items, and are statements rather than expressions.
+Thus the following is invalid:
 
 `WHILE @a++ < 100 DO ...; ENDWHILE;`
 
-The usual boolean comparison operators are present, and work in the same way as C.  The `||` and `&&` operators are not present: instead, use `or` and `and`.  Boolean `and` and `or` are short-circuiting: expressions are evaluated from left to right, and the right-hand expression is skipped when the left side already determines the result.  Both operators always return a normalized boolean.  Binary operands and call arguments likewise evaluate left to right in source order.
+The usual boolean comparison operators are present; `||` and `&&` are not.
+Use `or` and `and`, which short-circuit and return normalized booleans.
 
 Boolean literals are `true` and `false`; `nil` is the explicit nil literal (all
 three are case-insensitive reserved words).
 
-True values are: `true`, true outcomes of boolean operations, integer values which are not `0`, float values other than `+0.0` and `-0.0` (including NaN), and non-empty strings.  False values are: `false`, `nil`, integer `0`, float `+0.0` or `-0.0`, and the empty string (`""`). Nil compares equal to nil and remains distinct from `false`, `0`, and `""`.
+Truthiness includes non-empty lists and all item references (resolved or not);
+empty lists are false. See the canonical truthiness table for float NaN,
+signed-zero, and malformed aggregate edge cases.
 
 Examples:
 `is_wizard = true;`
@@ -160,7 +160,7 @@ Examples:
 `if is_wizard == true then ...; endif;`
 `if is_guest == false then ...; endif;`
 
-Strings may be concatenated with `+` but do not respond to other attempts to arithmetise them.
+Strings may be concatenated with `+` only when both operands are strings.
 
 The usual operator precedence applies, and (parentheses) can be used to change this.
 

@@ -124,3 +124,88 @@ not expression operators.
 - Statements execute in source order. `return` evaluates its optional
   expression once and exits; `return;` returns `nil`. `break` and `continue`
   transfer to the nearest enclosing loop.
+
+## Values and operator semantics
+
+The runtime has exactly seven value types: `nil`, boolean, signed 64-bit
+integer, IEEE-754 binary64 float, byte string, item reference, and list. The
+tables below are normative for the implemented 0.7.2 language. Results of
+comparisons and logical operators are always canonical booleans (`true` or
+`false`). `I`, `F`, `S`, `N`, `B`, `R`, and `L` abbreviate integer, float,
+string, nil, boolean, item reference, and list.
+
+### Truthiness
+
+| Type/value | Truth value |
+|---|---|
+| `nil` | false |
+| boolean | its stored boolean value |
+| integer | false only for `0` |
+| float | false only for `+0.0` or `-0.0`; infinities and NaN are true |
+| string | false only for the empty string |
+| item reference | true, including an unresolved reference |
+| list | false only for an empty list (a malformed/null list payload is false) |
+
+`!x` first converts `x` using this table, then returns the opposite canonical
+boolean. `and` and `or` short-circuit according to the evaluation-order rules
+above and return canonical booleans rather than either operand.
+
+### Equality and ordering
+
+`==` and `!=` always produce booleans. Equality supports same-type pairs as
+follows, plus numeric promotion: when either operand is `F`, an `I` operand is
+converted to binary64 and the pair is compared as floats.
+
+| Pair | `==` / `!=` |
+|---|---|
+| `I`/`I`, `F`/`F`, or `I`/`F` | numeric equality; `!=` is its negation |
+| `B`/`B` | stored boolean equality |
+| `N`/`N` | equal |
+| `S`/`S` | byte-for-byte string equality |
+| `R`/`R` | equal when canonical item paths are equal (not pointer identity) |
+| `L`/`L` | recursive, element-by-element equality |
+| any other pair | unequal; therefore `!=` is true |
+
+IEEE-754 rules apply to float equality: NaN is unequal to every value,
+including itself; `!=` is true for NaN. Positive and negative zero compare
+equal, including to integer zero. Lists compare recursively using these same
+rules; item references compare their stored canonical paths, even when they do
+not resolve to an item.
+
+Ordered comparisons support only the following pairs; every other or
+mismatched pair yields `false` for all four operators.
+
+| Supported pair | Ordering |
+|---|---|
+| `I`/`I`, `B`/`B` | signed integer/boolean ordering (`false < true`) |
+| `I`/`F`, `F`/`I`, `F`/`F` | binary64 ordering after integer promotion |
+
+Any ordered comparison with NaN is `false`, including `NaN <= NaN` and
+`NaN >= NaN`.
+
+### Implicit coercion and arithmetic
+
+There is no general string/numeric/boolean coercion. Integer/float mixing is
+the only numeric promotion, and it produces a float result. The sole additional
+coercion is for `+`: `nil` is treated as integer zero when paired with `nil` or
+an integer. `nil` is not numeric for any other operator, and `nil + float` is
+invalid. String concatenation is available only for `S + S`.
+
+The following matrix gives the exact result contract. “invalid” means the
+operator's result shown in the final column, not a generic conversion rule.
+
+| Operator | Valid operand pairs and result | Invalid operands/result |
+|---|---|---|
+| `+` | `I+I`, `N+I`, `I+N`, `N+N` -> `I`; any `I`/`F` or `F`/`F` -> `F`; `S+S` -> concatenated `S` | all other pairs -> `nil` |
+| `-` | `I-I` -> `I`; any `I`/`F` or `F`/`F` -> `F` | all other pairs -> `nil` |
+| `*` | `I*I` -> `I`; any `I`/`F` or `F`/`F` -> `F` | all other pairs -> `nil` |
+| `/` | `I/I` -> `I` (`x/0` is integer `0`); any `I`/`F` or `F`/`F` -> `F` with IEEE-754 division | invalid pair with no `F` operand -> integer `0`; invalid pair with an `F` operand -> `nil` (VM compatibility split) |
+| `%` | `I%I` -> `I` (zero divisor -> `nil`); any `I`/`F` or `F`/`F` -> `F` using `fmod` | all other pairs -> `nil` |
+| unary `-` | integer or float -> same type, negated | other types are left unchanged (the VM reports failure but keeps the value) |
+
+Integer `+`, `-`, `*`, `/`, and unary `-` detect signed 64-bit overflow and
+return `nil`; `INT64_MIN / -1` is therefore `nil`. Integer remainder truncates
+toward zero, with the non-zero result taking the left operand's sign;
+`INT64_MIN % -1` is integer zero. Floating arithmetic follows binary64,
+including infinities and NaN; floating `%` is C `fmod`, so a zero divisor
+produces NaN.
