@@ -1,5 +1,9 @@
 # How to be Sinister #
 
+For normative syntax, grammar, precedence, and evaluation order, see the
+[canonical 0.7.3 language reference](language-reference.md). This guide remains
+the practical introduction to concepts and runtime behaviour.
+
 The style of the language is something like the misbegotten offspring of Forth and Smalltalk.
 
 ## Flow of Operations ##

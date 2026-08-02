@@ -1,8 +1,9 @@
 # Sinistra Documentation Index
 
 This directory contains the current human-maintained documentation for Sinistra.
-The project is still pre-alpha, so implementation-derived references should be
-kept in sync with the source files named in each document.
+The 0.7.3 language reference is canonical for documented source behaviour;
+compatibility is not frozen until 0.8.0. Implementation-derived references
+remain linked to their source files.
 
 ## Guides and References
 
@@ -10,6 +11,8 @@ kept in sync with the source files named in each document.
   and source ownership rules.
 - [`concepts.md`](concepts.md): practical language and runtime concepts for
   writing Sinistra code.
+- [`language-reference.md`](language-reference.md): canonical 0.7.3 syntax,
+  grammar, precedence, and evaluation-order reference.
 - [`libcalls.md`](libcalls.md): library-call reference derived from
   `src/libcall/libcall_list.h`.
 - [`tools.md`](tools.md): command-line reference for `sin`, `scomp`, `sdiss`,

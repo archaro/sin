@@ -1,10 +1,10 @@
 # Documentation Improvement Roadmap
 
 This roadmap lists remaining documentation work for making Sinistra easier to
-learn while leaving space for a formal language reference once the language has
-stabilised. The documentation index, tools reference, and source-of-truth
-maintenance guidance are already present; the items below are follow-up work,
-not descriptions of missing current documentation.
+learn. The canonical 0.7.3 language reference is now present; compatibility is
+explicitly not frozen until 0.8.0. The documentation index, tools reference,
+and source-of-truth maintenance guidance are also present. Items below are
+follow-up work, not descriptions of missing current syntax documentation.
 
 ## Near-term tasks
 
@@ -31,25 +31,12 @@ stabilise.
 
 ## Medium-term tasks
 
-### Establish a language-reference skeleton
-
-Create a placeholder language reference with intentionally marked unstable
-sections. Suggested top-level sections are lexical structure, item names,
-literals, expressions, statements, code items, parameters, local variables,
-libcall syntax, evaluation order, errors, and implementation limits.
-
 ### Define stability labels
 
 Use simple stability labels in documentation so readers know whether a page is
 introductory, normative, implementation-derived, or provisional. This is
-especially useful while the formal language documentation is being prepared but
-not yet authoritative.
-
-### Add grammar-oriented documentation
-
-Once the parser rules settle, add a grammar appendix derived from the parser and
-lexer. Until then, document only the practical syntax that examples and tests
-exercise, and mark gaps explicitly.
+useful for distinguishing the canonical language reference from introductory
+and implementation-derived pages.
 
 ### Cross-link implementation-derived references
 
@@ -64,11 +51,6 @@ documented. This can highlight features that are implemented and tested but not
 yet explained to users.
 
 ## Long-term tasks
-
-### Promote the formal language reference to canonical status
-
-When the language stabilises, promote the language reference from provisional to
-canonical and make other guides link back to it for normative definitions.
 
 ### Generate reference tables where possible
 
@@ -85,4 +67,5 @@ for syntax, bytecode, library calls, and itemstore/runtime behaviour.
 
 1. Split `docs/concepts.md` into focused concept pages without changing content
    semantics.
-2. Add a provisional language-reference skeleton with stability notes.
+2. Add examples and coverage notes for the canonical language reference as
+   later 0.7.3 stages document values, calls, ownership, and limits.
