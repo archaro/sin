@@ -67,8 +67,39 @@ void test_parser_input_api(void) {
   errdetail = NULL;
   rc = parse_source(&nul_input, &absyn, &errdetail);
   ASSERT_TRUE(rc != ERR_NOERROR);
+  ASSERT_TRUE(absyn == NULL);
   ASSERT_TRUE(errdetail != NULL);
+  ASSERT_TRUE(strcmp(errdetail, "parser: NUL byte in source is not allowed") == 0);
   free(errdetail);
+
+  const char nul_escape[] = "\"\\000\";";
+  ParseInput nul_escape_input = {nul_escape, sizeof(nul_escape) - 1,
+                                 "nul-escape.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&nul_escape_input, &absyn, &errdetail);
+  ASSERT_TRUE(rc != ERR_NOERROR);
+  ASSERT_TRUE(absyn == NULL);
+  ASSERT_TRUE(errdetail != NULL);
+  ASSERT_TRUE(strcmp(errdetail, "NUL byte escape \\000 is not allowed.") == 0);
+  free(errdetail);
+
+  const char nonzero_escape[] = "\"\\077\";";
+  ParseInput nonzero_escape_input = {nonzero_escape,
+                                     sizeof(nonzero_escape) - 1,
+                                     "nonzero-escape.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&nonzero_escape_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(absyn);
+  AS_STMTLIST *escape_list = (AS_STMTLIST *)absyn->lhs;
+  AS_VALUE *escape_value = (AS_VALUE *)((AS_NODE *)escape_list->stmts[0]->lhs)->lhs;
+  ASSERT_EQ_INT(V_STR, escape_value->valtype);
+  ASSERT_EQ_INT(077, (unsigned char)escape_value->value.s[0]);
+  ASSERT_EQ_INT('\0', escape_value->value.s[1]);
+  as_delete(absyn);
 
   const char empty[] = "";
   ParseInput empty_input = {empty, 0, "empty.src"};

@@ -306,6 +306,11 @@ int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdet
     if (out_state) out_state->errnum = ERR_COMP_SYNTAX;
     return ERR_COMP_SYNTAX;
   }
+  if (memchr(input->data, '\0', input->len) != NULL) {
+    if (out_state) out_state->errnum = ERR_COMP_SYNTAX;
+    *errdetail = parser_strdup("parser: NUL byte in source is not allowed");
+    return ERR_COMP_SYNTAX;
+  }
 
   SCANNER_STATE_t *scanner_state = alloc_calloc(1, sizeof *scanner_state);
   if (!scanner_state) return ERR_COMP_SYNTAX;

@@ -320,6 +320,12 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                   /* octal escape sequence */
                   unsigned int result;
                   (void) sscanf( yytext + 1, "%o", &result );
+                  if ( result == 0 ) {
+                    BEGIN(INITIAL);
+                    yylval->TSTRINGLIT = sin_strdup("NUL byte escape \\000 is not allowed.");
+                    free(strbuf);
+                    return TUNKNOWNCHAR;
+                  }
                   if ( result > 0xff ) {
                     BEGIN(INITIAL);
                     yylval->TSTRINGLIT = sin_strdup("Escape sequence too big.");

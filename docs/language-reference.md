@@ -26,8 +26,10 @@ Token forms are:
   (`INT64_MAX`); a float is
   `[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?`.
 - A string is enclosed in double quotes. `\n`, `\t`, `\r`, `\b`, and `\f`
-  produce their usual bytes; `\0nn` is an octal byte escape (`nn` are two
-  octal digits), and a backslash followed by any other character quotes it.
+  produce their usual bytes; `\0nn` is an octal byte escape for values
+  `1..077` (`nn` are two octal digits; `\000` is rejected), and a backslash
+  followed by any other character quotes it. Source and string values cannot
+  contain NUL bytes.
   A newline or end-of-file before the closing quote is invalid. String
   payloads are limited by `SIN_MAX_STRING_BYTES`.
 
