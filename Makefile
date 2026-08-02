@@ -80,6 +80,8 @@ FUZZ_RUNS ?= 10000
 FUZZ_SEED ?= 1
 FUZZ_ARTIFACT_DIR ?=
 XXD ?= xxd
+BEAR ?= bear
+COMPILEDB := compile_commands.json
 FUZZ_DIR := $(TEST_DIR)/fuzz
 FUZZ_LOCAL_ARTIFACT_DIR := $(FUZZ_DIR)/artifacts
 FUZZ_BIN := $(FUZZ_DIR)/fuzz_scomp
@@ -183,7 +185,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
 
-.PHONY: all lib clean help debug release sanitize FORCE_BUILD
+.PHONY: all lib clean help debug release sanitize compiledb FORCE_BUILD
 .PHONY: test test-network test-chat-smoke test-build-switch test-strict test-benchmark test-release test-warnings test-asan test-lsan
 .PHONY: fuzz-build fuzz-corpora fuzz-smoke fuzz-smoke-run
 .PHONY: fuzz-scomp fuzz-sdiss fuzz-sin-object
@@ -205,6 +207,21 @@ sanitize:
 	+$(MAKE) clean
 	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=0" $(MAKE) BUILD=sanitize all
 
+# Regenerate the clangd compilation database.
+#
+# Always starts from a clean tree, deliberately. bear records only the
+# compilations it actually observes, so running it over an up-to-date tree
+# silently produces a partial database that still looks valid. The build must
+# also cover the test targets: `all` alone omits -Itests, which leaves every
+# file under tests/ unable to resolve test_assert.h.
+compiledb:
+	@command -v $(BEAR) >/dev/null 2>&1 || { \
+		printf 'bear not found; cannot regenerate %s\n' '$(COMPILEDB)' >&2; \
+		exit 1; \
+	}
+	+$(MAKE) clean
+	+$(BEAR) -- $(MAKE) all $(TEST_BINS)
+
 help:
 	@printf '%s\n' \
 		'Build targets:' \
@@ -213,6 +230,7 @@ help:
 		'  release          Clean, then build all with BUILD=release' \
 		'  sanitize         Clean, then build all with BUILD=sanitize and ASan/UBSan' \
 		'  lib              Build lib/libsinshared.a only' \
+		'  compiledb        Clean, rebuild, and regenerate compile_commands.json via bear' \
 		'  clean            Remove objects, binaries, libraries, tests, fuzz artifacts, and stale generated files' \
 		'' \
 		'Test targets:' \

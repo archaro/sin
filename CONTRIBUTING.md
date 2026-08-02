@@ -19,6 +19,24 @@ sudo apt-get install -y build-essential clang bison flex libuv1-dev pkg-config x
 
 Build with `make`.
 
+### Editor code intelligence (optional)
+
+The project builds through make, so clangd needs a compilation database. Install
+`bear` and run:
+
+```bash
+make compiledb
+```
+
+This cleans, rebuilds, and writes `compile_commands.json` (gitignored). The
+clean is deliberate: `bear` records only the compilations it observes, so
+regenerating over an up-to-date tree yields a partial database that still looks
+valid. The target also builds the test binaries, because `all` alone omits
+`-Itests` and leaves everything under `tests/` unable to resolve
+`test_assert.h`.
+
+Rerun it whenever `CPPFLAGS` or `BASE_CFLAGS` change.
+
 Run `make test` for the standard test harness. It builds the same test binary as `make test-strict` and runs every registered core, compiler, and runtime test; benchmark-style tests still execute and print timings, but performance budget assertions are disabled.
 
 Run `make test-strict` when you also want the benchmark budget checks enforced. This target runs the same registered tests as `make test`, but invokes the harness with `SIN_STRICT_BENCH=1`, causing the runtime benchmark test to fail if the lookup or dispatch timings exceed their strict thresholds.

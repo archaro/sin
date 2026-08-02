@@ -1,6 +1,11 @@
 # Sinistra
 /boot.src
 /items.dat
+
+# clangd tooling: machine-specific absolute paths, regenerated from the build.
+/compile_commands.json
+/.clangd
+/.cache/
 /src/lexer.c
 /src/parser.c
 /src/parser.h
