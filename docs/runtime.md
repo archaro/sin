@@ -49,6 +49,16 @@ A code item returns a value only through explicit `RETURN expression;`.
 are discarded during frame cleanup. `interpret()` transfers the explicit value
 to the caller, then discards the frame's locals and parameters.
 
+At source level, item-call arguments are evaluated left-to-right before the
+target expression, and each is evaluated once. Code-item calls then execute
+synchronously and resume the caller at the following instruction. Value-item
+targets are not executed: the runtime pushes a clone of the stored value.
+Missing or invalid targets consume the call's arguments and push `nil`.
+Arguments bind to code-item parameter slots in first-occurrence declaration
+order; duplicate names reuse a slot. Excess arguments are dropped and missing
+trailing slots are padded with `nil`. These are language contracts, not
+guarantees about a particular VM stack layout.
+
 At the language level, every expression statement is compiled with `DISCARD`.
 Its value is evaluated for side effects and removed from the stack.
 
@@ -61,7 +71,10 @@ top-level statement. Use an explicit `RETURN` in the branch or loop when it
 should terminate the current code item.
 
 Libcalls and item calls follow the same expression-statement rule as other
-expressions; use `RETURN` to expose their value to the caller.
+expressions; use `RETURN` to expose their value to the caller. Completed
+itemstore/libcall effects remain after an expression is discarded, a callee
+falls through, or an explicit return transfers control. Statements after a
+taken return do not execute.
 
 ## Itemstore ownership
 

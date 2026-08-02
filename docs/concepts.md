@@ -23,7 +23,13 @@ List literals evaluate left-to-right; bare code items execute while `&` creates 
 
 ## The Item ##
 
-The fundamental unit in Sinistra is the *item*.  An item can contain many things: integers, floats, strings, Boolean values or `nil`, or it can contain code.  A value item simply returns its value, whereas a code item executes its code and returns the result.  All items return a value (even if the value is `nil`).  Items can also call other items.
+The fundamental unit in Sinistra is the *item*. An item can contain integers,
+floats, strings, Boolean values, `nil`, or code. The exact call, parameter,
+return, and side-effect rules are normative in the [canonical language
+reference](language-reference.md#item-calls-and-code-item-execution). A value
+item is not executed: an item expression returns a clone of its stored value.
+A code item executes synchronously; a missing or invalid target returns `nil`.
+All items therefore produce a value, even when that value is `nil`.
 
 String values are byte strings and are capped by `SIN_MAX_STRING_BYTES` in
 `src/common/string_limits.h`, currently 65,535 bytes. Source string literals,
@@ -78,11 +84,17 @@ Code items can contain local variables.  There is only one scope: the item.  Thu
 
 `dingdong = code ( @a = bar; @b = 100; return @a + @b; );`
 
-When `dingdong` is executed, it assigns the value of `bar` to local variable `@a`, the value of `100` to local variable `@b`, adds `@a` and `@b` together, and returns the result. `return expression;` evaluates its expression once and immediately exits the current code item; `return;` exits with `nil`. Every expression statement is evaluated and discarded, including the final one. Falling off the end of a code item returns `nil`.
+When `dingdong` is executed, it assigns the value of `bar` to local variable `@a`, the value of `100` to local variable `@b`, adds `@a` and `@b` together, and returns the result. `return expression;` evaluates its expression once and immediately exits the current code item; `return;` exits with `nil`. Every expression statement is evaluated and discarded, including the final one. Falling off the end of a code item returns `nil`; no residual expression value becomes an implicit result.
 
 When compiling code, if the parser doesn't like the source which it is chewing on, it will bail out and set `error` to an error number, and `error.msg` to the appropriate error message.  Thus an easy way to check if the code has compiled is to test these items.  A successful compilation will set these items to `nil`.
 
-You can pass parameters to items, too.  If you pass arguments to an item which does not accept them, they are silently forgotten.  If you pass too many arguments, the extra ones are ignored.  If you pass too few, the missing ones have the value of `nil`.  Here is an item which takes two arguments:  
+You can pass parameters to items, too. Arguments evaluate left-to-right before
+the target is resolved. Parameters bind in declaration order; they are locals
+private to the invocation. If you pass too many arguments, only the first N
+distinct parameter slots are retained and the extras are ignored. Duplicate
+parameter names reuse the same slot, ordered by first occurrence. If you pass
+too few, trailing parameters receive `nil`. Here is an item which takes two
+arguments:
 ```
 add = code {@a, @b} ( return @a + @b; );
 if error then
@@ -92,9 +104,16 @@ if error then
 endif;
 ```
 
-If you call `add` with no arguments, you are effectively calling `add{nil, nil};`, and because `+` treats `nil` as integer `0`, the result is integer `0`.  Calling `add{1};` is effectively `add{1, nil};` and returns `1`.  Calling `add{1, 2, 3};` returns `3`, because the third argument is intentionally dropped. This default behavior is a live-update design choice: callers can keep running while a code item's parameter list is being changed, whether a new parameter is added or an old parameter is removed. The same tolerant behavior applies when arguments are supplied to a missing item or to an expression that does not resolve to an item name. Starting `sin` with `--strict-runtime-contracts` keeps executing with the same stack/result behavior, but performs extra checks and records `ERR_RUNTIME_INVALIDARGS` in `error` plus a diagnostic in `error.msg` whenever `F`/item-call evaluation has to discard arguments.
+If you call `add` with no arguments, you are effectively calling `add{nil, nil};`, and because `+` treats `nil` as integer `0`, the result is integer `0`. Calling `add{1};` is effectively `add{1, nil};` and returns `1`. Calling `add{1, 2, 3};` returns `3`, because the third argument is intentionally dropped. The same tolerant behavior applies when arguments are supplied to a missing item or to an expression that does not resolve to an item name; those calls return `nil`. Starting `sin` with `--strict-runtime-contracts` keeps executing with the same result behavior, but records `ERR_RUNTIME_INVALIDARGS` in `error`, writes a diagnostic in `error.msg`, and logs whenever a call has to discard arguments.
 
-Strict dropped-argument diagnostics are therefore opt-in. For example, `add{1, 2, 3};` still returns `3` in both modes, but strict mode also reports that one extra argument was discarded. Likewise, `missing.item{1};` still returns `nil`, but strict mode reports that the argument to the missing target was dropped. Run without `--strict-runtime-contracts` for normal live-update operation and lower runtime overhead; run with it when you want these mismatches surfaced during testing or development.
+Strict dropped-argument diagnostics are therefore opt-in. For example,
+`add{1, 2, 3};` still returns `3` in both modes, but strict mode also reports
+that one extra argument was discarded. Likewise, `missing.item{1};` still
+returns `nil`, but strict mode reports that the argument to the missing target
+was dropped. Run without `--strict-runtime-contracts` for normal live-update
+operation; run with it when you want these mismatches surfaced during testing
+or development. A value item is not executed and returns a clone of its value,
+regardless of supplied arguments.
 
 ## Comments ##
 

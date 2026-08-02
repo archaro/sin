@@ -125,6 +125,62 @@ not expression operators.
   expression once and exits; `return;` returns `nil`. `break` and `continue`
   transfer to the nearest enclosing loop.
 
+## Item calls and code-item execution
+
+An item expression with an argument block evaluates each argument from left to
+right, then evaluates the target expression, and then performs the call. Each
+argument and the target expression is evaluated once. The target is resolved
+relative to the executing item using the ordinary item-name rules.
+
+- A **code item** runs synchronously. The caller resumes at the next statement
+  only after the callee has terminated by `RETURN`, `RETURN expression`, or
+  ordinary fallthrough. A callee's locals and parameters are private to that
+  invocation; assignments to items and completed libcall/itemstore effects are
+  not rolled back when the result is discarded.
+- A **value item** is not executed. The call expression produces a clone of the
+  stored value (including `nil`, lists, strings, and references). Supplied
+  arguments do not change that value.
+- A missing item, an invalid computed item name, or a target whose name has an
+  invalid value produces `nil`. It is not an execution failure at the language
+  level.
+
+For a code item, arguments bind to parameters in declaration order. Parameters
+are locals for that invocation and do not share storage with a caller's locals.
+The call contract is deliberately tolerant: with fewer arguments, trailing
+parameters receive `nil`; with exactly the declared count, all arguments bind;
+with more arguments, only the first N (the distinct declared parameter-slot
+count) are kept and the rest are discarded. A parameter declaration names a
+local; duplicate names refer to the same local and do not consume another
+argument slot. Parameter slots are ordered by each name's first occurrence:
+`code {@a, @a, @b} (...)` has two slots, binding argument 1 to `@a` and
+argument 2 to `@b`. The compiler's established encoded limits apply: the
+distinct local/parameter table and emitted parameter count are each limited to
+255 entries. No stronger limit rule is part of this reference.
+
+In default mode, discarded arguments for excess-argument, missing-target, and
+invalid-target calls are silent and the call keeps its normal value (`nil` for
+the latter two). With `--strict-runtime-contracts`, the same arguments are
+discarded and the same values are returned, but the runtime also records
+`ERR_RUNTIME_INVALIDARGS`, writes a diagnostic to `error.msg`, and logs the
+contract violation. Strict mode changes diagnostics, not stack/result
+semantics.
+
+`RETURN expression;` evaluates its expression once, exposes that value as the
+code item's result, and immediately transfers control to the caller. Bare
+`RETURN;` and falling off the end both return `nil`. Every expression statement
+is evaluated for its effects and discarded; a residual value on the execution
+stack never becomes an implicit result. Statements after a taken return do not
+execute. `BREAK` and `CONTINUE` affect only the nearest enclosing loop; a return
+from inside a loop exits the whole current code item, while a break/continue
+continues with that loop's normal control flow.
+
+Argument expressions, target expressions, return expressions, and any side
+effects they perform obey the evaluation order above and happen once. Effects
+that complete before a value is discarded, a callee falls through, or a return
+is taken remain visible (for example item assignments, persistence operations,
+and libcalls). Only an explicit return with an expression exposes a value from
+a code item.
+
 ## Values and operator semantics
 
 The runtime has exactly seven value types: `nil`, boolean, signed 64-bit
