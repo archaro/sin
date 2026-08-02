@@ -1,7 +1,8 @@
 # Lists and item references
 
-The immutable list runtime and public list libcalls are available; item
-references remain available through their existing internal API.
+Observable list and item-reference semantics are normative in the
+[language reference](language-reference.md#lists-and-item-references). This
+page records implementation/API notes only.
 
 List literals and item-reference syntax compile and execute.
 
@@ -12,34 +13,29 @@ left-to-right; `#[fred]` stores fred's value while `#[&fred]` stores a
 reference. Empty, singleton, nested, and expression-position lists are valid;
 trailing commas are rejected initially.
 
-Lists are immutable shared values. Assignment, arguments, returns, item
-storage, and cloning share storage; append/replacement operations return new
-lists and aliases never mutate. Lists may contain any value, cannot be cyclic,
+Lists are immutable values. Assignment, arguments, returns, item storage, and
+cloning preserve the same logical value; an implementation may share internal
+storage, but that sharing is unobservable. Append/replacement operations return
+new lists and aliases never mutate. Lists may contain any value, cannot be cyclic,
 are false when empty and true otherwise, and use recursive structural `==` /
 `!=`. Relational comparisons are unsupported and produce the normal invalid
 comparison result. Identity is not exposed.
 
 The C API in `src/runtime/list.h` stores a 32-way persistent vector with a
-separate one-to-32-element tail. `sin_list_build_owned()` consumes every
-owned input element (including failed builds) and clears each array slot;
-`sin_list_get()` borrows an element, while `sin_list_append()`, `sin_list_set()`,
-`sin_list_concat()`, and `sin_list_slice()` borrow their inputs and return a new
-owned list. List handles
-and tree nodes are non-atomic reference counted. Count is limited to
-1,048,576 elements and nesting depth to 64; an empty or scalar-only list has
-depth 1. Cloning a `VALUE_list` shares its handle, and releasing a value
-releases that handle. List plain-text rendering is deferred; debug output is a
-bounded `<list:COUNT>` summary.
+separate one-to-32-element tail. `sin_list_build_owned()` consumes owned input
+elements only after a valid count and input reach the owned-build path; a
+nonzero count with `NULL` input and an over-limit count are rejected before any
+input is consumed. On an accepted build, each owned input is consumed and its
+array slot cleared;
+`sin_list_get()` borrows an element, while the update helpers borrow their
+inputs and return a new owned list. Handles and tree nodes are non-atomic
+reference counted; these ownership details do not alter the value semantics
+above. `value_debug_string` renders source-like list text, with truncation and
+error markers where required.
 
-Public API: `list.length{@list}`, `list.get{@list,@index}`,
-`list.append{@list,@value}`, `list.set{@list,@index,@value}`,
-`list.concat{@left,@right}`, and `list.slice{@list,@start,@length}`. Indices
-are zero-based; negative or out-of-range indices return `nil` without changing
-the error item. Wrong argument types return `nil` and report
-`ERR_RUNTIME_INVALIDARGS` with current-item provenance. Construction or limit
-failures return `nil` without changing the error item. `append`, `set`, `concat`,
-and `slice` return new lists. No
-mutable push/pop/insert/remove or extra indexing syntax is planned initially.
+The public list API, argument validation, and failure behavior are documented
+in [`libcalls.md`](libcalls.md). Indices are zero-based and update calls return
+new lists; there is no mutable push/pop/insert/remove syntax.
 
 ### Performance measurements
 
@@ -62,8 +58,8 @@ enforce the matrix.
 canonical root-relative paths. References are weak (not raw pointers), remain
 valid values when dangling, resolve afresh on use, compare by canonical path,
 and are truthy even when unresolved. Deletion and recreation of the same path
-therefore preserves resolution behavior. References are assignable and planned
-for itemstore v2 persistence.
+therefore preserves resolution behavior. References are assignable and are
+persisted by itemstore v2 as canonical paths.
 
 Executable list literals evaluate elements left-to-right. Prefixing an item
 expression with `&` builds an owning canonical item reference without fetching

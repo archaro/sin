@@ -265,3 +265,57 @@ toward zero, with the non-zero result taking the left operand's sign;
 `INT64_MIN % -1` is integer zero. Floating arithmetic follows binary64,
 including infinities and NaN; floating `%` is C `fmod`, so a zero divisor
 produces NaN.
+
+## Lists and item references
+
+This section defines observable value semantics. List libcall signatures and
+failure details remain authoritative in [`libcalls.md`](libcalls.md), while
+persistence encoding remains authoritative in
+[`itemstore-format.md`](itemstore-format.md).
+
+### Lists
+
+A list literal evaluates each element exactly once, from left to right, and
+stores the resulting value. A bare item expression therefore fetches its
+value (and executes it when it is a code item); prefixing the expression with
+`&` stores an item reference instead and does not fetch or execute the target.
+Empty, nested, and expression-position lists are valid.
+
+Lists are immutable values. Assignment, argument passing, explicit returns,
+item storage, item reads, and cloning preserve the same logical list value;
+whether an implementation shares internal storage is unobservable. Functional
+updates such as append, set, concat, and slice return a new list and never
+mutate any existing list or alias. Lists may contain every value type,
+including other lists and item references. Immutable construction cannot form
+a cycle, and list equality is recursive, element-by-element structural
+equality. There is no list identity operation; relational comparisons on lists
+are unsupported and produce the normal invalid-comparison result. An empty
+list is false and every non-empty list is true.
+
+### Item references
+
+`&item` evaluates the item path and creates a reference containing its
+canonical root-relative path. A relative path is resolved against the current
+item once, at reference creation; the reference does not retain a pointer and
+does not later rebase if execution moves elsewhere. Dynamic dereference layers
+accept string and integer values. A single leading `nil` or empty string may
+stand for an omitted leading layer when a later layer supplies a name; `nil` or
+empty alone, and either form in a non-leading position, is invalid. Floats,
+booleans, lists, and item references are invalid layer values; an
+item-reference value is not itself a path layer. If path assembly or
+canonicalization fails, `&item` evaluates to `nil`.
+
+References are weak values. Each item-targeting fetch or call, and each
+name-based operation that targets an item, resolves the stored path afresh, so
+a dangling reference remains a truthy value and observes an item later
+recreated at that same path. Path-inspection operations such as `sys.itemname`
+return the stored canonical path without resolving it. Deleting the item does
+not rewrite or invalidate the reference. Reference equality compares canonical
+paths only, without resolving either path; two references to the same path are
+equal even when that path is currently absent.
+
+Item references can be assigned, passed, returned, stored in lists or item
+values, and read back without changing these rules. V2 itemstore persistence
+stores logical list contents and canonical reference paths, never pointers or
+internal sharing; loading restores equivalent values without executing a
+referenced target.
