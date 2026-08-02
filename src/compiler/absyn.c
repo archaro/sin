@@ -2,6 +2,7 @@
 
 // Licensed under the MIT License - see LICENSE file for details.
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -54,7 +55,22 @@ AS_NODE *as_new_valnode(ENUM_VALUE valtype, char *sval) {
   AS_VALUE *newval;
   if (valtype != V_BOOLTRUE && valtype != V_BOOLFALSE && valtype != V_NIL && !sval) return NULL;
   if (valtype == V_INT) {
-    newval = as_new_value(V_INT, (uint64_t)atoll(sval), NULL);
+    uint64_t value = 0;
+    bool valid = sval[0] != '\0';
+    for (const unsigned char *p = (const unsigned char *)sval;
+         valid && *p != '\0'; ++p) {
+      if (*p < '0' || *p > '9') {
+        valid = false;
+        break;
+      }
+      uint64_t digit = (uint64_t)(*p - '0');
+      if (value > (UINT64_C(9223372036854775807) - digit) / 10u) {
+        valid = false;
+        break;
+      }
+      value = value * 10u + digit;
+    }
+    newval = valid ? as_new_value(V_INT, value, NULL) : NULL;
     free(sval);
   } else if (valtype == V_FLOAT) {
     uint64_t bits = 0;

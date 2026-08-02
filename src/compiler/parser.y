@@ -98,6 +98,33 @@ static AS_NODE *parser_new_value(SCANNER_STATE_t *state, ENUM_VALUE type, char *
   return node;
 }
 
+static AS_NODE *parser_new_integer(SCANNER_STATE_t *state, char *text) {
+  uint64_t value = 0;
+  bool valid = text && text[0] != '\0';
+  for (const unsigned char *p = (const unsigned char *)text;
+       valid && *p != '\0'; ++p) {
+    if (*p < '0' || *p > '9') {
+      valid = false;
+      break;
+    }
+    uint64_t digit = (uint64_t)(*p - '0');
+    if (value > (UINT64_C(9223372036854775807) - digit) / 10u) {
+      valid = false;
+      break;
+    }
+    value = value * 10u + digit;
+  }
+  free(text);
+  if (!valid) {
+    parser_set_failure(state,
+                       "parser: integer literal out of range (expected 0..9223372036854775807)");
+    return NULL;
+  }
+  AS_NODE *node = as_new_intnode((int64_t)value);
+  if (!node) parser_set_failure(state, NULL);
+  return node;
+}
+
 static AS_NODE *parser_new_node(SCANNER_STATE_t *state, ENUM_NODE type,
                                 AS_NODE *lhs, AS_NODE *rhs,
                                 bool lhs_required, bool rhs_required) {
@@ -478,7 +505,7 @@ stmt:   TWHILE expr TDO stmtlist TENDWHILE {
         ;
 
 expr:     TLOCAL { $$ = parser_new_value(state, V_LOCAL, $1); if (!$$) YYERROR; }
-        | TINTEGER { $$ = parser_new_value(state, V_INT, $1); if (!$$) YYERROR; }
+        | TINTEGER { $$ = parser_new_integer(state, $1); if (!$$) YYERROR; }
         | TFLOAT { $$ = parser_new_value(state, V_FLOAT, $1); if (!$$) YYERROR; }
         | TSTRINGLIT { $$ = parser_new_value(state, V_STR, $1); if (!$$) YYERROR; }
         | TTRUE { $$ = parser_new_value(state, V_BOOLTRUE, NULL); if (!$$) YYERROR; }
@@ -628,7 +655,7 @@ subsequent_layers: %empty { $$ = NULL; }
         ;
 
 layer:    TLAYER { $$ = parser_new_value(state, V_LAYER, $1); if (!$$) YYERROR; }
-        | TINTEGER { $$ = parser_new_value(state, V_INT, $1); if (!$$) YYERROR; }
+        | TINTEGER { $$ = parser_new_integer(state, $1); if (!$$) YYERROR; }
         | dereference { $$ = $1; }
 ;
 

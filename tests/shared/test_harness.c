@@ -111,6 +111,7 @@ void test_parser_float_literals_integer_still_int(void);
 void test_parser_float_literals_unary_minus_preserves_float_literals(void);
 void test_parser_float_literals_item_layers_unchanged(void);
 void test_parser_float_literals_malformed_rejected(void);
+void test_parser_integer_literals_range(void);
 void test_floatconv_binary64_edge_cases(void);
 void test_floatconv_binary64_formatting(void);
 void test_floatconv_binary64_format_roundtrip(void);
@@ -389,6 +390,7 @@ static const test_case_t core_tests[] = {
     {"test_parser_float_literals_unary_minus_preserves_float_literals", test_parser_float_literals_unary_minus_preserves_float_literals},
     {"test_parser_float_literals_item_layers_unchanged", test_parser_float_literals_item_layers_unchanged},
     {"test_parser_float_literals_malformed_rejected", test_parser_float_literals_malformed_rejected},
+    {"test_parser_integer_literals_range", test_parser_integer_literals_range},
     {"test_floatconv_binary64_edge_cases", test_floatconv_binary64_edge_cases},
     {"test_floatconv_binary64_formatting", test_floatconv_binary64_formatting},
     {"test_floatconv_binary64_format_roundtrip", test_floatconv_binary64_format_roundtrip},

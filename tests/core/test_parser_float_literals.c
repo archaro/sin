@@ -182,6 +182,39 @@ void test_parser_float_literals_malformed_rejected(void) {
   parse_fails("1.2.3;");
 }
 
+void test_parser_integer_literals_range(void) {
+  AS_NODE *root = parse_ok("0; 9223372036854775807; -42;");
+  AS_STMTLIST *list = (AS_STMTLIST *)root->lhs;
+  ASSERT_EQ_INT(3, list->count);
+  AS_VALUE *value = (AS_VALUE *)((AS_NODE *)list->stmts[0]->lhs)->lhs;
+  ASSERT_EQ_INT(V_INT, value->valtype);
+  ASSERT_EQ_INT(0, value->value.i);
+  value = (AS_VALUE *)((AS_NODE *)list->stmts[1]->lhs)->lhs;
+  ASSERT_EQ_INT(V_INT, value->valtype);
+  ASSERT_EQ_INT(INT64_MAX, value->value.i);
+  value = (AS_VALUE *)((AS_NODE *)list->stmts[2]->lhs)->lhs;
+  ASSERT_EQ_INT(V_INT, value->valtype);
+  ASSERT_EQ_INT(-42, value->value.i);
+  as_delete(root);
+
+  const char *out_of_range[] = {
+    "9223372036854775808;",
+    "99999999999999999999999999999999999999999999999999;",
+  };
+  for (size_t i = 0; i < sizeof(out_of_range) / sizeof(out_of_range[0]); ++i) {
+    AS_NODE *absyn = NULL;
+    char *errdetail = NULL;
+    ParseInput input = {out_of_range[i], strlen(out_of_range[i]),
+                        "integer-literal-test.src"};
+    ASSERT_TRUE(parse_source(&input, &absyn, &errdetail) != ERR_NOERROR);
+    ASSERT_TRUE(absyn == NULL);
+    ASSERT_NOT_NULL(errdetail);
+    ASSERT_TRUE(strcmp(errdetail,
+                       "parser: integer literal out of range (expected 0..9223372036854775807)") == 0);
+    free(errdetail);
+  }
+}
+
 static void assert_parse_bits(const char *literal, uint64_t expected) {
   uint64_t bits = 0;
   char *errdetail = NULL;

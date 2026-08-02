@@ -22,7 +22,8 @@ Token forms are:
 
 - A local is `@[a-z_][a-z0-9_]*`.
 - A layer is `[a-z0-9_]+`.
-- An integer is `[0-9]+`; a float is
+- An integer is `[0-9]+` and must have a value in `0..9223372036854775807`
+  (`INT64_MAX`); a float is
   `[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?`.
 - A string is enclosed in double quotes. `\n`, `\t`, `\r`, `\b`, and `\f`
   produce their usual bytes; `\0nn` is an octal byte escape (`nn` are two
