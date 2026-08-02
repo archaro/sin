@@ -6,11 +6,13 @@ take precedence.
 
 ## Project
 
-Sinistra is a C17 MUD engine with three executables:
+Sinistra is a C17 MUD engine with four executables:
 
 - `scomp` compiles Sinistra source to custom object/bytecode data.
 - `sin` loads object data, runs tasks, handles networking, and persists state.
 - `sdiss` disassembles object data and bytecode fixtures.
+- `sconv` converts itemstores from earlier on-disk versions to the latest
+  version, migrating the code items they contain.
 
 The codebase intentionally mixes older and newer C styles. Make small,
 idiomatic changes that fit nearby code; avoid broad cleanup during feature work.
@@ -37,7 +39,10 @@ test evidence.
 
 For every native implementation, correction, or review agent:
 
-- Set `fork_turns: "none"`; never pass the root conversation history.
+- Never pass the root conversation history: provide the minimum context
+  necessary to implement the requested task.
+- Run tests in Luna (Low).  Return the result of the tests to the orchestrator.
+  If there are errors, return those too.
 
 For every implementation, correction, or review handoff:
 
@@ -60,14 +65,14 @@ For non-trivial code changes:
    acceptance criteria, affected subsystems, constraints, and tests.
 2. Give the first implementation attempt to Luna (Medium).
 3. Review its diff and test evidence yourself.
-4. If useful, give rejected Luna work up to three focused corrective turn with
-   a complete updated handoff and upgrade the effort to High.
-5. If the fifth Luna result still fails a check, is incomplete, violates
-   an acceptance criterion, requires substantial correction, or leaves
-   unresolved uncertainty, delegate the correction to Sol (High).
+4. If the Luna result fails a check, is incomplete, violates an acceptance
+   criterion, requires substantial correction, or leaves an unresolved
+   certainty, refer back to Luna for correction, with detailed and bounded
+   instructions on what is wrong and what needs to be fixed.
 
 The root may make tiny mechanical edits. Substantive implementation follows
-the Luna-first, Sol-on-fifth-rejection policy.
+the model of Luna as code-monkey, irrespective of what the orchestration
+model is.
 
 ### Agent count and review scope
 
