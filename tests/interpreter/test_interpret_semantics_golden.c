@@ -29,7 +29,7 @@ typedef struct {
   const char *name;
   const char *src_path;
   const char *fixture_path;
-  const char *expected_code_items[2];
+  const char *expected_code_items[8];
   unsigned runs;
 } InterpretGoldenCase;
 
@@ -205,6 +205,9 @@ void test_interpret_semantics_golden(void) {
        "tests/fixtures/interpret/continue-log.expected.txt", {NULL, NULL}, 0},
       {"list_itemref_persist", "tests/fixtures/interpret/list-itemref-persist.src",
        "tests/fixtures/interpret/list-itemref-persist.expected.txt", {"target", "once"}, 2},
+      {"positive_core", "tests/fixtures/conformance/positive-core.src",
+       "tests/fixtures/conformance/positive-core.expected.txt",
+       {"tick", "first", "second", "pair", "returner", "fallthrough", "bare", "dup"}, 0},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {

@@ -2,6 +2,10 @@
 
 This directory and related `examples/` artifacts define golden fixtures used by compiler and interpreter tests.
 
+Reference-derived conformance fixtures live under `conformance/`; their
+traceability map is documented in
+[`conformance/README.md`](conformance/README.md).
+
 ## Golden fixture classes
 
 1. **Source fixtures** (`*.src`)

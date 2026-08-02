@@ -75,6 +75,8 @@ See [`bytecode.md`](bytecode.md) for encoding and verifier rules,
 [`itemstore-format.md`](itemstore-format.md) for persistence enforcement,
 [`libcalls.md`](libcalls.md) for operation-specific failure values, and
 [`runtime.md`](runtime.md) for VM ownership and interruption behavior.
+Reference-derived executable examples are mapped in
+[`tests/fixtures/conformance/README.md`](../tests/fixtures/conformance/README.md).
 
 ## Concrete grammar
 

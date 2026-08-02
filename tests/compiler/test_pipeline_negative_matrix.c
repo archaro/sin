@@ -6,6 +6,7 @@
 #include "compiler/compiler_pipeline.h"
 #include "error.h"
 #include "test_assert.h"
+#include "test_helpers.h"
 
 typedef enum {
   STAGE_PARSER,
@@ -14,6 +15,7 @@ typedef enum {
 
 typedef enum {
   CASE_SOURCE,
+  CASE_FIXTURE,
   CASE_BUILDER,
 } CASE_KIND;
 
@@ -54,14 +56,17 @@ static int8_t run_compile_case_too_many_params(char **errdetail) {
 
 void test_pipeline_negative_matrix(void) {
   static const NEG_CASE cases[] = {
-      {"parser_unknown_char", CASE_SOURCE, "^;", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "^", 1},
+      {"parser_unknown_char", CASE_FIXTURE, "tests/fixtures/conformance/negative/parser-unknown-character.src", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "^", 1},
+      {"parser_nul_escape", CASE_FIXTURE, "tests/fixtures/conformance/negative/parser-nul-escape.src", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "NUL byte escape", 1},
+      {"parser_trailing_comma", CASE_FIXTURE, "tests/fixtures/conformance/negative/parser-trailing-comma.src", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
+      {"parser_integer_overflow", CASE_FIXTURE, "tests/fixtures/conformance/negative/parser-integer-overflow.src", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "integer literal out of range", 1},
       {"parser_malformed_item_syntax", CASE_SOURCE, "foo..bar;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
       {"parser_unterminated_string", CASE_SOURCE, "\"unterminated;", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "EOF in string.", 1},
       {"parser_bad_if_endif_pairing", CASE_SOURCE, "endif;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
       {"parser_do_while_missing_condition", CASE_SOURCE, "do 1; while ;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 3},
-      {"semantic_use_before_def", CASE_SOURCE, "@x;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @x", 1},
+      {"semantic_use_before_def", CASE_FIXTURE, "tests/fixtures/conformance/negative/semantic-local-before-definition.src", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @x", 1},
       {"semantic_invalid_increment_target", CASE_SOURCE, "@x = 1; @y++;", NULL, ERR_COMP_LOCALBEFOREDEF, STAGE_SEMANTIC, "semant: @y", 1},
-      {"semantic_break_outside_loop", CASE_SOURCE, "break;", NULL, ERR_COMP_SYNTAX, STAGE_SEMANTIC, "BREAK outside loop", 2},
+      {"semantic_break_outside_loop", CASE_FIXTURE, "tests/fixtures/conformance/negative/semantic-break-outside-loop.src", NULL, ERR_COMP_SYNTAX, STAGE_SEMANTIC, "BREAK outside loop", 2},
       {"semantic_continue_outside_loop", CASE_SOURCE, "continue;", NULL, ERR_COMP_SYNTAX, STAGE_SEMANTIC, "CONTINUE outside loop", 2},
 
       {"parser_combo_priority_over_semantic", CASE_SOURCE, "@x; endif;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 3},
@@ -85,8 +90,16 @@ void test_pipeline_negative_matrix(void) {
     uint8_t runs = tc->deterministic_runs ? tc->deterministic_runs : 1;
     char *baseline_errdetail = NULL;
     for (uint8_t run = 0; run < runs; run++) {
-      if (tc->source_or_builder == CASE_SOURCE) {
-        rc = compile_source_to_bytecode(tc->source, strlen(tc->source), &out, &errdetail);
+      if (tc->source_or_builder == CASE_SOURCE || tc->source_or_builder == CASE_FIXTURE) {
+        char *fixture_source = NULL;
+        const char *source = tc->source;
+        if (tc->source_or_builder == CASE_FIXTURE) {
+          fixture_source = test_read_text_file(tc->source);
+          ASSERT_NOT_NULL(fixture_source);
+          source = fixture_source;
+        }
+        rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+        free(fixture_source);
         if (tc->expected_code == ERR_NOERROR) {
           ASSERT_NOT_NULL(out);
         } else {

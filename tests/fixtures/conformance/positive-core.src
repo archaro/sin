@@ -1,0 +1,59 @@
+sys.log{"CONF-precedence"};
+sys.log{#[1 + 2 * 3 == 7, (1 + 2) * 3 == 9]};
+sys.log{"CONF-short-circuit"};
+seen = 0;
+tick = code ( seen = seen + 1; return true; );
+short_false_and = false and tick;
+short_true_or = true or tick;
+short_true_and = true and tick;
+short_false_or = false or tick;
+sys.log{#[short_false_and == false, short_true_or == true,
+  short_true_and == true, short_false_or == true, seen == 2]};
+
+order = 0;
+first = code ( order = order * 10 + 1; return 1; );
+second = code ( order = order * 10 + 2; return 2; );
+pair = code {@a, @b} ( return @a + @b; );
+ordered_args = pair{first, second};
+arg_order = order == 12;
+order = 0;
+ordered_list = #[first, second];
+list_order = order == 12;
+order = 0;
+ordered_binary = first + second;
+binary_order = order == 12;
+sys.log{"CONF-evaluation-order"};
+sys.log{#[ordered_args == 3, arg_order, ordered_list == #[1, 2],
+  list_order, ordered_binary == 3, binary_order]};
+
+returner = code {@x} ( return @x; );
+fallthrough = code ( 1; );
+bare = code ( return; );
+dup = code {@a, @a, @b} ( return @a + @b; );
+value = 7;
+sys.log{"CONF-returns"};
+sys.log{#[returner{9} == 9, fallthrough == nil, bare == nil,
+  dup{2, 3, 4} == 5, value{tick} == 7, seen == 3]};
+
+sys.log{"CONF-truth-equality"};
+sys.log{#[!nil == true, !false == true, !0 == true, !0.0 == true,
+  !"" == true, !#[] == true, !&missing == false,
+  !true == false, !1 == false, !1.0 == false, !"x" == false,
+  !#[1] == false, nil == nil, (false == 0) == false, true == true,
+  1 == 1.0, "x" == "x", #[1, #[2]] == #[1, #[2]],
+  &value == &value, &value == sys.itemref{"value"}, (1 < "x") == false,
+  true / false == 0, true / 1.0 == nil,
+  1 + nil == 1, 1.5 + 2 == 3.5]};
+
+sys.log{"CONF-lists-refs"};
+@base = #[1, 2];
+@alias = @base;
+@updated = list.append{@base, 3};
+later_ref = &created_later;
+dangling_before = sys.fetch{later_ref} == nil;
+created_later = 9;
+dangling_after = sys.fetch{later_ref} == 9;
+sys.log{#[@base == @alias, @updated == #[1, 2, 3],
+  #[1, #[2]] == #[1, #[2]], &value == &value,
+  sys.fetch{&value} == 7, sys.fetch{&missing} == nil,
+  sys.itemname{&value} == "value", dangling_before, dangling_after]};

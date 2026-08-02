@@ -1,0 +1,19 @@
+===stdout===
+Using 'srcroot' as the source root.
+CONF-precedence
+#[true, true]
+CONF-short-circuit
+#[true, true]
+CONF-evaluation-order
+#[true, true, true, true, true, true]
+CONF-returns
+#[true, true, true, true, true, true]
+CONF-truth-equality
+#[true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
+CONF-lists-refs
+#[true, true, true, true, true, true, true, true, true]
+
+===stderr===
+
+===exit===
+0

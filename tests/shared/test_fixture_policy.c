@@ -69,6 +69,13 @@ void test_fixture_policy_declared_goldens_exist(void) {
       {"break_log_src", "tests/fixtures/interpret/break-log.src", "SOT: tests/fixtures/interpret/break-log.src | regen: authored source fixture"},
       {"continue_log_src", "tests/fixtures/interpret/continue-log.src", "SOT: tests/fixtures/interpret/continue-log.src | regen: authored source fixture"},
       {"list_itemref_persist_src", "tests/fixtures/interpret/list-itemref-persist.src", "SOT: tests/fixtures/interpret/list-itemref-persist.src | regen: authored source fixture"},
+      {"conformance_positive_core_src", "tests/fixtures/conformance/positive-core.src", "SOT: tests/fixtures/conformance/positive-core.src | regen: authored source fixture"},
+      {"conformance_negative_unknown_src", "tests/fixtures/conformance/negative/parser-unknown-character.src", "SOT: tests/fixtures/conformance/negative/parser-unknown-character.src | regen: authored source fixture"},
+      {"conformance_negative_nul_src", "tests/fixtures/conformance/negative/parser-nul-escape.src", "SOT: tests/fixtures/conformance/negative/parser-nul-escape.src | regen: authored source fixture"},
+      {"conformance_negative_trailing_comma_src", "tests/fixtures/conformance/negative/parser-trailing-comma.src", "SOT: tests/fixtures/conformance/negative/parser-trailing-comma.src | regen: authored source fixture"},
+      {"conformance_negative_integer_src", "tests/fixtures/conformance/negative/parser-integer-overflow.src", "SOT: tests/fixtures/conformance/negative/parser-integer-overflow.src | regen: authored source fixture"},
+      {"conformance_negative_break_src", "tests/fixtures/conformance/negative/semantic-break-outside-loop.src", "SOT: tests/fixtures/conformance/negative/semantic-break-outside-loop.src | regen: authored source fixture"},
+      {"conformance_negative_local_src", "tests/fixtures/conformance/negative/semantic-local-before-definition.src", "SOT: tests/fixtures/conformance/negative/semantic-local-before-definition.src | regen: authored source fixture"},
   };
 
   static const FixtureEntry bytecode_hex_fixtures[] = {
@@ -89,6 +96,7 @@ void test_fixture_policy_declared_goldens_exist(void) {
       {"break_log_expected", "tests/fixtures/interpret/break-log.expected.txt", "SOT: runtime output contract for break-log | regen: ./scomp tests/fixtures/interpret/break-log.src tests/fixtures/interpret/break-log.generated.obj && ./sin -o tests/fixtures/interpret/break-log.generated.obj > tests/fixtures/interpret/break-log.expected.txt"},
       {"continue_log_expected", "tests/fixtures/interpret/continue-log.expected.txt", "SOT: runtime output contract for continue-log | regen: ./scomp tests/fixtures/interpret/continue-log.src tests/fixtures/interpret/continue-log.generated.obj && ./sin -o tests/fixtures/interpret/continue-log.generated.obj > tests/fixtures/interpret/continue-log.expected.txt"},
       {"list_itemref_persist_expected", "tests/fixtures/interpret/list-itemref-persist.expected.txt", "SOT: runtime output contract for list-itemref-persist | regen: compile once, create temporary srcroot and itemstore, run './sin --loadonly -i <same-store> -s <same-srcroot> -o <object>' twice, normalize paths, and update expected sections manually"},
+      {"conformance_positive_core_expected", "tests/fixtures/conformance/positive-core.expected.txt", "SOT: runtime output contract for positive-core | regen: ./scomp tests/fixtures/conformance/positive-core.src <object> && ./sin --loadonly -i <store> -s <srcroot> -o <object> > tests/fixtures/conformance/positive-core.expected.txt"},
   };
 
   assert_no_duplicate_fixture_entries(source_fixtures,
