@@ -42,6 +42,40 @@ for libcall syntax. Punctuation tokens are `=`, `==`, `!`, `!=`, `<`, `<=`,
 tokens is invalid input. Unterminated strings, code bodies, embedded quoted
 strings, and comments are rejected.
 
+## Implementation limits and failure behavior
+
+The following limits are normative for the reference implementation. Host-
+configured network and CLI limits are documented separately by their options.
+
+| Limit | Enforcement point | Observable result |
+|---|---|---|
+| Source is NUL-free and at most `INT_MAX` bytes | Parser input boundary | Compile diagnostic; no AST |
+| String and code-body payloads at most 65,535 bytes | Lexer/compiler and bytecode encoding | Compiler rejects oversized literals/bodies; runtime string concatenation returns `nil`; libcalls return their documented value |
+| Integer literals `0..INT64_MAX` | Parser | Compile diagnostic |
+| Decimal binary64 literals | Float conversion | Correctly rounded IEEE-754 values; underflow/subnormal results and overflow to infinity are accepted |
+| At most 255 distinct locals (including parameters); at most 255 parameter slots | Semantic analysis and bytecode header | Compile diagnostic |
+| Item-call arity at most 65,535 (`u16`); literal item-layer length at most 255 bytes (`u8`) | Lowering/emission and verifier | Compile diagnostic or bytecode rejection |
+| Branch displacement `-32,768..32,767` (signed `i16`); item-expression nesting 8 | Bytecode emission/verifier | Compile diagnostic or bytecode rejection |
+| Emitted block length at most 4,294,967,295 bytes (`u32`) | Bytecode emission and `sys.compile` | Compile/runtime failure; no installed partial item |
+| Verifier operand stack capacity 1024 (locals, parameters, temporaries included) | Static bytecode verification | Bytecode rejection before execution |
+| Runtime value stack 1024; call stack 1024 | VM execution | `SIGUSR1` interruption; boot restarts, live runtime shuts down, and `sys.compile` returns `false`, setting `ERR_RUNTIME_SIGUSR1` when no more specific runtime error is already present |
+| List has at most 1,048,576 elements and nesting depth 64 | List operations and itemstore encoding | List libcalls return their documented `nil` value; load rejects atomically; source literals also face the 1024-slot verifier limit |
+| Item paths: 8 non-root layers, 32 bytes/layer, 263-byte complete non-root path; no NUL | Item path validation | Invalid lookup/fetch/call/reference assembly yields `nil` (`sys.exists` yields `false`); value assignment is discarded without mutation, code assignment reports `ERR_RUNTIME_INVALIDITEM`, and direct item mutation is atomic |
+| At most 250 persisted children/item; code payload at most 64 MiB | Itemstore save/load | Save reports failure; load rejects atomically |
+| V2 aggregate list-element budget 1,048,576 | Itemstore save/load stream | Save failure or atomic load rejection |
+
+Compilation and loading either produce a complete result or fail without
+exposing a partial result. Limits enforced by mutation APIs are checked before
+changing topology or payload, and functional list operations preserve their
+inputs. Ordinary value-producing failures return the operation's documented
+`nil` or `false`; process-level memory exhaustion has no stronger
+recoverability guarantee.
+
+See [`bytecode.md`](bytecode.md) for encoding and verifier rules,
+[`itemstore-format.md`](itemstore-format.md) for persistence enforcement,
+[`libcalls.md`](libcalls.md) for operation-specific failure values, and
+[`runtime.md`](runtime.md) for VM ownership and interruption behavior.
+
 ## Concrete grammar
 
 This EBNF is a readable rendering of the parser grammar. `ε` means empty;

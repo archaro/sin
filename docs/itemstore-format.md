@@ -115,7 +115,10 @@ Sibling names must be unique. The root name is also limited to 32 bytes and
 may not contain an embedded NUL, but it is not subject to the non-root character
 set restriction.
 
-The in-memory item APIs use these same limits before changing a tree. A path
+The in-memory item APIs enforce name, depth, and path limits before changing a
+tree. The v2 aggregate list-element budget is a stream-level save/load check,
+and the persisted bytecode and child-count limits are checked while writing and
+reading the file. A path
 passed to `item_set_value`, `item_set_code`, `find_item`,
 `find_item_cached`, or `item_delete` is relative to the supplied item pointer;
 the supplied item's ancestor depth counts toward the depth limit. Its complete
