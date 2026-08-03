@@ -59,11 +59,13 @@ static void assert_invalid_list_call(OP_t handler, VALUE_t *args,
 void test_list_libcall_registry_contract(void) {
   uint8_t lib_index = 0, call_index = 0;
   uint8_t args = 0;
-  const char *names[] = {"length", "get", "append", "set", "concat", "slice"};
-  const uint8_t arities[] = {1, 2, 2, 3, 2, 3};
+  const char *names[] = {"length", "get", "append", "set", "concat", "slice",
+                         "islist"};
+  const uint8_t arities[] = {1, 2, 2, 3, 2, 3, 1};
   OP_t handlers[] = {lc_list_length, lc_list_get, lc_list_append,
-                     lc_list_set, lc_list_concat, lc_list_slice};
-  for (size_t i = 0; i < 6; ++i) {
+                     lc_list_set, lc_list_concat, lc_list_slice,
+                     lc_list_islist};
+  for (size_t i = 0; i < 7; ++i) {
     ASSERT_TRUE(libcall_lookup_pair("list", names[i], &lib_index, &call_index, &args));
     ASSERT_EQ_INT(5, lib_index);
     ASSERT_EQ_INT(i, call_index);
@@ -317,7 +319,8 @@ void test_list_libcall_source_integration(void) {
   VALUE_t source = {VALUE_str, {.s = strdup(
       "result.a = list.length{#[1, 2]}; result.b = list.get{#[1, 2], 0}; "
       "result.c = list.append{#[1], 2}; result.d = list.set{#[1, 2], 0, 3}; "
-      "result.e = list.concat{#[1], #[2]}; result.f = list.slice{#[1, 2], 0, 1};")}};
+      "result.e = list.concat{#[1], #[2]}; result.f = list.slice{#[1, 2], 0, 1}; "
+      "result.g = list.islist{#[1]}; result.h = list.islist{1};")}};
   push_stack(config.vm->stack, source);
   (void)lc_sys_compile(test_ctx(), NULL, NULL);
   VALUE_t compiled = pop_stack(config.vm->stack);
@@ -329,12 +332,16 @@ void test_list_libcall_source_integration(void) {
   ITEM_t *d = find_item(itemstore_root(config.itemstore_ctx), "result.d");
   ITEM_t *e = find_item(itemstore_root(config.itemstore_ctx), "result.e");
   ITEM_t *f = find_item(itemstore_root(config.itemstore_ctx), "result.f");
+  ITEM_t *g = find_item(itemstore_root(config.itemstore_ctx), "result.g");
+  ITEM_t *h = find_item(itemstore_root(config.itemstore_ctx), "result.h");
   ASSERT_NOT_NULL(a);
   ASSERT_NOT_NULL(b);
   ASSERT_NOT_NULL(c);
   ASSERT_NOT_NULL(d);
   ASSERT_NOT_NULL(e);
   ASSERT_NOT_NULL(f);
+  ASSERT_NOT_NULL(g);
+  ASSERT_NOT_NULL(h);
   ASSERT_EQ_INT(2, item_value(a)->i);
   ASSERT_EQ_INT(1, item_value(b)->i);
   const int pair[] = {1, 2};
@@ -344,5 +351,49 @@ void test_list_libcall_source_integration(void) {
   assert_list_ints(item_value(d), replaced, 2);
   assert_list_ints(item_value(e), pair, 2);
   assert_list_ints(item_value(f), singleton, 1);
+  ASSERT_EQ_INT(VALUE_bool, item_value(g)->type);
+  ASSERT_EQ_INT(1, item_value(g)->i);
+  ASSERT_EQ_INT(VALUE_bool, item_value(h)->type);
+  ASSERT_EQ_INT(0, item_value(h)->i);
+  teardown_libcall_runtime();
+}
+
+void test_list_libcall_islist(void) {
+  setup_libcall_runtime();
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior error", NULL);
+
+  SIN_LIST_t *nonempty = list_of_ints(1, 2);
+  SIN_LIST_t *empty = sin_list_build_owned(NULL, 0);
+  ASSERT_NOT_NULL(nonempty);
+  ASSERT_NOT_NULL(empty);
+
+  VALUE_t cases[] = {
+      VALUE_NIL,
+      {VALUE_bool, {.i = 1}},
+      {VALUE_int, {.i = 42}},
+      {VALUE_float, {.f = 3.5}},
+      {VALUE_str, {.s = strdup("hello")}},
+      {VALUE_itemref, {.itemref = sin_itemref_create("root.child")}},
+      {VALUE_list, {.list = sin_list_retain(nonempty)}},
+      {VALUE_list, {.list = sin_list_retain(empty)}},
+  };
+  const int expected[] = {0, 0, 0, 0, 0, 0, 1, 1};
+  size_t count = sizeof(cases) / sizeof(cases[0]);
+
+  for (size_t i = 0; i < count; ++i) {
+    push_stack(config.vm->stack, cases[i]);
+    (void)lc_list_islist(test_ctx(), NULL, NULL);
+    VALUE_t result = pop_stack(config.vm->stack);
+    ASSERT_EQ_INT(VALUE_bool, result.type);
+    ASSERT_EQ_INT(expected[i], result.i);
+  }
+
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(error)->i);
+
+  sin_list_release(nonempty);
+  sin_list_release(empty);
   teardown_libcall_runtime();
 }

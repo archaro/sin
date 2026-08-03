@@ -41,6 +41,7 @@
   X("list", "set",         5,  3, 3, lc_list_set) \
   X("list", "concat",      5,  4, 2, lc_list_concat) \
   X("list", "slice",       5,  5, 3, lc_list_slice) \
+  X("list", "islist",      5,  6, 1, lc_list_islist) \
   X("net",  "input",       3,  0, 0, lc_net_input) \
   X("net",  "write",       3,  1, 2, lc_net_write) \
   X("net",  "ditch",       3,  2, 1, lc_net_ditch) \

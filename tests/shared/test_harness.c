@@ -233,6 +233,7 @@ void test_list_libcall_registry_contract(void);
 void test_list_libcall_valid_operations_and_ownership(void);
 void test_list_libcall_invalid_types_and_ranges(void);
 void test_list_libcall_source_integration(void);
+void test_list_libcall_islist(void);
 void test_relative_item_leading_dot_parse_accepts_deref_chain(void);
 void test_relative_item_leading_dot_nested_relative_deref_layers(void);
 void test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed(void);
@@ -640,6 +641,7 @@ static const test_case_t runtime_tests[] = {
     {"test_list_libcall_valid_operations_and_ownership", test_list_libcall_valid_operations_and_ownership},
     {"test_list_libcall_invalid_types_and_ranges", test_list_libcall_invalid_types_and_ranges},
     {"test_list_libcall_source_integration", test_list_libcall_source_integration},
+    {"test_list_libcall_islist", test_list_libcall_islist},
     {"test_libcall_output_formats_values", test_libcall_output_formats_values},
     {"test_sys_compile_libcall_runtime", test_sys_compile_libcall_runtime},
     {"test_sys_itemref_dynamic_calls", test_sys_itemref_dynamic_calls},

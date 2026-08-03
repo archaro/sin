@@ -33,6 +33,15 @@ uint8_t *lc_list_length(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *lc_list_islist(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  VALUE_t value = pop_stack(ctx->vm->stack);
+  int is_list = (value.type == VALUE_list && value.list != NULL) ? 1 : 0;
+  value_free(&value);
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_bool, {.i = is_list}});
+  return nextop;
+}
+
 uint8_t *lc_list_get(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   VALUE_t index = pop_stack(ctx->vm->stack);
