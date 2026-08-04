@@ -411,6 +411,14 @@ void test_interpret_result_semantics(void) {
                     "@sum = 0; foreach @x in #[1, 2, 3] do if @x == 2 then continue; endif; @sum = @sum + @x; endfor; return @sum;", 4);
   assert_result_int("result.foreach_sequence_evaluated_once",
                     "result.calls = 0; result.make = code ( result.calls = result.calls + 1; return #[1, 2]; ); foreach @x in result.make do endfor; return result.calls;", 1);
+  assert_result_bool("result.foreach_visits_nil_elements",
+                     "result.nil_seen = false; foreach @x in #[nil, 2] do if @x == nil then result.nil_seen = true; endif; endfor; return result.nil_seen;", true);
+  assert_result_int("result.foreach_nested_loops",
+                    "result.total = 0; foreach @outer in #[1, 2] do foreach @inner in #[10, 20] do result.total = result.total + @outer + @inner; endfor; endfor; return result.total;", 66);
+  assert_result_int("result.foreach_snapshot_under_rebinding",
+                    "@source = #[1, 2, 3]; result.total = 0; foreach @x in @source do result.total = result.total + @x; @source = #[99]; endfor; return result.total;", 6);
+  assert_result_bool("result.foreach_zero_iterations_iterator_nil",
+                     "@source = #[]; foreach @x in @source do result.unexpected = true; endfor; return @x == nil;", true);
   assert_result_string("result.owned_string_return", "return \"owned result\";", "owned result");
   assert_result_int("result.embedded_code_return",
                     "result.callee = code ( return 11; ); return result.callee;", 11);

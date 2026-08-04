@@ -1,0 +1,2 @@
+foreach foo in #[1] do
+endfor;

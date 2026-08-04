@@ -57,3 +57,20 @@ sys.log{#[@base == @alias, @updated == #[1, 2, 3],
   #[1, #[2]] == #[1, #[2]], &value == &value,
   sys.fetch{&value} == 7, sys.fetch{&missing} == nil,
   sys.itemname{&value} == "value", dangling_before, dangling_after]};
+
+sys.log{"CONF-foreach"};
+foreach @nil_element in #[nil, 2] do
+  if @nil_element == nil then seen_nil = true; endif;
+endfor;
+outer_sum = 0;
+foreach @outer in #[1, 2] do
+  foreach @inner in #[10, 20] do outer_sum = outer_sum + @outer + @inner; endfor;
+endfor;
+source = #[1, 2, 3];
+snapshot_sum = 0;
+foreach @element in source do
+  snapshot_sum = snapshot_sum + @element;
+  source = #[99];
+endfor;
+foreach @empty_element in #[] do seen_empty = true; endfor;
+sys.log{#[seen_nil, outer_sum == 66, snapshot_sum == 6, @empty_element == nil]};

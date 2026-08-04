@@ -60,6 +60,7 @@ void test_pipeline_negative_matrix(void) {
       {"parser_nul_escape", CASE_FIXTURE, "tests/fixtures/conformance/negative/parser-nul-escape.src", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "NUL byte escape", 1},
       {"parser_trailing_comma", CASE_FIXTURE, "tests/fixtures/conformance/negative/parser-trailing-comma.src", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
       {"parser_integer_overflow", CASE_FIXTURE, "tests/fixtures/conformance/negative/parser-integer-overflow.src", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "integer literal out of range", 1},
+      {"parser_foreach_nonlocal_iterator", CASE_FIXTURE, "tests/fixtures/conformance/negative/parser-foreach-nonlocal-iterator.src", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
       {"parser_malformed_item_syntax", CASE_SOURCE, "foo..bar;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},
       {"parser_unterminated_string", CASE_SOURCE, "\"unterminated;", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "EOF in string.", 1},
       {"parser_bad_if_endif_pairing", CASE_SOURCE, "endif;", NULL, ERR_COMP_SYNTAX, STAGE_PARSER, "syntax error", 1},

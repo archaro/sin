@@ -70,6 +70,7 @@ void test_fixture_policy_declared_goldens_exist(void) {
       {"continue_log_src", "tests/fixtures/interpret/continue-log.src", "SOT: tests/fixtures/interpret/continue-log.src | regen: authored source fixture"},
       {"list_itemref_persist_src", "tests/fixtures/interpret/list-itemref-persist.src", "SOT: tests/fixtures/interpret/list-itemref-persist.src | regen: authored source fixture"},
       {"conformance_positive_core_src", "tests/fixtures/conformance/positive-core.src", "SOT: tests/fixtures/conformance/positive-core.src | regen: authored source fixture"},
+      {"conformance_negative_foreach_nonlocal_iterator_src", "tests/fixtures/conformance/negative/parser-foreach-nonlocal-iterator.src", "SOT: tests/fixtures/conformance/negative/parser-foreach-nonlocal-iterator.src | regen: authored source fixture"},
       {"conformance_negative_unknown_src", "tests/fixtures/conformance/negative/parser-unknown-character.src", "SOT: tests/fixtures/conformance/negative/parser-unknown-character.src | regen: authored source fixture"},
       {"conformance_negative_nul_src", "tests/fixtures/conformance/negative/parser-nul-escape.src", "SOT: tests/fixtures/conformance/negative/parser-nul-escape.src | regen: authored source fixture"},
       {"conformance_negative_trailing_comma_src", "tests/fixtures/conformance/negative/parser-trailing-comma.src", "SOT: tests/fixtures/conformance/negative/parser-trailing-comma.src | regen: authored source fixture"},

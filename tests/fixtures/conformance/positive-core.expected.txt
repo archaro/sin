@@ -12,6 +12,8 @@ CONF-truth-equality
 #[true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
 CONF-lists-refs
 #[true, true, true, true, true, true, true, true, true]
+CONF-foreach
+#[true, true, true, true]
 
 ===stderr===
 
