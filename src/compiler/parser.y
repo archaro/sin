@@ -405,6 +405,7 @@ int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) 
 %token TLISTSTART TITEMREF
 %token TBREAK TCONTINUE
 %token TSEMI TWHILE TDO TENDWHILE TIF TTHEN TELSE TELSIF TENDIF TRETURN
+%token TFOREACH TIN TENDFOR
 %token TASSIGN TINC TDEC TLAYERSEP TDEREFSTART TCODE TDEREFEND
 %token TLPAREN TRPAREN TLBRACE TRBRACE TCOMMA
 
@@ -466,6 +467,12 @@ stmt:   TWHILE expr TDO stmtlist TENDWHILE {
         }
         | TIF expr TTHEN stmtlist elsif_else_opt TENDIF {
           $$ = parser_new_if_node(state, $2, $4, $5);
+          if (!$$) YYERROR;
+        }
+        | TFOREACH TLOCAL TIN expr TDO stmtlist TENDFOR {
+          AS_NODE *iterator = parser_new_value(state, V_LOCAL, $2);
+          AS_NODE *spec = parser_new_node(state, N_FOREACHSPEC, iterator, $4, true, true);
+          $$ = parser_new_node(state, N_FOREACH, spec, $6, true, true);
           if (!$$) YYERROR;
         }
         | TBREAK {

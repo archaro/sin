@@ -251,6 +251,26 @@ void test_parser_cleanup_allocation_failures(void) {
   }
 }
 
+void test_parser_foreach_allocation_failures(void) {
+  const char source[] = "foreach @x in #[1] do @y = 2; endfor;";
+  ParseInput input = {source, sizeof(source) - 1, "foreach-parser-failure.src"};
+
+  for (long fail_at = 0; fail_at < 128; ++fail_at) {
+    AS_NODE *absyn = NULL;
+    char *errdetail = NULL;
+    alloc_test_fail_after(fail_at);
+    int8_t rc = parse_source(&input, &absyn, &errdetail);
+    alloc_test_fail_after(-1);
+    if (rc == ERR_NOERROR) {
+      ASSERT_NOT_NULL(absyn);
+      as_delete(absyn);
+    } else {
+      ASSERT_TRUE(absyn == NULL);
+    }
+    free(errdetail);
+  }
+}
+
 void test_parser_lists_and_itemrefs_ast(void) {
   AS_NODE *root = parse_lists_ok(
       "#[]; #[fred]; #[&fred]; [fred]; "
@@ -315,4 +335,50 @@ void test_parser_lists_and_itemrefs_ast(void) {
   parse_lists_fails("#[1,];");
   parse_lists_fails("# [1];");
   parse_lists_fails("&1;");
+}
+
+void test_parser_foreach_ast(void) {
+  AS_NODE *empty_root = parse_lists_ok("foreach @x in #[] do endfor;");
+  AS_STMTLIST *empty_stmts = (AS_STMTLIST *)empty_root->lhs;
+  ASSERT_EQ_INT(1, empty_stmts->count);
+  ASSERT_EQ_INT(N_FOREACH, empty_stmts->stmts[0]->nodetype);
+  ASSERT_EQ_INT(N_STMTLIST, ((AS_NODE *)empty_stmts->stmts[0]->rhs)->nodetype);
+  ASSERT_EQ_INT(0, ((AS_STMTLIST *)((AS_NODE *)empty_stmts->stmts[0]->rhs)->lhs)->count);
+  as_delete(empty_root);
+
+  AS_NODE *root = parse_lists_ok(
+      "foreach @x in #[1, 2] do @y = 3; endfor;"
+      "foreach @outer in #[1] do foreach @inner in players{1} do endfor; endfor;");
+  AS_STMTLIST *stmts = (AS_STMTLIST *)root->lhs;
+  ASSERT_EQ_INT(2, stmts->count);
+
+  AS_NODE *foreach_node = stmts->stmts[0];
+  ASSERT_EQ_INT(N_FOREACH, foreach_node->nodetype);
+  AS_NODE *spec = (AS_NODE *)foreach_node->lhs;
+  ASSERT_EQ_INT(N_FOREACHSPEC, spec->nodetype);
+  ASSERT_EQ_INT(V_LOCAL, node_value((AS_NODE *)spec->lhs)->valtype);
+  ASSERT_TRUE(strcmp("@x", node_value((AS_NODE *)spec->lhs)->value.s) == 0);
+  AS_NODE *list = (AS_NODE *)spec->rhs;
+  ASSERT_EQ_INT(N_LIST, list->nodetype);
+  ASSERT_EQ_INT(V_INT, node_value(list_element(list, 0)->lhs)->valtype);
+  ASSERT_EQ_INT(V_INT, node_value(list_element(list, 1)->lhs)->valtype);
+  ASSERT_EQ_INT(N_STMTLIST, ((AS_NODE *)foreach_node->rhs)->nodetype);
+  AS_STMTLIST *body = (AS_STMTLIST *)((AS_NODE *)foreach_node->rhs)->lhs;
+  ASSERT_EQ_INT(1, body->count);
+
+  foreach_node = stmts->stmts[1];
+  ASSERT_EQ_INT(N_STMTLIST, ((AS_NODE *)foreach_node->rhs)->nodetype);
+  body = (AS_STMTLIST *)((AS_NODE *)foreach_node->rhs)->lhs;
+  ASSERT_EQ_INT(1, body->count);
+  AS_NODE *nested = body->stmts[0];
+  ASSERT_EQ_INT(N_FOREACH, nested->nodetype);
+  spec = (AS_NODE *)nested->lhs;
+  ASSERT_EQ_INT(N_CALL, ((AS_NODE *)spec->rhs)->nodetype);
+  ASSERT_EQ_INT(0, ((AS_STMTLIST *)((AS_NODE *)nested->rhs)->lhs)->count);
+  as_delete(root);
+
+  parse_lists_fails("foreach foo in #[1] do endfor;");
+  parse_lists_fails("foreach @x #[1] do endfor;");
+  parse_lists_fails("foreach @x in #[1] do @y = 1;");
+  parse_lists_fails("foreach @x in #[1] @y = 1; endfor;");
 }

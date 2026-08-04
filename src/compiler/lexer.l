@@ -232,9 +232,12 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   "do"          { return TDO; }
   "else"        { return TELSE; }
   "elsif"       { return TELSIF; }
+  "endfor"      { return TENDFOR; }
   "endif"       { return TENDIF; }
   "endwhile"    { return TENDWHILE; }
+  "foreach"     { return TFOREACH; }
   "if"          { return TIF; }
+  "in"          { return TIN; }
   "list"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "net"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "or"          { return TOR; }

@@ -103,8 +103,10 @@ void test_bytecode_verify_jump_targets(void);
 void test_bytecode_verify_stack_flow(void);
 void test_parser_input_api(void);
 void test_parser_lists_and_itemrefs_ast(void);
+void test_parser_foreach_ast(void);
 void test_parser_scanner_setup_allocation_failures(void);
 void test_parser_cleanup_allocation_failures(void);
+void test_parser_foreach_allocation_failures(void);
 void test_cli_io_helpers(void);
 void test_parser_float_literals_decimal_forms(void);
 void test_parser_float_literals_integer_still_int(void);
@@ -384,8 +386,10 @@ static const test_case_t core_tests[] = {
     {"test_bytecode_verify_stack_flow", test_bytecode_verify_stack_flow},
     {"test_parser_input_api", test_parser_input_api},
     {"test_parser_lists_and_itemrefs_ast", test_parser_lists_and_itemrefs_ast},
+    {"test_parser_foreach_ast", test_parser_foreach_ast},
     {"test_parser_scanner_setup_allocation_failures", test_parser_scanner_setup_allocation_failures},
     {"test_parser_cleanup_allocation_failures", test_parser_cleanup_allocation_failures},
+    {"test_parser_foreach_allocation_failures", test_parser_foreach_allocation_failures},
     {"test_cli_io_helpers", test_cli_io_helpers},
     {"test_parser_float_literals_decimal_forms", test_parser_float_literals_decimal_forms},
     {"test_parser_float_literals_integer_still_int", test_parser_float_literals_integer_still_int},
