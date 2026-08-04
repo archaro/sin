@@ -129,6 +129,15 @@ Comments begin with `/*` and end with `*/`, and may include anything, including 
 `WHILE condition DO statements; ENDWHILE;`
 `DO statements; WHILE condition;`
 
+`FOREACH @local IN expression DO statements; ENDFOR;` evaluates `expression`
+once, then visits list elements in order. The iterator is initialized to `nil`
+and remains an ordinary item-local after the loop, containing the last visited
+element or `nil` when no iteration occurred. Non-list values skip the body
+without changing `error`; `BREAK` exits and `CONTINUE` advances. Lists are
+immutable, so rebinding the source local in the body does not alter the
+captured iteration. Nested loops use three hidden locals per level and count
+against the 255-local limit.
+
 `DO` loops execute their body at least once, then repeat while the condition is
 truthy. For example, `@a = 0; DO sys.log{@a}; @a++; WHILE @a < 5;` logs a
 counter from zero through four. The loop itself has no result value.

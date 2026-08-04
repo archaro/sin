@@ -34,7 +34,7 @@ Token forms are:
   payloads are limited by `SIN_MAX_STRING_BYTES`.
 
 Reserved words are `and`, `break`, `code`, `continue`, `do`, `else`, `elsif`,
-`endif`, `endfor`, `foreach`, `if`, `in`, `nil`, `or`, `return`, `then`, `true`,
+`endif`, `endfor`, `endwhile`, `foreach`, `if`, `in`, `nil`, `or`, `return`, `then`, `true`,
 `false`, and `while`. Library prefixes `list`, `net`, `str`, `sys`, and `task` are recognized
 for libcall syntax. Punctuation tokens are `=`, `==`, `!`, `!=`, `<`, `<=`,
 `>`, `>=`, `++`, `+`, `--`, `-`, `*`, `%`, `/`, `(`, `)`, `,`, `{`, `}`, `;`,
@@ -133,13 +133,27 @@ Every statement in a statement list ends with `;`. A code value is
 an expression only in the item-assignment form shown above.
 
 `FOREACH` is a statement and yields no value. Its sequence expression is
-evaluated exactly once before the iterator is assigned. The iterator is set to
-`nil` before the first iteration and remains in scope after `ENDFOR`; after the
-loop it contains the last element visited, or `nil` when there were none. A
-non-list sequence executes the body zero times without changing `error`.
-Lists are immutable, so rebinding the source inside the body does not change
-the remaining iteration. `BREAK` exits the loop and `CONTINUE` advances to the
-next element.
+evaluated exactly once, in full, before the iterator is assigned or the body is
+entered. Thus a code item in the sequence position is called once, not once
+per element. The iterator is then assigned `nil`; it is assigned each visited
+element in order and remains in scope after `ENDFOR`, holding the last element
+visited or `nil` when there were none. A non-list sequence, including `nil`,
+executes the body zero times and does not change `error`.
+
+The loop iterates over the list value captured by that single evaluation.
+Lists are immutable, so rebinding the source local inside the body does not
+change the remaining iterations. `BREAK` exits the nearest loop; `CONTINUE`
+advances to the next element (and therefore cannot skip the loop's index
+advance). Both are valid in a `FOREACH` body and affect no enclosing loop.
+
+The iterator is an ordinary local: Sinistra has item-wide, not block, scope, so
+it is visible from its definition through the rest of the code item, including
+after `ENDFOR`. The sequence is analyzed before the iterator is defined, so an
+already-defined local may be used as both sequence and iterator. Each nested
+`FOREACH` level reserves three hidden locals; sequential loops reuse those
+slots. The ordinary limit of 255 distinct locals, including these hidden
+locals and parameters, applies. Compilation fails with a `foreach nesting
+exceeds the local budget` diagnostic when another nested level cannot fit.
 
 ## Precedence and associativity
 
@@ -173,6 +187,9 @@ not expression operators.
 - Statements execute in source order. `return` evaluates its optional
   expression once and exits; `return;` returns `nil`. `break` and `continue`
   transfer to the nearest enclosing loop.
+- A `FOREACH` evaluates its sequence once before assigning its iterator and
+  entering the body; its remaining evaluation and iterator rules are given in
+  the grammar section above.
 
 ## Item calls and code-item execution
 

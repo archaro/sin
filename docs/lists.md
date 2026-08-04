@@ -39,11 +39,18 @@ new lists; there is no mutable push/pop/insert/remove syntax.
 
 ## Iteration
 
-`FOREACH @local IN expression DO ... ENDFOR` visits each element of a list in
-order. The expression is evaluated once; non-list and empty-list values perform
-zero iterations and leave the iterator `nil`. The iterator holds the last
-visited element afterward. `BREAK` exits and `CONTINUE` advances, and list
-immutability makes iteration unaffected by rebinding the source local.
+`FOREACH @local IN expression DO ... ENDFOR` is a statement that visits each
+element of a list in order. The expression is evaluated exactly once before the
+iterator is assigned or the body is entered; a code item there is therefore
+called once. The iterator is initialized to `nil`, is assigned each visited
+element, and remains in scope after `ENDFOR`, holding the last visited element
+or `nil` when there were none. Non-list values perform zero iterations without
+changing `error`. The captured list value is immutable, so rebinding the source
+local in the body does not affect the remaining iterations. `BREAK` exits the
+nearest loop and `CONTINUE` advances to the next element. Each nested loop uses
+three hidden locals and counts against the 255-local limit; sequential loops
+reuse those hidden slots. See the language reference for the complete grammar
+and scope rules.
 
 ### Performance measurements
 
