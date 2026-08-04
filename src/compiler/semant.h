@@ -34,6 +34,7 @@ typedef struct {
   uint32_t index_capacity;
   bool local_index_sorted;
   uint32_t loop_depth;
+  uint32_t foreach_depth;
   int8_t errnum;
   char *errdetail;
 } SEM_CTX;
@@ -49,3 +50,7 @@ int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic
 int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx);
 bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out);
 void sem_seed_params(SEM_CTX *ctx, const char **params, size_t count);
+
+/* Construct the compiler-owned locals used by FOREACH lowering. */
+bool sem_foreach_hidden_name(char *buffer, size_t size, uint32_t depth,
+                             const char *suffix);

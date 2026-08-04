@@ -37,6 +37,14 @@ The public list API, argument validation, and failure behavior are documented
 in [`libcalls.md`](libcalls.md). Indices are zero-based and update calls return
 new lists; there is no mutable push/pop/insert/remove syntax.
 
+## Iteration
+
+`FOREACH @local IN expression DO ... ENDFOR` visits each element of a list in
+order. The expression is evaluated once; non-list and empty-list values perform
+zero iterations and leave the iterator `nil`. The iterator holds the last
+visited element afterward. `BREAK` exits and `CONTINUE` advances, and list
+immutability makes iteration unaffected by rebinding the source local.
+
 ### Performance measurements
 
 The representative list/item-reference matrix is opt-in: run `make

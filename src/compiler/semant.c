@@ -4,6 +4,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -165,6 +166,7 @@ SEM_CTX *sem_create_ctx(void) {
   (*ctx).index_capacity = 0;
   (*ctx).local_index_sorted = true;
   (*ctx).loop_depth = 0;
+  (*ctx).foreach_depth = 0;
   (*ctx).errnum = ERR_NOERROR;
   (*ctx).errdetail = NULL;
 
@@ -270,6 +272,39 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       sem_walk(ctx, (AS_NODE *)node->rhs);
       ctx->loop_depth--;
       return;
+    case N_FOREACH: {
+      AS_NODE *spec = (AS_NODE *)node->lhs;
+      AS_NODE *iterator = spec ? (AS_NODE *)spec->lhs : NULL;
+      AS_NODE *sequence = spec ? (AS_NODE *)spec->rhs : NULL;
+      AS_VALUE *value = iterator && iterator->nodetype == N_VALUE ? (AS_VALUE *)iterator->lhs : NULL;
+      char name[64];
+      const char *suffixes[] = {"seq", "idx", "len"};
+      size_t i;
+      sem_walk(ctx, sequence);
+      if (ctx->errnum != ERR_NOERROR) return;
+      if (!value || value->valtype != V_LOCAL || !value->value.s) {
+        sem_set_error(ctx, ERR_COMP_SYNTAX, "foreach iterator must be local");
+        return;
+      }
+      sem_add_local(ctx, value->value.s);
+      if (ctx->errnum != ERR_NOERROR) return;
+      if (ctx->count > UINT8_MAX - 3u) {
+        sem_set_error(ctx, ERR_COMP_TOOMANYLOCALS,
+                      "foreach nesting exceeds the local budget");
+        return;
+      }
+      for (i = 0; i < 3; ++i) {
+        if (ctx->errnum != ERR_NOERROR || !sem_foreach_hidden_name(name, sizeof name, ctx->foreach_depth, suffixes[i])) return;
+        sem_add_local(ctx, name);
+      }
+      if (ctx->errnum != ERR_NOERROR) return;
+      ctx->foreach_depth++;
+      ctx->loop_depth++;
+      sem_walk(ctx, (AS_NODE *)node->rhs);
+      ctx->loop_depth--;
+      ctx->foreach_depth--;
+      return;
+    }
     case N_BREAK:
       if (ctx->loop_depth == 0) sem_set_error(ctx, ERR_COMP_SYNTAX, "BREAK outside loop");
       return;
@@ -334,6 +369,7 @@ int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic
   compdiag_reset_detail(&ctx->errdetail);
   ctx->errnum = ERR_NOERROR;
   ctx->loop_depth = 0;
+  ctx->foreach_depth = 0;
 
   sem_walk(ctx, root);
 
@@ -378,4 +414,12 @@ void sem_seed_params(SEM_CTX *ctx, const char **params, size_t count) {
     if (ctx->errnum != ERR_NOERROR) return;
     ctx->locals[index].param = true;
   }
+}
+
+bool sem_foreach_hidden_name(char *buffer, size_t size, uint32_t depth,
+                             const char *suffix) {
+  int written;
+  if (!buffer || size == 0 || !suffix) return false;
+  written = snprintf(buffer, size, "@$foreach.%u.%s", depth, suffix);
+  return written >= 0 && (size_t)written < size;
 }

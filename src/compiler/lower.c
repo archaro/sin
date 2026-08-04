@@ -86,6 +86,30 @@ static bool lower_list_count(LOWER_CTX *ctx, AS_NODE *node, size_t *out) {
 static bool lower_build_embedded_payload(LOWER_CTX *ctx, AS_NODE *node, int32_t *payload_index);
 static bool lower_resolve_local_index(LOWER_CTX *ctx, AS_NODE *node, uint8_t *out_index);
 
+static bool lower_foreach_local(LOWER_CTX *ctx, uint32_t depth, const char *suffix,
+                                uint8_t *index) {
+  char name[64];
+  if (!sem_foreach_hidden_name(name, sizeof name, depth, suffix) ||
+      !sem_get_local_index(ctx->sem, name, index)) {
+    lower_set_error(ctx, ERR_COMP_TOOMANYLOCALS,
+                    "foreach nesting exceeds the local budget");
+    return false;
+  }
+  return true;
+}
+
+static bool lower_emit_named_libcall(LOWER_CTX *ctx, const char *library,
+                                     const char *call, uint8_t args) {
+  uint8_t lib_index = 0, call_index = 0, expected = 0;
+  if (!libcall_lookup_pair(library, call, &lib_index, &call_index, &expected) ||
+      expected != args) {
+    lower_set_error(ctx, ERR_COMP_UNKNOWN, "unknown FOREACH libcall");
+    return false;
+  }
+  return lower_emit(ctx, (IR_Inst){.op = IR_OP_LIBCALL, .a = lib_index,
+                                   .b = call_index});
+}
+
 static bool lower_resolve_local_index(LOWER_CTX *ctx, AS_NODE *node, uint8_t *out_index) {
   AS_VALUE *value;
   const char *name;
@@ -673,6 +697,65 @@ static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
       return;
     }
 
+    case N_FOREACH: {
+      AS_NODE *spec = (AS_NODE *)node->lhs;
+      AS_NODE *sequence = spec ? (AS_NODE *)spec->rhs : NULL;
+      AS_NODE *iter_node = spec ? (AS_NODE *)spec->lhs : NULL;
+      AS_VALUE *iter_value = iter_node ? (AS_VALUE *)iter_node->lhs : NULL;
+      int32_t condition = -1, increment = -1, end = -1;
+      uint8_t seq = 0, index = 0, length = 0, iterator = 0;
+      if (!lower_new_label(ctx, &condition) || !lower_new_label(ctx, &increment) ||
+          !lower_new_label(ctx, &end) ||
+          !lower_foreach_local(ctx, ctx->foreach_depth, "seq", &seq) ||
+          !lower_foreach_local(ctx, ctx->foreach_depth, "idx", &index) ||
+          !lower_foreach_local(ctx, ctx->foreach_depth, "len", &length) ||
+          !iter_value || !iter_value->value.s ||
+          !sem_get_local_index(ctx->sem, iter_value->value.s, &iterator)) {
+        lower_set_error(ctx, ERR_COMP_LOCALBEFOREDEF, "foreach iterator");
+        return;
+      }
+      lower_expr(ctx, sequence);
+      if (ctx->errnum != ERR_NOERROR) return;
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = seq});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_NIL});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = iterator});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 0});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = index});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = seq});
+      if (!lower_emit_named_libcall(ctx, "list", "islist", 1)) return;
+      if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = end})) return;
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = seq});
+      if (!lower_emit_named_libcall(ctx, "list", "length", 1)) return;
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = length});
+      if (!lower_bind_label(ctx, condition) ||
+          !lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = condition})) return;
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = index});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = length});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LT});
+      if (!lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = end})) return;
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = seq});
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = index});
+      if (!lower_emit_named_libcall(ctx, "list", "get", 2)) return;
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = iterator});
+      int32_t old_break = ctx->break_label;
+      int32_t old_continue = ctx->continue_label;
+      ctx->break_label = end;
+      ctx->continue_label = increment;
+      ctx->foreach_depth++;
+      lower_stmtlist(ctx, (AS_NODE *)node->rhs);
+      ctx->foreach_depth--;
+      ctx->break_label = old_break;
+      ctx->continue_label = old_continue;
+      if (ctx->errnum != ERR_NOERROR) return;
+      if (!lower_bind_label(ctx, increment) ||
+          !lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = increment}) ||
+          !lower_emit(ctx, (IR_Inst){.op = IR_OP_INC_LOCAL, .a = index}) ||
+          !lower_emit(ctx, (IR_Inst){.op = IR_OP_JUMP, .a = condition}) ||
+          !lower_bind_label(ctx, end)) return;
+      lower_emit(ctx, (IR_Inst){.op = IR_OP_LABEL, .a = end});
+      return;
+    }
+
     default:
       lower_set_unsupported(ctx, node, "node type unsupported");
       return;
@@ -735,6 +818,7 @@ int8_t lower_ast_to_ir_diag(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char 
   ctx.errnum = ERR_NOERROR;
   ctx.break_label = -1;
   ctx.continue_label = -1;
+  ctx.foreach_depth = 0;
 
   if (!libcall_init_registry()) {
     ir_destroy_unit(ctx.ir);

@@ -51,6 +51,9 @@ error item. `list.islist{value}` is a total type predicate: it accepts any
 value type, returns `true` for a list and `false` otherwise, and never changes
 the error item.
 
+`list.islist` is also the type guard used by `FOREACH`: a non-list sequence is
+simply skipped without setting `error`.
+
 The `list.*` calls are immutable-list operations; combine them with
 `sys.itemref`, `sys.itemname`, `sys.fetch`, and `sys.call` when a list carries
 references that should be inspected or invoked explicitly.

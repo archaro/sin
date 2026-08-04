@@ -34,8 +34,8 @@ Token forms are:
   payloads are limited by `SIN_MAX_STRING_BYTES`.
 
 Reserved words are `and`, `break`, `code`, `continue`, `do`, `else`, `elsif`,
-`endif`, `endwhile`, `if`, `nil`, `or`, `return`, `then`, `true`, `false`, and
-`while`. Library prefixes `list`, `net`, `str`, `sys`, and `task` are recognized
+`endif`, `endfor`, `foreach`, `if`, `in`, `nil`, `or`, `return`, `then`, `true`,
+`false`, and `while`. Library prefixes `list`, `net`, `str`, `sys`, and `task` are recognized
 for libcall syntax. Punctuation tokens are `=`, `==`, `!`, `!=`, `<`, `<=`,
 `>`, `>=`, `++`, `+`, `--`, `-`, `*`, `%`, `/`, `(`, `)`, `,`, `{`, `}`, `;`,
 `.`, `#[`, `&`, `[` and `]`. Any character that does not begin one of these
@@ -87,6 +87,7 @@ quoted punctuation is a terminal.
 program          ::= statement-list ;
 statement-list   ::= ε | statement-list statement ";" ;
 statement        ::= "while" expression "do" statement-list "endwhile"
+                   | "foreach" local "in" expression "do" statement-list "endfor"
                    | "do" statement-list "while" expression
                    | "if" expression "then" statement-list elsif-or-else "endif"
                    | "break" | "continue" | "return" | "return" expression
@@ -130,6 +131,15 @@ capture, tabs and newlines become spaces. Comment markers in this captured body
 remain raw body text rather than starting comments in the outer lexing pass.
 Every statement in a statement list ends with `;`. A code value is
 an expression only in the item-assignment form shown above.
+
+`FOREACH` is a statement and yields no value. Its sequence expression is
+evaluated exactly once before the iterator is assigned. The iterator is set to
+`nil` before the first iteration and remains in scope after `ENDFOR`; after the
+loop it contains the last element visited, or `nil` when there were none. A
+non-list sequence executes the body zero times without changing `error`.
+Lists are immutable, so rebinding the source inside the body does not change
+the remaining iteration. `BREAK` exits the loop and `CONTINUE` advances to the
+next element.
 
 ## Precedence and associativity
 

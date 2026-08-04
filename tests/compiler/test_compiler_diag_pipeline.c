@@ -335,6 +335,35 @@ static void test_compiler_diag_rejects_256_locals(void) {
   compiler_diag_reset(&d);
 }
 
+void test_compiler_diag_rejects_deep_foreach_with_dedicated_detail(void) {
+  char source[16384];
+  size_t used = 0;
+  for (int i = 0; i < 64; i++) {
+    int written = snprintf(source + used, sizeof(source) - used,
+                           "foreach @x_%d in #[] do\n", i);
+    ASSERT_TRUE(written > 0);
+    ASSERT_TRUE((size_t)written < sizeof(source) - used);
+    used += (size_t)written;
+  }
+  for (int i = 0; i < 64; i++) {
+    int written = snprintf(source + used, sizeof(source) - used, "endfor;\n");
+    ASSERT_TRUE(written > 0);
+    ASSERT_TRUE((size_t)written < sizeof(source) - used);
+    used += (size_t)written;
+  }
+
+  OUTPUT_t *out = NULL;
+  CompilerDiagnostic d;
+  compiler_diag_init(&d);
+  int8_t rc = compile_source_to_bytecode_diag(source, used, &out, &d);
+  ASSERT_EQ_INT(ERR_COMP_TOOMANYLOCALS, rc);
+  ASSERT_EQ_INT(DIAG_PHASE_SEMANT, d.phase);
+  ASSERT_TRUE(d.message != NULL);
+  ASSERT_TRUE(strcmp(d.message, "semant: foreach nesting exceeds the local budget") == 0);
+  ASSERT_TRUE(out == NULL);
+  compiler_diag_reset(&d);
+}
+
 static void free_pipeline_output(OUTPUT_t *out) {
   if (!out) return;
   free(out->bytecode);

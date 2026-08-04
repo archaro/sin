@@ -85,6 +85,7 @@ void test_absyn_constructor_allocation_failures(void);
 void test_absyn_valnode_string_second_allocation_failure(void);
 void test_absyn_stmtlist_growth_failure_preserves_statement(void);
 void test_sem_check_locals_reusable_context(void);
+void test_sem_foreach_semantics(void);
 void test_sem_locals_in_lists_and_itemrefs(void);
 void test_sem_duplicate_local_keeps_original_index(void);
 void test_sem_code_params_are_treated_as_defined_locals(void);
@@ -327,6 +328,7 @@ void test_sdiss_lists_and_itemrefs_show_full_operands(void);
 void test_sdiss_malformed_fixture_reports_verifier_diagnostic(void);
 void test_compiler_context_failures(void);
 void test_compiler_diag_pipeline(void);
+void test_compiler_diag_rejects_deep_foreach_with_dedicated_detail(void);
 void test_cli_metadata_stdout_stderr_and_status(void);
 void test_sys_compile_libcall_runtime(void);
 void test_sys_itemref_dynamic_calls(void);
@@ -369,6 +371,7 @@ static const test_case_t core_tests[] = {
     {"test_absyn_valnode_string_second_allocation_failure", test_absyn_valnode_string_second_allocation_failure},
     {"test_absyn_stmtlist_growth_failure_preserves_statement", test_absyn_stmtlist_growth_failure_preserves_statement},
     {"test_sem_check_locals_reusable_context", test_sem_check_locals_reusable_context},
+    {"test_sem_foreach_semantics", test_sem_foreach_semantics},
     {"test_sem_locals_in_lists_and_itemrefs", test_sem_locals_in_lists_and_itemrefs},
     {"test_sem_duplicate_local_keeps_original_index", test_sem_duplicate_local_keeps_original_index},
     {"test_sem_code_params_are_treated_as_defined_locals", test_sem_code_params_are_treated_as_defined_locals},
@@ -548,6 +551,7 @@ static const test_case_t compiler_tests[] = {
     {"test_sdiss_lists_and_itemrefs_show_full_operands", test_sdiss_lists_and_itemrefs_show_full_operands},
     {"test_compiler_context_failures", test_compiler_context_failures},
     {"test_compiler_diag_pipeline", test_compiler_diag_pipeline},
+    {"test_compiler_diag_rejects_deep_foreach_with_dedicated_detail", test_compiler_diag_rejects_deep_foreach_with_dedicated_detail},
     {"test_cli_metadata_stdout_stderr_and_status", test_cli_metadata_stdout_stderr_and_status},
 };
 

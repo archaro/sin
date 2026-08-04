@@ -10,6 +10,7 @@
 #include "test_helpers.h"
 
 static void test_sem_break_continue_loop_scope(void);
+static AS_NODE *parse_semantic_lists(const char *source);
 
 static AS_NODE *parse_semantic_lists(const char *source) {
   AS_NODE *absyn = NULL;
@@ -207,6 +208,34 @@ void test_sem_embedded_scope_error_detail_includes_provenance(void) {
   as_delete(program);
   sem_delete_ctx(ctx);
   test_sem_break_continue_loop_scope();
+}
+
+void test_sem_foreach_semantics(void) {
+  const char *valid[] = {
+      "foreach @x in #[1] do break; continue; endfor;",
+      "foreach @x in #[1] do foreach @y in #[2] do continue; endfor; endfor;",
+      "foreach @x in #[1] do endfor; @x = 2;",
+  };
+  for (size_t i = 0; i < sizeof valid / sizeof valid[0]; ++i) {
+    AS_NODE *root = parse_semantic_lists(valid[i]);
+    SEM_CTX *ctx = sem_create_ctx();
+    char *detail = NULL;
+    ASSERT_NOT_NULL(ctx);
+    ASSERT_EQ_INT(ERR_NOERROR, sem_check_locals(root, &detail, ctx));
+    ASSERT_TRUE(detail == NULL);
+    ASSERT_TRUE(ctx->count >= (i == 1 ? 8 : 4));
+    free(detail);
+    sem_delete_ctx(ctx);
+    as_delete(root);
+  }
+  AS_NODE *root = parse_semantic_lists("foreach @x in @missing do endfor;");
+  SEM_CTX *ctx = sem_create_ctx();
+  char *detail = NULL;
+  ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, sem_check_locals(root, &detail, ctx));
+  ASSERT_TRUE(detail != NULL && strstr(detail, "@missing") != NULL);
+  free(detail);
+  sem_delete_ctx(ctx);
+  as_delete(root);
 }
 
 static void test_sem_break_continue_loop_scope(void) {

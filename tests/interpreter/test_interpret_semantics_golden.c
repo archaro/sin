@@ -397,6 +397,20 @@ void test_interpret_result_semantics(void) {
   assert_result_int("result.if_return", "if true then return 8; endif; return 9;", 8);
   assert_result_int("result.while_return", "@i = 0; while true do @i++; return @i; endwhile;", 1);
   assert_result_int("result.do_while_return", "do return 6; while true;", 6);
+  assert_result_int("result.foreach_executes_list",
+                    "@sum = 0; foreach @x in #[1, 2, 3] do @sum = @sum + @x; endfor; return @sum;", 6);
+  assert_result_bool("result.foreach_non_list_leaves_iterator_nil",
+                     "foreach @x in 7 do @x = 1; endfor; return @x == nil;", true);
+  assert_result_bool("result.foreach_empty_list_leaves_iterator_nil",
+                     "foreach @x in #[] do @x = 1; endfor; return @x == nil;", true);
+  assert_result_int("result.foreach_iterator_keeps_last_element",
+                    "foreach @x in #[4, 5] do endfor; return @x;", 5);
+  assert_result_int("result.foreach_break_exits_loop",
+                    "@sum = 0; foreach @x in #[1, 2, 3] do @sum = @sum + @x; break; endfor; return @sum;", 1);
+  assert_result_int("result.foreach_continue_advances_iterator",
+                    "@sum = 0; foreach @x in #[1, 2, 3] do if @x == 2 then continue; endif; @sum = @sum + @x; endfor; return @sum;", 4);
+  assert_result_int("result.foreach_sequence_evaluated_once",
+                    "result.calls = 0; result.make = code ( result.calls = result.calls + 1; return #[1, 2]; ); foreach @x in result.make do endfor; return result.calls;", 1);
   assert_result_string("result.owned_string_return", "return \"owned result\";", "owned result");
   assert_result_int("result.embedded_code_return",
                     "result.callee = code ( return 11; ); return result.callee;", 11);

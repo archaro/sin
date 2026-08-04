@@ -93,6 +93,14 @@ static const PipelineGoldenCase PIPELINE_CASES[] = {
     {"locals_dec", NULL, "@x = 2; @x--; @x;", "tests/fixtures/locals_dec.hex", PIPELINE_LAYER_SOURCE},
     {"libcall_exprstmt", NULL, "sys.log{\"hello\"};", "tests/fixtures/libcall_exprstmt.hex", PIPELINE_LAYER_SOURCE},
     {"do_while_counter", NULL, "@i = 0; DO @i++; WHILE @i < 2;", "tests/fixtures/do_while_counter.hex", PIPELINE_LAYER_SOURCE},
+    {"foreach_simple", NULL, "foreach @x in #[1, 2] do @x; endfor; 0;", "tests/fixtures/foreach_simple.hex",
+     PIPELINE_LAYER_SOURCE},
+    {"foreach_nested", NULL,
+     "foreach @outer in #[1] do foreach @inner in #[2] do @inner; endfor; endfor; 0;",
+     "tests/fixtures/foreach_nested.hex", PIPELINE_LAYER_SOURCE},
+    {"foreach_sequential", NULL,
+     "foreach @first in #[1] do @first; endfor; foreach @second in #[2] do @second; endfor; 0;",
+     "tests/fixtures/foreach_sequential.hex", PIPELINE_LAYER_SOURCE},
     {"item_numeric_layer", NULL, "foo.12;", "tests/fixtures/item_numeric_layer.hex", PIPELINE_LAYER_SOURCE},
 };
 
