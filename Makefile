@@ -168,6 +168,7 @@ PARSER_SOURCES := $(SRC_DIR)/compiler/parser.y
 PARSER_C := $(GENERATED_DIR)/parser.c
 PARSER_H := $(GENERATED_DIR)/parser.h
 PARSER_GENERATED := $(PARSER_C) $(PARSER_H)
+.SECONDARY: $(PARSER_GENERATED)
 
 # Lexer files for library
 LEXER_SOURCES := $(SRC_DIR)/compiler/lexer.l
@@ -283,15 +284,26 @@ $(LEXER_GENERATED): $(LEXER_SOURCES) $(PARSER_GENERATED)
 	@mkdir -p $(GENERATED_DIR)
 	$(LEX) -o $(LEXER_C) $<
 
-# Make sure parser.o and lexer.o dependences are tracked
-$(OBJECTS): $(PARSER_H)
-
 $(OBJ_DIR)/parser.o: $(PARSER_C) $(PARSER_H)
 	@mkdir -p $(@D)
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $(GENERATED_WARNING_FLAGS) $< -o $@
 $(OBJ_DIR)/lexer.o: $(LEXER_C) $(PARSER_H)
 	@mkdir -p $(@D)
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $(GENERATED_WARNING_FLAGS) $< -o $@
+
+# These translation units include parser.h directly or through compiler
+# headers. Keep this list narrow so unrelated objects do not rebuild when the
+# generated parser header changes.
+PARSER_DEPENDENT_OBJECTS := \
+	$(OBJ_DIR)/compiler/compiler_context.o \
+	$(OBJ_DIR)/compiler/compiler_pipeline.o \
+	$(OBJ_DIR)/compiler/emitbc.o \
+	$(OBJ_DIR)/libcall/libcall_sys.o \
+	$(OBJ_DIR)/runtime/runtime_item_ops.o \
+	$(OBJ_DIR)/runtime/interpret.o \
+	$(OBJ_DIR)/scomp.o
+
+$(PARSER_DEPENDENT_OBJECTS): $(PARSER_H)
 
 # Include dependency files
 -include $(DEPS)
@@ -333,7 +345,7 @@ test-asan: clean
 test-lsan: clean
 	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=1" $(MAKE) BUILD=sanitize STRICT_WARNINGS=1 test
 
-$(TEST_BIN): $(TEST_SOURCES) $(LIB) scomp sdiss sin sconv FORCE_BUILD
+$(TEST_BIN): $(TEST_SOURCES) $(PARSER_H) $(LIB) scomp sdiss sin sconv FORCE_BUILD
 	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
 $(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/net/network.c $(SRC_DIR)/net/network.h FORCE_BUILD
