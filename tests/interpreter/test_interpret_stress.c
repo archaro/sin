@@ -13,6 +13,25 @@ typedef struct {
   const char *expected_path;
 } StressCase;
 
+enum { STRESS_CASE_COUNT = 2 };
+
+/* The test harness aborts a test with longjmp on assertion failure.  Keep the
+ * small, bounded set of process results in static storage so the atexit hook
+ * can release them when that happens. */
+typedef struct {
+  TestProcessResult current;
+  TestProcessResult baselines[STRESS_CASE_COUNT];
+} StressCleanup;
+
+static StressCleanup stress_cleanup;
+
+static void stress_cleanup_results(void) {
+  test_process_result_free(&stress_cleanup.current);
+  for (size_t i = 0; i < STRESS_CASE_COUNT; ++i) {
+    test_process_result_free(&stress_cleanup.baselines[i]);
+  }
+}
+
 static void normalize_runtime_path(char *text, const char *path,
                                    const char *replacement) {
   if (!text || !path || !replacement) return;
@@ -32,17 +51,16 @@ void test_interpret_stress(void) {
       {"echo_boot", "examples/echo-boot.src", "tests/fixtures/interpret/echo-boot.expected.txt"},
   };
   const int iterations = 30;
-  char obj_paths[sizeof(cases) / sizeof(cases[0])][128];
-  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+  memset(&stress_cleanup, 0, sizeof(stress_cleanup));
+  ASSERT_EQ_INT(0, atexit(stress_cleanup_results));
+  char obj_paths[STRESS_CASE_COUNT][128];
+  for (size_t i = 0; i < STRESS_CASE_COUNT; ++i) {
     ASSERT_EQ_INT(0, test_make_temp_path("sin-interp-stress", obj_paths[i],
                                          sizeof(obj_paths[i])));
   }
 
-  TestProcessResult baselines[sizeof(cases) / sizeof(cases[0])];
-  memset(baselines, 0, sizeof(baselines));
-
   for (int iter = 0; iter < iterations; ++iter) {
-    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+    for (size_t i = 0; i < STRESS_CASE_COUNT; ++i) {
       char *const compile_argv[] = {
         "./scomp", (char *)cases[i].src_path, obj_paths[i], NULL
       };
@@ -68,12 +86,14 @@ void test_interpret_stress(void) {
         "./sin", "--loadonly", "-i", itemstore_path, "-s", srcroot_path,
         "-o", obj_paths[i], NULL
       };
-      TestProcessResult current = {0};
-      int run_capture_rc = test_run_argv_capture(run_argv, 2000, &current);
+      int run_capture_rc = test_run_argv_capture(run_argv, 2000,
+                                                 &stress_cleanup.current);
       ASSERT_EQ_INT(0, remove(obj_paths[i]));
-      normalize_runtime_path(current.stdout_text, srcroot_path, "srcroot");
-      normalize_runtime_path(current.stdout_text, itemstore_path, "items.dat");
-      test_normalize_text(current.stderr_text);
+      normalize_runtime_path(stress_cleanup.current.stdout_text, srcroot_path,
+                             "srcroot");
+      normalize_runtime_path(stress_cleanup.current.stdout_text, itemstore_path,
+                             "items.dat");
+      test_normalize_text(stress_cleanup.current.stderr_text);
       ASSERT_EQ_INT(0, remove(itemstore_path));
       ASSERT_EQ_INT(0, rmdir(srcroot_path));
       ASSERT_EQ_INT(0, rmdir(run_dir));
@@ -93,18 +113,19 @@ void test_interpret_stress(void) {
 
       int missing_line = -1;
       if (expected_exit >= 0) {
-        ASSERT_EQ_INT(expected_exit, current.exit_code);
+        ASSERT_EQ_INT(expected_exit, stress_cleanup.current.exit_code);
       } else {
-        ASSERT_TRUE(current.exit_code != 0);
+        ASSERT_TRUE(stress_cleanup.current.exit_code != 0);
       }
-      ASSERT_TRUE(test_contains_all_lines(expected_stdout, current.stdout_text,
+      ASSERT_TRUE(test_contains_all_lines(expected_stdout,
+                                          stress_cleanup.current.stdout_text,
                                           &missing_line));
       missing_line = -1;
       if (expected_stderr[0] == '\0') {
-        ASSERT_EQ_INT(0, strcmp("", current.stderr_text));
+        ASSERT_EQ_INT(0, strcmp("", stress_cleanup.current.stderr_text));
       } else {
         ASSERT_TRUE(test_contains_all_lines(expected_stderr,
-                                            current.stderr_text,
+                                            stress_cleanup.current.stderr_text,
                                             &missing_line));
       }
 
@@ -114,17 +135,19 @@ void test_interpret_stress(void) {
       free(fixture);
 
       if (iter == 0) {
-        baselines[i] = current;
+        stress_cleanup.baselines[i] = stress_cleanup.current;
+        stress_cleanup.current = (TestProcessResult){0};
       } else {
-        ASSERT_EQ_INT(baselines[i].exit_code, current.exit_code);
-        ASSERT_EQ_INT(0, strcmp(baselines[i].stdout_text, current.stdout_text));
-        ASSERT_EQ_INT(0, strcmp(baselines[i].stderr_text, current.stderr_text));
-        test_process_result_free(&current);
+        ASSERT_EQ_INT(stress_cleanup.baselines[i].exit_code,
+                      stress_cleanup.current.exit_code);
+        ASSERT_EQ_INT(0, strcmp(stress_cleanup.baselines[i].stdout_text,
+                                stress_cleanup.current.stdout_text));
+        ASSERT_EQ_INT(0, strcmp(stress_cleanup.baselines[i].stderr_text,
+                                stress_cleanup.current.stderr_text));
+        test_process_result_free(&stress_cleanup.current);
       }
     }
   }
 
-  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
-    test_process_result_free(&baselines[i]);
-  }
+  stress_cleanup_results();
 }
