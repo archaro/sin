@@ -279,6 +279,7 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       AS_VALUE *value = iterator && iterator->nodetype == N_VALUE ? (AS_VALUE *)iterator->lhs : NULL;
       char name[64];
       const char *suffixes[] = {"seq", "idx", "len"};
+      bool need_hidden_locals = false;
       size_t i;
       sem_walk(ctx, sequence);
       if (ctx->errnum != ERR_NOERROR) return;
@@ -288,7 +289,15 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       }
       sem_add_local(ctx, value->value.s);
       if (ctx->errnum != ERR_NOERROR) return;
-      if (ctx->count > UINT8_MAX - 3u) {
+      for (i = 0; i < 3; ++i) {
+        if (ctx->errnum != ERR_NOERROR ||
+            !sem_foreach_hidden_name(name, sizeof name, ctx->foreach_depth,
+                                     suffixes[i])) {
+          return;
+        }
+        if (!sem_has_local(ctx, name)) need_hidden_locals = true;
+      }
+      if (need_hidden_locals && ctx->count > UINT8_MAX - 3u) {
         sem_set_error(ctx, ERR_COMP_TOOMANYLOCALS,
                       "foreach nesting exceeds the local budget");
         return;

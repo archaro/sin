@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "compiler/compiler_pipeline.h"
+#include "compiler/emitbc.h"
 #include "compiler/compdiag.h"
 #include "compiler/semant.h"
 #include "compiler/lower.h"
@@ -361,6 +362,35 @@ void test_compiler_diag_rejects_deep_foreach_with_dedicated_detail(void) {
   ASSERT_TRUE(d.message != NULL);
   ASSERT_TRUE(strcmp(d.message, "semant: foreach nesting exceeds the local budget") == 0);
   ASSERT_TRUE(out == NULL);
+  compiler_diag_reset(&d);
+}
+
+void test_compiler_diag_allows_sequential_foreach_hidden_local_reuse(void) {
+  char source[16384];
+  size_t used = 0;
+  for (int i = 0; i < 252; i++) {
+    int written = snprintf(source + used, sizeof(source) - used,
+                           "@local_%d = %d;\n", i, i);
+    ASSERT_TRUE(written > 0);
+    ASSERT_TRUE((size_t)written < sizeof(source) - used);
+    used += (size_t)written;
+  }
+  int written = snprintf(source + used, sizeof(source) - used,
+                         "foreach @local_0 in #[] do endfor;\n"
+                         "foreach @local_1 in #[] do endfor;\n");
+  ASSERT_TRUE(written > 0);
+  ASSERT_TRUE((size_t)written < sizeof(source) - used);
+  used += (size_t)written;
+
+  OUTPUT_t *out = NULL;
+  CompilerDiagnostic d;
+  compiler_diag_init(&d);
+  int8_t rc = compile_source_to_bytecode_diag(source, used, &out, &d);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_EQ_INT(ERR_NOERROR, d.code);
+  ASSERT_TRUE(out != NULL);
+  free(out->bytecode);
+  free(out);
   compiler_diag_reset(&d);
 }
 

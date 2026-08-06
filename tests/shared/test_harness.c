@@ -329,6 +329,7 @@ void test_sdiss_malformed_fixture_reports_verifier_diagnostic(void);
 void test_compiler_context_failures(void);
 void test_compiler_diag_pipeline(void);
 void test_compiler_diag_rejects_deep_foreach_with_dedicated_detail(void);
+void test_compiler_diag_allows_sequential_foreach_hidden_local_reuse(void);
 void test_cli_metadata_stdout_stderr_and_status(void);
 void test_sys_compile_libcall_runtime(void);
 void test_sys_itemref_dynamic_calls(void);
@@ -552,6 +553,7 @@ static const test_case_t compiler_tests[] = {
     {"test_compiler_context_failures", test_compiler_context_failures},
     {"test_compiler_diag_pipeline", test_compiler_diag_pipeline},
     {"test_compiler_diag_rejects_deep_foreach_with_dedicated_detail", test_compiler_diag_rejects_deep_foreach_with_dedicated_detail},
+    {"test_compiler_diag_allows_sequential_foreach_hidden_local_reuse", test_compiler_diag_allows_sequential_foreach_hidden_local_reuse},
     {"test_cli_metadata_stdout_stderr_and_status", test_cli_metadata_stdout_stderr_and_status},
 };
 
