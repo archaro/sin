@@ -399,8 +399,18 @@ void test_interpret_result_semantics(void) {
   assert_result_int("result.do_while_return", "do return 6; while true;", 6);
   assert_result_int("result.foreach_executes_list",
                     "@sum = 0; foreach @x in #[1, 2, 3] do @sum = @sum + @x; endfor; return @sum;", 6);
-  assert_result_bool("result.foreach_non_list_leaves_iterator_nil",
-                     "foreach @x in 7 do @x = 1; endfor; return @x == nil;", true);
+  {
+    VALUE_t result = run_result_semantics_source(
+        "result.foreach_non_list_leaves_iterator_nil",
+        "foreach @x in 7 do @x = 1; endfor; return @x == nil;");
+    ASSERT_EQ_INT(VALUE_bool, result.type);
+    ASSERT_TRUE(result.i != 0);
+    value_free(&result);
+    /* FOREACH on a non-list must not set an error. */
+    ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+    ASSERT_NOT_NULL(error);
+    ASSERT_EQ_INT(VALUE_nil, item_value(error)->type);
+  }
   assert_result_bool("result.foreach_empty_list_leaves_iterator_nil",
                      "foreach @x in #[] do @x = 1; endfor; return @x == nil;", true);
   assert_result_int("result.foreach_iterator_keeps_last_element",

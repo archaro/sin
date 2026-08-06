@@ -1,0 +1,1 @@
+foreach @item in #[1] do sys.log{@item}; endfor;
