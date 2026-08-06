@@ -258,6 +258,18 @@ updates where applicable, and positive and negative tests.
   `grep -R`.
 - Avoid broad cleanup unless cleanup is the task.
 
+## Session-efficiency guidance
+
+Keep coding work bounded to a single feature, bug, or review gate. Prefer a
+fresh agent session after implementation and validation rather than carrying a
+conversation across unrelated tasks. Batch independent repository inspection
+and test commands, keep file and terminal output targeted, and avoid polling
+loops when a completion notification or foreground command is sufficient.
+
+Do not repeat repository searches or skill loads already performed in the
+current task. Delegate only when isolation or genuine parallelism materially
+helps; do not duplicate the same inspection in both parent and worker sessions.
+
 For a PR or completed code change, report:
 
 - a concise summary and repository-relative citations for changed files;
