@@ -135,18 +135,10 @@
 
   - Positive and negative conformance fixtures derived from that reference.
 
-  There are also two language-design decisions worth making now:
+  There is also a language-design decision worth making now:
 
   - Whether lists need native iteration syntax. while plus list.get is
     sufficient, but a future foreach would change the frozen grammar.
-
-  - Whether indexing, slicing, maps or other collections will ever receive
-    native syntax. They need not be implemented now, but likely syntax should at
-    least be reserved before the freeze.
-
-  I would not delay 0.8.0 for sys.valuetype, exceptions, labelled control flow
-  or convenience syntax unless you already intend them to be core language
-  constructs.
 
   In short: the major remaining work is not another expression feature. It is
   establishing a genuine bytecode ABI—especially portable encoding and stable
