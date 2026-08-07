@@ -534,8 +534,11 @@ uint8_t *op_add(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   v2 = pop_stack(VM->stack);
   VALUE_t result;
   if (value_add(&v2, &v1, &result)) {
+    VALUE_e v1_type = v1.type;
+    VALUE_e v2_type = v2.type;
     value_free(&v1);
     value_free(&v2);
+    logverbose("OP_ADD: operand types %d and %d\n", v2_type, v1_type);
     push_stack(VM->stack, result);
   } else if (v1.type == VALUE_str && v2.type == VALUE_str) {
     push_stack(VM->stack, concat_two_strings(v2, v1));
@@ -548,7 +551,6 @@ uint8_t *op_add(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
                value_type_name(left_type), value_type_name(right_type));
     push_stack(VM->stack, VALUE_NIL);
   }
-  logverbose("OP_ADD: types %d and %d\n", v1.type, v2.type);
   return nextop;
 }
 
@@ -1116,7 +1118,8 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
     if (*nextop == 'E') {
       break;
     }
-    switch (*nextop++) {
+    uint8_t layer_type = *nextop++;
+    switch (layer_type) {
       case 'L': {
         // Simple layer
         REQUIRE_BYTES(nextop, 1, "OP_ASSEMBLEITEM layer length");
@@ -1170,14 +1173,14 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
             break;
           }
           default: {
-            logerr("Invalid dereference layer type '%c' (%d).\n", *nextop, *nextop);
+            logerr("Invalid dereference layer type '%c' (%d).\n", deref_type, deref_type);
             invalid = true;
           }
         }
         break;
       }
       default: {
-        logerr("Invalid layer type '%c' (%d).\n", *nextop, *nextop);
+        logerr("Invalid layer type '%c' (%d).\n", layer_type, layer_type);
         invalid = true;
       }
     }

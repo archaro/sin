@@ -96,7 +96,7 @@ VALUE_t *peek_stack(STACK_t *stack) {
 
 int size_stack(STACK_t *stack) {
   // How many items are on me?
-  // An empty stack is size -1.  Also don't include any sneaky locals
+  // An empty stack is size 0.  Also don't include any sneaky locals
   // which are freeloading at the bottom of the stack.
   return (stack->current + 1 - stack->locals);
 }
