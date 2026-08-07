@@ -182,8 +182,14 @@ not expression operators.
   For `item = expression`, the item path (including dereferences) is evaluated
   first, then the value, then the store.
 - For an item call, argument expressions are evaluated in source order before
-  the call target expression; the call then runs. Libcall arguments are also
-  evaluated left-to-right before the fixed library call.
+  the call target expression; the call then runs. An expression directly
+  followed by `{` or `(` with argument expressions always constructs an item
+  call: the compiler does not inspect the target item's kind first. This means
+  `str.len{foo.bar}` evaluates `foo.bar` as the argument, executing it when
+  it is code, before resolving `str.len` as the target. The value-item
+  argument rules in the item-calls section apply when the resolved target is
+  not a code item. Libcall arguments are also evaluated left-to-right before
+  the fixed library call.
 - Statements execute in source order. `return` evaluates its optional
   expression once and exits; `return;` returns `nil`. `break` and `continue`
   transfer to the nearest enclosing loop.
