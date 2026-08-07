@@ -211,6 +211,7 @@
 %x CODEPARAMS
 %x CODESTREMBED
 %x COMMENT
+%x LAYERCTX
 
 local       @[a-z_][a-z0-9_]*
 layer       [a-z0-9_]+
@@ -290,7 +291,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   {integer}     { yylval->TSTRINGLIT = sin_strdup(yytext); return TINTEGER; }
   {local}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLOCAL; }
   {layer}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLAYER; }
-  "\."          { return TLAYERSEP; }
+  "\."          { BEGIN(LAYERCTX); return TLAYERSEP; }
   "#["           { return TLISTSTART; }
   "&"            { return TITEMREF; }
   "\["          { return TDEREFSTART; }
@@ -433,7 +434,13 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   "*/"        { BEGIN(INITIAL); }
   .|\n        { /* Eat everything else */ }
 }
-<INITIAL,CODE>{
+<LAYERCTX>{
+  {float}       { yylval->TSTRINGLIT = sin_strdup(yytext); BEGIN(INITIAL); return TFLOAT; }
+  {integer}     { yylval->TSTRINGLIT = sin_strdup(yytext); BEGIN(INITIAL); return TINTEGER; }
+  {layer}       { yylval->TSTRINGLIT = strdup_lc(yytext); BEGIN(INITIAL); return TLAYER; }
+  "\["          { BEGIN(INITIAL); return TDEREFSTART; }
+}
+<INITIAL,CODE,LAYERCTX>{
   .             { yylval->TSTRINGLIT = sin_strdup(yytext); return TUNKNOWNCHAR; }
 }
 <STRINGLIT><<EOF>> {

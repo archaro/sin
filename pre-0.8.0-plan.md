@@ -137,37 +137,14 @@
 
   There is also a language-design decision worth making now:
 
-  - Whether lists need native iteration syntax. while plus list.get is
-    sufficient, but a future foreach would change the frozen grammar.
+  - Whether lists need native iteration syntax. While list.get is
+    sufficient, a future foreach would change the frozen grammar.
 
   In short: the major remaining work is not another expression feature. It is
   establishing a genuine bytecode ABI—especially portable encoding and stable
   libcall IDs—then making the language documentation and conformance suite
   authoritative. No files were changed and no tests were necessary for this
   review.
-
-  ## Pinned before the 0.8.0 freeze
-
-  Raised while designing FOREACH. Neither is caused by FOREACH; both are
-  pre-existing and both are cheaper to settle while the grammar is still open.
-
-  ### Keywords shadow item layer names
-
-  The lexer matches keywords in INITIAL before the generic `layer` pattern
-  `[a-z0-9_]+`, and the parser only accepts a layer token after `.`. So any
-  keyword is unusable as an item layer: `foo.if`, `foo.do`, `foo.while` and
-  `foo.then` are already rejected today, and each new keyword removes another
-  name. FOREACH adds `foreach`, `in` and `endfor`, and `in` is a plausible
-  layer name in a MUD world.
-
-  Fix before 0.8.0: add a lexer start condition entered after TLAYERSEP so that
-  an identifier in layer position always lexes as TLAYER. Both `item` and
-  `libcall` productions expect TLAYER after the separator, so one start
-  condition covers both. This repairs every existing collision at once rather
-  than accumulating more of them past the freeze.
-
-  Nothing in this repository's sources, examples or fuzz corpus currently uses
-  a keyword as a layer name, so the fix is a pure widening — no fixture churn.
 
   ### Item arguments are evaluated, with side effects
 
@@ -184,9 +161,7 @@
   `sys.fetch` on a code item schedules the call rather than returning a stored
   payload.
 
-  Decide before the freeze whether that is a defect or the intended design. It
-  is arguably intended — a code item has no stored value, only behaviour, and
-  the tolerant call contract is deliberate. If so, the deliverable is a
-  normative paragraph in the evaluation-order section of the language reference
-  making the evaluation point explicit, not a language change.
+  This is a deliberate design choice.  Include a normative paragraph in the
+  evaluation-order section of the language reference making the evaluation
+  point explicit.
 

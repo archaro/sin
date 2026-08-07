@@ -113,6 +113,33 @@ void test_relative_item_leading_dot_existing_absolute_item_unchanged(void) {
                     "foo.bar.baz = 1; foo.bar.baz = foo.bar.baz + 1;");
 }
 
+void test_keywords_as_layer_names_after_dot(void) {
+  assert_compile_ok("keyword as layer: foo.if",
+                    "foo.if = 1;");
+  assert_compile_ok("keyword as layer: foo.do",
+                    "foo.do = 1;");
+  assert_compile_ok("keyword as layer: foo.while",
+                    "foo.while = 1;");
+  assert_compile_ok("keyword as layer: foo.then",
+                    "foo.then = 1;");
+  assert_compile_ok("keyword as layer: foo.foreach",
+                    "foo.foreach = 1;");
+  assert_compile_ok("keyword as layer: foo.in",
+                    "foo.in = 1;");
+  assert_compile_ok("keyword as layer: foo.endfor",
+                    "foo.endfor = 1;");
+  assert_compile_ok("keyword as layer: foo.else",
+                    "foo.else = 1;");
+  assert_compile_ok("keyword as layer: foo.break",
+                    "foo.break = 1;");
+  assert_compile_ok("keyword as layer: .foreach",
+                    ".foreach = 1;");
+  assert_compile_ok("keyword as layer: .in",
+                    ".in = 1;");
+  assert_compile_ok("keyword as layer: .if",
+                    ".if = 1;");
+}
+
 void test_float_item_literal_layer_rejected_at_compile_time(void) {
   assert_compile_err("foo.1.0 = 1;", ERR_COMP_SYNTAX, "syntax");
 }
