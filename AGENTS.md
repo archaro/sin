@@ -24,26 +24,15 @@ criteria, final validation, and the final answer. It is always the final
 reviewer and must not accept a worker's summary without inspecting the diff and
 test evidence.
 
-### Special instructions for OpenAI models
-- In Code Mode, within each bounded stage, run independent,
-  functions.exec-available tool calls concurrently in one functions.exec call.
-- Use await Promise.allSettled([...]) when partial results are useful, and
-  inspect every result; use await Promise.all([...]) only when any failure
-  should abort the batch.
-- Keep dependencies, waits/resumes, approvals, conflicting or interdependent
-  mutations, and adaptive investigations where each result may change the next
-  step sequential.
-- Do not split otherwise batchable inspections across outer tool calls.
-
 ### Isolated handoffs
 
 For every native implementation, correction, or review agent:
 
 - Never pass the root conversation history: provide the minimum context
   necessary to implement the requested task.
-- Run tests in `luna-test` (Luna, Low). Return the result of the tests to the
-  orchestrator. If there are errors, return those too. That agent executes and
-  reports only; it never edits files or diagnoses failures.
+- Run tests with a low-capability, read-only agent. Return the results to the
+  orchestrator; include errors verbatim. That agent executes and reports only;
+  it never edits files or diagnoses failures.
 
 For every implementation, correction, or review handoff:
 
@@ -64,29 +53,33 @@ For non-trivial code changes:
 
 1. Inspect enough of the repository to define a bounded task, explicit
    acceptance criteria, affected subsystems, constraints, and tests.
-2. Give the first implementation attempt to Luna (Medium).
+2. Give the first implementation attempt to a medium-capability agent.
 3. Review its diff and test evidence yourself.
-4. If the Luna result fails a check, is incomplete, violates an acceptance
+4. If the result fails a check, is incomplete, violates an acceptance
    criterion, requires substantial correction, or leaves an unresolved
-   certainty, refer back to Luna for correction, with detailed and bounded
-   instructions on what is wrong and what needs to be fixed.
+   certainty, refer back to the implementation agent for correction, with
+   detailed and bounded instructions on what is wrong and what needs to be
+   fixed.
 
 Escalation is bounded. Count the initial implementation as attempt 1:
 
-- Attempts 1 through 5 belong to Luna. Repeat step 4 for each correction.
-- If attempt 5 still fails root review, hand the task to Sol (`gpt-5.6-sol`)
-  with a fresh, self-contained handoff stating what Luna produced, which
-  acceptance criteria remain unmet, and the specific failures. Do not forward
-  Luna's transcript.
-- Sol gets at most two attempts, reviewed against the same criteria.
-- If Sol's second attempt still fails, the root implements the fix itself.
+- Attempts 1 through 5 belong to the medium-capability implementation agent.
+  Repeat step 4 for each correction.
+- If attempt 5 still fails root review, hand the task to a high-capability
+  review agent with a fresh, self-contained handoff stating what the
+  implementation agent produced, which acceptance criteria remain unmet, and
+  the specific failures. Do not forward the implementation agent's transcript.
+- The high-capability review agent gets at most two attempts, reviewed against
+  the same criteria.
+- If the review agent's second attempt still fails, the root implements the
+  fix itself.
 
 Never restart the ladder for the same bounded task; re-scoping a failed task
 does not reset the count. A task that reaches the root stays with the root.
 
 The root may make tiny mechanical edits. Substantive implementation follows
-the model of Luna as code-monkey, irrespective of what the orchestration
-model is.
+the pattern of an implementation agent as code-monkey, irrespective of what
+the orchestration model is.
 
 ### Agent count and review scope
 
@@ -134,7 +127,7 @@ diagnosis. The Unix-like build requires `make`, a C compiler, `pkg-config`,
 libuv development files, Bison, Flex, `ar`, and `xxd`. Do not vendor missing
 dependencies; report the exact failing command and error.
 
-- `make`: debug builds of `scomp`, `sdiss`, and `sin`.
+- `make`: debug builds of `scomp`, `sdiss`, `sin`, and `sconv`.
 - `make BUILD=release`: optimized build.
 - `make BUILD=sanitize`: ASan/UBSan build.
 - `make clean`: remove generated and built artifacts.
