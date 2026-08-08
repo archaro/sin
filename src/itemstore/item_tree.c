@@ -148,6 +148,10 @@ static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
   item->store = parent ? parent->store : NULL;
   item->execution_pins = 0;
   item->type = type;
+  // Keep value storage in a canonical state even for code items.  Public
+  // accessors reject code items, but initializing this field prevents any
+  // accidental read from observing indeterminate bytes.
+  item->value = VALUE_NIL;
   item->bytecode = NULL;
   item->bytecode_len = 0;
   // There are two types of items.  Those which don't contain a value

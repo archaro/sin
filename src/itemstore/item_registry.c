@@ -107,7 +107,9 @@ ITEMSTORE_t *itemstore_owner(const ITEM_t *item) { return item ? item->store : N
 ITEM_e item_kind(const ITEM_t *item) { return item ? item->type : ITEM_value; }
 const char *item_layer_name(const ITEM_t *item) { return item ? item->name : NULL; }
 ITEM_t *item_parent(const ITEM_t *item) { return item ? item->parent : NULL; }
-const VALUE_t *item_value(const ITEM_t *item) { return item ? &item->value : NULL; }
+const VALUE_t *item_value(const ITEM_t *item) {
+  return item && item->type == ITEM_value ? &item->value : NULL;
+}
 const uint8_t *item_bytecode(const ITEM_t *item) { return item ? item->bytecode : NULL; }
 uint32_t item_bytecode_length(const ITEM_t *item) { return item ? item->bytecode_len : 0; }
 size_t item_child_count(const ITEM_t *item) {

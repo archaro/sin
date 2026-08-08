@@ -84,8 +84,9 @@ tree, including child links, value payloads, and code-item bytecode. Root and
 other `ITEM_t` pointers are borrowed: the root remains valid until
 `itemstore_destroy()`, while a non-root pointer is also invalidated if that item
 or one of its ancestors is deleted. The `VALUE_t` field pointer returned by
-`item_value()` remains valid while its item does, although its contents can
-change; any referenced string storage and the buffer returned by
+`item_value()` returns a borrowed pointer only for value items; it returns
+`NULL` for code items and NULL inputs. The pointer remains valid while its item
+does, although its contents can change; any referenced string storage and the buffer returned by
 `item_bytecode()` may be invalidated when that payload is replaced.
 
 Mutate the borrowed tree with the public item APIs such as `item_set_value()`

@@ -152,3 +152,43 @@ void test_float_local_deref_layer_returns_nil_and_does_not_save_item(void) {
   ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "foo") == NULL);
   teardown_runtime();
 }
+
+void test_item_deref_value_layer_resolves_normally(void) {
+  setup_runtime();
+  VALUE_t result = compile_and_run("test.itemderefvalue",
+      "selector = \"branch\"; foo.[selector] = 7; return foo.branch;");
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(7, result.i);
+  value_free(&result);
+  teardown_runtime();
+}
+
+void test_item_deref_code_layer_is_rejected(void) {
+  setup_runtime();
+  VALUE_t result = compile_and_run("test.itemderefcode",
+      "selector = code (return \"branch\"); foo.[selector] = 7; return foo;");
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  value_free(&result);
+  ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "foo") == NULL);
+  teardown_runtime();
+}
+
+void test_item_deref_missing_layer_is_rejected(void) {
+  setup_runtime();
+  VALUE_t result = compile_and_run("test.itemderefmissing",
+      "foo.[missing] = 7; return foo;");
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  value_free(&result);
+  ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "foo") == NULL);
+  teardown_runtime();
+}
+
+void test_item_deref_invalid_result_layer_is_rejected(void) {
+  setup_runtime();
+  VALUE_t result = compile_and_run("test.itemderefinvalid",
+      "selector = 1.0; foo.[selector] = 7; return foo;");
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  value_free(&result);
+  ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "foo") == NULL);
+  teardown_runtime();
+}

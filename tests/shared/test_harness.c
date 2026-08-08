@@ -132,6 +132,7 @@ void test_itemstore_benchmarks(void);
 void test_get_itemname_root_item(void);
 void test_loaded_zero_child_item_can_gain_runtime_child(void);
 void test_itemstore_value_and_code_roundtrip(void);
+void test_item_value_accessor_rejects_code_items(void);
 void test_itemstore_v2_lists_and_itemrefs_roundtrip(void);
 void test_itemstore_v2_all_values_fixture(void);
 void test_itemstore_v2_malformed_value_table(void);
@@ -248,6 +249,10 @@ void test_relative_item_leading_dot_existing_absolute_item_unchanged(void);
 void test_keywords_as_layer_names_after_dot(void);
 void test_float_item_literal_layer_rejected_at_compile_time(void);
 void test_float_local_deref_layer_returns_nil_and_does_not_save_item(void);
+void test_item_deref_value_layer_resolves_normally(void);
+void test_item_deref_code_layer_is_rejected(void);
+void test_item_deref_missing_layer_is_rejected(void);
+void test_item_deref_invalid_result_layer_is_rejected(void);
 void test_error_item_preserves_compiler_diagnostic_fields(void);
 void test_error_message_table_defines_active_errors(void);
 void test_value_ieee754_environment_contract(void);
@@ -425,6 +430,7 @@ static const test_case_t core_tests[] = {
     {"test_get_itemname_root_item", test_get_itemname_root_item},
     {"test_loaded_zero_child_item_can_gain_runtime_child", test_loaded_zero_child_item_can_gain_runtime_child},
     {"test_itemstore_value_and_code_roundtrip", test_itemstore_value_and_code_roundtrip},
+    {"test_item_value_accessor_rejects_code_items", test_item_value_accessor_rejects_code_items},
     {"test_itemstore_v2_lists_and_itemrefs_roundtrip", test_itemstore_v2_lists_and_itemrefs_roundtrip},
     {"test_itemstore_v2_all_values_fixture", test_itemstore_v2_all_values_fixture},
     {"test_itemstore_v2_malformed_value_table", test_itemstore_v2_malformed_value_table},
@@ -468,6 +474,10 @@ static const test_case_t core_tests[] = {
     {"test_keywords_as_layer_names_after_dot", test_keywords_as_layer_names_after_dot},
     {"test_float_item_literal_layer_rejected_at_compile_time", test_float_item_literal_layer_rejected_at_compile_time},
     {"test_float_local_deref_layer_returns_nil_and_does_not_save_item", test_float_local_deref_layer_returns_nil_and_does_not_save_item},
+    {"test_item_deref_value_layer_resolves_normally", test_item_deref_value_layer_resolves_normally},
+    {"test_item_deref_code_layer_is_rejected", test_item_deref_code_layer_is_rejected},
+    {"test_item_deref_missing_layer_is_rejected", test_item_deref_missing_layer_is_rejected},
+    {"test_item_deref_invalid_result_layer_is_rejected", test_item_deref_invalid_result_layer_is_rejected},
     {"test_error_item_preserves_compiler_diagnostic_fields", test_error_item_preserves_compiler_diagnostic_fields},
     {"test_error_message_table_defines_active_errors", test_error_message_table_defines_active_errors},
     {"test_value_ieee754_environment_contract", test_value_ieee754_environment_contract},

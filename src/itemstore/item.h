@@ -85,6 +85,8 @@ ITEMSTORE_t *itemstore_owner(const ITEM_t *item);
 ITEM_e item_kind(const ITEM_t *item);
 const char *item_layer_name(const ITEM_t *item);
 ITEM_t *item_parent(const ITEM_t *item);
+/* Returns the borrowed value payload for value items; code items and NULL
+ * inputs return NULL. */
 const VALUE_t *item_value(const ITEM_t *item);
 const uint8_t *item_bytecode(const ITEM_t *item);
 uint32_t item_bytecode_length(const ITEM_t *item);

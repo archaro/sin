@@ -373,7 +373,9 @@ list is false and every non-empty list is true.
 canonical root-relative path. A relative path is resolved against the current
 item once, at reference creation; the reference does not retain a pointer and
 does not later rebase if execution moves elsewhere. Dynamic dereference layers
-accept string and integer values. A single leading `nil` or empty string may
+accept string and integer values. An item-based dynamic dereference that
+resolves to a code item is rejected and evaluates to `nil`; code items are not
+executed to produce a layer name. A single leading `nil` or empty string may
 stand for an omitted leading layer when a later layer supplies a name; `nil` or
 empty alone, and either form in a non-leading position, is invalid. Floats,
 booleans, lists, and item references are invalid layer values; an

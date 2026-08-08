@@ -22,6 +22,20 @@
 
 extern CONFIG_t config;
 
+void test_item_value_accessor_rejects_code_items(void) {
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  uint8_t *bytecode = malloc(1);
+  ASSERT_NOT_NULL(bytecode);
+  bytecode[0] = 0;
+  ITEM_t *code = make_item("code", root, ITEM_code, VALUE_NIL, bytecode, 1);
+  ASSERT_NOT_NULL(code);
+  ASSERT_EQ_INT(ITEM_code, item_kind(code));
+  ASSERT_TRUE(item_value(code) == NULL);
+  ASSERT_TRUE(item_value(NULL) == NULL);
+  destroy_item(root);
+}
+
 /* Generated fixtures follow docs/itemstore-format.md. */
 enum {
   WIRE_ITEM_VALUE = 1,

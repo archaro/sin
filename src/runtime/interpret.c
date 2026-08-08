@@ -1192,11 +1192,15 @@ uint8_t *assembleitem_helper(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item,
             if (layername.type == VALUE_str) {
               //  This is basically the same as op_fetchitem
               ITEM_t *i = find_item(itemstore_root(ctx->itemstore), layername.s);
-              if (i) {
+              if (i && item_kind(i) == ITEM_value) {
                 // We have an item.  Convert its value into the dereferenced layer.
                 const VALUE_t *iv = item_value(i);
                 invalid = !iv || !append_layer_from_value(&sb, iv, &layer_state, layername.s);
                 just_processed_layer = !invalid;
+              } else if (i) {
+                logverbose("Item dereference failed for '%s': target is a code item.\n",
+                           layername.s);
+                invalid = true;
               } else {
                 logverbose("Item dereference failed for '%s'.\n", layername.s);
                 invalid = true;
