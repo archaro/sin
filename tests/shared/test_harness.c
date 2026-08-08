@@ -98,6 +98,7 @@ void test_sem_embedded_scope_error_detail_includes_provenance(void);
 void test_sem_many_locals_deterministic_indices(void);
 void test_sem_local_limit_255_is_accepted(void);
 void test_sem_local_limit_over_255_fails_deterministically(void);
+void test_sem_embedded_local_limit_boundaries(void);
 void test_ir_validate(void);
 void test_opcode_schema_consistency(void);
 void test_bytecode_v1_abi_manifest(void);
@@ -408,6 +409,7 @@ static const test_case_t core_tests[] = {
     {"test_sem_many_locals_deterministic_indices", test_sem_many_locals_deterministic_indices},
     {"test_sem_local_limit_255_is_accepted", test_sem_local_limit_255_is_accepted},
     {"test_sem_local_limit_over_255_fails_deterministically", test_sem_local_limit_over_255_fails_deterministically},
+    {"test_sem_embedded_local_limit_boundaries", test_sem_embedded_local_limit_boundaries},
     {"test_ir_validate", test_ir_validate},
     {"test_opcode_schema_consistency", test_opcode_schema_consistency},
     {"test_bytecode_verify_item_expression_streams", test_bytecode_verify_item_expression_streams},

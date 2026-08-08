@@ -319,7 +319,7 @@ void test_sem_local_limit_255_is_accepted(void) {
   ASSERT_NOT_NULL(ctx);
 
   AS_NODE *list = as_new_stmtlist_node();
-  for (int i = 0; i < 256; i++) {
+  for (int i = 0; i < 255; i++) {
     char name[32];
     snprintf(name, sizeof(name), "local_%03d", i);
     list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local(name), t_int(i)));
@@ -329,11 +329,11 @@ void test_sem_local_limit_255_is_accepted(void) {
   int8_t rc = sem_check_locals(list, &errdetail, ctx);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
   ASSERT_TRUE(errdetail == NULL);
-  ASSERT_EQ_INT(256, (int)ctx->count);
+  ASSERT_EQ_INT(255, (int)ctx->count);
 
   uint8_t idx = 0;
-  ASSERT_TRUE(sem_get_local_index(ctx, "local_255", &idx));
-  ASSERT_EQ_INT(255, (int)idx);
+  ASSERT_TRUE(sem_get_local_index(ctx, "local_254", &idx));
+  ASSERT_EQ_INT(254, (int)idx);
 
   as_delete(list);
   sem_delete_ctx(ctx);
@@ -344,7 +344,7 @@ void test_sem_local_limit_over_255_fails_deterministically(void) {
   ASSERT_NOT_NULL(ctx);
 
   AS_NODE *list = as_new_stmtlist_node();
-  for (int i = 0; i < 257; i++) {
+  for (int i = 0; i < 256; i++) {
     char name[32];
     snprintf(name, sizeof(name), "local_%03d", i);
     list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local(name), t_int(i)));
@@ -354,10 +354,81 @@ void test_sem_local_limit_over_255_fails_deterministically(void) {
   int8_t rc = sem_check_locals(list, &errdetail, ctx);
   ASSERT_EQ_INT(ERR_COMP_TOOMANYLOCALS, rc);
   ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "local_256") != NULL);
-  ASSERT_EQ_INT(256, (int)ctx->count);
+  ASSERT_TRUE(strstr(errdetail, "local_255") != NULL);
+  ASSERT_EQ_INT(255, (int)ctx->count);
 
   free(errdetail);
   as_delete(list);
+  sem_delete_ctx(ctx);
+}
+
+void test_sem_embedded_local_limit_boundaries(void) {
+  AS_NODE *body = as_new_stmtlist_node();
+  for (int i = 0; i < 256; i++) {
+    char name[32];
+    snprintf(name, sizeof(name), "embedded_%03d", i);
+    body = as_stmtlist_append(body,
+                              t_node(N_ASSLOCAL, t_local(name), t_int(i)));
+  }
+  AS_NODE *code = t_node(N_CODE, NULL, body);
+  AS_NODE *program = t_stmtlist_with_one(t_node(N_EXPRSTMT, code, NULL));
+  SEM_CTX *ctx = sem_create_ctx();
+  char *detail = NULL;
+  ASSERT_NOT_NULL(ctx);
+  ASSERT_EQ_INT(ERR_COMP_TOOMANYLOCALS,
+                sem_check_locals(program, &detail, ctx));
+  ASSERT_NOT_NULL(detail);
+  ASSERT_TRUE(strcmp(detail,
+                     "semant: embedded code: semant: embedded_255") == 0);
+  free(detail);
+  as_delete(program);
+  sem_delete_ctx(ctx);
+
+  /* Parameters and locals share one scope budget. */
+  AS_NODE *params = NULL;
+  for (int i = 0; i < 254; i++) {
+    char name[32];
+    snprintf(name, sizeof(name), "param_%03d", i);
+    params = as_new_node(N_ARGLIST, t_local(name), params);
+  }
+  body = as_new_stmtlist_node();
+  body = as_stmtlist_append(body,
+                            t_node(N_ASSLOCAL, t_local("boundary_254"),
+                                   t_int(1)));
+  code = t_node(N_CODE, params, body);
+  program = t_stmtlist_with_one(t_node(N_EXPRSTMT, code, NULL));
+  ctx = sem_create_ctx();
+  detail = NULL;
+  ASSERT_NOT_NULL(ctx);
+  ASSERT_EQ_INT(ERR_NOERROR, sem_check_locals(program, &detail, ctx));
+  ASSERT_TRUE(detail == NULL);
+  as_delete(program);
+  sem_delete_ctx(ctx);
+
+  params = NULL;
+  for (int i = 0; i < 254; i++) {
+    char name[32];
+    snprintf(name, sizeof(name), "param_%03d", i);
+    params = as_new_node(N_ARGLIST, t_local(name), params);
+  }
+  body = as_new_stmtlist_node();
+  body = as_stmtlist_append(body,
+                            t_node(N_ASSLOCAL, t_local("boundary_254"),
+                                   t_int(1)));
+  body = as_stmtlist_append(body,
+                            t_node(N_ASSLOCAL, t_local("boundary_255"),
+                                   t_int(2)));
+  code = t_node(N_CODE, params, body);
+  program = t_stmtlist_with_one(t_node(N_EXPRSTMT, code, NULL));
+  ctx = sem_create_ctx();
+  detail = NULL;
+  ASSERT_NOT_NULL(ctx);
+  ASSERT_EQ_INT(ERR_COMP_TOOMANYLOCALS,
+                sem_check_locals(program, &detail, ctx));
+  ASSERT_NOT_NULL(detail);
+  ASSERT_TRUE(strcmp(detail,
+                     "semant: embedded code: semant: boundary_255") == 0);
+  free(detail);
+  as_delete(program);
   sem_delete_ctx(ctx);
 }

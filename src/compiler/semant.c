@@ -14,6 +14,10 @@
 #include "memory.h"
 #include "compiler/compdiag.h"
 #include "compiler/semant.h"
+
+/* Local indices are one byte, while the encoded local count must remain
+ * representable without wrapping.  The count therefore tops out at 255. */
+#define SEM_LOCAL_BUDGET UINT8_MAX
  
 static bool sem_has_local(SEM_CTX *ctx, const char *name) {
   return sem_get_local_index(ctx, name, NULL);
@@ -98,7 +102,7 @@ static void sem_add_local(SEM_CTX *ctx, const char *name) {
     return;
   }
 
-  if (ctx->count > UINT8_MAX) {
+  if (ctx->count >= SEM_LOCAL_BUDGET) {
     sem_set_error(ctx, ERR_COMP_TOOMANYLOCALS, name);
     return;
   }
@@ -297,7 +301,8 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
         }
         if (!sem_has_local(ctx, name)) need_hidden_locals = true;
       }
-      if (need_hidden_locals && ctx->count > UINT8_MAX - 3u) {
+      if (need_hidden_locals &&
+          ctx->count > SEM_LOCAL_BUDGET - 3u) {
         sem_set_error(ctx, ERR_COMP_TOOMANYLOCALS,
                       "foreach nesting exceeds the local budget");
         return;
