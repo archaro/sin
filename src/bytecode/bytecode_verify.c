@@ -24,11 +24,14 @@ typedef struct {
 } BC_JumpRef;
 
 typedef struct {
-  uint8_t opcode;
-  IR_Op op;
+  uint32_t offset;
   uint32_t next_offset;
   uint32_t operand_u32;
+  IR_Op op;
+  uint8_t opcode;
 } BC_InstructionMeta;
+
+#define BC_ANALYSIS_MEMORY_BUDGET (16u * 1024u * 1024u)
 
 typedef struct {
   const uint8_t *base;
@@ -37,12 +40,12 @@ typedef struct {
   BC_VerifyOptions options;
   BC_VerifyResult result;
   uint8_t local_count;
-  uint32_t instruction_offset;
   bool legacy;
   bool validate_local_indices;
-  bool *top_level_instruction_starts;
-  uint32_t top_level_instruction_start_capacity;
+  uint8_t *top_level_instruction_starts;
+  uint32_t top_level_instruction_count;
   BC_InstructionMeta *instructions;
+  uint32_t instruction_capacity;
   BC_JumpRef *jumps;
   uint32_t jump_count;
   uint32_t jump_capacity;
@@ -50,6 +53,8 @@ typedef struct {
   void *callback_ctx;
   uint32_t event_depth;
   uint32_t item_expression_depth;
+  size_t analysis_bytes;
+  bool recording_top_level;
 } BC_Decoder;
 
 BC_VerifyOptions bc_verify_strict_options(void) {
@@ -89,6 +94,49 @@ const char *bc_verify_status_name(BC_VerifyStatus status) {
 static uint32_t bc_offset(const BC_Decoder *d, const uint8_t *p) {
   if (!d->base || !p) return 0;
   return (uint32_t)(p - d->base);
+}
+
+static bool bc_analysis_resize_fits(const BC_Decoder *d, size_t old_count,
+                                    size_t new_count, size_t element_size,
+                                    size_t *new_total) {
+  size_t old_bytes = 0;
+  size_t new_bytes = 0;
+  if (alloc_mul_overflow(old_count, element_size, &old_bytes) ||
+      alloc_mul_overflow(new_count, element_size, &new_bytes) ||
+      old_bytes > d->analysis_bytes) {
+    return false;
+  }
+  size_t other_bytes = d->analysis_bytes - old_bytes;
+  if (new_bytes > BC_ANALYSIS_MEMORY_BUDGET - other_bytes) return false;
+  *new_total = other_bytes + new_bytes;
+  return true;
+}
+
+static bool bc_is_top_level_instruction_start(const BC_Decoder *d,
+                                              uint32_t offset) {
+  uint32_t bytecode_len = (uint32_t)(d->end - d->base);
+  return offset < bytecode_len &&
+         (d->top_level_instruction_starts[offset >> 3] &
+          (uint8_t)(1u << (offset & 7u))) != 0;
+}
+
+static uint32_t bc_instruction_index_for_offset(const BC_Decoder *d,
+                                                uint32_t offset) {
+  uint32_t low = 0;
+  uint32_t high = d->top_level_instruction_count;
+  while (low < high) {
+    uint32_t mid = low + (high - low) / 2u;
+    uint32_t candidate = d->instructions[mid].offset;
+    if (candidate < offset) {
+      low = mid + 1u;
+    } else {
+      high = mid;
+    }
+  }
+  return low < d->top_level_instruction_count &&
+                 d->instructions[low].offset == offset
+             ? low
+             : UINT32_MAX;
 }
 
 static int bc_fail(BC_Decoder *d, const uint8_t *p, uint8_t opcode,
@@ -322,13 +370,21 @@ static int bc_record_jump(BC_Decoder *d, const uint8_t *operand_start,
                           uint8_t opcode) {
   if (!d->options.validate_control_flow) return 1;
   if (d->jump_count == d->jump_capacity) {
-    size_t new_capacity = d->jump_capacity;
-    if (!alloc_grow_array_capacity((void **)&d->jumps, &new_capacity,
-                                   (size_t)d->jump_count + 1u, sizeof *d->jumps) ||
-        new_capacity > UINT32_MAX) {
+    size_t new_capacity = 0;
+    size_t new_total = 0;
+    if (!alloc_grow_capacity(d->jump_capacity, (size_t)d->jump_count + 1u,
+                             &new_capacity) ||
+        new_capacity > UINT32_MAX ||
+        !bc_analysis_resize_fits(d, d->jump_capacity, new_capacity,
+                                 sizeof *d->jumps, &new_total)) {
+      return bc_fail(d, operand_start, opcode, "verification analysis memory budget exceeded");
+    }
+    if (!alloc_grow_array((void **)&d->jumps, new_capacity,
+                          sizeof *d->jumps)) {
       return bc_fail(d, operand_start, opcode, "out of memory recording jump target");
     }
     d->jump_capacity = (uint32_t)new_capacity;
+    d->analysis_bytes = new_total;
   }
   uint16_t raw = bc_wire_load_u16(operand_start);
   d->jumps[d->jump_count++] = (BC_JumpRef){
@@ -351,36 +407,44 @@ static bool bc_stack_effect(const BC_InstructionMeta *meta, int *pops,
 }
 
 static int bc_enqueue_stack_depth(BC_Decoder *d, int *depths, uint32_t *work,
-                                  uint32_t *work_count, uint32_t offset,
+                                  uint32_t *work_count, uint32_t index,
                                   int depth, const uint8_t *from,
                                   uint8_t opcode) {
-  if (offset >= d->top_level_instruction_start_capacity ||
-      !d->top_level_instruction_starts[offset]) {
+  if (index >= d->top_level_instruction_count) {
     return bc_fail(d, from, opcode,
                    "control-flow edge does not target an instruction boundary");
   }
-  if (depths[offset] == -1) {
-    depths[offset] = depth;
-    work[(*work_count)++] = offset;
+  if (depths[index] == -1) {
+    depths[index] = depth;
+    work[(*work_count)++] = index;
     return 1;
   }
   /* HALT has no successor and does not consume the operand stack, so paths
    * may terminate with different residual depths without making later
    * execution ambiguous. */
-  if (d->instructions[offset].op == IR_OP_HALT) return 1;
-  if (depths[offset] != depth) {
+  if (d->instructions[index].op == IR_OP_HALT) return 1;
+  if (depths[index] != depth) {
     char msg[128];
     snprintf(msg, sizeof(msg), "conflicting stack depths at byte %u (%d vs %d)",
-             offset, depths[offset], depth);
-    return bc_fail(d, d->base + offset, d->instructions[offset].opcode, msg);
+             d->instructions[index].offset, depths[index], depth);
+    return bc_fail(d, d->base + d->instructions[index].offset,
+                   d->instructions[index].opcode, msg);
   }
   return 1;
 }
 
 static int bc_verify_stack_flow(BC_Decoder *d, uint8_t params) {
-  uint32_t cap = d->top_level_instruction_start_capacity;
-  int *depths = malloc((size_t)cap * sizeof(*depths));
-  uint32_t *work = malloc((size_t)cap * sizeof(*work));
+  uint32_t cap = d->top_level_instruction_count;
+  size_t depth_bytes = 0, work_bytes = 0, flow_bytes = 0;
+  if (alloc_mul_overflow(cap, sizeof(int), &depth_bytes) ||
+      alloc_mul_overflow(cap, sizeof(uint32_t), &work_bytes) ||
+      alloc_add_overflow(depth_bytes, work_bytes, &flow_bytes) ||
+      flow_bytes > BC_ANALYSIS_MEMORY_BUDGET - d->analysis_bytes) {
+    return bc_fail(d, d->base, 0, "verification analysis memory budget exceeded");
+  }
+  if (cap == 0) return 1;
+  int *depths = alloc_malloc(depth_bytes);
+  uint32_t *work = alloc_malloc(work_bytes);
   if (!depths || !work) {
     free(depths);
     free(work);
@@ -388,19 +452,20 @@ static int bc_verify_stack_flow(BC_Decoder *d, uint8_t params) {
   }
   for (uint32_t i = 0; i < cap; i++) depths[i] = -1;
   uint32_t work_count = 0;
-  depths[d->instruction_offset] = params;
-  work[work_count++] = d->instruction_offset;
+  depths[0] = params;
+  work[work_count++] = 0;
 
   while (work_count > 0) {
-    uint32_t offset = work[--work_count];
-    BC_InstructionMeta *meta = &d->instructions[offset];
+    uint32_t index = work[--work_count];
+    uint32_t offset = d->instructions[index].offset;
+    BC_InstructionMeta *meta = &d->instructions[index];
     int pops, pushes;
     if (!bc_stack_effect(meta, &pops, &pushes)) {
       free(depths);
       free(work);
       return bc_fail(d, d->base + offset, meta->opcode, "missing stack-effect metadata");
     }
-    int in_depth = depths[offset];
+    int in_depth = depths[index];
     if (in_depth < pops) {
       char msg[96];
       snprintf(msg, sizeof(msg), "stack underflow (depth %d, needs %d)", in_depth, pops);
@@ -435,8 +500,9 @@ static int bc_verify_stack_flow(BC_Decoder *d, uint8_t params) {
       int16_t rel = bc_wire_i16_from_bits((uint16_t)meta->operand_u32);
       uint32_t operand_offset = offset + 1;
       uint32_t target = (uint32_t)((int64_t)operand_offset + rel);
-      if (!bc_enqueue_stack_depth(d, depths, work, &work_count, target, out_depth,
-                                  d->base + offset, meta->opcode)) {
+      uint32_t target_index = bc_instruction_index_for_offset(d, target);
+      if (!bc_enqueue_stack_depth(d, depths, work, &work_count, target_index,
+                                  out_depth, d->base + offset, meta->opcode)) {
         free(depths);
         free(work);
         return 0;
@@ -444,7 +510,7 @@ static int bc_verify_stack_flow(BC_Decoder *d, uint8_t params) {
       if (schema->control_flow == IR_CONTROL_JUMP) continue;
     }
     if (meta->next_offset < (uint32_t)(d->end - d->base)) {
-      if (!bc_enqueue_stack_depth(d, depths, work, &work_count, meta->next_offset,
+      if (!bc_enqueue_stack_depth(d, depths, work, &work_count, index + 1u,
                                   out_depth, d->base + offset, meta->opcode)) {
         free(depths);
         free(work);
@@ -470,8 +536,7 @@ static int bc_validate_recorded_jumps(BC_Decoder *d) {
       return bc_fail(d, jump_p, jump->opcode, "jump target past bytecode body");
     }
     if ((uint32_t)target == d->result.halt_offset) continue;
-    if ((uint32_t)target >= d->top_level_instruction_start_capacity ||
-        !d->top_level_instruction_starts[target]) {
+    if (!bc_is_top_level_instruction_start(d, (uint32_t)target)) {
       return bc_fail(d, jump_p, jump->opcode,
                      "jump target is not a top-level instruction boundary");
     }
@@ -539,21 +604,47 @@ static int bc_decode_deref(BC_Decoder *d, const uint8_t **cursor) {
 }
 
 static void bc_release_analysis_storage(BC_Decoder *d) {
-  if (d->options.validate_control_flow || d->options.validate_stack_effects) {
-    free(d->top_level_instruction_starts);
-  }
-  if (d->options.validate_stack_effects) free(d->instructions);
+  free(d->top_level_instruction_starts);
+  free(d->instructions);
   if (d->options.validate_control_flow) free(d->jumps);
 }
 
 static void bc_record_instruction_meta(BC_Decoder *d, const uint8_t *start,
                                        const uint8_t *cursor, uint8_t opcode,
                                        IR_Op op, uint32_t operand_u32) {
-  uint32_t offset = bc_offset(d, start);
-  if (d->instructions && offset < d->top_level_instruction_start_capacity) {
-    d->instructions[offset] = (BC_InstructionMeta){
-        opcode, op, bc_offset(d, cursor), operand_u32};
+  if (!d->options.validate_stack_effects || !d->recording_top_level ||
+      d->event_depth != 0) {
+    return;
   }
+  uint32_t offset = bc_offset(d, start);
+  if (d->top_level_instruction_count >= d->instruction_capacity) {
+    size_t cap = 0;
+    size_t new_total = 0;
+    if (!alloc_grow_capacity(d->instruction_capacity,
+                             (size_t)d->top_level_instruction_count + 1u,
+                             &cap) ||
+        cap > UINT32_MAX ||
+        !bc_analysis_resize_fits(d, d->instruction_capacity, cap,
+                                 sizeof *d->instructions, &new_total)) {
+      bc_fail(d, start, opcode, "verification analysis memory budget exceeded");
+      return;
+    }
+    if (!alloc_grow_array((void **)&d->instructions, cap,
+                          sizeof *d->instructions)) {
+      bc_fail(d, start, opcode,
+              "out of memory recording instruction metadata");
+      return;
+    }
+    d->instruction_capacity = (uint32_t)cap;
+    d->analysis_bytes = new_total;
+  }
+  d->instructions[d->top_level_instruction_count++] = (BC_InstructionMeta){
+      .offset = offset,
+      .next_offset = bc_offset(d, cursor),
+      .operand_u32 = operand_u32,
+      .op = op,
+      .opcode = opcode,
+  };
 }
 
 static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
@@ -807,7 +898,6 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
     metadata->instructions = header.instructions; metadata->legacy = header.legacy;
   }
   d.local_count = locals;
-  d.instruction_offset = header.instruction_offset;
   d.legacy = header.legacy;
   d.validate_local_indices = d.options.validate_local_indices;
   if (params > locals) {
@@ -818,16 +908,15 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
   bool needs_instruction_starts = d.options.validate_control_flow ||
                                   d.options.validate_stack_effects;
   if (needs_instruction_starts) {
-    d.top_level_instruction_starts = alloc_calloc(
-        (size_t)bytecode_len + 1, sizeof(bool));
-    d.top_level_instruction_start_capacity = bytecode_len + 1;
+    size_t start_bytes = ((size_t)bytecode_len + 7u) / 8u;
+    if (start_bytes > BC_ANALYSIS_MEMORY_BUDGET) {
+      bc_fail(&d, d.base, 0, "verification analysis memory budget exceeded");
+      return d.result;
+    }
+    d.top_level_instruction_starts = alloc_calloc(start_bytes, 1);
+    if (d.top_level_instruction_starts) d.analysis_bytes = start_bytes;
   }
-  if (d.options.validate_stack_effects) {
-    d.instructions = alloc_calloc((size_t)bytecode_len + 1,
-                                  sizeof(*d.instructions));
-  }
-  if ((needs_instruction_starts && !d.top_level_instruction_starts) ||
-      (d.options.validate_stack_effects && !d.instructions)) {
+  if (needs_instruction_starts && !d.top_level_instruction_starts) {
     bc_fail(&d, d.base, 0, "out of memory recording instruction starts");
     bc_release_analysis_storage(&d);
     return d.result;
@@ -839,9 +928,17 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
   while (cursor < d.end) {
     const uint8_t *start = cursor;
     if (needs_instruction_starts) {
-      d.top_level_instruction_starts[bc_offset(&d, start)] = true;
+      uint32_t offset = bc_offset(&d, start);
+      d.top_level_instruction_starts[offset >> 3] |=
+          (uint8_t)(1u << (offset & 7u));
     }
+    d.recording_top_level = true;
     if (!bc_decode_one(&d, &cursor, BC_CTX_STMT)) {
+      bc_release_analysis_storage(&d);
+      return d.result;
+    }
+    d.recording_top_level = false;
+    if (d.result.status == BC_VERIFY_ERROR) {
       bc_release_analysis_storage(&d);
       return d.result;
     }

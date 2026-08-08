@@ -312,6 +312,8 @@ void test_emitbc_invariants(void);
 void test_emitbc_post_emission_verification(void);
 void test_bytecode_verify_policy_profiles(void);
 void test_bytecode_verify_analysis_storage_is_profile_scoped(void);
+void test_bytecode_verify_dense_budget_and_growth_failures(void);
+void test_bytecode_verify_constrained_address_space(void);
 void test_bytecode_verify_minimal_and_header_errors(void);
 void test_bytecode_format_header_variants(void);
 void test_bytecode_verify_opcode_terminators_and_complete_buffer(void);
@@ -551,6 +553,8 @@ static const test_case_t compiler_tests[] = {
     {"test_emitbc_post_emission_verification", test_emitbc_post_emission_verification},
     {"test_bytecode_verify_policy_profiles", test_bytecode_verify_policy_profiles},
     {"test_bytecode_verify_analysis_storage_is_profile_scoped", test_bytecode_verify_analysis_storage_is_profile_scoped},
+    {"test_bytecode_verify_dense_budget_and_growth_failures", test_bytecode_verify_dense_budget_and_growth_failures},
+    {"test_bytecode_verify_constrained_address_space", test_bytecode_verify_constrained_address_space},
     {"test_bytecode_verify_minimal_and_header_errors", test_bytecode_verify_minimal_and_header_errors},
     {"test_bytecode_format_header_variants", test_bytecode_format_header_variants},
     {"test_bytecode_verify_opcode_terminators_and_complete_buffer", test_bytecode_verify_opcode_terminators_and_complete_buffer},

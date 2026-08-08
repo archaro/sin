@@ -109,6 +109,11 @@ is retained only for internal conversion decoding):
 | String payload | 65,535 bytes (`SIN_MAX_STRING_BYTES`) |
 | Bytecode payload | 64 MiB (`64 * 1024 * 1024` bytes) |
 
+Strict bytecode verification uses a separate 16 MiB analysis-memory budget.
+Instruction metadata is stored per decoded top-level instruction and boundary
+tracking is bit-packed, so verification memory remains bounded for payloads at
+the bytecode limit. Exceeding the budget is rejected deterministically.
+
 Non-root names must contain between 1 and 32 bytes and consist only of ASCII
 letters, digits, and underscore. Names may not contain an embedded NUL.
 Sibling names must be unique. The root name is also limited to 32 bytes and

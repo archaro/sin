@@ -1,6 +1,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "bytecode_verify.h"
 #include "memory.h"
@@ -113,6 +116,63 @@ void test_bytecode_verify_analysis_storage_is_profile_scoped(void) {
 
   alloc_test_fail_after(-1);
   free(bytecode);
+}
+
+void test_bytecode_verify_dense_budget_and_growth_failures(void) {
+  const size_t n = 17u * 1024u * 1024u;
+  uint8_t *bytes = malloc(n + 3u);
+  ASSERT_NOT_NULL(bytes);
+  bytes[0] = bytes[1] = 0;
+  memset(bytes + 2, 'N', n);
+  bytes[n + 2] = 'h';
+  BC_VerifyResult r = bc_verify_bytecode(bytes, (uint32_t)(n + 3u), "budget", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, r.status);
+  ASSERT_TRUE(strstr(r.diagnostic.message, "verification analysis memory budget exceeded") != NULL);
+  free(bytes);
+
+  const uint8_t tiny[] = {0, 0, 'N', 'h'};
+  for (long fail = 0; fail < 5; fail++) {
+    alloc_test_fail_after(fail);
+    r = bc_verify_bytecode(tiny, sizeof(tiny), "growth failure", NULL);
+    ASSERT_EQ_INT(BC_VERIFY_ERROR, r.status);
+    ASSERT_TRUE(strstr(r.diagnostic.message, "out of memory") != NULL);
+  }
+  alloc_test_fail_after(5);
+  r = bc_verify_bytecode(tiny, sizeof(tiny), "growth success", NULL);
+  ASSERT_EQ_INT(BC_VERIFY_OK, r.status);
+  alloc_test_fail_after(-1);
+}
+
+void test_bytecode_verify_constrained_address_space(void) {
+#if defined(RLIMIT_AS) && !defined(__SANITIZE_ADDRESS__)
+  const size_t n = 60u * 1024u * 1024u;
+  uint8_t *bytes = malloc(n + 3u);
+  ASSERT_NOT_NULL(bytes);
+  bytes[0] = bytes[1] = 0;
+  size_t pos = 2;
+  while (pos + 65539u < n + 2u) {
+    bytes[pos++] = 'l'; bytes[pos++] = 0xff; bytes[pos++] = 0xff;
+    memset(bytes + pos, 'x', 65535u); pos += 65535u;
+    bytes[pos++] = 'w';
+  }
+  bytes[pos++] = 'h';
+  pid_t pid = fork();
+  ASSERT_TRUE(pid >= 0);
+  if (pid == 0) {
+    struct rlimit lim = {256u * 1024u * 1024u, 256u * 1024u * 1024u};
+    if (setrlimit(RLIMIT_AS, &lim) != 0) _exit(2);
+    BC_VerifyResult r = bc_verify_bytecode(bytes, (uint32_t)pos, "rlimit", NULL);
+    if (r.status != BC_VERIFY_OK) {
+      dprintf(STDERR_FILENO, "%s\n", r.diagnostic.message);
+    }
+    _exit(r.status == BC_VERIFY_OK ? 0 : 1);
+  }
+  int status = 0;
+  ASSERT_EQ_INT((int)pid, (int)waitpid(pid, &status, 0));
+  ASSERT_TRUE(WIFEXITED(status));
+  ASSERT_EQ_INT(0, WEXITSTATUS(status));
+  free(bytes);
+#endif
 }
 
 void test_bytecode_verify_minimal_and_header_errors(void) {
