@@ -967,7 +967,9 @@ void input_processor(uv_timer_t *handle) {
   ITEM_t *input = find_item(itemstore_root(input_ctx->itemstore), input_ctx->input_name);
   if (!input) {
     logerr("Input item does not exist!  Cannot continue.\n");
-    exit(EXIT_FAILURE);
+    if (input_ctx->safe_shutdown) *input_ctx->safe_shutdown = false;
+    if (input_ctx->loop) uv_stop(input_ctx->loop);
+    return;
   }
   VALUE_t result = interpret(input_ctx, input);
   value_free(&result);

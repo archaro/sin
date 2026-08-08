@@ -26,6 +26,7 @@ static int fail_malloc_after = -1, malloc_calls, uv_close_calls;
 static uv_close_cb last_close_cb; static uv_handle_t *last_close_handle; static uv_write_cb last_write_cb; static uv_write_t *last_write_req;
 static int stub_uv_write_result, stub_uv_accept_result, stub_uv_read_start_result, stub_uv_tcp_init_result, stub_uv_tcp_getpeername_result, stub_uv_ip_name_result, stub_telnet_init_fail;
 static int input_interpret_calls;
+static bool input_item_missing;
 static uv_timer_t *input_timer_to_stop, *input_timer_watchdog;
 static bool input_timer_watchdog_fired;
 static VALUE_e input_result_type = VALUE_nil;
@@ -60,7 +61,7 @@ void logverbose(const char *msg, ...){(void)msg;}
 void runtime_context_init(RuntimeContext *ctx, VM_t *vm){(void)ctx;(void)vm;}
 VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item){(void)ctx;(void)item; input_interpret_calls++; if (input_timer_to_stop && input_interpret_calls >= 3) { uv_timer_stop(input_timer_to_stop); uv_timer_stop(input_timer_watchdog); } VALUE_t v={input_result_type,{0}}; if (v.type == VALUE_str) { v.s = strdup("owned input result"); if (v.s) { input_tracked_result = v.s; input_live_result_strings++; } } return v;}
 void value_free(VALUE_t *value){if (!value)return;input_value_free_calls++;if(value->type==VALUE_str&&value->s){if(value->s==input_tracked_result){input_tracked_result=NULL;input_live_result_strings--;}free(value->s);input_string_free_calls++;}value->type=VALUE_nil;value->i=0;}
-ITEM_t *find_item(ITEM_t *root, const char *name){(void)root;(void)name; return (ITEM_t *)1;}
+ITEM_t *find_item(ITEM_t *root, const char *name){(void)root;(void)name; return input_item_missing ? NULL : (ITEM_t *)1;}
 ITEM_t *itemstore_root(ITEMSTORE_t *store){(void)store; return (ITEM_t *)1;}
 void reset_stack(STACK_t *stack){(void)stack;}
 int test_uv_write(uv_write_t *req, uv_stream_t *h, const uv_buf_t bufs[], unsigned int nbufs, uv_write_cb cb){(void)h;(void)bufs;(void)nbufs;last_write_req=req;last_write_cb=cb;return stub_uv_write_result;} void test_uv_close(uv_handle_t*h,uv_close_cb cb){uv_close_calls++;last_close_handle=h;last_close_cb=cb;} int test_uv_is_closing(const uv_handle_t*h){(void)h;return 0;} int test_uv_accept(uv_stream_t*s,uv_stream_t*c){(void)s;(void)c;return stub_uv_accept_result;} int test_uv_read_start(uv_stream_t*s,uv_alloc_cb a,uv_read_cb r){(void)s;(void)a;(void)r;return stub_uv_read_start_result;} int test_uv_tcp_init(uv_loop_t*l,uv_tcp_t*h){(void)l;(void)h;return stub_uv_tcp_init_result;} int test_uv_tcp_getpeername(const uv_tcp_t*h,struct sockaddr*n,int*len){(void)h;(void)n;(void)len;return stub_uv_tcp_getpeername_result;} int test_uv_ip_name(const struct sockaddr*src,char*dst,size_t size){(void)src;snprintf(dst,size,"127.0.0.1");return stub_uv_ip_name_result;} int test_uv_try_write(uv_stream_t*h,const uv_buf_t bufs[],unsigned int nbufs){(void)h;(void)bufs;(void)nbufs;return 0;} telnet_t *test_telnet_init(const telnet_telopt_t*opts,telnet_event_handler_t eh,unsigned char flags,void*ud){(void)opts;(void)eh;(void)flags;(void)ud;return stub_telnet_init_fail?NULL:(telnet_t*)test_malloc(8);} void test_telnet_free(telnet_t*t){free(t);} void test_telnet_printf(telnet_t*t,const char*fmt,...){(void)t;(void)fmt;} void test_telnet_recv(telnet_t*t,const char*b,size_t s){(void)t;(void)b;(void)s;}
@@ -188,6 +189,34 @@ static void input_timer_watchdog_cb(uv_timer_t *timer) {
   uv_timer_stop((uv_timer_t *)timer->data);
 }
 
+void test_input_processor_missing_item_requests_unsafe_shutdown(void) {
+  uv_loop_t loop;
+  uv_timer_t timer = {0};
+  RuntimeContext ctx = {0};
+  bool safe_shutdown = true;
+  bool shutdown_requested = false;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  ctx.input_name = "missing";
+  ctx.loop = &loop;
+  ctx.safe_shutdown = &safe_shutdown;
+  ctx.shutdown_requested = &shutdown_requested;
+  ASSERT_EQ_INT(0, uv_timer_init(&loop, &timer));
+  timer.data = &ctx;
+
+  input_item_missing = true;
+  input_interpret_calls = 0;
+  ASSERT_EQ_INT(0, uv_timer_start(&timer, input_processor, 0, 0));
+  ASSERT_TRUE(uv_run(&loop, UV_RUN_DEFAULT) != 0);
+  input_item_missing = false;
+
+  ASSERT_TRUE(!safe_shutdown);
+  ASSERT_TRUE(!shutdown_requested);
+  ASSERT_EQ_INT(0, input_interpret_calls);
+  uv_close((uv_handle_t *)&timer, NULL);
+  ASSERT_EQ_INT(0, uv_run(&loop, UV_RUN_DEFAULT));
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
+}
+
 void test_input_processor_timer_is_nonblocking_and_sleepable(void) {
   uv_loop_t loop;
   uv_timer_t input_timer;
@@ -225,4 +254,4 @@ void test_input_processor_timer_is_nonblocking_and_sleepable(void) {
   ASSERT_EQ_INT(0, uv_loop_close(&loop));
 }
 
-static const test_case_t tests[]={{"append_input_lines_and_limits",test_append_input_lines_and_limits},{"get_input_cases",test_get_input_cases},{"output_flush_limits_and_callback",test_output_flush_limits_and_callback},{"disconnect_waits_for_pending_output",test_disconnect_waits_for_pending_output},{"line_lifecycle_states_and_reuse",test_line_lifecycle_states_and_reuse},{"remote_disconnect_marks_line_before_close_callback",test_remote_disconnect_marks_line_before_close_callback},{"disconnect_close_write_callback_orders",test_disconnect_close_write_callback_orders},{"destroy_line_does_not_release_live_transport",test_destroy_line_does_not_release_live_transport},{"destroy_line_after_real_telnet_init_failure",test_destroy_line_after_real_telnet_init_failure},{"on_new_connection_rejections_and_close_ownership",test_on_new_connection_rejections_and_close_ownership},{"adversarial_long_stream_without_newline",test_adversarial_long_stream_without_newline},{"input_processor_releases_interpreter_results",test_input_processor_releases_interpreter_results},{"input_processor_timer_is_nonblocking_and_sleepable",test_input_processor_timer_is_nonblocking_and_sleepable}};int main(void){size_t total=sizeof(tests)/sizeof(tests[0]);current_test_total=total;for(size_t i=0;i<total;i++){current_test_index=i+1;current_test_name=tests[i].name;tests[i].fn();}printf("[network] totals: ran=%zu passed=%zu failed=0 skipped=0 status=SUCCESS\n",total,total);return 0;}
+static const test_case_t tests[]={{"append_input_lines_and_limits",test_append_input_lines_and_limits},{"get_input_cases",test_get_input_cases},{"output_flush_limits_and_callback",test_output_flush_limits_and_callback},{"disconnect_waits_for_pending_output",test_disconnect_waits_for_pending_output},{"line_lifecycle_states_and_reuse",test_line_lifecycle_states_and_reuse},{"remote_disconnect_marks_line_before_close_callback",test_remote_disconnect_marks_line_before_close_callback},{"disconnect_close_write_callback_orders",test_disconnect_close_write_callback_orders},{"destroy_line_does_not_release_live_transport",test_destroy_line_does_not_release_live_transport},{"destroy_line_after_real_telnet_init_failure",test_destroy_line_after_real_telnet_init_failure},{"on_new_connection_rejections_and_close_ownership",test_on_new_connection_rejections_and_close_ownership},{"adversarial_long_stream_without_newline",test_adversarial_long_stream_without_newline},{"input_processor_releases_interpreter_results",test_input_processor_releases_interpreter_results},{"input_processor_missing_item_requests_unsafe_shutdown",test_input_processor_missing_item_requests_unsafe_shutdown},{"input_processor_timer_is_nonblocking_and_sleepable",test_input_processor_timer_is_nonblocking_and_sleepable}};int main(void){size_t total=sizeof(tests)/sizeof(tests[0]);current_test_total=total;for(size_t i=0;i<total;i++){current_test_index=i+1;current_test_name=tests[i].name;tests[i].fn();}printf("[network] totals: ran=%zu passed=%zu failed=0 skipped=0 status=SUCCESS\n",total,total);return 0;}
