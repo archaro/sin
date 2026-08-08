@@ -74,8 +74,9 @@ fair-queue cursor before scanning for the next line with a pending event:
 
 * `1` means a new connection. The line moves from connecting to idle and
   `input.line` is set to the zero-based line number.
-* `2` means a disconnection. `input.line` is set, the line is destroyed, and the
-  slot becomes reusable before `net.input` returns.
+* `2` means a disconnection. `input.line` is set only after close completion
+  and pending writes settle; the line is then destroyed and the slot becomes
+  reusable before `net.input` returns.
 * `3` means a complete input line. `input.line` is set and `input.text` receives
   the line text without the terminating newline.
 * `0` means no connection, disconnection, or complete input line is pending.
@@ -84,7 +85,8 @@ fair-queue cursor before scanning for the next line with a pending event:
 lines: connecting, idle, or data. It marks the line for disconnection, flushes
 pending output, and closes the handle immediately only when no output remains
 queued or in flight. The later `net.input` disconnection event is what destroys
-the line and makes the slot reusable. Repeating `net.ditch` on an already
+the line and makes the slot reusable; close completion and pending writes are
+settled before this event. Repeating `net.ditch` on an already
 disconnecting or empty line returns `false` and sets the network error item.
 
 | Libcall | Library | Call | Arity | Argument expectations | Return value | Side effects | Failure behaviour | Example |

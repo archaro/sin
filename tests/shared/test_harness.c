@@ -190,6 +190,8 @@ void test_net_address_returns_owned_numeric_peer_address(void);
 void test_net_address_invalid_line_returns_nil(void);
 void test_net_write_ignores_non_writable_lines(void);
 void test_net_input_fair_queue_progresses_connect_data_disconnect(void);
+void test_net_ditch_then_input_waits_for_close_callback(void);
+void test_network_shutdown_drains_client_close_callbacks(void);
 void test_net_ditch_disconnects_active_lines(void);
 void test_net_flush_reports_line_status(void);
 void test_net_ditch_reports_inactive_lines(void);
@@ -614,6 +616,8 @@ static const test_case_t runtime_tests[] = {
     {"test_net_address_invalid_line_returns_nil", test_net_address_invalid_line_returns_nil},
     {"test_net_write_ignores_non_writable_lines", test_net_write_ignores_non_writable_lines},
     {"test_net_input_fair_queue_progresses_connect_data_disconnect", test_net_input_fair_queue_progresses_connect_data_disconnect},
+    {"test_net_ditch_then_input_waits_for_close_callback", test_net_ditch_then_input_waits_for_close_callback},
+    {"test_network_shutdown_drains_client_close_callbacks", test_network_shutdown_drains_client_close_callbacks},
     {"test_net_ditch_disconnects_active_lines", test_net_ditch_disconnects_active_lines},
     {"test_net_flush_reports_line_status", test_net_flush_reports_line_status},
     {"test_net_ditch_reports_inactive_lines", test_net_ditch_reports_inactive_lines},

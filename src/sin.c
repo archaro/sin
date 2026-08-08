@@ -65,10 +65,7 @@ static bool runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
 }
 
 void close_all_tasks(uv_handle_t* handle, void* arg) {
-  (void)arg;
-  if (!uv_is_closing(handle)) { //FALSE, handle is closing
-    uv_close(handle, NULL);
-  }
+  network_close_walk_cb(handle, arg);
 }
 
 void handle_sigusr1(int sig) {

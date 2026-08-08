@@ -41,7 +41,9 @@ static NetworkRuntimeDeps *deps_from_server(uv_stream_t *server) {
 }
 
 static void close_line_handle(LINE_t *linep) {
-  if (linep->line_handle && !uv_is_closing((uv_handle_t *)linep->line_handle)) {
+  if (linep && linep->line_handle && !linep->close_requested &&
+      !uv_is_closing((uv_handle_t *)linep->line_handle)) {
+    linep->close_requested = true;
     uv_close((uv_handle_t *)linep->line_handle, client_on_close);
   }
 }
@@ -70,6 +72,8 @@ bool line_is_reusable(const LINE_t *linep) {
          linep->output_in_flight_length == 0 &&
          linep->output_backpressure_ticks == 0 &&
          !linep->close_after_output &&
+         (!linep->close_requested ||
+          (linep->close_completed && linep->disconnect_event_delivered)) &&
          linep->input_line_length == 0;
 }
 
@@ -175,6 +179,9 @@ LINE_t *add_line(uv_tcp_t *line_handle) {
   line[l].output_in_flight_length = 0;
   line[l].output_backpressure_ticks = 0;
   line[l].close_after_output = false;
+  line[l].close_requested = false;
+  line[l].close_completed = false;
+  line[l].disconnect_event_delivered = false;
   line[l].input_line_length = 0;
   return &line[l];
 }
@@ -183,10 +190,10 @@ static void free_client_on_close(uv_handle_t *handle) {
   free(handle);
 }
 
-void destroy_line(LINE_t *linep) {
-  // Clean up the line object
-  telnet_free(linep->telnet);
-  free(linep->line_handle);
+static void release_line_resources(LINE_t *linep) {
+  if (linep->telnet) {
+    telnet_free(linep->telnet);
+  }
   if (linep->outbuf) {
     free(linep->outbuf->buf.base);
     free(linep->outbuf);
@@ -195,7 +202,6 @@ void destroy_line(LINE_t *linep) {
     free(linep->inbuf->buf.base);
     free(linep->inbuf);
   }
-  linep->line_handle = NULL;
   linep->telnet = NULL;
   linep->outbuf = NULL;
   linep->inbuf = NULL;
@@ -204,6 +210,17 @@ void destroy_line(LINE_t *linep) {
   linep->output_backpressure_ticks = 0;
   linep->close_after_output = false;
   linep->input_line_length = 0;
+}
+
+void destroy_line(LINE_t *linep) {
+  // Public teardown is only valid after the TCP close callback and writes.
+  if (!linep || linep->line_handle || linep->output_write_in_flight) {
+    return;
+  }
+  release_line_resources(linep);
+  if (linep->close_completed) {
+    linep->disconnect_event_delivered = true;
+  }
   linep->status = LINE_empty;
 }
 
@@ -227,8 +244,25 @@ void client_on_close(uv_handle_t *handle) {
     free(handle);
     return;
   }
+  /* libuv owns a live handle until this callback; this is its sole release. */
+  free(handle);
+  linep->line_handle = NULL;
+  linep->close_completed = true;
   logmsg("Line %zu: %s disconnected.\n", linep->linenum, linep->address);
   linep->status = LINE_disconnecting;
+  if (!linep->output_write_in_flight) {
+    release_line_resources(linep);
+  }
+}
+
+void close_network_handle(uv_handle_t *handle) {
+  if (!handle || uv_is_closing(handle)) return;
+  uv_close(handle, find_line((uv_tcp_t *)handle) ? client_on_close : NULL);
+}
+
+void network_close_walk_cb(uv_handle_t *handle, void *arg) {
+  (void)arg;
+  close_network_handle(handle);
 }
 
 static void disconnect_line_for_output_limit(LINE_t *linep, const char *reason) {
@@ -514,6 +548,11 @@ static void output_write_cb(uv_write_t *req, int status) {
   linep->output_write_in_flight = false;
   linep->output_in_flight_length = 0;
   linep->output_backpressure_ticks = 0;
+
+  if (linep->close_completed) {
+    release_line_resources(linep);
+    return;
+  }
 
   if (status < 0) {
     linep->status = LINE_disconnecting;

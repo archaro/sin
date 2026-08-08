@@ -69,8 +69,14 @@ uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         lc_net_push_int(ctx, 1);
         return nextop;
       case LINE_disconnecting:
+        if ((linep->close_requested && !linep->close_completed) ||
+            linep->output_write_in_flight ||
+            linep->disconnect_event_delivered) {
+          (*lastconn)++;
+          continue;
+        }
+        linep->disconnect_event_delivered = true;
         destroy_line(linep);
-        linep->status = LINE_empty;
         lc_net_set_input_line(ctx, &deps, line_index);
         lc_net_push_int(ctx, 2);
         return nextop;

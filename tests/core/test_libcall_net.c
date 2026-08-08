@@ -162,9 +162,11 @@ void test_net_input_fair_queue_progresses_connect_data_disconnect(void) {
   line = calloc(config.maxconns, sizeof(LINE_t));
   ASSERT_NOT_NULL(line);
 
+  uv_tcp_t *handles[3] = {0};
   for (size_t i = 0; i < config.maxconns; i++) {
     uv_tcp_t *line_handle = calloc(1, sizeof(*line_handle));
     ASSERT_NOT_NULL(line_handle);
+    handles[i] = line_handle;
     ASSERT_NOT_NULL(add_line(line_handle));
     line[i].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
     ASSERT_NOT_NULL(line[i].telnet);
@@ -176,7 +178,7 @@ void test_net_input_fair_queue_progresses_connect_data_disconnect(void) {
   ASSERT_NOT_NULL(line[1].inbuf->buf.base);
   line[1].inbuf->buf.len = strlen(line[1].inbuf->buf.base);
   line[1].inbuf->length = line[1].inbuf->buf.len + 1;
-  line[2].status = LINE_disconnecting;
+  client_on_close((uv_handle_t *)handles[2]);
 
   RuntimeContext *ctx = test_ctx();
   (void)lc_net_input(ctx, NULL, itemstore_root(config.itemstore_ctx));
@@ -202,12 +204,97 @@ void test_net_input_fair_queue_progresses_connect_data_disconnect(void) {
   ASSERT_EQ_INT(2, ret.i);
   ASSERT_EQ_INT(LINE_empty, line[2].status);
 
+  client_on_close((uv_handle_t *)handles[0]);
+  client_on_close((uv_handle_t *)handles[1]);
   destroy_line(&line[0]);
   destroy_line(&line[1]);
   free(config.inputline);
   free(config.inputtext);
   config.inputline = NULL;
   config.inputtext = NULL;
+  teardown_libcall_runtime();
+}
+
+void test_net_ditch_then_input_waits_for_close_callback(void) {
+  setup_libcall_runtime();
+  config.maxconns = 1;
+  config.lastconn = 0;
+  uv_loop_t loop;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  config.loop = &loop;
+  line = calloc(1, sizeof(LINE_t));
+  ASSERT_NOT_NULL(line);
+  uv_tcp_t *handle = calloc(1, sizeof(*handle));
+  ASSERT_NOT_NULL(handle);
+  ASSERT_EQ_INT(0, uv_tcp_init(&loop, handle));
+  LINE_t *linep = add_line(handle);
+  ASSERT_NOT_NULL(linep);
+  linep->status = LINE_idle;
+  linep->telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
+  ASSERT_NOT_NULL(linep->telnet);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  (void)lc_net_ditch(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  VALUE_t ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(1, ret.i);
+  ASSERT_TRUE(linep->line_handle == handle);
+  ASSERT_TRUE(linep->outbuf != NULL);
+  ASSERT_TRUE(linep->inbuf != NULL);
+
+  (void)lc_net_input(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  ASSERT_TRUE(linep->line_handle == handle);
+  ASSERT_TRUE(linep->outbuf != NULL);
+  ASSERT_TRUE(linep->inbuf != NULL);
+
+  ASSERT_EQ_INT(0, uv_run(&loop, UV_RUN_DEFAULT));
+  (void)lc_net_input(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(2, ret.i);
+  ASSERT_TRUE(line_is_reusable(linep));
+
+  (void)lc_net_input(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  ret = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, ret.type);
+  ASSERT_EQ_INT(0, ret.i);
+  ASSERT_TRUE(line_is_reusable(linep));
+  free(line);
+  line = NULL;
+  teardown_libcall_runtime();
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
+}
+
+void test_network_shutdown_drains_client_close_callbacks(void) {
+  setup_libcall_runtime();
+  uv_loop_t loop;
+  uv_tcp_t listener;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  ASSERT_EQ_INT(0, uv_tcp_init(&loop, &listener));
+  NetworkRuntimeDeps deps = {.loop = &loop, .listener = &listener,
+                             .lines = &line, .maxconns = 1};
+  ASSERT_TRUE(init_networking_with_deps(&deps));
+  uv_tcp_t *client = calloc(1, sizeof(*client));
+  ASSERT_NOT_NULL(client);
+  ASSERT_EQ_INT(0, uv_tcp_init(&loop, client));
+  LINE_t *linep = add_line(client);
+  ASSERT_NOT_NULL(linep);
+  linep->status = LINE_idle;
+  linep->telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
+  ASSERT_NOT_NULL(linep->telnet);
+
+  uv_walk(&loop, network_close_walk_cb, NULL);
+  ASSERT_EQ_INT(0, uv_run(&loop, UV_RUN_DEFAULT));
+  ASSERT_TRUE(linep->line_handle == NULL);
+  ASSERT_TRUE(linep->telnet == NULL);
+  ASSERT_TRUE(linep->outbuf == NULL);
+  ASSERT_TRUE(linep->inbuf == NULL);
+  shutdown_networking();
+  ASSERT_EQ_INT(0, uv_run(&loop, UV_RUN_DEFAULT));
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
   teardown_libcall_runtime();
 }
 

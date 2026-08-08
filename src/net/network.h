@@ -41,6 +41,9 @@ typedef struct {
   size_t output_in_flight_length;
   uint32_t output_backpressure_ticks;
   bool close_after_output;
+  bool close_requested;
+  bool close_completed;
+  bool disconnect_event_delivered;
   size_t input_line_length; // Bytes buffered since the last newline
 } LINE_t;
 
@@ -64,6 +67,8 @@ bool line_is_reusable(const LINE_t *linep);
 bool init_networking_with_deps(NetworkRuntimeDeps *deps);
 bool init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port);
 void client_on_close(uv_handle_t *handle);
+void close_network_handle(uv_handle_t *handle);
+void network_close_walk_cb(uv_handle_t *handle, void *arg);
 void destroy_line(LINE_t *line);
 void input_processor(uv_timer_t *handle);
 char *get_input(LINE_t *line);
