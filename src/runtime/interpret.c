@@ -747,24 +747,31 @@ static bool sb_append_intstr(SIN_STRBUILDER_t *sb, int64_t val) {
 
 uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   // Bytecode format assumption:
-  //   ['P' <u16 len><bytes>...<u16 0>] optional parameter block,
+  //   'P' <u16 len><bytes>...<u16 0> mandatory parameter block,
   //   followed by mandatory <u16 source_len><source bytes>.
   CODEITEM_INPUT_t in = {0};
   VALUE_t itemname = VALUE_NIL;
   int8_t result = ERR_COMP_UNKNOWN;
   char *errdetail = NULL;
 
-  RuntimeDecodeStatus marker_status =
-      require_bytes(ctx ? &ctx->decoder : NULL, nextop, 1, "OP_ASSIGNCODEITEM");
-  if (runtime_decode_status_ok(marker_status) && *nextop == 'P') {
-    nextop++;
-    if (!decode_assigncode_params(ctx, &nextop, &in)) {
-      set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_BYTECODE,
-                             "Invalid parameter block in code assignment bytecode.",
-                             ctx ? ctx->current_item : NULL);
-      nextop = NULL;
-      goto cleanup;
-    }
+  RuntimeDecodeStatus marker_status = require_bytes(
+      ctx ? &ctx->decoder : NULL, nextop, 1, "OP_ASSIGNCODEITEM");
+  if (!runtime_decode_status_ok(marker_status) || *nextop != 'P') {
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL,
+                   ERR_RUNTIME_BYTECODE,
+                   "Missing parameter marker in code assignment bytecode.",
+                   ctx ? ctx->current_item : NULL);
+    nextop = NULL;
+    goto cleanup;
+  }
+  nextop++;
+  if (!decode_assigncode_params(ctx, &nextop, &in)) {
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL,
+                   ERR_RUNTIME_BYTECODE,
+                   "Invalid parameter block in code assignment bytecode.",
+                   ctx ? ctx->current_item : NULL);
+    nextop = NULL;
+    goto cleanup;
   }
 
   itemname = pop_stack(VM->stack);

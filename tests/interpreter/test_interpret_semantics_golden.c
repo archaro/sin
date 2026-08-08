@@ -731,6 +731,81 @@ void test_interpret_legacy_conversion_semantics(void) {
   bc_convert_result_free(&conversion);
 }
 
+void test_interpret_embedded_code_boundary_lengths(void) {
+  const size_t lengths[] = {0x50u, 0x150u, 0xff50u};
+  setup_result_semantics_runtime();
+
+  for (size_t i = 0; i < sizeof(lengths) / sizeof(lengths[0]); i++) {
+    char target_name[40];
+    char outer_name[40];
+    ASSERT_TRUE(snprintf(target_name, sizeof(target_name),
+                         "boundary.target%zu", i) > 0);
+    ASSERT_TRUE(snprintf(outer_name, sizeof(outer_name),
+                         "boundary.outer%zu", i) > 0);
+
+    char *source = malloc(lengths[i] + 1u);
+    ASSERT_NOT_NULL(source);
+    memcpy(source, "return 7;", 9u);
+    memset(source + 9u, ' ', lengths[i] - 9u);
+    source[lengths[i]] = '\0';
+
+    IR_Unit *unit = t_new_unit();
+    ASSERT_NOT_NULL(unit);
+    int32_t payload = ir_add_embedded_code_payload(
+        unit, (IR_EmbeddedCodePayload){.source = source});
+    ASSERT_TRUE(payload >= 0);
+    t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_STRING,
+                           .imm = (int64_t)(intptr_t)target_name});
+    t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = payload});
+    t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
+
+    OUTPUT_t output = {0};
+    output.maxsize = lengths[i] + 64u;
+    output.bytecode = malloc(output.maxsize);
+    output.nextbyte = output.bytecode;
+    ASSERT_NOT_NULL(output.bytecode);
+    char *errdetail = NULL;
+    ASSERT_EQ_INT(ERR_NOERROR,
+                  t_emit_bytecode(unit, 0, 0, &output, &errdetail));
+    ASSERT_TRUE(errdetail == NULL);
+    size_t output_len = (size_t)(output.nextbyte - output.bytecode);
+    ASSERT_TRUE(output_len <= UINT32_MAX);
+
+    ITEM_t *outer = test_item_set_code(
+        itemstore_root(config.itemstore_ctx), outer_name, (uint32_t)output_len,
+        output.bytecode);
+    ASSERT_NOT_NULL(outer);
+    output.bytecode = NULL;
+
+    RuntimeContext assign_ctx;
+    runtime_context_init(&assign_ctx, config.vm);
+    assign_ctx.itemstore = config.itemstore_ctx;
+    VALUE_t assignment = interpret(&assign_ctx, outer);
+    ASSERT_EQ_INT(VALUE_nil, assignment.type);
+    value_free(&assignment);
+    runtime_destroy(&assign_ctx);
+
+    ITEM_t *target = find_item(itemstore_root(config.itemstore_ctx),
+                               target_name);
+    ASSERT_NOT_NULL(target);
+    ASSERT_EQ_INT(ITEM_code, item_kind(target));
+    RuntimeContext execute_ctx;
+    runtime_context_init(&execute_ctx, config.vm);
+    execute_ctx.itemstore = config.itemstore_ctx;
+    VALUE_t result = interpret(&execute_ctx, target);
+    ASSERT_EQ_INT(VALUE_int, result.type);
+    ASSERT_EQ_INT(7, result.i);
+    value_free(&result);
+    runtime_destroy(&execute_ctx);
+
+    ir_destroy_unit(unit);
+    free(source);
+    free(errdetail);
+  }
+
+  teardown_result_semantics_runtime();
+}
+
 void test_runtime_jump_diagnostic_uses_absolute_header_offset(void) {
   const uint8_t legacy[] = {0, 0, 'j', 0xf6, 0xff, 'h'};
   const uint8_t v1[] = {0, 0xff, 'S', 'B', 1, 0, 0, 0,

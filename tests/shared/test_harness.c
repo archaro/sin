@@ -322,6 +322,7 @@ void test_bytecode_convert_malformed_matrix(void);
 void test_bytecode_convert_v1_idempotent(void);
 void test_bytecode_convert_legacy_token_boundaries(void);
 void test_bytecode_convert_allocation_failures(void);
+void test_embedded_code_conversion_boundaries(void);
 void test_pipeline_golden(void);
 void test_pipeline_large_local_lookup_duplicate(void);
 void test_pipeline_source_golden(void);
@@ -343,6 +344,7 @@ void test_sys_itemref_dynamic_calls(void);
 void test_interpret_semantics_golden(void);
 void test_interpret_legacy_and_v1_headers_execute_equivalently(void);
 void test_interpret_legacy_conversion_semantics(void);
+void test_interpret_embedded_code_boundary_lengths(void);
 void test_runtime_jump_diagnostic_uses_absolute_header_offset(void);
 void test_interpret_result_semantics(void);
 void test_runtime_build_list_allocation_failure_consumes_inputs(void);
@@ -551,6 +553,7 @@ static const test_case_t compiler_tests[] = {
     {"test_bytecode_convert_v1_idempotent", test_bytecode_convert_v1_idempotent},
     {"test_bytecode_convert_legacy_token_boundaries", test_bytecode_convert_legacy_token_boundaries},
     {"test_bytecode_convert_allocation_failures", test_bytecode_convert_allocation_failures},
+    {"test_embedded_code_conversion_boundaries", test_embedded_code_conversion_boundaries},
     {"test_pipeline_golden", test_pipeline_golden},
     {"test_pipeline_large_local_lookup_duplicate", test_pipeline_large_local_lookup_duplicate},
     {"test_pipeline_source_golden", test_pipeline_source_golden},
@@ -587,6 +590,7 @@ static const test_case_t runtime_tests[] = {
     {"test_interpret_semantics_golden", test_interpret_semantics_golden},
     {"test_interpret_legacy_and_v1_headers_execute_equivalently", test_interpret_legacy_and_v1_headers_execute_equivalently},
     {"test_interpret_legacy_conversion_semantics", test_interpret_legacy_conversion_semantics},
+    {"test_interpret_embedded_code_boundary_lengths", test_interpret_embedded_code_boundary_lengths},
     {"test_runtime_jump_diagnostic_uses_absolute_header_offset", test_runtime_jump_diagnostic_uses_absolute_header_offset},
     {"test_interpret_result_semantics", test_interpret_result_semantics},
     {"test_runtime_build_list_allocation_failure_consumes_inputs", test_runtime_build_list_allocation_failure_consumes_inputs},

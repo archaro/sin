@@ -139,12 +139,14 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
         isz = 1 + 2;
         if (in->a >= 0 && (size_t)in->a < ir->embedded_code.count) {
           const IR_EmbeddedCodePayload *payload = &ir->embedded_code.entries[in->a];
+          /* Every payload carries an explicit parameter marker and terminator,
+           * including parameterless code, so source lengths beginning with
+           * 'P' cannot be mistaken for a parameter block. */
+          isz += 1 + 2;
           if (payload->param_count > 0) {
-            isz += 1;
             for (size_t p = 0; p < payload->param_count; p++) {
               isz += 2 + (int)strlen(payload->params[p]);
             }
-            isz += 2;
           }
           if (payload->source != NULL) isz += (int)strlen(payload->source);
         }
@@ -315,8 +317,8 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
           return errnum;
         }
         const IR_EmbeddedCodePayload *payload = &ir->embedded_code.entries[in->a];
+        if (!bw_write_u8(&w, 'P')) goto oom;
         if (payload->param_count > 0) {
-          if (!bw_write_u8(&w, 'P')) goto oom;
           for (size_t p = 0; p < payload->param_count; p++) {
             const char *name = payload->params[p];
             size_t nlen = strlen(name);
@@ -328,8 +330,8 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
             }
             if (!bw_write_u16(&w, (uint16_t)nlen) || !bw_write_bytes(&w, name, nlen)) goto oom;
           }
-          if (!bw_write_u16(&w, 0)) goto oom;
         }
+        if (!bw_write_u16(&w, 0)) goto oom;
         if (!payload->source) {
           free(pos);
           int8_t errnum = ERR_NOERROR;

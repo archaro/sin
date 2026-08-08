@@ -75,10 +75,17 @@ SIN_LIST_MAX_ELEMENTS. One-byte fields are unchanged.
   use `D` followed by the nested dereference kind, currently `V` plus a one-byte
   local index for a local variable layer, or another item assembly. Nested item
   assemblies are limited to eight levels.
-* **Embedded code** (`B`) optionally begins with a parameter block: `P`, zero or
-  more parameter names as `u16 length + bytes`, then a terminating zero `u16`
-  length. The parameter block is followed by the mandatory source block encoded
-  as `u16 source_length + source bytes`.
+* **Embedded code** (`B`) begins with a parameter marker `P`, zero or more
+  parameter names as `u16 length + bytes`, then a terminating zero `u16` length.
+  The parameter block is followed by the mandatory source block encoded as
+  `u16 source_length + source bytes`. New emitters always write `P, u16(0)` for
+  parameterless code, making source lengths whose low byte is `0x50`
+  unambiguous. Version-1 payloads without the marker are invalid. During legacy
+  conversion, markerless payloads whose source-length low byte is not `P` gain
+  an empty parameter block. If that byte is `P`, the historical payload is
+  deterministically parsed as a parameter block; malformed or truncated blocks
+  are rejected rather than guessed or rewritten in place. Consequently, an old
+  markerless source whose length has low byte `0x50` is rejected as ambiguous.
 
 ## Opcode reference
 

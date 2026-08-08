@@ -38,6 +38,7 @@ typedef struct {
   BC_VerifyResult result;
   uint8_t local_count;
   uint32_t instruction_offset;
+  bool legacy;
   bool validate_local_indices;
   bool *top_level_instruction_starts;
   uint32_t top_level_instruction_start_capacity;
@@ -659,7 +660,12 @@ static int bc_decode_one(BC_Decoder *d, const uint8_t **cursor,
       return bc_emit_event(d, start, *cursor, op, schema, &operand, ctx);
     }
     case IR_OP_ITEM_SAVE_CODE: {
-      if (*cursor < d->end && **cursor == 'P') {
+      if (*cursor >= d->end || **cursor != 'P') {
+        if (!d->legacy) {
+          return bc_fail(d, *cursor, op,
+                         "embedded code is missing canonical parameter marker");
+        }
+      } else {
         uint32_t param_count = 0;
         uint32_t total_param_len = 0;
         (*cursor)++;
@@ -802,6 +808,7 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
   }
   d.local_count = locals;
   d.instruction_offset = header.instruction_offset;
+  d.legacy = header.legacy;
   d.validate_local_indices = d.options.validate_local_indices;
   if (params > locals) {
     bc_fail(&d, bytecode + 1, params, "parameter count exceeds local count");

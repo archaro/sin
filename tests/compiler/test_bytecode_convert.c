@@ -138,3 +138,40 @@ void test_bytecode_convert_allocation_failures(void) {
   ASSERT_TRUE(jump.data == NULL && jump.length == 0);
   bc_convert_result_free(&jump);
 }
+
+void test_embedded_code_conversion_boundaries(void) {
+  const uint8_t markerless[] = {
+      0, 0, 'l', 1, 0, 'x', 'B', 9, 0,
+      'r', 'e', 't', 'u', 'r', 'n', ' ', '7', ';', 'h'};
+  BC_ConvertResult upgraded = bc_convert_latest(markerless,
+                                                 sizeof(markerless));
+  ASSERT_EQ_INT(BC_CONVERT_SUCCESS, upgraded.status);
+  const uint8_t canonical[] = {'B', 'P', 0, 0, 9, 0};
+  ASSERT_TRUE(contains_bytes(upgraded.data, upgraded.length, canonical,
+                             sizeof(canonical)));
+  ASSERT_EQ_INT(BC_VERIFY_OK,
+                bc_verify_bytecode(upgraded.data, upgraded.length,
+                                   "upgraded markerless embedded code", NULL)
+                    .status);
+  bc_convert_result_free(&upgraded);
+
+  const uint32_t lengths[] = {0x50u, 0x150u, 0xff50u};
+  for (size_t i = 0; i < sizeof lengths / sizeof lengths[0]; i++) {
+    uint32_t src_len = lengths[i];
+    size_t legacy_len = 2u + 1u + 2u + src_len + 1u;
+    uint8_t *legacy = malloc(legacy_len);
+    ASSERT_NOT_NULL(legacy);
+    legacy[0] = 0; legacy[1] = 0; legacy[2] = 'B';
+    legacy[3] = (uint8_t)src_len;
+    legacy[4] = (uint8_t)(src_len >> 8);
+    memset(legacy + 5, 'x', src_len);
+    legacy[5 + src_len] = 'h';
+    BC_ConvertResult converted = bc_convert_latest(legacy, (uint32_t)legacy_len);
+    /* Historical markerless lengths with low byte 0x50 are ambiguous; the
+     * converter rejects them deterministically instead of guessing. */
+    ASSERT_EQ_INT(BC_CONVERT_INVALID, converted.status);
+    ASSERT_TRUE(converted.data == NULL && converted.length == 0);
+    bc_convert_result_free(&converted);
+    free(legacy);
+  }
+}

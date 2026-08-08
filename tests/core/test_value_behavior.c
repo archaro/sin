@@ -1244,7 +1244,7 @@ void test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_er
   ASSERT_NOT_NULL(target.s);
   push_stack(config.vm->stack, target);
 
-  uint8_t code[] = {'B'};
+  uint8_t code[] = {'B', 'P', 0, 0};
   runtime_decoder_init(&ctx.decoder, code + 1, code + sizeof(code));
   uint8_t *next = op_assigncodeitem(&ctx, code + 1, current);
   ASSERT_TRUE(next == NULL);
@@ -1263,6 +1263,9 @@ void test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_erro
   code[pos++] = 'p';
   emit_i64(code, &pos, 1);
   code[pos++] = 'B';
+  code[pos++] = 'P';
+  code[pos++] = 0;
+  code[pos++] = 0;
   memcpy(code + pos, &source_len, sizeof(source_len));
   pos += sizeof(source_len);
   code[pos++] = 'h';

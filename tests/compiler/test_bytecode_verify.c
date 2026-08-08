@@ -219,6 +219,13 @@ void test_bytecode_verify_truncated_operand_widths(void) {
                        "truncated_parameter_block",
                        "truncated embedded parameter length");
 
+  const uint8_t markerless_v1[] = {
+      0, 0xff, 'S', 'B', 1, 0, 0, 0,
+      'l', 1, 0, 'x', 'B', 1, 0, 'x', 'h'};
+  assert_verify_status(markerless_v1, sizeof(markerless_v1), BC_VERIFY_ERROR,
+                       "markerless_v1",
+                       "embedded code is missing canonical parameter marker");
+
   const size_t too_many_param_count = 1025;
   const size_t too_many_len = 2 + 2 + too_many_param_count * 3 + 2 + 2;
   uint8_t *too_many_params = malloc(too_many_len);

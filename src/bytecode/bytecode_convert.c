@@ -214,7 +214,9 @@ static bool scan_one(ConvertCtx *c, const uint8_t **pp, bool nested) {
     break;
   case 'l':
   case 'B': {
+    bool has_params = false;
     if (op == 'B' && need(c, *pp, 1u) && **pp == 'P') {
+      has_params = true;
       (*pp)++;
       for (;;) {
         if (!need(c, *pp, 2u))
@@ -232,6 +234,16 @@ static bool scan_one(ConvertCtx *c, const uint8_t **pp, bool nested) {
       return false;
     uint16_t z = bc_wire_load_u16(*pp);
     n = (size_t)(*pp - start - 1u) + 2u + z;
+    if (op == 'B' && !has_params) {
+      if (!emit_bytes(c, start, 1u)) return false;
+      uint8_t marker = 'P';
+      uint8_t zero[2] = {0, 0};
+      if (!emit_bytes(c, &marker, 1u) || !emit_bytes(c, zero, 2u) ||
+          !emit_bytes(c, *pp, 2u + z)) return false;
+      *pp += 2u + z;
+      emitted = true;
+      return true;
+    }
     *pp = start + 1u;
     break;
   }

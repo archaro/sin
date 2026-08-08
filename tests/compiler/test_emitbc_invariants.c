@@ -5,11 +5,31 @@
 
 #include "error.h"
 #include "compiler/ir.h"
+#include "compiler/compiler_pipeline.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 #include "bytecode_format.h"
+#include "bytecode_verify.h"
+#include "bytecode_convert.h"
+#include "bytecode_wire.h"
+#include "sdiss_core.h"
 
 enum { TEST_SEED = 0x5EED1234u };
+
+typedef struct {
+  size_t embedded_count;
+  uint16_t source_len;
+} EmbeddedDecodeCapture;
+
+static bool capture_embedded_source(const BC_Instruction *instruction,
+                                    void *ctx) {
+  EmbeddedDecodeCapture *capture = ctx;
+  if (instruction->schema->op == IR_OP_ITEM_SAVE_CODE) {
+    capture->embedded_count++;
+    capture->source_len = instruction->operand.value.bytes.len;
+  }
+  return true;
+}
 
 static uint32_t lcg_next(uint32_t *state) {
   *state = (*state * 1664525u) + 1013904223u;
@@ -90,9 +110,129 @@ static void test_emitbc_op_class_invariants(void) {
   ASSERT_TRUE(errdetail == NULL);
   ASSERT_EQ_INT(2, out.bytecode[6]);
   ASSERT_EQ_INT(2, out.bytecode[7]);
-  ASSERT_EQ_INT(BC_V1_HEADER_SIZE + 1 + 2 + 4 + 1, (size_t)(out.nextbyte - out.bytecode));
+  ASSERT_EQ_INT(BC_V1_HEADER_SIZE + 1 + 1 + 2 + 2 + 4 + 1,
+                (size_t)(out.nextbyte - out.bytecode));
   free(out.bytecode);
   ir_destroy_unit(u);
+}
+
+static void test_embedded_code_canonical_boundaries(void) {
+  const size_t lengths[] = {0x50u, 0x150u, 0xff50u};
+  for (size_t i = 0; i < sizeof lengths / sizeof lengths[0]; i++) {
+    IR_Unit *u = t_new_unit();
+    ASSERT_NOT_NULL(u);
+    char *src = malloc(lengths[i] + 1u);
+    ASSERT_NOT_NULL(src);
+    memcpy(src, "return 7;", 9);
+    memset(src + 9, ' ', lengths[i] - 9);
+    src[lengths[i]] = '\0';
+    int32_t idx = ir_add_embedded_code_payload(
+        u, (IR_EmbeddedCodePayload){.source = src});
+    ASSERT_TRUE(idx >= 0);
+    t_emit(u, (IR_Inst){.op = IR_OP_PUSH_STRING,
+                        .imm = (int64_t)(intptr_t)"boundary.target"});
+    t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = idx});
+    t_emit(u, (IR_Inst){.op = IR_OP_HALT});
+    OUTPUT_t out = make_out(lengths[i] + 64u);
+    char *err = NULL;
+    ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 0, 0, &out, &err));
+    ASSERT_TRUE(err == NULL);
+    size_t n = (size_t)(out.nextbyte - out.bytecode);
+    size_t embedded = BC_V1_HEADER_SIZE + 1u + 2u + strlen("boundary.target");
+    ASSERT_EQ_INT('B', out.bytecode[embedded]);
+    ASSERT_EQ_INT('P', out.bytecode[embedded + 1u]);
+    ASSERT_EQ_INT(0, out.bytecode[embedded + 2u]);
+    ASSERT_EQ_INT(0, out.bytecode[embedded + 3u]);
+    ASSERT_EQ_INT(lengths[i], bc_wire_load_u16(out.bytecode + embedded + 4u));
+    ASSERT_EQ_INT(BC_VERIFY_OK,
+                  bc_verify_bytecode(out.bytecode, (uint32_t)n, "boundary",
+                                     NULL).status);
+    SDissResult shown = sdiss_disassemble_bytes(
+        out.bytecode, (uint32_t)n, &(SDissOptions){.no_header = 1}, NULL,
+        NULL);
+    ASSERT_EQ_INT(BC_VERIFY_OK, shown.status);
+    ASSERT_EQ_INT(2, shown.instruction_count);
+    BC_ConvertResult c = bc_convert_latest(out.bytecode, (uint32_t)n);
+    ASSERT_EQ_INT(BC_CONVERT_SUCCESS, c.status);
+    ASSERT_EQ_INT(n, c.length);
+    ASSERT_EQ_INT(0, memcmp(out.bytecode, c.data, n));
+    bc_convert_result_free(&c);
+    free(out.bytecode);
+    free(src);
+    ir_destroy_unit(u);
+  }
+}
+
+static void test_embedded_code_parameterized_compatibility(void) {
+  IR_Unit *u = t_new_unit();
+  ASSERT_NOT_NULL(u);
+  const char **params = malloc(sizeof(*params));
+  ASSERT_NOT_NULL(params);
+  params[0] = "arg";
+  int32_t idx = ir_add_embedded_code_payload(
+      u, (IR_EmbeddedCodePayload){.source = "return @arg;",
+                                  .params = params,
+                                  .param_count = 1});
+  ASSERT_TRUE(idx >= 0);
+  t_emit(u, (IR_Inst){.op = IR_OP_PUSH_STRING,
+                      .imm = (int64_t)(intptr_t)"parameterized.target"});
+  t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = idx});
+  t_emit(u, (IR_Inst){.op = IR_OP_HALT});
+  OUTPUT_t out = make_out(64u);
+  char *err = NULL;
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 0, 0, &out, &err));
+  ASSERT_TRUE(err == NULL);
+  size_t n = (size_t)(out.nextbyte - out.bytecode);
+  ASSERT_EQ_INT(BC_VERIFY_OK,
+                bc_verify_bytecode(out.bytecode, (uint32_t)n,
+                                   "parameterized", NULL).status);
+  BC_ConvertResult converted = bc_convert_latest(out.bytecode, (uint32_t)n);
+  ASSERT_EQ_INT(BC_CONVERT_SUCCESS, converted.status);
+  ASSERT_EQ_INT(n, converted.length);
+  ASSERT_EQ_INT(0, memcmp(out.bytecode, converted.data, n));
+  bc_convert_result_free(&converted);
+  free(out.bytecode);
+  ir_destroy_unit(u);
+}
+
+static void test_compiler_embedded_code_boundary_lengths(void) {
+  const size_t lengths[] = {0x50u, 0x150u, 0xff50u};
+  const char prefix[] = "boundary.compiled = code (";
+  const char suffix[] = ");";
+  for (size_t i = 0; i < sizeof(lengths) / sizeof(lengths[0]); i++) {
+    size_t program_len = sizeof(prefix) - 1u + lengths[i] +
+                         sizeof(suffix) - 1u;
+    char *program = malloc(program_len + 1u);
+    ASSERT_NOT_NULL(program);
+    size_t pos = 0;
+    memcpy(program + pos, prefix, sizeof(prefix) - 1u);
+    pos += sizeof(prefix) - 1u;
+    memcpy(program + pos, "return 7;", 9u);
+    memset(program + pos + 9u, ' ', lengths[i] - 9u);
+    pos += lengths[i];
+    memcpy(program + pos, suffix, sizeof(suffix));
+
+    OUTPUT_t *out = NULL;
+    char *err = NULL;
+    ASSERT_EQ_INT(ERR_NOERROR,
+                  compile_source_to_bytecode(program, program_len, &out,
+                                             &err));
+    ASSERT_TRUE(err == NULL);
+    ASSERT_NOT_NULL(out);
+    size_t bytecode_len = (size_t)(out->nextbyte - out->bytecode);
+    EmbeddedDecodeCapture capture = {0};
+    BC_VerifyResult decoded = bc_decode_bytecode_events(
+        out->bytecode, (uint32_t)bytecode_len, "compiled boundary", NULL,
+        NULL, capture_embedded_source, &capture);
+    ASSERT_EQ_INT(BC_VERIFY_OK, decoded.status);
+    ASSERT_EQ_INT(1, capture.embedded_count);
+    ASSERT_EQ_INT(lengths[i], capture.source_len);
+
+    free(out->bytecode);
+    free(out);
+    free(err);
+    free(program);
+  }
 }
 
 static void emit_random_program(IR_Unit *u, uint32_t *seed, int count) {
@@ -211,6 +351,9 @@ static void test_emitbc_label_heavy_jump_targets_in_bounds(void) {
 
 void test_emitbc_invariants(void) {
   test_emitbc_op_class_invariants();
+  test_embedded_code_canonical_boundaries();
+  test_embedded_code_parameterized_compatibility();
+  test_compiler_embedded_code_boundary_lengths();
   test_emitbc_determinism_fixed_seed();
   test_emitbc_label_heavy_jump_targets_in_bounds();
   test_emitbc_successful_emission_verifies();
