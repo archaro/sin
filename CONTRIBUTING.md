@@ -41,12 +41,12 @@ Run `make test` for the standard test harness. It builds the same test binary as
 
 Run `make test-strict` when you also want the benchmark budget checks enforced. This target runs the same registered tests as `make test`, but invokes the harness with `SIN_STRICT_BENCH=1`, causing the runtime benchmark test to fail if the lookup or dispatch timings exceed their strict thresholds.
 
-Test targets suppress successful compilation commands, per-test records, and
-normal program chatter. Each runner ends with dynamic ran/passed/failed/skipped
-totals and `status=SUCCESS`; an aggregate target such as `make test` prints one
-combined total. Failures replay the captured build or test diagnostics and end
-with `status=FAILURE`. Set `SIN_BENCH_REPORT=1` to replay explicitly requested
-benchmark measurements before the concise totals.
+Test targets leave compilation commands and compiler diagnostics visible in
+normal Make output, while suppressing successful per-test records and program
+chatter. Each aggregate ends with one authoritative line containing dynamic
+ran/passed/failed/skipped totals plus an explicit `[PASS]` or `[FAIL]` marker.
+Failures replay captured build or test diagnostics. Set `SIN_BENCH_REPORT=1` to
+replay explicitly requested benchmark measurements before the concise totals.
 
 ### Strict warning builds
 

@@ -315,89 +315,87 @@ $(PARSER_DEPENDENT_OBJECTS): $(PARSER_H)
 # Include dependency files
 -include $(DEPS)
 
-test:
-	@$(MAKE) --silent _test
+test: $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) scomp sin sconv
+	@$(MAKE) --no-print-directory _test
 
 _test:
 	@$(QUIET_RUNNER) aggregate test \
-		"$(MAKE) --silent _test-harness" \
-		"$(MAKE) --silent _test-network" \
-		"$(MAKE) --silent _test-chat-smoke" \
-		"$(MAKE) --silent _test-output-contract"
+		"$(QUIET_RUNNER) run test-harness -- ./$(TEST_BIN)" \
+		"$(QUIET_RUNNER) run network -- ./$(NETWORK_TEST_BIN)" \
+		"$(QUIET_RUNNER) run chat-smoke -- ./$(CHAT_SMOKE_BIN)" \
+		"$(QUIET_RUNNER) run quiet-output -- ./$(QUIET_OUTPUT_TEST)"
 
-_test-harness: $(TEST_BIN)
+_test-harness:
 	@$(QUIET_RUNNER) run test-harness -- ./$(TEST_BIN)
 
-test-network:
-	@$(MAKE) --silent _test-network
-
-_test-network: $(NETWORK_TEST_BIN)
+test-network: $(NETWORK_TEST_BIN)
 	@$(QUIET_RUNNER) run network -- ./$(NETWORK_TEST_BIN)
 
-test-chat-smoke:
-	@$(MAKE) --silent _test-chat-smoke
+_test-network:
+	@$(QUIET_RUNNER) run network -- ./$(NETWORK_TEST_BIN)
 
-_test-chat-smoke: $(CHAT_SMOKE_BIN) scomp sin
+test-chat-smoke: $(CHAT_SMOKE_BIN) scomp sin
 	@$(QUIET_RUNNER) run chat-smoke -- ./$(CHAT_SMOKE_BIN)
 
-test-output-contract:
-	@$(MAKE) --silent _test-output-contract
+_test-chat-smoke:
+	@$(QUIET_RUNNER) run chat-smoke -- ./$(CHAT_SMOKE_BIN)
 
-_test-output-contract: $(QUIET_RUNNER) $(QUIET_OUTPUT_TEST)
+test-output-contract: $(QUIET_RUNNER) $(QUIET_OUTPUT_TEST)
+	@$(QUIET_RUNNER) run quiet-output -- ./$(QUIET_OUTPUT_TEST)
+
+_test-output-contract:
 	@$(QUIET_RUNNER) run quiet-output -- ./$(QUIET_OUTPUT_TEST)
 
 test-build-switch:
-	@$(MAKE) --silent _test-build-switch
+	@$(MAKE) --no-print-directory _test-build-switch
 
 _test-build-switch:
+	+$(MAKE) --no-print-directory BUILD=sanitize all
+	+$(MAKE) --no-print-directory BUILD=debug all
+	+$(MAKE) --no-print-directory BUILD=release all
+	+$(MAKE) --no-print-directory BUILD=debug all
 	@$(QUIET_RUNNER) aggregate test-build-switch \
-		"$(QUIET_RUNNER) one build-sanitize -- $(MAKE) --silent BUILD=sanitize all" \
-		"$(QUIET_RUNNER) one build-debug-first -- $(MAKE) --silent BUILD=debug all" \
-		"$(QUIET_RUNNER) one build-release -- $(MAKE) --silent BUILD=release all" \
-		"$(QUIET_RUNNER) one build-debug-second -- $(MAKE) --silent BUILD=debug all" \
 		"$(QUIET_RUNNER) one check-sanitize-interpret -- test -f obj/sanitize-$(notdir $(CC))/runtime/interpret.o" \
 		"$(QUIET_RUNNER) one check-release-interpret -- test -f obj/release-$(notdir $(CC))/runtime/interpret.o" \
 		"$(QUIET_RUNNER) one check-debug-interpret -- test -f obj/debug-$(notdir $(CC))/runtime/interpret.o"
 
-test-strict:
-	@$(MAKE) --silent _test-strict
+test-strict: $(TEST_BIN)
+	@$(QUIET_RUNNER) run test-strict -- env SIN_STRICT_BENCH=1 ./$(TEST_BIN)
 
-_test-strict: $(TEST_BIN)
+_test-strict:
 	@$(QUIET_RUNNER) run test-strict -- env SIN_STRICT_BENCH=1 ./$(TEST_BIN)
 
 test-benchmark:
-	@$(QUIET_RUNNER) report test-benchmark -- $(MAKE) --silent BUILD=release _test-benchmark
+	+$(MAKE) --no-print-directory BUILD=release _test-benchmark
 
 _test-benchmark: $(TEST_BIN)
 	@SIN_EXTENDED_BENCH=1 SIN_BENCH_REPORT=1 ./$(TEST_BIN)
 
 test-warnings:
-	@$(QUIET_RUNNER) run test-warnings -- $(MAKE) --silent _test-warnings
+	+$(MAKE) --no-print-directory STRICT_WARNINGS=1 _test-warnings
 
 _test-warnings: clean
-	+$(MAKE) --silent STRICT_WARNINGS=1 _test
+	+$(MAKE) --no-print-directory STRICT_WARNINGS=1 test
 
 test-release:
-	@$(QUIET_RUNNER) run test-release -- $(MAKE) --silent _test-release
+	+$(MAKE) --no-print-directory _test-release
 
 _test-release: clean
-	+$(MAKE) --silent BUILD=release STRICT_WARNINGS=1 _test
+	+$(MAKE) --no-print-directory BUILD=release STRICT_WARNINGS=1 test
 
 test-asan:
-	@$(QUIET_RUNNER) run test-asan -- env ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=0" \
-		$(MAKE) --silent _test-asan
+	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=0" $(MAKE) --no-print-directory _test-asan
 
 _test-asan: clean
 	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=0" \
-		$(MAKE) --silent BUILD=sanitize STRICT_WARNINGS=1 _test
+		$(MAKE) --no-print-directory BUILD=sanitize STRICT_WARNINGS=1 test
 
 test-lsan:
-	@$(QUIET_RUNNER) run test-lsan -- env ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=1" \
-		$(MAKE) --silent _test-lsan
+	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=1" $(MAKE) --no-print-directory _test-lsan
 
 _test-lsan: clean
 	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=1" \
-		$(MAKE) --silent BUILD=sanitize STRICT_WARNINGS=1 _test
+		$(MAKE) --no-print-directory BUILD=sanitize STRICT_WARNINGS=1 test
 
 $(TEST_BIN): $(TEST_SOURCES) $(PARSER_H) $(LIB) scomp sdiss sin sconv FORCE_BUILD
 	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
@@ -443,15 +441,15 @@ fuzz-build: clean
 	+$(FUZZ_MAKE) fuzz-corpora $(FUZZ_BINS)
 
 fuzz-smoke:
-	@$(QUIET_RUNNER) report fuzz-smoke -- $(MAKE) --silent _fuzz-smoke
+	+$(MAKE) --no-print-directory _fuzz-smoke
 
 _fuzz-smoke: clean
-	+$(FUZZ_MAKE) --silent fuzz-corpora $(FUZZ_BINS)
-	@$(MAKE) --silent _fuzz-smoke-run
+	+$(FUZZ_MAKE) --no-print-directory fuzz-corpora $(FUZZ_BINS)
+	@$(QUIET_RUNNER) run fuzz-smoke -- $(MAKE) --no-print-directory _fuzz-smoke-run
 
 # Runs the already-built fuzz harnesses against seeded corpora.
 fuzz-smoke-run:
-	@$(QUIET_RUNNER) report fuzz-smoke-run -- $(MAKE) --silent _fuzz-smoke-run
+	@$(QUIET_RUNNER) run fuzz-smoke-run -- $(MAKE) --no-print-directory _fuzz-smoke-run
 
 _fuzz-smoke-run:
 	@set -eu; \

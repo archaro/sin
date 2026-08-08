@@ -127,11 +127,11 @@ aggregate() {
   done
 
   if [ "$total_failed" -ne 0 ]; then
-    printf '[%s] totals: ran=%d passed=%d failed=%d skipped=%d status=FAILURE\n' \
+    printf '[%s] totals: ran=%d passed=%d failed=%d skipped=%d status=FAILURE [FAIL]\n' \
       "$label" "$total_ran" "$total_passed" "$total_failed" "$total_skipped" >&2
     return 1
   fi
-  printf '[%s] totals: ran=%d passed=%d failed=0 skipped=%d status=SUCCESS\n' \
+  printf '[%s] totals: ran=%d passed=%d failed=0 skipped=%d status=SUCCESS [PASS]\n' \
     "$label" "$total_ran" "$total_passed" "$total_skipped"
 }
 
