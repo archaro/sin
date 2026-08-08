@@ -525,7 +525,11 @@ uint8_t *op_pushstr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   nextop = decode_next(ctx, bc_read_u16(&ctx->decoder, nextop, &len, "OP_PUSHSTR length"));
   if (!nextop) return NULL;
   REQUIRE_BYTES(nextop, len, "OP_PUSHSTR payload");
-  v.s = malloc((size_t)len + 1);
+  v.s = alloc_malloc((size_t)len + 1u);
+  if (!v.s) {
+    logerr("Unable to allocate string literal.\n");
+    return NULL;
+  }
   memcpy(v.s, nextop, len);
   v.s[len] = 0;
   push_stack(VM->stack, v);

@@ -24,6 +24,7 @@ uint8_t *op_jump(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 extern CONFIG_t config;
 extern uint8_t *op_build_list(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+extern uint8_t *op_pushstr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 typedef struct {
   const char *name;
@@ -540,6 +541,22 @@ void test_runtime_build_list_allocation_failure_consumes_inputs(void) {
   ASSERT_TRUE(next == frame + sizeof(frame));
   ASSERT_EQ_INT(1, size_stack(vm->stack));
   ASSERT_EQ_INT(VALUE_nil, peek_stack(vm->stack)->type);
+  destroy_vm(vm);
+}
+
+void test_interpreter_string_literal_allocation_failure_aborts_frame(void) {
+  VM_t *vm = make_vm();
+  ASSERT_NOT_NULL(vm);
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, vm);
+  uint8_t operand[] = {3, 0, 'a', 'b', 'c'};
+  runtime_decoder_init(&ctx.decoder, operand, operand + sizeof(operand));
+  alloc_test_fail_after(0);
+  uint8_t *next = op_pushstr(&ctx, operand, NULL);
+  alloc_test_fail_after(-1);
+
+  ASSERT_TRUE(next == NULL);
+  ASSERT_EQ_INT(-1, vm->stack->current);
   destroy_vm(vm);
 }
 

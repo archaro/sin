@@ -365,6 +365,7 @@ void test_interpret_embedded_code_boundary_lengths(void);
 void test_runtime_jump_diagnostic_uses_absolute_header_offset(void);
 void test_interpret_result_semantics(void);
 void test_runtime_build_list_allocation_failure_consumes_inputs(void);
+void test_interpreter_string_literal_allocation_failure_aborts_frame(void);
 void test_interpret_rejects_malformed_bytecode_before_execution(void);
 void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void);
 void test_interpret_stress(void);
@@ -623,6 +624,7 @@ static const test_case_t runtime_tests[] = {
     {"test_runtime_jump_diagnostic_uses_absolute_header_offset", test_runtime_jump_diagnostic_uses_absolute_header_offset},
     {"test_interpret_result_semantics", test_interpret_result_semantics},
     {"test_runtime_build_list_allocation_failure_consumes_inputs", test_runtime_build_list_allocation_failure_consumes_inputs},
+    {"test_interpreter_string_literal_allocation_failure_aborts_frame", test_interpreter_string_literal_allocation_failure_aborts_frame},
     {"test_interpret_rejects_malformed_bytecode_before_execution", test_interpret_rejects_malformed_bytecode_before_execution},
     {"test_interpret_baseline_bytecode_safety_in_default_and_strict_modes", test_interpret_baseline_bytecode_safety_in_default_and_strict_modes},
     {"test_interpret_stress", test_interpret_stress},
