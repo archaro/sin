@@ -285,6 +285,56 @@ void test_runtime_init_validates_libcalls_once(void) {
   ASSERT_TRUE(ctx.initialized == false);
 }
 
+void test_interpret_lazy_init_failure_is_transactional(void) {
+  setup_libcall_runtime();
+
+  uint8_t bytecode[] = {
+    0x00, 0x00, 'p', 7, 0, 0, 0, 0, 0, 0, 0, 'Q', 'h'
+  };
+  uint8_t *owned_bytecode = malloc(sizeof(bytecode));
+  ASSERT_NOT_NULL(owned_bytecode);
+  memcpy(owned_bytecode, bytecode, sizeof(bytecode));
+  ITEM_t *code = test_item_set_code(itemstore_root(config.itemstore_ctx),
+                                    "test.lazy_init_failure",
+                                    sizeof(bytecode), owned_bytecode);
+  ASSERT_NOT_NULL(code);
+
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemstore = config.itemstore_ctx;
+  ITEM_t *saved_current_item = itemstore_root(config.itemstore_ctx);
+  ITEM_t *saved_pending_call_item = code;
+  ctx.decoder.frame_start = bytecode;
+  ctx.current_item = saved_current_item;
+  ctx.pending_call_item = saved_pending_call_item;
+  ctx.invocation_callstack_floor = 17;
+  ctx.invocation_caller_item = saved_current_item;
+
+  alloc_test_fail_after(0);
+  VALUE_t failed = interpret(&ctx, code);
+  alloc_test_fail_after(-1);
+  ASSERT_EQ_INT(VALUE_nil, failed.type);
+  ASSERT_TRUE(!ctx.initialized);
+  ASSERT_TRUE(ctx.libcalls == NULL);
+  ASSERT_TRUE(ctx.decoder.frame_start == bytecode);
+  ASSERT_TRUE(ctx.current_item == saved_current_item);
+  ASSERT_TRUE(ctx.pending_call_item == saved_pending_call_item);
+  ASSERT_EQ_INT(17, ctx.invocation_callstack_floor);
+  ASSERT_TRUE(ctx.invocation_caller_item == saved_current_item);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+
+  VALUE_t retried = interpret(&ctx, code);
+  ASSERT_EQ_INT(VALUE_int, retried.type);
+  ASSERT_EQ_INT(7, retried.i);
+  ASSERT_TRUE(ctx.initialized);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  runtime_destroy(&ctx);
+  destroy_vm(config.vm);
+  destroy_item(itemstore_root(config.itemstore_ctx));
+}
+
 void test_libcall_registry_init_failure_has_no_partial_state(void) {
   bool reached_success = false;
 

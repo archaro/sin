@@ -108,6 +108,9 @@ bool runtime_init(RuntimeContext *ctx, VM_t *vm) {
   }
   if (!libcall_registry_init(ctx->libcalls)) {
     logerr("Failed to initialize libcall registry.\n");
+    runtime_registry_untrack(ctx->libcalls);
+    free(ctx->libcalls);
+    ctx->libcalls = NULL;
     return false;
   }
   runtime_opcode_bind_table(ctx);
@@ -1303,6 +1306,10 @@ void init_interpreter(RuntimeContext *ctx) {
 
 VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   if (!ctx) return VALUE_NIL;
+  // Lazy initialization must complete before changing any per-invocation
+  // state.  A failed allocation here leaves the context untouched and safe
+  // to retry on a later invocation.
+  if (!ctx->initialized && !runtime_init(ctx, ctx->vm)) return VALUE_NIL;
   RuntimeDecoder saved_decoder = ctx->decoder;
   ITEM_t *saved_current_item = ctx->current_item;
   ITEM_t *saved_pending_call_item = ctx->pending_call_item;
@@ -1315,9 +1322,6 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   uint8_t entry_stack_params = VM->stack->params;
   ctx->invocation_callstack_floor = entry_callstack_depth;
   ctx->invocation_caller_item = saved_current_item;
-  if (!ctx->initialized) {
-    init_interpreter(ctx);
-  }
   clear_error_item(itemstore_root(ctx->itemstore));
   // Given some bytecode, interpret it until the HALT instruction is seen
   // NB: The HALT opcode (currently represented by the character 'h') does

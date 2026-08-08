@@ -174,6 +174,7 @@ void test_sin_itemstore_version_policy(void);
 void test_libcall_registry_roundtrip(void);
 void test_emitbc_libcall_pair_bytes(void);
 void test_runtime_init_validates_libcalls_once(void);
+void test_interpret_lazy_init_failure_is_transactional(void);
 void test_libcall_registry_init_failure_has_no_partial_state(void);
 void test_libcall_registry_lifecycle_reinit_sequence(void);
 void test_libcall_registry_repeated_teardown_is_safe(void);
@@ -627,6 +628,7 @@ static const test_case_t runtime_tests[] = {
     {"test_interpret_stress", test_interpret_stress},
     {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},
     {"test_runtime_init_validates_libcalls_once", test_runtime_init_validates_libcalls_once},
+    {"test_interpret_lazy_init_failure_is_transactional", test_interpret_lazy_init_failure_is_transactional},
     {"test_libcall_registry_init_failure_has_no_partial_state", test_libcall_registry_init_failure_has_no_partial_state},
     {"test_libcall_registry_lifecycle_reinit_sequence", test_libcall_registry_lifecycle_reinit_sequence},
     {"test_libcall_registry_repeated_teardown_is_safe", test_libcall_registry_repeated_teardown_is_safe},
