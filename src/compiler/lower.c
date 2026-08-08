@@ -473,7 +473,7 @@ static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
         lower_set_unsupported(ctx, node, "unknown libcall target");
         return;
       }
-      if ((uint8_t)argc != expected_args) {
+      if (argc < 0 || argc > UINT8_MAX || argc != (int32_t)expected_args) {
         lower_set_unsupported(ctx, node, "invalid libcall argument count");
         return;
       }

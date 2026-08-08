@@ -56,6 +56,28 @@ static int8_t run_compile_case_too_many_params(char **errdetail) {
   return rc;
 }
 
+static int8_t run_compile_case_libcall_256_args(char **errdetail) {
+  const size_t arg_count = (size_t)UINT8_MAX + 1u;
+  const size_t source_len = strlen("sys.backup{");
+  const size_t suffix_len = strlen("};");
+  char *source = malloc(source_len + arg_count * 2u + suffix_len + 1u);
+  ASSERT_NOT_NULL(source);
+  size_t offset = source_len;
+  memcpy(source, "sys.backup{", source_len);
+  for (size_t i = 0; i < arg_count; i++) {
+    source[offset++] = '1';
+    source[offset++] = (i + 1u == arg_count) ? '}' : ',';
+  }
+  source[offset++] = ';';
+  source[offset] = '\0';
+
+  OUTPUT_t *out = NULL;
+  int8_t rc = compile_source_to_bytecode(source, offset, &out, errdetail);
+  ASSERT_TRUE(out == NULL);
+  free(source);
+  return rc;
+}
+
 void test_pipeline_negative_matrix(void) {
   static const NEG_CASE cases[] = {
       {"parser_unknown_char", CASE_FIXTURE, "tests/fixtures/conformance/negative/parser-unknown-character.src", NULL, ERR_COMP_UNKNOWNCHAR, STAGE_PARSER, "^", 1},
@@ -80,6 +102,9 @@ void test_pipeline_negative_matrix(void) {
       {"semantic_truthiness_int_unchanged", CASE_SOURCE, "if 1 then sys.log{\"t\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL, 1},
       {"semantic_truthiness_empty_string_unchanged", CASE_SOURCE, "if \"\" then sys.log{\"t\"}; endif;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL, 1},
       {"semantic_do_while_body_defines_condition_local", CASE_SOURCE, "do @x = 1; while @x < 2; @x;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL, 1},
+
+      {"semantic_libcall_zero_args", CASE_SOURCE, "sys.backup;", NULL, ERR_NOERROR, STAGE_SEMANTIC, NULL, 1},
+      {"semantic_libcall_256_args", CASE_BUILDER, NULL, run_compile_case_libcall_256_args, ERR_COMP_SYNTAX, STAGE_SEMANTIC, "invalid libcall argument count", 3},
 
       {"semantic_compile_param_count_guard", CASE_BUILDER, NULL, run_compile_case_too_many_params, ERR_COMP_TOOMANYLOCALS, STAGE_SEMANTIC, "", 1},
   };
