@@ -400,7 +400,10 @@ uint8_t *op_inclocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   int32_t index = (int32_t)raw_index + VM->stack->base;
   if (index < 0 || index >= STACK_SIZE) return NULL;
   if (VM->stack->stack[index].type == VALUE_int) {
-    VM->stack->stack[index].i++;
+    VALUE_t one = {VALUE_int, {.i = 1}};
+    VALUE_t result = VALUE_NIL;
+    (void)value_add(&VM->stack->stack[index], &one, &result);
+    value_replace(&VM->stack->stack[index], result);
   } else {
     logverbose("Trying to increment non integer local variable.\n");
   }
@@ -418,7 +421,10 @@ uint8_t *op_declocal(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   int32_t index = (int32_t)raw_index + VM->stack->base;
   if (index < 0 || index >= STACK_SIZE) return NULL;
   if (VM->stack->stack[index].type == VALUE_int) {
-    VM->stack->stack[index].i--;
+    VALUE_t one = {VALUE_int, {.i = 1}};
+    VALUE_t result = VALUE_NIL;
+    (void)value_sub(&VM->stack->stack[index], &one, &result);
+    value_replace(&VM->stack->stack[index], result);
   } else {
     logverbose("Trying to decrement non integer local variable.\n");
   }

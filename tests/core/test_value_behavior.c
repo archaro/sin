@@ -380,6 +380,44 @@ void test_value_integer_overflow_contract(void) {
   teardown_runtime();
 }
 
+static VALUE_t run_local_step(int64_t initial, uint8_t opcode, const char *name) {
+  uint8_t code[32] = {0};
+  size_t pos = 0;
+  code[pos++] = 1;
+  code[pos++] = 0;
+  code[pos++] = 'p'; emit_i64(code, &pos, initial);
+  code[pos++] = 'c'; code[pos++] = 0;
+  code[pos++] = opcode; code[pos++] = 0;
+  code[pos++] = 'e'; code[pos++] = 0;
+  code[pos++] = 'Q';
+  code[pos++] = 'h';
+  return run_code(name, code, pos);
+}
+
+void test_value_local_increment_decrement_boundaries(void) {
+  setup_runtime();
+
+  VALUE_t result = run_local_step(INT64_MAX - 1, 'f', "test.local_increment_boundary");
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(INT64_MAX, result.i);
+  value_free(&result);
+
+  result = run_local_step(INT64_MAX, 'f', "test.local_increment_overflow");
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  value_free(&result);
+
+  result = run_local_step(INT64_MIN + 1, 'g', "test.local_decrement_boundary");
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(INT64_MIN, result.i);
+  value_free(&result);
+
+  result = run_local_step(INT64_MIN, 'g', "test.local_decrement_overflow");
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  value_free(&result);
+
+  teardown_runtime();
+}
+
 void test_value_push_int_interprets_i64_immediates(void) {
   setup_runtime();
 
