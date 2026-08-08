@@ -3,8 +3,6 @@
 // Licensed under the MIT License - see LICENSE file for details.
 
 #include <stdlib.h>
-#include "signal.h"
-
 #include "config.h"
 #include "memory.h"
 #include "log.h"
@@ -45,12 +43,20 @@ void destroy_callstack(CALLSTACK_t *stack) {
   free(stack);
 }
 
-void push_callstack(VM_t *vm, ITEM_t *item, uint8_t *nextop, uint8_t args,
-                    uint8_t *bytecode_start, uint8_t *bytecode_end) {
+bool push_callstack(VM_t *vm, ITEM_t *item, uint8_t *nextop, uint8_t args,
+                    uint8_t locals, uint8_t *bytecode_start,
+                    uint8_t *bytecode_end) {
   // Store the currently-executing item on the call stack.
   // If arguments are being passed to the next item, adjust the
   // stack for this item to take into account.
-  if (vm->callstack->current < vm->callstack->max) {
+  if (!vm || !vm->stack || !vm->callstack || args > locals ||
+      vm->stack->current < (int32_t)args - 1 ||
+      vm->callstack->current >= vm->callstack->max ||
+      vm->stack->current > vm->stack->max - (int32_t)(locals - args)) {
+    logerr("Unable to enter call frame: insufficient VM capacity or invalid arguments.\n");
+    return false;
+  }
+  {
     vm->callstack->current++;
     vm->callstack->entry[vm->callstack->current].item = item;
     vm->callstack->entry[vm->callstack->current].nextop = nextop;
@@ -68,10 +74,23 @@ void push_callstack(VM_t *vm, ITEM_t *item, uint8_t *nextop, uint8_t args,
     // - current/base/locals/params of the caller are captured in the frame.
     // - base shifts to the first argument for callee local indexing.
     vm->stack->base = vm->stack->current + 1 - args;
-  } else {
-    logerr("Callstack overflow.\n");
-    raise(SIGUSR1);
+    vm->stack->current += (int32_t)locals - args;
+    vm->stack->locals = locals;
+    vm->stack->params = args;
+    return true;
   }
+}
+
+bool enter_initial_frame(VM_t *vm, uint8_t locals, uint8_t params) {
+  if (!vm || !vm->stack || params > locals ||
+      vm->stack->current > vm->stack->max - (int32_t)(locals - params)) {
+    logerr("Unable to enter initial frame: insufficient VM stack capacity.\n");
+    return false;
+  }
+  vm->stack->current += (int32_t)locals - params;
+  vm->stack->locals = locals;
+  vm->stack->params = params;
+  return true;
 }
 
 FRAME_t *pop_callstack(VM_t *vm) {
@@ -98,7 +117,6 @@ FRAME_t *pop_callstack(VM_t *vm) {
     return &vm->callstack->entry[vm->callstack->current + 1];
   }
   logerr("Callstack underflow.\n");
-  raise(SIGUSR1);
   return NULL;
 }
 

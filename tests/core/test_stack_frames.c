@@ -139,6 +139,42 @@ static ITEM_t *insert_outer_nil_frame(const char *name, const char *target) {
   return insert_frame_code(name, code, pos);
 }
 
+static ITEM_t *insert_large_stack_caller(const char *name, const char *target,
+                                         bool use_sys_call) {
+  const size_t filler_count = 780;
+  size_t capacity = 2 + filler_count * 8 + 64;
+  uint8_t *code = calloc(capacity, 1);
+  ASSERT_NOT_NULL(code);
+  size_t pos = 2;
+  for (size_t i = 0; i < filler_count; i++) {
+    code[pos++] = 'l';
+    pos = emit_string(code, pos, "x");
+  }
+  code[pos++] = 'l';
+  pos = emit_string(code, pos, target);
+  if (use_sys_call) {
+    code[pos++] = 'M'; code[pos++] = 1; code[pos++] = 21;
+    code[pos++] = '['; memset(code + pos, 0, 4); pos += 4;
+    code[pos++] = 'M'; code[pos++] = 1; code[pos++] = 24;
+  } else {
+    code[pos++] = 'F'; code[pos++] = 0; code[pos++] = 0;
+  }
+  code[pos++] = 'h';
+  ITEM_t *item = insert_frame_code(name, code, pos);
+  free(code);
+  return item;
+}
+
+static ITEM_t *insert_large_local_recursive(const char *name) {
+  uint8_t code[96] = {255, 0};
+  size_t pos = 2;
+  code[pos++] = 'l';
+  pos = emit_string(code, pos, name);
+  code[pos++] = 'F'; code[pos++] = 0; code[pos++] = 0;
+  code[pos++] = 'h';
+  return insert_frame_code(name, code, pos);
+}
+
 void test_stack_reset_to_frees_values_at_boundaries(void) {
   STACK_t *stack = make_stack();
   ASSERT_NOT_NULL(stack);
@@ -168,6 +204,56 @@ void test_stack_reset_to_frees_values_at_boundaries(void) {
   reset_stack(stack);
   ASSERT_EQ_INT(-1, stack->current);
   destroy_stack(stack);
+}
+
+void test_transactional_frame_entry_rejects_stack_and_callstack_overflow(void) {
+  VM_t *vm = make_vm();
+  ASSERT_NOT_NULL(vm);
+  vm->stack->current = vm->stack->max - 1;
+  int32_t stack_before = vm->stack->current;
+  ASSERT_TRUE(!push_callstack(vm, NULL, NULL, 0, 3, NULL, NULL));
+  ASSERT_EQ_INT(stack_before, vm->stack->current);
+  ASSERT_EQ_INT(-1, vm->callstack->current);
+
+  vm->stack->current = -1;
+  vm->callstack->current = vm->callstack->max;
+  ASSERT_TRUE(!push_callstack(vm, NULL, NULL, 0, 0, NULL, NULL));
+  ASSERT_EQ_INT(vm->callstack->max, vm->callstack->current);
+  ASSERT_TRUE(enter_initial_frame(vm, 255, 0));
+  ASSERT_EQ_INT(254, vm->stack->current);
+  vm->stack->current = vm->stack->max - 1;
+  ASSERT_TRUE(!enter_initial_frame(vm, 255, 0));
+  ASSERT_EQ_INT(vm->stack->max - 1, vm->stack->current);
+  destroy_vm(vm);
+}
+
+void test_large_local_direct_and_sys_call_rejection_reuses_vm(void) {
+  setup_stack_frame_runtime();
+  ITEM_t *recursive = insert_large_local_recursive("frames.large_recursive");
+  ITEM_t *sys_target = insert_frame_code("frames.large_sys_target",
+      (uint8_t[]){255, 0, 'h'}, 3);
+  ITEM_t *sys = insert_large_stack_caller("frames.large_sys",
+      "frames.large_sys_target", true);
+
+  VALUE_t result = run_frame_item(recursive);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  value_free(&result);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  ASSERT_TRUE(!item_is_in_use(recursive));
+
+  result = run_frame_item(sys);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  value_free(&result);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  ASSERT_TRUE(!item_is_in_use(sys));
+  ASSERT_TRUE(!item_is_in_use(sys_target));
+
+  result = run_frame_item(sys_target);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  value_free(&result);
+  teardown_stack_frame_runtime();
 }
 
 void test_nested_string_frames_release_locals_and_preserve_result(void) {

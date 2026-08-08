@@ -892,6 +892,28 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         // If so, lose 'em.
         BC_FormatHeader iheader;
         if (!runtime_code_header(i, &iheader)) { FREE_STR(itemname); return NULL; }
+        if (arg_count < iheader.params &&
+            VM->stack->current > VM->stack->max -
+                (int32_t)(iheader.params - arg_count)) {
+          set_runtime_bytecode_error(ctx, NULL, 0,
+              "unable to enter call frame: VM stack capacity exhausted");
+          FREE_STR(itemname);
+          return NULL;
+        }
+        uint16_t effective_args = arg_count < iheader.params
+            ? arg_count : iheader.params;
+        int32_t normalized_current = VM->stack->current -
+            (int32_t)(arg_count - effective_args) +
+            (int32_t)(iheader.params - effective_args);
+        if (VM->callstack->current >= VM->callstack->max ||
+            normalized_current < (int32_t)iheader.params - 1 ||
+            normalized_current > VM->stack->max -
+                (int32_t)(iheader.locals - iheader.params)) {
+          set_runtime_bytecode_error(ctx, NULL, 0,
+              "unable to enter call frame: VM capacity exhausted");
+          FREE_STR(itemname);
+          return NULL;
+        }
         while (arg_count > iheader.params) {
           logverbose("Popping unneeded argument.\n");
           report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded extra argument for target item");
@@ -909,7 +931,14 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         // correctly adjusted to account for them at the top of the
         // current stack (they will be at the bottom of the frame for
         // the new item).
-        push_callstack(VM, item, nextop, iheader.params, (uint8_t *)ctx->decoder.frame_start, (uint8_t *)ctx->decoder.frame_end);
+        if (!push_callstack(VM, item, nextop, iheader.params, iheader.locals,
+                            (uint8_t *)ctx->decoder.frame_start,
+                            (uint8_t *)ctx->decoder.frame_end)) {
+          set_runtime_bytecode_error(ctx, NULL, 0,
+              "unable to enter call frame: VM capacity exhausted");
+          FREE_STR(itemname);
+          return NULL;
+        }
         // Invariant at call-entry:
         // - caller VM stack/base/locals/params are captured in callstack.
         // - caller continuation (item + nextop + bytecode bounds) is captured.
@@ -1305,9 +1334,11 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   uint32_t current_code_len = item_bytecode_length(ctx->current_item);
   BC_FormatHeader current_header;
   if (!runtime_code_header(ctx->current_item, &current_header)) goto interpretation_failure;
-  VM->stack->current += current_header.locals - current_header.params;
-  VM->stack->locals = current_header.locals;
-  VM->stack->params = current_header.params;
+  if (!enter_initial_frame(VM, current_header.locals, current_header.params)) {
+    set_runtime_bytecode_error(ctx, NULL, 0,
+        "unable to enter initial frame: VM stack capacity exhausted");
+    goto interpretation_failure;
+  }
   uint8_t *op = (uint8_t *)current_header.instructions;
   runtime_decoder_init(&ctx->decoder, op, (uint8_t *)current_code + current_code_len);
 
@@ -1347,6 +1378,12 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
       current_frame_pinned = true;
       op = prev_frame->nextop;
       runtime_decoder_init(&ctx->decoder, prev_frame->bytecode_start, prev_frame->bytecode_end);
+      if (VM->stack->current >= VM->stack->max) {
+        value_free(&return_value);
+        set_runtime_bytecode_error(ctx, NULL, 0,
+            "unable to return from call: VM stack capacity exhausted");
+        goto interpretation_failure;
+      }
       push_stack(VM->stack, return_value);
       continue;
     }
@@ -1366,9 +1403,6 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
         current_code = item_bytecode(ctx->current_item);
         current_code_len = item_bytecode_length(ctx->current_item);
         if (!runtime_code_header(ctx->current_item, &current_header)) goto interpretation_failure;
-        VM->stack->current += current_header.locals - current_header.params;
-        VM->stack->locals = current_header.locals;
-        VM->stack->params = current_header.params;
         op = (uint8_t *)current_header.instructions;
         runtime_decoder_init(&ctx->decoder, op, (uint8_t *)current_code + current_code_len);
         continue;

@@ -268,6 +268,8 @@ void test_value_string_boundaries_enforce_string_limit(void);
 void test_value_bool_nil_truthiness_helpers(void);
 void test_stack_peek_returns_top_pointer_without_popping(void);
 void test_stack_reset_to_frees_values_at_boundaries(void);
+void test_transactional_frame_entry_rejects_stack_and_callstack_overflow(void);
+void test_large_local_direct_and_sys_call_rejection_reuses_vm(void);
 void test_nested_string_frames_release_locals_and_preserve_result(void);
 void test_deferred_interrupt_unwinds_nested_call_frames(void);
 void test_nested_nil_return_releases_frame_locals(void);
@@ -486,6 +488,10 @@ static const test_case_t core_tests[] = {
      test_stack_peek_returns_top_pointer_without_popping},
     {"test_stack_reset_to_frees_values_at_boundaries",
      test_stack_reset_to_frees_values_at_boundaries},
+    {"test_transactional_frame_entry_rejects_stack_and_callstack_overflow",
+     test_transactional_frame_entry_rejects_stack_and_callstack_overflow},
+    {"test_large_local_direct_and_sys_call_rejection_reuses_vm",
+     test_large_local_direct_and_sys_call_rejection_reuses_vm},
     {"test_nested_string_frames_release_locals_and_preserve_result",
      test_nested_string_frames_release_locals_and_preserve_result},
     {"test_deferred_interrupt_unwinds_nested_call_frames",
