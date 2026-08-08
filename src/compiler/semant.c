@@ -415,14 +415,15 @@ bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out) {
   return true;
 }
 
-void sem_seed_params(SEM_CTX *ctx, const char **params, size_t count) {
-  if (!ctx || !params) return;
+int8_t sem_seed_params(SEM_CTX *ctx, const char **params, size_t count) {
+  if (!ctx || !params) return ERR_NOERROR;
   for (size_t i = 0; i < count; i++) {
     if (!params[i]) continue;
     uint32_t index = sem_resolve_local_index(ctx, params[i]);
-    if (ctx->errnum != ERR_NOERROR) return;
+    if (ctx->errnum != ERR_NOERROR) return ctx->errnum;
     ctx->locals[index].param = true;
   }
+  return ERR_NOERROR;
 }
 
 bool sem_foreach_hidden_name(char *buffer, size_t size, uint32_t depth,

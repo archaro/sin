@@ -49,7 +49,7 @@ void sem_delete_ctx(SEM_CTX *ctx);
 int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic *diag, SEM_CTX *ctx);
 int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx);
 bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out);
-void sem_seed_params(SEM_CTX *ctx, const char **params, size_t count);
+int8_t sem_seed_params(SEM_CTX *ctx, const char **params, size_t count);
 
 /* Construct the compiler-owned locals used by FOREACH lowering. */
 bool sem_foreach_hidden_name(char *buffer, size_t size, uint32_t depth,

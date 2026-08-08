@@ -104,7 +104,17 @@ static int8_t compile_pipeline_run(const ParseInput *input,
     goto done;
   }
 
-  sem_seed_params(ctx.sem_ctx, params, param_count);
+  rc = sem_seed_params(ctx.sem_ctx, params, param_count);
+  if (rc != ERR_NOERROR) {
+    compdiag_reset_detail(pipeline_errdetail);
+    *pipeline_errdetail = compdiag_copy_detail(ctx.sem_ctx->errdetail);
+    if (diag) {
+      compiler_diag_set(diag, rc, DIAG_PHASE_SEMANT,
+                        ctx.sem_ctx->errdetail ? ctx.sem_ctx->errdetail
+                                                : "semant: parameter seeding failed");
+    }
+    goto done;
+  }
 
   rc = sem_check_locals_diag(ctx.ast_root, pipeline_errdetail, diag,
                              ctx.sem_ctx);

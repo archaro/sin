@@ -135,7 +135,7 @@ void test_sem_seed_params_duplicate_name_only_marks_target_symbol(void) {
   ASSERT_TRUE(errdetail == NULL);
 
   const char *params[] = {"a", "a"};
-  sem_seed_params(ctx, params, 2);
+  ASSERT_EQ_INT(ERR_NOERROR, sem_seed_params(ctx, params, 2));
 
   uint8_t idx = 255;
   ASSERT_TRUE(sem_get_local_index(ctx, "a", &idx));

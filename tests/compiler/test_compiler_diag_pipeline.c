@@ -584,6 +584,34 @@ static void test_compiler_pipeline_failure_cleanup(void) {
   ASSERT_TRUE(diag_saw_success);
 }
 
+static void test_compiler_pipeline_parameter_seeding_oom(void) {
+  const char *source = "1;";
+  const char *params[] = {"seed"};
+  bool saw_seeding_oom = false;
+
+  for (long fail_at = 0; fail_at < 256; fail_at++) {
+    OUTPUT_t *out = NULL;
+    char *errdetail = NULL;
+    alloc_test_fail_after(fail_at);
+    int8_t rc = compile_source_to_bytecode_with_params(
+        source, strlen(source), params, 1, &out, &errdetail);
+    alloc_test_fail_after(-1);
+
+    if (rc == ERR_COMP_UNKNOWN && errdetail &&
+        strstr(errdetail, "semant: out of memory growing local table") != NULL) {
+      saw_seeding_oom = true;
+      ASSERT_TRUE(out == NULL);
+      compdiag_reset_detail(&errdetail);
+      break;
+    }
+
+    if (out) free_pipeline_output(out);
+    compdiag_reset_detail(&errdetail);
+  }
+
+  ASSERT_TRUE(saw_seeding_oom);
+}
+
 void test_compiler_diag_pipeline(void){
   test_shared_argv_capture_stdin_eof();
   test_compiler_pipeline_legacy_diag_success_parity();
@@ -591,6 +619,7 @@ void test_compiler_diag_pipeline(void){
   test_compiler_pipeline_parameter_seeding();
   test_compiler_pipeline_invalid_inputs_clear_output();
   test_compiler_pipeline_failure_cleanup();
+  test_compiler_pipeline_parameter_seeding_oom();
   test_compiler_diag_repeated_set_reset_cycles();
   test_compiler_diag_rejects_256_locals();
   test_scomp_cli_malformed_diagnostic_shape();
