@@ -117,6 +117,7 @@ AS_NODE *as_new_node(ENUM_NODE nodetype, void *lhs, void *rhs) {
   AS_NODE *newnode = alloc_malloc(sizeof *newnode);
   if (!newnode) return NULL;
   newnode->nodetype = nodetype;
+  newnode->cleanup_next = NULL;
   // Add nodetypes to the switch below.
   switch (nodetype) {
     case N_VALUE:
@@ -196,99 +197,81 @@ void as_delete_if(AS_IF *asif) {
   // Internal helper for deleting an AS_IF node
   // asif: the node to delete
   // WARNING: the pointer passed to this function is freed!
-  if (!asif) return;
-  if (asif->condition) {
+  while (asif) {
+    AS_IF *next = asif->elsif;
     as_delete(asif->condition);
-  }
-  if (asif->then) {
     as_delete(asif->then);
+    free(asif);
+    asif = next;
   }
-  if (asif->elsif) {
-    as_delete_if(asif->elsif);
-  }
-  free(asif);
 }
 
 void as_delete(AS_NODE *root) {
-  // Deletes the abstract syntax tree.  Recursive.
+  // Deletes the abstract syntax tree iteratively to avoid native-stack use.
   // root: The root of the tree
   // WARNING: the pointer passed to this function is freed!
 
-  if (!root) return; // Nothing to do!
+  while (root) {
+    AS_NODE *node = root;
+    root = root->cleanup_next;
+#define PUSH_NODE(ptr) do { \
+  AS_NODE *child = (ptr); \
+  if (child) { child->cleanup_next = root; root = child; } \
+} while (0)
+    switch (node->nodetype) {
+      case N_VALUE: { AS_VALUE *val = (AS_VALUE *)node->lhs; as_delete_value_payload(val); free(val); break; }
+      case N_IFSTMT: { AS_IF *branch = (AS_IF *)node->lhs; if (branch) { PUSH_NODE(branch->condition); PUSH_NODE(branch->then); AS_IF *next = branch->elsif; free(branch); while (next) { AS_IF *tail = next->elsif; PUSH_NODE(next->condition); PUSH_NODE(next->then); free(next); next = tail; } } break; }
+      case N_STMTLIST: { AS_STMTLIST *list = (AS_STMTLIST *)node->lhs; if (list) { for (uint32_t i = 0; i < list->count; ++i) PUSH_NODE(list->stmts[i]); free(list->stmts); free(list); } break; }
+      case N_ADD: case N_SUB: case N_MUL: case N_DIV: case N_MOD: case N_INC: case N_DEC:
+      case N_EQUAL: case N_NOTEQ: case N_OR: case N_AND: case N_LT: case N_LTEQ: case N_GT: case N_GTEQ:
+      case N_DEREF: case N_ITEM: case N_RELITEM: case N_ITEMREF: case N_LIST: case N_LISTELEM: case N_NOT:
+      case N_LIBCALL: case N_ARGLIST: case N_CODE: case N_CALL: case N_ASSITEM: case N_ASSLOCAL:
+      case N_EXPRSTMT: case N_RETURN: case N_STMT: case N_WHILESTMT: case N_DOWHILESTMT: case N_BREAK:
+      case N_CONTINUE: case N_FOREACH: case N_FOREACHSPEC: PUSH_NODE(node->lhs); PUSH_NODE(node->rhs); break;
+      default: logerr("Calling as_delete() with invalid node type %d\n", node->nodetype); break;
+    }
+    free(node);
+#undef PUSH_NODE
+  }
+}
 
-  switch (root->nodetype) {
-    case N_VALUE: {
-      AS_VALUE *val = (AS_VALUE*)root->lhs;
-      as_delete_value_payload(val);
-      free(root->lhs);
-      // rhs is always null for this nodetype
-      break;
-    }
-    case N_IFSTMT: {
-      as_delete_if((AS_IF*)root->lhs);
-      // rhs is always null for this nodetype
-      break;
-    }
-    case N_STMTLIST: {
-      AS_STMTLIST *stmtlist = (AS_STMTLIST*)root->lhs;
-      for (uint32_t i = 0; i < stmtlist->count; i++) {
-        as_delete(stmtlist->stmts[i]);
+typedef struct { AS_NODE *node; uint32_t depth; } AS_BUDGET_ENTRY;
+AS_BUDGET_RESULT as_check_budget(AS_NODE *root) {
+  if (!root) return AS_BUDGET_OK;
+  size_t capacity = 64, count = 1;
+  AS_BUDGET_ENTRY *stack = malloc(capacity * sizeof(*stack));
+  if (!stack) return AS_BUDGET_ALLOCATION;
+  stack[0] = (AS_BUDGET_ENTRY){root, 1};
+  uint64_t nodes = 0;
+  while (count) {
+    AS_BUDGET_ENTRY entry = stack[--count];
+    if (++nodes > AS_AST_NODE_LIMIT) { free(stack); return AS_BUDGET_NODE_LIMIT; }
+    if (entry.depth > AS_AST_DEPTH_LIMIT) { free(stack); return AS_BUDGET_DEPTH_LIMIT; }
+    AS_NODE *node = entry.node;
+    if (node->nodetype == N_IFSTMT) {
+      AS_IF *branch = (AS_IF *)node->lhs;
+      for (; branch; branch = branch->elsif) {
+        AS_NODE *children[2] = {branch->condition, branch->then};
+        for (int i = 0; i < 2; ++i) if (children[i]) {
+          if (count == capacity) { capacity *= 2; AS_BUDGET_ENTRY *ns = realloc(stack, capacity * sizeof(*ns)); if (!ns) { free(stack); return AS_BUDGET_ALLOCATION; } stack = ns; }
+          stack[count++] = (AS_BUDGET_ENTRY){children[i], entry.depth + 1};
+        }
       }
-      free(stmtlist->stmts);
-      free(stmtlist);
-      break;
-    }
-    case N_ADD:
-    case N_SUB:
-    case N_MUL:
-    case N_DIV:
-    case N_MOD:
-    case N_INC:
-    case N_DEC:
-    case N_EQUAL:
-    case N_NOTEQ:
-    case N_OR:
-    case N_AND:
-    case N_LT:
-    case N_LTEQ:
-    case N_GT:
-    case N_GTEQ:
-    case N_DEREF:
-    case N_ITEM:
-    case N_RELITEM:
-    case N_ITEMREF:
-    case N_LIST:
-    case N_LISTELEM:
-    case N_NOT:
-    case N_LIBCALL:
-    case N_ARGLIST:
-    case N_CODE:
-    case N_CALL:
-    case N_ASSITEM:
-    case N_ASSLOCAL:
-    case N_EXPRSTMT:
-    case N_RETURN:
-    case N_STMT:
-    case N_WHILESTMT:
-    case N_DOWHILESTMT:
-    case N_BREAK:
-    case N_CONTINUE:
-    case N_FOREACH:
-    case N_FOREACHSPEC:
-    {
-      if (root->lhs) {
-        as_delete((AS_NODE*)root->lhs);
+    } else if (node->nodetype == N_STMTLIST) {
+      AS_STMTLIST *list = (AS_STMTLIST *)node->lhs;
+      if (list) for (uint32_t i = 0; i < list->count; ++i) if (list->stmts[i]) {
+        if (count == capacity) { capacity *= 2; AS_BUDGET_ENTRY *ns = realloc(stack, capacity * sizeof(*ns)); if (!ns) { free(stack); return AS_BUDGET_ALLOCATION; } stack = ns; }
+        stack[count++] = (AS_BUDGET_ENTRY){list->stmts[i], entry.depth + 1};
       }
-      if (root->rhs) {
-        as_delete((AS_NODE*)root->rhs);
+    } else if (node->nodetype != N_VALUE) {
+      AS_NODE *children[2] = {(AS_NODE *)node->lhs, (AS_NODE *)node->rhs};
+      for (int i = 0; i < 2; ++i) if (children[i]) {
+        if (count == capacity) { capacity *= 2; AS_BUDGET_ENTRY *ns = realloc(stack, capacity * sizeof(*ns)); if (!ns) { free(stack); return AS_BUDGET_ALLOCATION; } stack = ns; }
+        stack[count++] = (AS_BUDGET_ENTRY){children[i], entry.depth + 1};
       }
-      break;
-    }
-    default: {
-      logerr("Calling as_delete() with invalid node type %d\n", root->nodetype);
     }
   }
-  free(root);
+  free(stack); return AS_BUDGET_OK;
 }
 
 // Keep this in sync with ENUM_VALUE!

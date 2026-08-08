@@ -39,10 +39,16 @@
     bool scanner_fatal_jmp_active;
     bool scanner_failed;
     void *scanner_handle;
+    uint64_t ast_node_count;
+    uint64_t ast_node_limit;
   } SCANNER_STATE_t;
 
   int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail);
   int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, SCANNER_STATE_t *out_state);
+  int8_t parse_source_diag_with_node_limit(const ParseInput *input, AS_NODE **absyn,
+                                           char **errdetail,
+                                           SCANNER_STATE_t *out_state,
+                                           size_t ast_node_limit);
   int8_t parse_source_compiler_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, CompilerDiagnostic *diag, SCANNER_STATE_t *out_state);
 }
 
@@ -92,7 +98,21 @@ static void parser_set_failure(SCANNER_STATE_t *state, const char *detail) {
   }
 }
 
+static bool parser_take_ast_node(SCANNER_STATE_t *state) {
+  if (!state) return false;
+  if (state->ast_node_count >= state->ast_node_limit) {
+    parser_set_failure(state, "AST node budget exceeded");
+    return false;
+  }
+  state->ast_node_count++;
+  return true;
+}
+
 static AS_NODE *parser_new_value(SCANNER_STATE_t *state, ENUM_VALUE type, char *text) {
+  if (!parser_take_ast_node(state)) {
+    free(text);
+    return NULL;
+  }
   AS_NODE *node = as_new_valnode(type, text);
   if (!node) parser_set_failure(state, NULL);
   return node;
@@ -120,7 +140,15 @@ static AS_NODE *parser_new_integer(SCANNER_STATE_t *state, char *text) {
                        "parser: integer literal out of range (expected 0..9223372036854775807)");
     return NULL;
   }
+  if (!parser_take_ast_node(state)) return NULL;
   AS_NODE *node = as_new_intnode((int64_t)value);
+  if (!node) parser_set_failure(state, NULL);
+  return node;
+}
+
+static AS_NODE *parser_new_stmtlist(SCANNER_STATE_t *state) {
+  if (!parser_take_ast_node(state)) return NULL;
+  AS_NODE *node = as_new_stmtlist_node();
   if (!node) parser_set_failure(state, NULL);
   return node;
 }
@@ -132,6 +160,11 @@ static AS_NODE *parser_new_node(SCANNER_STATE_t *state, ENUM_NODE type,
     as_delete(lhs);
     as_delete(rhs);
     parser_set_failure(state, NULL);
+    return NULL;
+  }
+  if (!parser_take_ast_node(state)) {
+    as_delete(lhs);
+    as_delete(rhs);
     return NULL;
   }
   AS_NODE *node = as_new_node(type, lhs, rhs);
@@ -169,6 +202,12 @@ static AS_NODE *parser_new_if_node(SCANNER_STATE_t *state, AS_NODE *condition,
     parser_set_failure(state, NULL);
     return NULL;
   }
+  if (!parser_take_ast_node(state)) {
+    as_delete(condition);
+    as_delete(then);
+    as_delete_if(elsif);
+    return NULL;
+  }
   AS_IF *if_data = parser_new_if(state, condition, then, elsif);
   if (!if_data) return NULL;
   AS_NODE *node = as_new_node(N_IFSTMT, if_data, NULL);
@@ -194,6 +233,10 @@ static AS_NODE *parser_new_unary_minus(AS_NODE *operand, SCANNER_STATE_t *state)
     }
   }
 
+  if (!parser_take_ast_node(state)) {
+    as_delete(operand);
+    return NULL;
+  }
   AS_NODE *zero = as_new_intnode(0);
   if (!zero) {
     as_delete(operand);
@@ -278,7 +321,10 @@ void yyerror(YYLTYPE *locp, yyscan_t scanner, SCANNER_STATE_t *state, char const
   }
 }
 
-int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, SCANNER_STATE_t *out_state) {
+int8_t parse_source_diag_with_node_limit(const ParseInput *input,
+                                         AS_NODE **absyn, char **errdetail,
+                                         SCANNER_STATE_t *out_state,
+                                         size_t ast_node_limit) {
   // Compile the given string.
   // Returns 0 if successful or > 0 (error number) if not.
   // source holds the source input string
@@ -318,6 +364,10 @@ int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdet
   scanner_state->column = 1;
   scanner_state->span = 1;
   scanner_state->source_name = input->source_name;
+  scanner_state->ast_node_limit =
+      ast_node_limit > 0 && ast_node_limit < AS_AST_NODE_LIMIT
+          ? (uint64_t)ast_node_limit
+          : AS_AST_NODE_LIMIT;
 
   volatile int parse_result = 1;
   int setup_failed = setjmp(scanner_state->scanner_fatal_jmp);
@@ -367,6 +417,12 @@ int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdet
   else free(scanner_state->offending_token);
   free(scanner_state);
   return result;
+}
+
+int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn,
+                         char **errdetail, SCANNER_STATE_t *out_state) {
+  return parse_source_diag_with_node_limit(input, absyn, errdetail, out_state,
+                                           0);
 }
 
 int8_t parse_source_compiler_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, CompilerDiagnostic *diag, SCANNER_STATE_t *out_state) {
@@ -436,7 +492,7 @@ input:  stmtlist { state->absyn = $1; }
         ;
 
 stmtlist: %empty {
-            $$ = as_new_stmtlist_node();
+            $$ = parser_new_stmtlist(state);
             if (!$$) { parser_set_failure(state, NULL); YYERROR; }
           }
         | stmtlist stmtsemi {

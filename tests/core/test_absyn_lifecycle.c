@@ -21,6 +21,30 @@ void test_absyn_nested_binary_expressions(void) {
   as_delete(root);
 }
 
+void test_absyn_budget_limits_and_iterative_cleanup(void) {
+  AS_NODE *root = t_int(1);
+  for (uint32_t i = 0; i + 1 < AS_AST_DEPTH_LIMIT; ++i) root = t_node(N_ADD, root, t_int(1));
+  ASSERT_EQ_INT(AS_BUDGET_OK, as_check_budget(root));
+  root = t_node(N_ADD, root, t_int(1));
+  ASSERT_EQ_INT(AS_BUDGET_DEPTH_LIMIT, as_check_budget(root));
+  /* Teardown must not allocate, including for payload strings and arrays. */
+  AS_NODE *strings = as_new_stmtlist_node();
+  ASSERT_NOT_NULL(strings);
+  for (int i = 0; i < 80; ++i) {
+    AS_NODE *value = as_new_valnode(V_STR, strdup("cleanup-owned"));
+    ASSERT_NOT_NULL(value);
+    ASSERT_TRUE(as_stmtlist_append_checked(strings, value));
+  }
+  AS_IF *branch = as_new_if(t_int(1), strings, NULL);
+  ASSERT_NOT_NULL(branch);
+  AS_NODE *if_node = as_new_node(N_IFSTMT, branch, NULL);
+  ASSERT_NOT_NULL(if_node);
+  root = t_node(N_ADD, root, if_node);
+  alloc_test_fail_after(0);
+  as_delete(root);
+  alloc_test_fail_after(-1);
+}
+
 void test_absyn_stmtlist_multiple_statements(void) {
   AS_NODE *stmtlist = as_new_stmtlist_node();
   AS_NODE *stmt1 = t_node(N_EXPRSTMT, t_int(10), NULL);

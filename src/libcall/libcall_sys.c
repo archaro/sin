@@ -779,7 +779,9 @@ uint8_t *lc_sys_compile(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   char tmpname[MAX_ITEM_NAME];
 
   // Compile source -> bytecode
-  int8_t result = compile_source_to_bytecode_diag(val.s, strlen(val.s), &out, &diag);
+  ParseInput compile_input = {val.s, strlen(val.s), "<memory>"};
+  int8_t result = compile_parse_input_to_bytecode_diag_with_node_limit(
+      &compile_input, ctx ? ctx->compiler_ast_node_limit : 0, &out, &diag);
 
   if (result != 0 || !out || !out->bytecode) {
     if (result == 0) {

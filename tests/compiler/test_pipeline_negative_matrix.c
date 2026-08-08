@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "compiler/compiler_pipeline.h"
 #include "error.h"
@@ -146,4 +148,76 @@ void test_pipeline_negative_matrix(void) {
     }
 
   }
+}
+
+void test_pipeline_ast_budget_subprocess(void) {
+  char srcname[] = "/tmp/sin-ast-src-XXXXXX";
+  char outname[] = "/tmp/sin-ast-out-XXXXXX";
+  int sfd = mkstemp(srcname), ofd = mkstemp(outname);
+  ASSERT_TRUE(sfd >= 0 && ofd >= 0);
+  FILE *f = fdopen(sfd, "w"); ASSERT_NOT_NULL(f);
+  for (int i = 0; i < 5000; ++i) fprintf(f, "%s1", i ? "+" : "");
+  fputs(";\n", f); fclose(f); close(ofd);
+  char cmd[512]; snprintf(cmd, sizeof(cmd), "./scomp -q -i %s -o %s > /tmp/sin-ast-log 2>&1", srcname, outname);
+  int status = system(cmd);
+  ASSERT_TRUE(WIFEXITED(status)); ASSERT_TRUE(WEXITSTATUS(status) != 0);
+  FILE *log = fopen("/tmp/sin-ast-log", "r"); ASSERT_NOT_NULL(log);
+  char text[2048] = {0}; size_t got = fread(text, 1, sizeof(text) - 1, log); (void)got; fclose(log);
+  ASSERT_TRUE(strstr(text, "AST traversal depth budget exceeded") != NULL);
+  unlink(srcname); unlink(outname); unlink("/tmp/sin-ast-log");
+
+  char shallow[256];
+  size_t shallow_len = 0;
+  for (int i = 0; i < 40; ++i) {
+    memcpy(shallow + shallow_len, "1;", 2);
+    shallow_len += 2;
+  }
+  shallow[shallow_len] = '\0';
+  OUTPUT_t *out = NULL;
+  char *errdetail = NULL;
+  ParseInput shallow_input = {shallow, shallow_len, "node-budget.sin"};
+  CompilerDiagnostic shallow_diag;
+  compiler_diag_init(&shallow_diag);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX,
+                compile_parse_input_to_bytecode_diag_with_node_limit(
+                    &shallow_input, 32, &out, &shallow_diag));
+  ASSERT_TRUE(out == NULL);
+  ASSERT_NOT_NULL(shallow_diag.message);
+  ASSERT_TRUE(strstr(shallow_diag.message, "AST node budget exceeded") != NULL);
+  compiler_diag_reset(&shallow_diag);
+
+  char shallow_srcname[] = "/tmp/sin-ast-shallow-src-XXXXXX";
+  char shallow_outname[] = "/tmp/sin-ast-shallow-out-XXXXXX";
+  sfd = mkstemp(shallow_srcname);
+  ofd = mkstemp(shallow_outname);
+  ASSERT_TRUE(sfd >= 0 && ofd >= 0);
+  f = fdopen(sfd, "w");
+  ASSERT_NOT_NULL(f);
+  ASSERT_EQ_INT((int)shallow_len, (int)fwrite(shallow, 1, shallow_len, f));
+  fclose(f);
+  close(ofd);
+  ASSERT_EQ_INT(0, setenv("SINISTRA_TEST_AST_NODE_LIMIT", "32", 1));
+  snprintf(cmd, sizeof(cmd),
+           "./scomp -q -i %s -o %s > /tmp/sin-ast-log 2>&1", shallow_srcname,
+           shallow_outname);
+  status = system(cmd);
+  ASSERT_TRUE(WIFEXITED(status));
+  ASSERT_TRUE(WEXITSTATUS(status) != 0);
+  log = fopen("/tmp/sin-ast-log", "r");
+  ASSERT_NOT_NULL(log);
+  memset(text, 0, sizeof(text));
+  got = fread(text, 1, sizeof(text) - 1, log);
+  (void)got;
+  fclose(log);
+  ASSERT_TRUE(strstr(text, "AST node budget exceeded") != NULL);
+  ASSERT_EQ_INT(0, unsetenv("SINISTRA_TEST_AST_NODE_LIMIT"));
+  unlink(shallow_srcname);
+  unlink(shallow_outname);
+  unlink("/tmp/sin-ast-log");
+
+  ASSERT_EQ_INT(ERR_NOERROR,
+                compile_source_to_bytecode("1;", 2, &out, &errdetail));
+  ASSERT_NOT_NULL(out);
+  free(out->bytecode);
+  free(out);
 }

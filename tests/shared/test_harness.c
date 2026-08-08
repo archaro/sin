@@ -75,6 +75,7 @@ static double elapsed_ms_since(clock_t start) {
 
 /* Shared/core component tests. */
 void test_absyn_nested_binary_expressions(void);
+void test_absyn_budget_limits_and_iterative_cleanup(void);
 void test_absyn_stmtlist_multiple_statements(void);
 void test_absyn_if_elsif_else_chain(void);
 void test_absyn_item_deref_chains(void);
@@ -103,6 +104,7 @@ void test_bytecode_verify_local_index_bounds(void);
 void test_bytecode_verify_jump_targets(void);
 void test_bytecode_verify_stack_flow(void);
 void test_parser_input_api(void);
+void test_parser_ast_node_budget_stops_construction_early(void);
 void test_parser_lists_and_itemrefs_ast(void);
 void test_parser_foreach_ast(void);
 void test_parser_scanner_setup_allocation_failures(void);
@@ -332,6 +334,7 @@ void test_pipeline_golden(void);
 void test_pipeline_large_local_lookup_duplicate(void);
 void test_pipeline_source_golden(void);
 void test_pipeline_negative_matrix(void);
+void test_pipeline_ast_budget_subprocess(void);
 void test_parser_examples_obj_golden(void);
 void test_sdiss_fixture_basic(void);
 void test_sdiss_reads_compiler_operand_widths(void);
@@ -374,6 +377,7 @@ void test_runtime_bytecode_safety_is_mandatory(void);
 void test_strict_validation_rejects_null_bytecode(void);
 static const test_case_t core_tests[] = {
     {"test_absyn_nested_binary_expressions", test_absyn_nested_binary_expressions},
+    {"test_absyn_budget_limits_and_iterative_cleanup", test_absyn_budget_limits_and_iterative_cleanup},
     {"test_absyn_stmtlist_multiple_statements", test_absyn_stmtlist_multiple_statements},
     {"test_absyn_if_elsif_else_chain", test_absyn_if_elsif_else_chain},
     {"test_absyn_item_deref_chains", test_absyn_item_deref_chains},
@@ -401,6 +405,7 @@ static const test_case_t core_tests[] = {
     {"test_bytecode_verify_jump_targets", test_bytecode_verify_jump_targets},
     {"test_bytecode_verify_stack_flow", test_bytecode_verify_stack_flow},
     {"test_parser_input_api", test_parser_input_api},
+    {"test_parser_ast_node_budget_stops_construction_early", test_parser_ast_node_budget_stops_construction_early},
     {"test_parser_lists_and_itemrefs_ast", test_parser_lists_and_itemrefs_ast},
     {"test_parser_foreach_ast", test_parser_foreach_ast},
     {"test_parser_scanner_setup_allocation_failures", test_parser_scanner_setup_allocation_failures},
@@ -568,6 +573,7 @@ static const test_case_t compiler_tests[] = {
     {"test_pipeline_large_local_lookup_duplicate", test_pipeline_large_local_lookup_duplicate},
     {"test_pipeline_source_golden", test_pipeline_source_golden},
     {"test_pipeline_negative_matrix", test_pipeline_negative_matrix},
+    {"test_pipeline_ast_budget_subprocess", test_pipeline_ast_budget_subprocess},
     {"test_parser_examples_obj_golden", test_parser_examples_obj_golden},
     {"test_sdiss_fixture_basic", test_sdiss_fixture_basic},
     {"test_sdiss_malformed_fixture_reports_verifier_diagnostic", test_sdiss_malformed_fixture_reports_verifier_diagnostic},

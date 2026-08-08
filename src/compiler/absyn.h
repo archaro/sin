@@ -31,6 +31,8 @@ struct AS_NODE_s {
   ENUM_NODE nodetype;
   void *lhs; // May be AS_NODE or AS_VALUE
   void *rhs; // May be AS_NODE or AS_VALUE
+  /* Reserved for allocation-free destructive traversal by as_delete(). */
+  struct AS_NODE_s *cleanup_next;
 };
 typedef struct AS_NODE_s AS_NODE;
 
@@ -40,6 +42,16 @@ struct AS_STMTLIST_s {
   uint32_t capacity;
 };
 typedef struct AS_STMTLIST_s AS_STMTLIST;
+
+#define AS_AST_NODE_LIMIT UINT32_C(1000000)
+#define AS_AST_DEPTH_LIMIT UINT32_C(4096)
+
+typedef enum {
+  AS_BUDGET_OK = 0,
+  AS_BUDGET_NODE_LIMIT,
+  AS_BUDGET_DEPTH_LIMIT,
+  AS_BUDGET_ALLOCATION
+} AS_BUDGET_RESULT;
 
 // This is vexing but IF is vexing
 struct AS_IF_s {
@@ -70,4 +82,5 @@ AS_NODE *as_new_node(ENUM_NODE nodetype, void *lhs, void *rhs);
 AS_IF *as_new_if(AS_NODE *condition, AS_NODE *then, AS_IF *elsif);
 void as_delete(AS_NODE *root);
 void as_delete_if(AS_IF *asif);
+AS_BUDGET_RESULT as_check_budget(AS_NODE *root);
 void as_walk(AS_NODE *root);

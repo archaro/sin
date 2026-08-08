@@ -271,6 +271,38 @@ void test_parser_foreach_allocation_failures(void) {
   }
 }
 
+void test_parser_ast_node_budget_stops_construction_early(void) {
+  char source[256];
+  size_t used = 0;
+  for (int i = 0; i < 40; ++i) {
+    memcpy(source + used, "1;", 2);
+    used += 2;
+  }
+  source[used] = '\0';
+  ParseInput input = {source, used, "node-budget.src"};
+  AS_NODE *absyn = NULL;
+  char *errdetail = NULL;
+  SCANNER_STATE_t state = {0};
+
+  int8_t rc = parse_source_diag_with_node_limit(&input, &absyn, &errdetail,
+                                                &state, 32);
+
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_TRUE(absyn == NULL);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strcmp(errdetail, "AST node budget exceeded") == 0);
+  ASSERT_EQ_INT(32, state.ast_node_count);
+  ASSERT_EQ_INT(32, state.ast_node_limit);
+  free(errdetail);
+  free(state.offending_token);
+
+  errdetail = NULL;
+  ASSERT_EQ_INT(ERR_NOERROR, parse_source(&input, &absyn, &errdetail));
+  ASSERT_NOT_NULL(absyn);
+  ASSERT_TRUE(errdetail == NULL);
+  as_delete(absyn);
+}
+
 void test_parser_lists_and_itemrefs_ast(void) {
   AS_NODE *root = parse_lists_ok(
       "#[]; #[fred]; #[&fred]; [fred]; "

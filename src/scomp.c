@@ -3,6 +3,7 @@
 // Licensed under the MIT License - see LICENSE file for details.
 
 #include <stdio.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +19,7 @@
 #include "memory.h"
 #include "log.h"
 #include "compiler/emitbc.h"
+#include "compiler/absyn.h"
 
 // Things which need to be known
 CONFIG_t config;
@@ -204,7 +206,19 @@ int main(int argc, char **argv) {
   ParseInput input = {source, source_len,
                       strcmp(opts.input_path, "-") == 0 ? "<stdin>"
                                                         : opts.input_path};
-  result = compile_parse_input_to_bytecode_diag(&input, &out, &diag);
+  size_t ast_node_limit = 0;
+  const char *test_node_limit = getenv("SINISTRA_TEST_AST_NODE_LIMIT");
+  if (test_node_limit && test_node_limit[0]) {
+    char *end = NULL;
+    errno = 0;
+    unsigned long long parsed = strtoull(test_node_limit, &end, 10);
+    if (errno == 0 && end && *end == '\0' && parsed > 0 &&
+        parsed <= AS_AST_NODE_LIMIT) {
+      ast_node_limit = (size_t)parsed;
+    }
+  }
+  result = compile_parse_input_to_bytecode_diag_with_node_limit(
+      &input, ast_node_limit, &out, &diag);
   if (result != ERR_NOERROR) {
     goto compile_error;
   }

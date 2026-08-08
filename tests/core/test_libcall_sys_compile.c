@@ -619,5 +619,41 @@ void test_sys_compile_libcall_runtime(void) {
     assert_only_temp_item_named(collision_name);
   }
 
+  size_t deep_len = 5000u * 2u + 2u;
+  char *deep_source = malloc(deep_len);
+  ASSERT_NOT_NULL(deep_source);
+  size_t pos = 0;
+  for (int i = 0; i < 5000; ++i) {
+    deep_source[pos++] = '1';
+    if (i != 4999) deep_source[pos++] = '+';
+  }
+  deep_source[pos++] = ';'; deep_source[pos] = '\0';
+  push_stack(config.vm->stack, vstr(deep_source));
+  free(deep_source);
+  (void)lc_sys_compile(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  assert_bool(pop_stack(config.vm->stack), 0);
+  ASSERT_EQ_INT(baseline, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  assert_string_item("error.msg", "AST traversal depth budget exceeded");
+  assert_only_temp_item_named(collision_name);
+  assert_compile_success_bool("recovery_value = 123;");
+  assert_int_item("recovery_value", 123);
+
+  char shallow_source[256];
+  size_t shallow_pos = 0;
+  for (int i = 0; i < 40; ++i) {
+    memcpy(shallow_source + shallow_pos, "1;", 2);
+    shallow_pos += 2;
+  }
+  shallow_source[shallow_pos] = '\0';
+  push_stack(config.vm->stack, vstr(shallow_source));
+  RuntimeContext *limited_ctx = test_ctx();
+  limited_ctx->compiler_ast_node_limit = 32;
+  (void)lc_sys_compile(limited_ctx, NULL, itemstore_root(config.itemstore_ctx));
+  assert_bool(pop_stack(config.vm->stack), 0);
+  assert_string_item("error.msg", "AST node budget exceeded");
+  assert_compile_success_bool("node_budget_recovery = 456;");
+  assert_int_item("node_budget_recovery", 456);
+
   teardown_runtime();
 }

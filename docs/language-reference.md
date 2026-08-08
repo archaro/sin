@@ -52,6 +52,7 @@ configured network and CLI limits are documented separately by their options.
 | Source is NUL-free and at most `INT_MAX` bytes | Parser input boundary | Compile diagnostic; no AST |
 | String and code-body payloads at most 65,535 bytes | Lexer/compiler and bytecode encoding | Compiler rejects oversized literals/bodies; runtime string concatenation returns `nil`; libcalls return their documented value |
 | Integer literals `0..INT64_MAX` | Parser | Compile diagnostic |
+| AST at most 1,000,000 nodes and traversal depth 4,096 | Node count during parsing; depth before semantic analysis | Stable `AST node budget exceeded` or `AST traversal depth budget exceeded` diagnostic; rejected trees are cleaned up iteratively without further allocation |
 | Decimal binary64 literals | Float conversion | Correctly rounded IEEE-754 values; underflow/subnormal results and overflow to infinity are accepted |
 | At most 255 distinct locals (including parameters); at most 255 parameter slots | Semantic analysis and bytecode header | Compile diagnostic |
 | Item-call arity at most 65,535 (`u16`); literal item-layer length at most 255 bytes (`u8`) | Lowering/emission and verifier | Compile diagnostic or bytecode rejection |
