@@ -216,6 +216,8 @@ void test_task_introspection_exists_valid_and_invalid_ids(void);
 void test_task_exists_rejects_non_integer(void);
 void test_task_introspection_count_and_exists_with_lifecycle(void);
 void test_task_thisid_in_callback_survives_self_close(void);
+void test_task_callback_frees_aggregate_return_values(void);
+void test_sin_boot_frees_aggregate_return_values(void);
 void test_newgametask_child_callback_uses_own_identity(void);
 void test_libcall_output_formats_values(void);
 void test_str_libcalls_float_returns_invalidargs_nil(void);
@@ -667,6 +669,8 @@ static const test_case_t runtime_tests[] = {
     {"test_task_exists_rejects_non_integer", test_task_exists_rejects_non_integer},
     {"test_task_introspection_count_and_exists_with_lifecycle", test_task_introspection_count_and_exists_with_lifecycle},
     {"test_task_thisid_in_callback_survives_self_close", test_task_thisid_in_callback_survives_self_close},
+    {"test_task_callback_frees_aggregate_return_values", test_task_callback_frees_aggregate_return_values},
+    {"test_sin_boot_frees_aggregate_return_values", test_sin_boot_frees_aggregate_return_values},
     {"test_newgametask_child_callback_uses_own_identity", test_newgametask_child_callback_uses_own_identity},
     {"test_str_libcalls_float_returns_invalidargs_nil", test_str_libcalls_float_returns_invalidargs_nil},
     {"test_str_len_returns_string_byte_length", test_str_len_returns_string_byte_length},

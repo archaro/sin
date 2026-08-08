@@ -481,7 +481,6 @@ static void log_interpreter_return(VALUE_t ret) {
     logverbose("Bytecode interpreter returned: %ld\n", ret.i);
   } else if (ret.type == VALUE_str) {
     logverbose("Bytecode interpreter returned: %s\n", ret.s);
-    free_runtime_string(ret.s);
   } else if (ret.type == VALUE_float) {
     char fbuffer[64];
     if (sin_format_binary64_buf(ret.f, fbuffer, sizeof(fbuffer))) {
@@ -493,9 +492,12 @@ static void log_interpreter_return(VALUE_t ret) {
     logverbose("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
   } else if (ret.type == VALUE_nil) {
     logverbose("Bytecode interpreter returned nil.\n");
+  } else if (ret.type == VALUE_itemref || ret.type == VALUE_list) {
+    logverbose("Bytecode interpreter returned %s.\n", value_type_name(ret.type));
   } else {
     logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
   }
+  value_free(&ret);
 }
 
 static void destroy_boot_runtime(SinStartupState *state, bool destroy_boot_item) {

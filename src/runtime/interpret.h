@@ -11,8 +11,8 @@
 void init_interpreter(RuntimeContext *ctx);
 
 // Executes a code item in the supplied runtime context. The returned VALUE_t is
-// transferred to the caller by value; if it contains a string payload, the
-// caller owns that payload and must free it when finished. interpret() borrows
+// transferred to the caller by value; the caller owns the returned VALUE_t and
+// must call value_free() when finished. interpret() borrows
 // ctx, item, the itemstore, and ctx->vm, but mutates the VM stack/callstack while
 // executing. The top-level return value is popped from the stack before it is
 // returned.

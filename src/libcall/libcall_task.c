@@ -31,7 +31,6 @@ void execute_task_cb(uv_timer_t *req) {
       logverbose("Bytecode interpreter returned: %ld\n", ret.i);
     } else if (ret.type == VALUE_str) {
       logverbose("Bytecode interpreter returned: %s\n", ret.s);
-      value_free(&ret);
     } else if (ret.type == VALUE_float) {
       char fbuffer[64];
       if (sin_format_binary64_buf(ret.f, fbuffer, sizeof(fbuffer))) {
@@ -43,9 +42,13 @@ void execute_task_cb(uv_timer_t *req) {
       logverbose("Bytecode interpreter returned: %s\n", ret.i?"true":"false");
     } else if (ret.type == VALUE_nil) {
       logverbose("Bytecode interpreter returned nil.\n");
+    } else if (ret.type == VALUE_itemref || ret.type == VALUE_list) {
+      logverbose("Bytecode interpreter returned %s.\n",
+                 value_type_name(ret.type));
     } else {
       logerr("Interpreter returned unknown value type: '%c'.\n", ret.type);
     }
+    value_free(&ret);
   } else {
     logerr("Cannot execute %s - not a code item.\n", task->itemname);
   }

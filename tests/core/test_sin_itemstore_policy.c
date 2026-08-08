@@ -185,3 +185,36 @@ void test_sin_itemstore_version_policy(void) {
   ASSERT_EQ_INT(0, unlink(path));
   ASSERT_EQ_INT(0, unlink(object_path));
 }
+
+void test_sin_boot_frees_aggregate_return_values(void) {
+  static const char *sources[] = {
+    "return #[1, &fred];",
+    "return &fred;"
+  };
+  static const char *kinds[] = {"list", "itemref"};
+  for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); ++i) {
+    char source_path[96], object_path[96], itemstore_path[96];
+    ASSERT_EQ_INT(0, test_make_temp_path("sin-boot-source", source_path,
+                                         sizeof(source_path)));
+    ASSERT_EQ_INT(0, test_make_temp_path("sin-boot-object", object_path,
+                                         sizeof(object_path)));
+    ASSERT_EQ_INT(0, test_make_temp_path("sin-boot-items", itemstore_path,
+                                         sizeof(itemstore_path)));
+    write_bytes(source_path, (const uint8_t *)sources[i], strlen(sources[i]));
+    char *compile_argv[] = {"./scomp", source_path, object_path, NULL};
+    TestProcessResult result = {0};
+    ASSERT_EQ_INT(0, test_run_argv_capture(compile_argv, 0, &result));
+    ASSERT_EQ_INT(0, result.exit_code);
+    test_process_result_free(&result);
+    char *run_argv[] = {"./sin", "--loadonly", "--verbose", "--itemstore",
+                        itemstore_path, "--srcroot", "tests/fixtures", "--object",
+                        object_path, NULL};
+    ASSERT_EQ_INT(0, test_run_argv_capture(run_argv, 0, &result));
+    ASSERT_EQ_INT(0, result.exit_code);
+    ASSERT_TRUE(strstr(result.stderr_text, kinds[i]) != NULL);
+    test_process_result_free(&result);
+    ASSERT_EQ_INT(0, unlink(source_path));
+    ASSERT_EQ_INT(0, unlink(object_path));
+    ASSERT_EQ_INT(0, unlink(itemstore_path));
+  }
+}

@@ -326,6 +326,36 @@ void test_task_thisid_in_callback_survives_self_close(void) {
   teardown_libcall_runtime();
 }
 
+void test_task_callback_frees_aggregate_return_values(void) {
+  uv_loop_t loop;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  setup_libcall_runtime();
+  config.loop = &loop;
+  init_tasks();
+  insert_compiled_code(itemstore_root(config.itemstore_ctx), "task.list_return",
+                       "return #[1, &fred];");
+  insert_compiled_code(itemstore_root(config.itemstore_ctx), "task.ref_return",
+                       "return &fred;");
+
+  TASK_t *list_task = make_task("task.list_return", 0);
+  TASK_t *ref_task = make_task("task.ref_return", 0);
+  ASSERT_NOT_NULL(list_task);
+  ASSERT_NOT_NULL(ref_task);
+  list_task->itemstore = config.itemstore_ctx;
+  ref_task->itemstore = config.itemstore_ctx;
+  uint64_t list_id = list_task->id;
+  uint64_t ref_id = ref_task->id;
+  ASSERT_TRUE(start_task_timer(list_task, &loop, execute_task_cb, 0));
+  ASSERT_TRUE(start_task_timer(ref_task, &loop, execute_task_cb, 0));
+  (void)uv_run(&loop, UV_RUN_DEFAULT);
+  ASSERT_TRUE(find_task_by_id(list_id) == NULL);
+  ASSERT_TRUE(find_task_by_id(ref_id) == NULL);
+
+  finalise_tasks(&loop);
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
+  teardown_libcall_runtime();
+}
+
 void test_newgametask_child_callback_uses_own_identity(void) {
   uv_loop_t loop;
   ASSERT_EQ_INT(0, uv_loop_init(&loop));
