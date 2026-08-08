@@ -67,6 +67,22 @@ int test_uv_write(uv_write_t *req, uv_stream_t *h, const uv_buf_t bufs[], unsign
 #include "../../src/net/network.c"
 #undef static
 #undef uv_close
+#undef telnet_init
+#undef telnet_free
+#undef telnet_printf
+#undef telnet_recv
+
+/* Keep this regression linked to the vendored implementation.  The network
+ * tests above replace telnet calls with tolerant stubs, which cannot expose
+ * libtelnet's NULL dereference in telnet_free(). */
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
+#include "../../src/net/libtelnet.c"
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 static uv_stream_t *test_server_with_deps(NetworkRuntimeDeps *deps){static uv_tcp_t listener;static uv_loop_t loop;deps->loop=&loop;deps->listener=&listener;deps->lines=&line;deps->maxconns=config.maxconns;listener.data=deps;return (uv_stream_t *)&listener;}
 static LINE_t *make_line(void){reset_faults();config.maxconns=2;line=calloc(config.maxconns,sizeof(*line));uv_tcp_t*h=calloc(1,sizeof(*h));LINE_t*lp=add_line(h);ASSERT_NOT_NULL(lp);lp->status=LINE_idle;return lp;} static void cleanup_lines(void){for(size_t i=0;i<config.maxconns;i++){LINE_t*lp=&line[i];if(lp->status==LINE_empty)continue;if(lp->output_write_in_flight&&last_write_req&&last_write_req->data==lp)complete_last_write(UV_ECANCELED);if(lp->line_handle&&!lp->close_completed){request_line_disconnect(lp);}if(lp->line_handle&&last_close_cb&&last_close_handle==(uv_handle_t*)lp->line_handle){last_close_cb(last_close_handle);last_close_handle=NULL;last_close_cb=NULL;}destroy_line(lp);}free(line);line=NULL;memset(&config,0,sizeof(config));}
@@ -117,6 +133,16 @@ void test_destroy_line_does_not_release_live_transport(void){
   ASSERT_TRUE(lp->line_handle != NULL);
   ASSERT_TRUE(lp->telnet == telnet);
   ASSERT_TRUE(lp->outbuf == outbuf);
+  client_on_close((uv_handle_t *)lp->line_handle);
+  destroy_line(lp);
+  ASSERT_TRUE(line_is_disconnected(lp));
+  cleanup_lines();
+}
+void test_destroy_line_after_real_telnet_init_failure(void){
+  LINE_t*lp=make_line();
+  fail_malloc_after=0;
+  lp->telnet=telnet_init(NULL,NULL,0,NULL);
+  ASSERT_TRUE(lp->telnet == NULL);
   client_on_close((uv_handle_t *)lp->line_handle);
   destroy_line(lp);
   ASSERT_TRUE(line_is_disconnected(lp));
@@ -199,4 +225,4 @@ void test_input_processor_timer_is_nonblocking_and_sleepable(void) {
   ASSERT_EQ_INT(0, uv_loop_close(&loop));
 }
 
-static const test_case_t tests[]={{"append_input_lines_and_limits",test_append_input_lines_and_limits},{"get_input_cases",test_get_input_cases},{"output_flush_limits_and_callback",test_output_flush_limits_and_callback},{"disconnect_waits_for_pending_output",test_disconnect_waits_for_pending_output},{"line_lifecycle_states_and_reuse",test_line_lifecycle_states_and_reuse},{"remote_disconnect_marks_line_before_close_callback",test_remote_disconnect_marks_line_before_close_callback},{"disconnect_close_write_callback_orders",test_disconnect_close_write_callback_orders},{"destroy_line_does_not_release_live_transport",test_destroy_line_does_not_release_live_transport},{"on_new_connection_rejections_and_close_ownership",test_on_new_connection_rejections_and_close_ownership},{"adversarial_long_stream_without_newline",test_adversarial_long_stream_without_newline},{"input_processor_releases_interpreter_results",test_input_processor_releases_interpreter_results},{"input_processor_timer_is_nonblocking_and_sleepable",test_input_processor_timer_is_nonblocking_and_sleepable}};int main(void){size_t total=sizeof(tests)/sizeof(tests[0]);current_test_total=total;for(size_t i=0;i<total;i++){current_test_index=i+1;current_test_name=tests[i].name;tests[i].fn();}printf("[network] totals: ran=%zu passed=%zu failed=0 skipped=0 status=SUCCESS\n",total,total);return 0;}
+static const test_case_t tests[]={{"append_input_lines_and_limits",test_append_input_lines_and_limits},{"get_input_cases",test_get_input_cases},{"output_flush_limits_and_callback",test_output_flush_limits_and_callback},{"disconnect_waits_for_pending_output",test_disconnect_waits_for_pending_output},{"line_lifecycle_states_and_reuse",test_line_lifecycle_states_and_reuse},{"remote_disconnect_marks_line_before_close_callback",test_remote_disconnect_marks_line_before_close_callback},{"disconnect_close_write_callback_orders",test_disconnect_close_write_callback_orders},{"destroy_line_does_not_release_live_transport",test_destroy_line_does_not_release_live_transport},{"destroy_line_after_real_telnet_init_failure",test_destroy_line_after_real_telnet_init_failure},{"on_new_connection_rejections_and_close_ownership",test_on_new_connection_rejections_and_close_ownership},{"adversarial_long_stream_without_newline",test_adversarial_long_stream_without_newline},{"input_processor_releases_interpreter_results",test_input_processor_releases_interpreter_results},{"input_processor_timer_is_nonblocking_and_sleepable",test_input_processor_timer_is_nonblocking_and_sleepable}};int main(void){size_t total=sizeof(tests)/sizeof(tests[0]);current_test_total=total;for(size_t i=0;i<total;i++){current_test_index=i+1;current_test_name=tests[i].name;tests[i].fn();}printf("[network] totals: ran=%zu passed=%zu failed=0 skipped=0 status=SUCCESS\n",total,total);return 0;}
