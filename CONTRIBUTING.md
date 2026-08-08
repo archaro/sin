@@ -37,11 +37,16 @@ valid. The target also builds the test binaries, because `all` alone omits
 
 Rerun it whenever `CPPFLAGS` or `BASE_CFLAGS` change.
 
-Run `make test` for the standard test harness. It builds the same test binary as `make test-strict` and runs every registered core, compiler, and runtime test; benchmark-style tests still execute and print timings, but performance budget assertions are disabled.
+Run `make test` for the standard test harness. It builds the same test binary as `make test-strict` and runs every registered core, compiler, and runtime test; benchmark-style tests still execute, but performance budget assertions are disabled.
 
 Run `make test-strict` when you also want the benchmark budget checks enforced. This target runs the same registered tests as `make test`, but invokes the harness with `SIN_STRICT_BENCH=1`, causing the runtime benchmark test to fail if the lookup or dispatch timings exceed their strict thresholds.
 
-The harness prints the selected mode and a final summary with per-suite and total test counts, so the output should identify whether strict benchmark checks were enabled regardless of which make target launched it.
+Test targets suppress successful compilation commands, per-test records, and
+normal program chatter. Each runner ends with dynamic ran/passed/failed/skipped
+totals and `status=SUCCESS`; an aggregate target such as `make test` prints one
+combined total. Failures replay the captured build or test diagnostics and end
+with `status=FAILURE`. Set `SIN_BENCH_REPORT=1` to replay explicitly requested
+benchmark measurements before the concise totals.
 
 ### Strict warning builds
 

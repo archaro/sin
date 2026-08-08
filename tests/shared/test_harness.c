@@ -34,6 +34,8 @@ typedef struct {
 
 static const char *current_suite_name = "<startup>";
 static const char *current_test_name = "<startup>";
+static size_t harness_total_expected;
+static size_t harness_total_passed;
 static jmp_buf test_failure_jmp;
 static bool test_failure_jmp_active = false;
 static char test_failure_message[1024];
@@ -850,14 +852,12 @@ static void validate_suite_definitions(const test_suite_definition_t *suites,
 static test_suite_summary_t run_suite(const char *suite_name, const test_case_t *cases, size_t count) {
   test_suite_summary_t summary = {suite_name, 0, 0.0};
   clock_t suite_start = clock();
-  harness_printf("\n[test-harness][%s][START] total=%zu\n", suite_name, count);
-  for (size_t i = 0; i < count; ++i) {
+  volatile size_t case_index = 0;
+  for (; case_index < count; ++case_index) {
+    size_t i = case_index;
     current_suite_name = suite_name;
     current_test_name = cases[i].name;
     clock_t test_start = clock();
-    harness_printf("[test-harness][%s][START] index=%zu/%zu test=%s\n", suite_name, i + 1,
-                   count, cases[i].name);
-
     test_output_capture_t capture;
     capture_start(&capture);
     test_failure_message[0] = '\0';
@@ -876,27 +876,26 @@ static test_suite_summary_t run_suite(const char *suite_name, const test_case_t 
     }
 
     if (failed != 0) {
-      harness_printf("[test-harness][%s][FAIL] index=%zu/%zu test=%s elapsed_ms=%.2f\n",
-                     suite_name, i + 1, count, cases[i].name,
+      harness_printf("[test-harness][FAIL] suite=%s test=%s index=%zu/%zu elapsed_ms=%.2f\n",
+                     suite_name, cases[i].name, i + 1, count,
                      elapsed_ms_since(test_start));
       harness_printf("%s\n", test_failure_message);
       replay_captured_stream("stdout", capture.stdout_file);
       replay_captured_stream("stderr", capture.stderr_file);
       capture_close(&capture);
+      size_t ran = harness_total_passed + 1;
+      harness_printf("[test-harness] totals: ran=%zu passed=%zu failed=1 skipped=%zu status=FAILURE\n",
+                     ran, harness_total_passed, harness_total_expected - ran);
       exit(1);
     }
 
     capture_close(&capture);
-    harness_printf("[test-harness][%s][PASS] index=%zu/%zu test=%s elapsed_ms=%.2f\n",
-                   suite_name, i + 1, count, cases[i].name,
-                   elapsed_ms_since(test_start));
     summary.count++;
+    harness_total_passed++;
   }
   summary.elapsed_ms = elapsed_ms_since(suite_start);
   current_suite_name = "<idle>";
   current_test_name = "<idle>";
-  harness_printf("[test-harness][%s][COMPLETE] executed=%zu expected=%zu status=PASS elapsed_ms=%.2f\n",
-                 suite_name, summary.count, count, summary.elapsed_ms);
   return summary;
 }
 
@@ -917,10 +916,8 @@ int main(void) {
     suites[i] = (test_suite_summary_t){suite_defs[i].name, 0, 0.0};
     total_expected += suite_defs[i].count;
   }
-
-  harness_printf("[test-harness] mode=%s strict_bench=%s suites=%zu expected_tests=%zu\n",
-                 strict_bench ? "strict" : "standard",
-                 strict_bench ? "enabled" : "disabled", suite_count, total_expected);
+  harness_total_expected = total_expected;
+  harness_total_passed = 0;
 
   for (size_t i = 0; i < suite_count; ++i) {
     suites[i] = run_suite(suite_defs[i].name, suite_defs[i].cases, suite_defs[i].count);
@@ -931,15 +928,9 @@ int main(void) {
     total_ran += suites[i].count;
   }
 
-  harness_printf("\n[test-harness] summary: mode=%s strict_bench=%s status=PASS suites=%zu "
-                 "tests=%zu/%zu\n",
+  harness_printf("[test-harness] totals: mode=%s strict_bench=%s ran=%zu passed=%zu failed=0 skipped=0 expected=%zu status=SUCCESS\n",
                  strict_bench ? "strict" : "standard",
-                 strict_bench ? "enabled" : "disabled", suite_count, total_ran,
+                 strict_bench ? "enabled" : "disabled", total_ran, total_ran,
                  total_expected);
-  harness_printf("[test-harness] suite summary:");
-  for (size_t i = 0; i < suite_count; ++i) {
-    harness_printf(" %s=%zu(%.2fms)", suites[i].name, suites[i].count, suites[i].elapsed_ms);
-  }
-  harness_printf("\n");
   return 0;
 }

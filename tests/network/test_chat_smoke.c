@@ -45,6 +45,7 @@ static void stop_server(void);
 static void fail(const char *message) {
   resources.failed = true;
   fprintf(stderr, "[chat-smoke][FAIL] %s\n", message);
+  fprintf(stderr, "[chat-smoke] totals: ran=1 passed=0 failed=1 skipped=0 status=FAILURE\n");
   cleanup_resources();
   exit(EXIT_FAILURE);
 }
@@ -54,6 +55,7 @@ static void fail_errno(const char *message) {
   resources.failed = true;
   fprintf(stderr, "[chat-smoke][FAIL] %s: %s\n", message,
           strerror(saved_errno));
+  fprintf(stderr, "[chat-smoke] totals: ran=1 passed=0 failed=1 skipped=0 status=FAILURE\n");
   cleanup_resources();
   errno = saved_errno;
   exit(EXIT_FAILURE);
@@ -71,10 +73,30 @@ static void make_path(char *out, size_t out_size, const char *dir,
   if (written < 0 || (size_t)written >= out_size) fail("path buffer overflow");
 }
 
+static void replay_subprocess_capture(FILE *capture, const char *label) {
+  if (!capture) return;
+  fflush(capture);
+  rewind(capture);
+  fprintf(stderr, "[chat-smoke][FAIL] captured %s output:\n", label);
+  char buffer[4096];
+  size_t used;
+  while ((used = fread(buffer, 1, sizeof(buffer), capture)) > 0) {
+    (void)fwrite(buffer, 1, used, stderr);
+  }
+}
+
 static void run_checked(char *const argv[], const char *label) {
+  FILE *capture = tmpfile();
+  if (!capture) fail_errno("tmpfile");
   pid_t pid = fork();
-  if (pid < 0) fail_errno("fork");
+  if (pid < 0) {
+    fclose(capture);
+    fail_errno("fork");
+  }
   if (pid == 0) {
+    int fd = fileno(capture);
+    if (dup2(fd, STDOUT_FILENO) < 0 || dup2(fd, STDERR_FILENO) < 0) _exit(126);
+    fclose(capture);
     execv(argv[0], argv);
     _exit(127);
   }
@@ -85,30 +107,50 @@ static void run_checked(char *const argv[], const char *label) {
     kill(pid, SIGKILL);
     while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
     }
+    replay_subprocess_capture(capture, label);
+    fclose(capture);
     errno = saved_errno;
     fail_errno("waitpid");
   }
   if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
     fprintf(stderr, "[chat-smoke][FAIL] %s failed with status %d\n", label,
             status);
+    replay_subprocess_capture(capture, label);
+    fclose(capture);
     fail("subprocess failed");
   }
+  fclose(capture);
 }
 
 static void run_expect_failure(char *const argv[], const char *label) {
+  FILE *capture = tmpfile();
+  if (!capture) fail_errno("tmpfile");
   pid_t pid = fork();
-  if (pid < 0) fail_errno("fork");
+  if (pid < 0) {
+    fclose(capture);
+    fail_errno("fork");
+  }
   if (pid == 0) {
+    int fd = fileno(capture);
+    if (dup2(fd, STDOUT_FILENO) < 0 || dup2(fd, STDERR_FILENO) < 0) _exit(126);
+    fclose(capture);
     execv(argv[0], argv);
     _exit(127);
   }
 
   int status = 0;
-  if (waitpid(pid, &status, 0) < 0) fail_errno("waitpid");
+  if (waitpid(pid, &status, 0) < 0) {
+    replay_subprocess_capture(capture, label);
+    fclose(capture);
+    fail_errno("waitpid");
+  }
   if (!WIFEXITED(status) || WEXITSTATUS(status) == 0) {
     fprintf(stderr, "[chat-smoke][FAIL] %s unexpectedly succeeded\n", label);
+    replay_subprocess_capture(capture, label);
+    fclose(capture);
     fail("expected nonzero subprocess status");
   }
+  fclose(capture);
 }
 
 static void print_child_status(pid_t pid, int status) {
@@ -484,8 +526,6 @@ static void cleanup_resources(void) {
 }
 
 int main(void) {
-  printf("[chat-smoke][RUN] chat example localhost flow\n");
-
   char tmp_template[] = "/tmp/sin-chat-smoke-XXXXXX";
   char *tmp = mkdtemp(tmp_template);
   if (!tmp) fail_errno("mkdtemp");
@@ -669,6 +709,6 @@ int main(void) {
   resources.shutdown_client_fd = -1;
   cleanup_resources();
 
-  printf("[chat-smoke][PASS] chat example localhost flow\n");
+  printf("[chat-smoke] totals: ran=1 passed=1 failed=0 skipped=0 status=SUCCESS\n");
   return EXIT_SUCCESS;
 }

@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
@@ -15,8 +16,8 @@
 #include "test_assert.h"
 #include "runtime_context.h"
 
-CONFIG_t config;
-const char *test_harness_current_suite(void){return "network";} const char *test_harness_current_test(void){return "network";} void test_harness_failf(const char *file,int line_no,const char *fmt,...){fprintf(stderr,"fail %s:%d %s\n",file,line_no,fmt); exit(1);}
+CONFIG_t config; static size_t current_test_index, current_test_total; static const char *current_test_name = "<startup>";
+const char *test_harness_current_suite(void){return "network";} const char *test_harness_current_test(void){return current_test_name;} void test_harness_failf(const char *file,int line_no,const char *fmt,...){va_list ap;fprintf(stderr,"[network][FAIL] test=%s at %s:%d: ",current_test_name,file,line_no);va_start(ap,fmt);vfprintf(stderr,fmt,ap);va_end(ap);fprintf(stderr,"\n[network] totals: ran=%zu passed=%zu failed=1 skipped=%zu status=FAILURE\n",current_test_index,current_test_index?current_test_index-1:0,current_test_total-current_test_index);exit(1);}
 
 typedef void (*test_fn_t)(void);
 typedef struct { const char *name; test_fn_t fn; } test_case_t;
@@ -198,4 +199,4 @@ void test_input_processor_timer_is_nonblocking_and_sleepable(void) {
   ASSERT_EQ_INT(0, uv_loop_close(&loop));
 }
 
-static const test_case_t tests[]={{"append_input_lines_and_limits",test_append_input_lines_and_limits},{"get_input_cases",test_get_input_cases},{"output_flush_limits_and_callback",test_output_flush_limits_and_callback},{"disconnect_waits_for_pending_output",test_disconnect_waits_for_pending_output},{"line_lifecycle_states_and_reuse",test_line_lifecycle_states_and_reuse},{"remote_disconnect_marks_line_before_close_callback",test_remote_disconnect_marks_line_before_close_callback},{"disconnect_close_write_callback_orders",test_disconnect_close_write_callback_orders},{"destroy_line_does_not_release_live_transport",test_destroy_line_does_not_release_live_transport},{"on_new_connection_rejections_and_close_ownership",test_on_new_connection_rejections_and_close_ownership},{"adversarial_long_stream_without_newline",test_adversarial_long_stream_without_newline},{"input_processor_releases_interpreter_results",test_input_processor_releases_interpreter_results},{"input_processor_timer_is_nonblocking_and_sleepable",test_input_processor_timer_is_nonblocking_and_sleepable}};int main(void){for(size_t i=0;i<sizeof(tests)/sizeof(tests[0]);i++){printf("[network][RUN] %s\n",tests[i].name);tests[i].fn();printf("[network][PASS] %s\n",tests[i].name);}return 0;}
+static const test_case_t tests[]={{"append_input_lines_and_limits",test_append_input_lines_and_limits},{"get_input_cases",test_get_input_cases},{"output_flush_limits_and_callback",test_output_flush_limits_and_callback},{"disconnect_waits_for_pending_output",test_disconnect_waits_for_pending_output},{"line_lifecycle_states_and_reuse",test_line_lifecycle_states_and_reuse},{"remote_disconnect_marks_line_before_close_callback",test_remote_disconnect_marks_line_before_close_callback},{"disconnect_close_write_callback_orders",test_disconnect_close_write_callback_orders},{"destroy_line_does_not_release_live_transport",test_destroy_line_does_not_release_live_transport},{"on_new_connection_rejections_and_close_ownership",test_on_new_connection_rejections_and_close_ownership},{"adversarial_long_stream_without_newline",test_adversarial_long_stream_without_newline},{"input_processor_releases_interpreter_results",test_input_processor_releases_interpreter_results},{"input_processor_timer_is_nonblocking_and_sleepable",test_input_processor_timer_is_nonblocking_and_sleepable}};int main(void){size_t total=sizeof(tests)/sizeof(tests[0]);current_test_total=total;for(size_t i=0;i<total;i++){current_test_index=i+1;current_test_name=tests[i].name;tests[i].fn();}printf("[network] totals: ran=%zu passed=%zu failed=0 skipped=0 status=SUCCESS\n",total,total);return 0;}

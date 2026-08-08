@@ -74,6 +74,8 @@ TEST_BINS := $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN)
 TEST_DEPS := $(TEST_BINS:%=%.d)
 TEST_TMP_ARTIFACTS := $(TEST_DIR)/fixtures/sdiss/*.bin
 TEST_CFLAGS = $(filter-out -MMD -MP,$(CFLAGS))
+QUIET_RUNNER := $(TEST_DIR)/shared/quiet_runner.sh
+QUIET_OUTPUT_TEST := $(TEST_DIR)/test_quiet_output.sh
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -187,8 +189,11 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
 
 .PHONY: all lib clean help debug release sanitize compiledb FORCE_BUILD
-.PHONY: test test-network test-chat-smoke test-build-switch test-strict test-benchmark test-release test-warnings test-asan test-lsan
+.PHONY: test test-network test-chat-smoke test-output-contract test-build-switch test-strict test-benchmark test-release test-warnings test-asan test-lsan
+.PHONY: _test _test-harness _test-network _test-chat-smoke _test-output-contract _test-build-switch _test-strict _test-benchmark
+.PHONY: _test-warnings _test-release _test-asan _test-lsan
 .PHONY: fuzz-build fuzz-corpora fuzz-smoke fuzz-smoke-run
+.PHONY: _fuzz-smoke _fuzz-smoke-run
 .PHONY: fuzz-scomp fuzz-sdiss fuzz-sin-object
 .PHONY: seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
 
@@ -235,9 +240,11 @@ help:
 		'  clean            Remove objects, binaries, libraries, tests, fuzz artifacts, and stale generated files' \
 		'' \
 		'Test targets:' \
+		'  Successful test targets print concise totals; failures replay captured diagnostics' \
 		'  test             Build debug artifacts and run network + combined core/compiler/runtime suite' \
 		'  test-network     Build and run network tests only' \
 		'  test-chat-smoke  Run the real chat example through localhost' \
+		'  test-output-contract Verify concise success and diagnostic failure formatting' \
 		'  test-build-switch Verify build variants can be switched without cleaning' \
 		'  test-strict      Run combined core/compiler/runtime suite with benchmark budgets enabled' \
 		'  test-benchmark   Run the opt-in extended benchmark matrix in an optimized build' \
@@ -308,42 +315,89 @@ $(PARSER_DEPENDENT_OBJECTS): $(PARSER_H)
 # Include dependency files
 -include $(DEPS)
 
-test: $(TEST_BIN) test-network test-chat-smoke
-	./$(TEST_BIN)
+test:
+	@$(MAKE) --silent _test
 
-test-network: $(NETWORK_TEST_BIN)
-	./$(NETWORK_TEST_BIN)
+_test:
+	@$(QUIET_RUNNER) aggregate test \
+		"$(MAKE) --silent _test-harness" \
+		"$(MAKE) --silent _test-network" \
+		"$(MAKE) --silent _test-chat-smoke" \
+		"$(MAKE) --silent _test-output-contract"
 
-test-chat-smoke: $(CHAT_SMOKE_BIN) scomp sin
-	./$(CHAT_SMOKE_BIN)
+_test-harness: $(TEST_BIN)
+	@$(QUIET_RUNNER) run test-harness -- ./$(TEST_BIN)
+
+test-network:
+	@$(MAKE) --silent _test-network
+
+_test-network: $(NETWORK_TEST_BIN)
+	@$(QUIET_RUNNER) run network -- ./$(NETWORK_TEST_BIN)
+
+test-chat-smoke:
+	@$(MAKE) --silent _test-chat-smoke
+
+_test-chat-smoke: $(CHAT_SMOKE_BIN) scomp sin
+	@$(QUIET_RUNNER) run chat-smoke -- ./$(CHAT_SMOKE_BIN)
+
+test-output-contract:
+	@$(MAKE) --silent _test-output-contract
+
+_test-output-contract: $(QUIET_RUNNER) $(QUIET_OUTPUT_TEST)
+	@$(QUIET_RUNNER) run quiet-output -- ./$(QUIET_OUTPUT_TEST)
 
 test-build-switch:
-	+$(MAKE) BUILD=sanitize all
-	+$(MAKE) BUILD=debug all
-	+$(MAKE) BUILD=release all
-	+$(MAKE) BUILD=debug all
-	@test -f obj/sanitize-$(notdir $(CC))/runtime/interpret.o
-	@test -f obj/release-$(notdir $(CC))/runtime/interpret.o
-	@test -f obj/debug-$(notdir $(CC))/runtime/interpret.o
+	@$(MAKE) --silent _test-build-switch
 
-test-strict: $(TEST_BIN)
-	SIN_STRICT_BENCH=1 ./$(TEST_BIN)
+_test-build-switch:
+	@$(QUIET_RUNNER) aggregate test-build-switch \
+		"$(QUIET_RUNNER) one build-sanitize -- $(MAKE) --silent BUILD=sanitize all" \
+		"$(QUIET_RUNNER) one build-debug-first -- $(MAKE) --silent BUILD=debug all" \
+		"$(QUIET_RUNNER) one build-release -- $(MAKE) --silent BUILD=release all" \
+		"$(QUIET_RUNNER) one build-debug-second -- $(MAKE) --silent BUILD=debug all" \
+		"$(QUIET_RUNNER) one check-sanitize-interpret -- test -f obj/sanitize-$(notdir $(CC))/runtime/interpret.o" \
+		"$(QUIET_RUNNER) one check-release-interpret -- test -f obj/release-$(notdir $(CC))/runtime/interpret.o" \
+		"$(QUIET_RUNNER) one check-debug-interpret -- test -f obj/debug-$(notdir $(CC))/runtime/interpret.o"
+
+test-strict:
+	@$(MAKE) --silent _test-strict
+
+_test-strict: $(TEST_BIN)
+	@$(QUIET_RUNNER) run test-strict -- env SIN_STRICT_BENCH=1 ./$(TEST_BIN)
 
 test-benchmark:
-	+$(MAKE) BUILD=release $(TEST_BIN)
-	SIN_EXTENDED_BENCH=1 SIN_BENCH_REPORT=1 ./$(TEST_BIN)
+	@$(QUIET_RUNNER) report test-benchmark -- $(MAKE) --silent BUILD=release _test-benchmark
 
-test-warnings: clean
-	+$(MAKE) STRICT_WARNINGS=1 test
+_test-benchmark: $(TEST_BIN)
+	@SIN_EXTENDED_BENCH=1 SIN_BENCH_REPORT=1 ./$(TEST_BIN)
 
-test-release: clean
-	+$(MAKE) BUILD=release STRICT_WARNINGS=1 test
+test-warnings:
+	@$(QUIET_RUNNER) run test-warnings -- $(MAKE) --silent _test-warnings
 
-test-asan: clean
-	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=0" $(MAKE) BUILD=sanitize STRICT_WARNINGS=1 test
+_test-warnings: clean
+	+$(MAKE) --silent STRICT_WARNINGS=1 _test
 
-test-lsan: clean
-	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=1" $(MAKE) BUILD=sanitize STRICT_WARNINGS=1 test
+test-release:
+	@$(QUIET_RUNNER) run test-release -- $(MAKE) --silent _test-release
+
+_test-release: clean
+	+$(MAKE) --silent BUILD=release STRICT_WARNINGS=1 _test
+
+test-asan:
+	@$(QUIET_RUNNER) run test-asan -- env ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=0" \
+		$(MAKE) --silent _test-asan
+
+_test-asan: clean
+	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=0" \
+		$(MAKE) --silent BUILD=sanitize STRICT_WARNINGS=1 _test
+
+test-lsan:
+	@$(QUIET_RUNNER) run test-lsan -- env ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=1" \
+		$(MAKE) --silent _test-lsan
+
+_test-lsan: clean
+	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=1" \
+		$(MAKE) --silent BUILD=sanitize STRICT_WARNINGS=1 _test
 
 $(TEST_BIN): $(TEST_SOURCES) $(PARSER_H) $(LIB) scomp sdiss sin sconv FORCE_BUILD
 	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
@@ -388,11 +442,18 @@ fuzz-corpora: seed-fuzz-sdiss-corpus seed-fuzz-sin-object-corpus
 fuzz-build: clean
 	+$(FUZZ_MAKE) fuzz-corpora $(FUZZ_BINS)
 
-fuzz-smoke: fuzz-build
-	+$(MAKE) fuzz-smoke-run
+fuzz-smoke:
+	@$(QUIET_RUNNER) report fuzz-smoke -- $(MAKE) --silent _fuzz-smoke
+
+_fuzz-smoke: clean
+	+$(FUZZ_MAKE) --silent fuzz-corpora $(FUZZ_BINS)
+	@$(MAKE) --silent _fuzz-smoke-run
 
 # Runs the already-built fuzz harnesses against seeded corpora.
 fuzz-smoke-run:
+	@$(QUIET_RUNNER) report fuzz-smoke-run -- $(MAKE) --silent _fuzz-smoke-run
+
+_fuzz-smoke-run:
 	@set -eu; \
 	for bin in $(FUZZ_BINS); do \
 		[ -x "$$bin" ] || { printf 'Missing %s; run make fuzz-build first.\n' "$$bin" >&2; exit 1; }; \
@@ -405,9 +466,7 @@ fuzz-smoke-run:
 	fi; \
 	mkdir -p "$$work_dir/scomp" "$$work_dir/sdiss" "$$work_dir/sin-object" \
 		"$$artifact_dir/scomp" "$$artifact_dir/sdiss" "$$artifact_dir/sin-object"; \
-	$(FUZZ_BIN) -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) -artifact_prefix="$$artifact_dir/scomp/" "$$work_dir/scomp" $(FUZZ_CORPUS_DIR); \
-	$(FUZZ_SDISS_BIN) -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) -artifact_prefix="$$artifact_dir/sdiss/" "$$work_dir/sdiss" $(FUZZ_SDISS_CORPUS_DIR); \
-	$(FUZZ_SIN_OBJECT_BIN) -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) -artifact_prefix="$$artifact_dir/sin-object/" "$$work_dir/sin-object" $(FUZZ_SIN_OBJECT_CORPUS_DIR)
+	failed=0; total=0; for spec in "scomp $(FUZZ_BIN) $(FUZZ_CORPUS_DIR)" "sdiss $(FUZZ_SDISS_BIN) $(FUZZ_SDISS_CORPUS_DIR)" "sin-object $(FUZZ_SIN_OBJECT_BIN) $(FUZZ_SIN_OBJECT_CORPUS_DIR)"; do set -- $$spec; name=$$1; bin=$$2; corpus=$$3; log="$$work_dir/$$name.log"; total=$$((total+1)); if ASAN_OPTIONS="$${ASAN_OPTIONS:-}:detect_leaks=0" "$$bin" -runs=$(FUZZ_RUNS) -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) -artifact_prefix="$$artifact_dir/$$name/" "$$work_dir/$$name" "$$corpus" >"$$log" 2>&1; then printf '[fuzz:%s] ran=1 passed=1 failed=0 status=SUCCESS\n' "$$name"; else cat "$$log"; printf '[fuzz:%s] ran=1 passed=0 failed=1 status=FAILURE\n' "$$name"; failed=$$((failed+1)); fi; done; if [ $$failed -ne 0 ]; then printf '[fuzz] totals: ran=%s passed=%s failed=%s skipped=0 status=FAILURE\n' "$$total" "$$((total-failed))" "$$failed"; exit 1; fi; printf '[fuzz] totals: ran=%s passed=%s failed=0 skipped=0 status=SUCCESS\n' "$$total" "$$total"
 
 fuzz-scomp: clean
 	+$(FUZZ_MAKE) $(FUZZ_BIN)
