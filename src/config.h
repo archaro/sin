@@ -30,6 +30,6 @@ typedef struct {
   size_t lastconn;      // Last connection processed by net.input
   bool safe_shutdown;   // Determines how to shut down.
   bool shutdown_requested; // True after sys.shutdown or sys.abort stops loop.
-  bool strict_validation; // Verify bytecode at runtime before execution.
+  bool strict_validation; // Verify bytecode while loading itemstores.
   bool strict_runtime_contracts; // Report runtime contract violations.
 } CONFIG_t;

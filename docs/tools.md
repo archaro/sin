@@ -113,7 +113,7 @@ Options:
 | `-o <file>`, `--object <file>` | Read the compiled bootstrap object from `<file>`. This option is required. |
 | `-p <port>`, `--port <port>` | Listen for network connections on `<port>`. The option requires an argument in both forms; `--port=<port>` is also accepted. The value must be decimal digits only and fit `0` through `65535`; signs, empty values, junk, overflow, and out-of-range values are rejected. Port `0` is accepted and asks the kernel to choose an ephemeral port. The default is the build-time listener port from `src/config.h`. |
 | `-s <dir>`, `--srcroot <dir>` | Use `<dir>` as the source root for saved source files. If omitted, `srcroot` in the current directory is used and created when missing. If supplied, the directory must already exist and be writable. |
-| `--strict-validation` | Verify bytecode before runtime execution and while loading itemstores. |
+| `--strict-validation` | Apply bytecode verification while loading itemstores; executable bytecode safety verification before runtime execution is always enabled. |
 | `--strict-runtime-contracts` | Report runtime argument contract mismatches that normal live-update operation intentionally tolerates, such as discarded item-call arguments while callers and callees are being updated. Stack effects and return values stay the same, but the extra checks add runtime overhead. |
 | `-q`, `--quiet` | Suppress progress/status messages. |
 | `-v`, `--verbose` | Print verbose progress and diagnostic trace messages. |

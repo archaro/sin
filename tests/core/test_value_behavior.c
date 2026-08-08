@@ -1443,7 +1443,7 @@ void test_strict_runtime_contracts_uses_context_itemroot(void) {
   memset(&config, 0, sizeof(config));
 }
 
-void test_strict_validation_runtime_opt_in(void) {
+void test_runtime_bytecode_safety_is_mandatory(void) {
   setup_runtime();
   uint8_t code[] = {0, 0, 'e', 1, 'h'};
   uint8_t *bytecode = malloc(sizeof(code));
@@ -1454,10 +1454,13 @@ void test_strict_validation_runtime_opt_in(void) {
 
   config.strict_validation = false;
   VALUE_t result = run_interpret(item);
-  (void)result;
+  ASSERT_EQ_INT(VALUE_nil, result.type);
   ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
-  ASSERT_EQ_INT(VALUE_nil, item_value(err)->type);
+  ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, item_value(err)->i);
+  ITEM_t *msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_TRUE(strstr(item_value(msg)->s, "local index") != NULL);
 
   teardown_runtime();
   setup_runtime();
@@ -1480,7 +1483,7 @@ void test_strict_validation_runtime_opt_in(void) {
   err = find_item(itemstore_root(config.itemstore_ctx), "error");
   ASSERT_NOT_NULL(err);
   ASSERT_EQ_INT(ERR_RUNTIME_BYTECODE, item_value(err)->i);
-  ITEM_t *msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
+  msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
   ASSERT_NOT_NULL(msg);
   ASSERT_EQ_INT(VALUE_str, item_value(msg)->type);
   ASSERT_TRUE(strstr(item_value(msg)->s, "test.strict_invalid_local") != NULL);

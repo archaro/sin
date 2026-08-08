@@ -110,8 +110,8 @@ typedef struct {
 } BC_VerifyError;
 
 /* Verification behavior after a caller has chosen to invoke the verifier.
- * Executable-level policy, such as sin's --strict-validation gate, remains
- * the caller's responsibility. */
+ * Runtime execution uses all memory-safety checks regardless of policy flags;
+ * callers may choose narrower profiles for non-executable inspection paths. */
 typedef struct {
   bool validate_local_indices;
   bool validate_control_flow;

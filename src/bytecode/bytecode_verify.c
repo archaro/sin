@@ -61,9 +61,10 @@ BC_VerifyOptions bc_verify_strict_options(void) {
 
 BC_VerifyOptions bc_verify_runtime_options(void) {
   return (BC_VerifyOptions){
-      .validate_local_indices = false,
-      .validate_control_flow = false,
-      .validate_stack_effects = false,
+      /* Executable bytecode must always satisfy memory-safety invariants. */
+      .validate_local_indices = true,
+      .validate_control_flow = true,
+      .validate_stack_effects = true,
   };
 }
 

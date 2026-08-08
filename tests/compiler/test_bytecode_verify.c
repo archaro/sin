@@ -30,9 +30,9 @@ void test_bytecode_verify_policy_profiles(void) {
   ASSERT_TRUE(strict.validate_stack_effects);
 
   BC_VerifyOptions runtime = bc_verify_runtime_options();
-  ASSERT_TRUE(!runtime.validate_local_indices);
-  ASSERT_TRUE(!runtime.validate_control_flow);
-  ASSERT_TRUE(!runtime.validate_stack_effects);
+  ASSERT_TRUE(runtime.validate_local_indices);
+  ASSERT_TRUE(runtime.validate_control_flow);
+  ASSERT_TRUE(runtime.validate_stack_effects);
 
   BC_VerifyOptions disassembly = bc_verify_disassembly_options();
   ASSERT_TRUE(disassembly.validate_local_indices);
@@ -50,7 +50,7 @@ void test_bytecode_verify_policy_profiles(void) {
   ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
   result = bc_verify_bytecode(invalid_jump, sizeof(invalid_jump),
                               "runtime jump", &runtime);
-  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
   result = bc_verify_bytecode(invalid_jump, sizeof(invalid_jump),
                               "disassembly jump", &disassembly);
   ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
@@ -61,7 +61,7 @@ void test_bytecode_verify_policy_profiles(void) {
   ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
   result = bc_verify_bytecode(underflow, sizeof(underflow),
                               "runtime stack", &runtime);
-  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
   result = bc_verify_bytecode(underflow, sizeof(underflow),
                               "disassembly stack", &disassembly);
   ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
@@ -72,7 +72,7 @@ void test_bytecode_verify_policy_profiles(void) {
   ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
   result = bc_verify_bytecode(invalid_local, sizeof(invalid_local),
                               "runtime local", &runtime);
-  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
   result = bc_verify_bytecode(invalid_local, sizeof(invalid_local),
                               "disassembly local", &disassembly);
   ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);

@@ -594,6 +594,11 @@ void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void) {
   static const uint8_t truncated_operand[] = {0, 0, 'e'};
   static const uint8_t missing_halt[] = {0, 0, 'b', 1};
   static const uint8_t invalid_opcode[] = {0, 0, 0x7f, 'h'};
+  static const uint8_t stack_underflow[] = {0, 0, 'a', 'h'};
+  static const uint8_t invalid_local[] = {0, 0, 'e', 1, 'h'};
+  static const uint8_t jump_into_operand[] = {
+    0, 0, 'l', 3, 0, 'a', 'b', 'c', 'j', 0xFD, 0xFF, 'h'
+  };
   struct {
     const char *name;
     const uint8_t *bytes;
@@ -608,6 +613,12 @@ void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void) {
      "final physical instruction must be HALT"},
     {"invalid_opcode", invalid_opcode, sizeof(invalid_opcode),
      "opcode 0x7F (.): invalid opcode; recompile from Sinistra source"},
+    {"stack_underflow", stack_underflow, sizeof(stack_underflow),
+     "stack underflow"},
+    {"invalid_local", invalid_local, sizeof(invalid_local),
+     "local index"},
+    {"jump_into_operand", jump_into_operand, sizeof(jump_into_operand),
+     "not a top-level instruction boundary"},
     {"null_bytecode", NULL, 0, "null bytecode pointer"},
   };
 

@@ -239,7 +239,8 @@ void test_top_level_string_frame_cleanup_and_vm_reuse(void) {
 
 void test_deferred_interrupt_unwinds_nested_call_frames(void) {
   setup_stack_frame_runtime();
-  uint8_t callee_code[] = {0, 0, 'a', 'h'};
+  /* Seed operands so the intercepted ADD is verifier-valid. */
+  uint8_t callee_code[] = {0, 0, 'b', 1, 'b', 1, 'a', 'h'};
   ITEM_t *callee = insert_frame_code("frames.interrupt_callee", callee_code,
                                      sizeof(callee_code));
   ITEM_t *caller = insert_runner("frames.interrupt_caller",

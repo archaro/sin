@@ -244,7 +244,7 @@ integration, and an opt-in performance guard.
   - `test_strict_runtime_contracts_reports_invalid_item_name_arguments`
   - `test_strict_runtime_contracts_reports_missing_item_arguments`
   - `test_strict_runtime_contracts_uses_context_itemroot`
-  - `test_strict_validation_runtime_opt_in`
+  - `test_runtime_bytecode_safety_is_mandatory`
   - `test_strict_validation_rejects_null_bytecode`
 - **Interpreter semantics golden contracts**
   - `tests/interpreter/test_interpret_semantics_golden.c`

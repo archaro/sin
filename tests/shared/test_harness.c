@@ -359,7 +359,7 @@ void test_strict_runtime_contracts_reports_too_many_item_arguments(void);
 void test_strict_runtime_contracts_reports_invalid_item_name_arguments(void);
 void test_strict_runtime_contracts_reports_missing_item_arguments(void);
 void test_strict_runtime_contracts_uses_context_itemroot(void);
-void test_strict_validation_runtime_opt_in(void);
+void test_runtime_bytecode_safety_is_mandatory(void);
 void test_strict_validation_rejects_null_bytecode(void);
 static const test_case_t core_tests[] = {
     {"test_absyn_nested_binary_expressions", test_absyn_nested_binary_expressions},
@@ -574,7 +574,7 @@ static const test_case_t runtime_tests[] = {
     {"test_strict_runtime_contracts_reports_invalid_item_name_arguments", test_strict_runtime_contracts_reports_invalid_item_name_arguments},
     {"test_strict_runtime_contracts_reports_missing_item_arguments", test_strict_runtime_contracts_reports_missing_item_arguments},
     {"test_strict_runtime_contracts_uses_context_itemroot", test_strict_runtime_contracts_uses_context_itemroot},
-    {"test_strict_validation_runtime_opt_in", test_strict_validation_runtime_opt_in},
+    {"test_runtime_bytecode_safety_is_mandatory", test_runtime_bytecode_safety_is_mandatory},
     {"test_strict_validation_rejects_null_bytecode", test_strict_validation_rejects_null_bytecode},
     {"test_interpret_semantics_golden", test_interpret_semantics_golden},
     {"test_interpret_legacy_and_v1_headers_execute_equivalently", test_interpret_legacy_and_v1_headers_execute_equivalently},
