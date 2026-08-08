@@ -375,7 +375,18 @@ static SinParseResult parse_sin_options(int argc, char **argv,
           return EXIT_FAILURE;
         }
         BC_FormatHeader header;
-        bc_decode_header(new_bytecode, (uint32_t)new_filesize, &header);
+        BC_FormatStatus format_status = bc_decode_header(new_bytecode,
+            (uint32_t)new_filesize, &header);
+        if (format_status != BC_FORMAT_OK && !header.legacy) {
+          const char *detail = "invalid header";
+          if (format_status == BC_FORMAT_TRUNCATED) detail = "truncated header";
+          else if (format_status == BC_FORMAT_UNSUPPORTED_VERSION) {
+            detail = "unsupported bytecode version";
+          }
+          logerr("Unable to load bootstrap object '%s': %s.\n", optarg, detail);
+          free(new_bytecode);
+          return EXIT_FAILURE;
+        }
         if (header.legacy) {
           logerr("Bootstrap object '%s' is unversioned; recompile with scomp.\n",
                  optarg);
@@ -554,12 +565,19 @@ restart_boot:
   }
 
   logverbose("Setting up error handler.\n");
-  log_interpreter_return(interpret(&state->boot_ctx, state->boot_item));
+  VALUE_t boot_return = interpret(&state->boot_ctx, state->boot_item);
+  log_interpreter_return(boot_return);
   if (state->boot_ctx.interrupted) {
     logerr("SIGUSR1 received.  Restarting boot item.\n");
     logerr("Destroying and recreating all stacks.\n");
     destroy_boot_runtime(state, false);
     goto restart_boot;
+  }
+  ITEM_t *error_item = find_item(itemstore_root(state->boot_ctx.itemstore), "error");
+  const VALUE_t *error_value = item_value(error_item);
+  if (error_value && error_value->type == VALUE_int && error_value->i != 0) {
+    logerr("Bootstrap interpreter validation failed.\n");
+    goto boot_failure;
   }
   state->boot_completed = true;
   destroy_boot_runtime(state, true);

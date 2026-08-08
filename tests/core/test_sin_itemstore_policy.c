@@ -110,6 +110,36 @@ void test_sin_itemstore_version_policy(void) {
   char object_path[96];
   ASSERT_EQ_INT(0, test_make_temp_path("sin-policy-object", object_path,
                                        sizeof(object_path)));
+  const uint8_t truncated_header[] = {0x00, 0xff, 'S'};
+  const uint8_t unsupported_version[] = {
+    0x00, 0xff, 'S', 'B', 0x00, 0x02, 0x00, 0x00
+  };
+  const uint8_t invalid_opcode[] = {
+    0x00, 0xff, 'S', 'B', 0x01, 0x00, 0x00, 0x00, 0xff
+  };
+  const struct {
+    const uint8_t *bytes;
+    size_t length;
+    const char *diagnostic;
+  } malformed[] = {
+    {truncated_header, sizeof(truncated_header), "truncated header"},
+    {unsupported_version, sizeof(unsupported_version), "unsupported bytecode version"},
+    {invalid_opcode, sizeof(invalid_opcode), "invalid opcode"}
+  };
+  char *malformed_argv[] = {"./sin", "--loadonly", "--itemstore", path,
+                            "--srcroot", "tests/fixtures", "--object",
+                            object_path, NULL};
+  for (size_t i = 0; i < sizeof(malformed) / sizeof(malformed[0]); i++) {
+    write_bytes(object_path, malformed[i].bytes, malformed[i].length);
+    ASSERT_EQ_INT(0, test_run_argv_capture(malformed_argv, 0, &result));
+    ASSERT_EQ_INT(1, result.exit_code);
+    ASSERT_TRUE(strstr(result.stderr_text, malformed[i].diagnostic) != NULL);
+    test_process_result_free(&result);
+    errno = 0;
+    ASSERT_EQ_INT(-1, access(path, F_OK));
+    ASSERT_EQ_INT(ENOENT, errno);
+  }
+
   size_t legacy_length = 0;
   uint8_t *legacy = load_hex_fixture(
       "tests/fixtures/bytecode-migration/legacy-0.7.1.hex", &legacy_length);
