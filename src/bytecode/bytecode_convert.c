@@ -33,6 +33,8 @@ typedef struct {
   bool alloc_failed;
 } ConvertCtx;
 
+static size_t g_map_offset_probes;
+
 static bool grow(void **p, size_t *cap, size_t n, size_t size) {
   return alloc_grow_array_capacity(p, cap, n, size);
 }
@@ -286,11 +288,28 @@ static bool scan_one(ConvertCtx *c, const uint8_t **pp, bool nested) {
 }
 
 static uint32_t map_offset(const ConvertCtx *c, uint32_t old) {
-  for (size_t i = 0; i < c->pair_count; i++)
-    if (c->pairs[i].old_off == old && c->pairs[i].top)
-      return c->pairs[i].new_off;
+  size_t lo = 0;
+  size_t hi = c->pair_count;
+  while (lo < hi) {
+    size_t mid = lo + (hi - lo) / 2u;
+    g_map_offset_probes++;
+    if (c->pairs[mid].old_off < old) {
+      lo = mid + 1u;
+    } else {
+      hi = mid;
+    }
+  }
+  if (lo < c->pair_count) {
+    g_map_offset_probes++;
+    if (c->pairs[lo].old_off == old && c->pairs[lo].top)
+      return c->pairs[lo].new_off;
+  }
   return UINT32_MAX;
 }
+
+void bc_convert_test_reset_lookup_probes(void) { g_map_offset_probes = 0; }
+
+size_t bc_convert_test_lookup_probes(void) { return g_map_offset_probes; }
 
 BC_ConvertResult bc_convert_latest(const uint8_t *input, uint32_t length) {
   BC_ConvertResult r = {BC_CONVERT_INVALID, NULL, 0};

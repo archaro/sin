@@ -20,6 +20,9 @@ Bytecode migration coverage includes historical fixed-width/nested/embedded
 operands, permanent libcall-pair widening and jump relocation, strict output
 verification, v1 byte-idempotence, malformed-input rejection, and mixed-tree
 atomic publication checks.
+`test_bytecode_convert_jump_lookup_scaling` converts deterministic 10,000,
+20,000, and 40,000-jump chains and bounds relocation probes to guard against
+quadratic offset lookup regressions.
 
 Phase 13 adds the two-run `list-itemref-persist` interpreter golden, three
 itemstore hex seed classes (v1, valid nested-list/reference v2, malformed

@@ -332,6 +332,7 @@ void test_bytecode_convert_v1_idempotent(void);
 void test_bytecode_convert_legacy_token_boundaries(void);
 void test_bytecode_convert_allocation_failures(void);
 void test_embedded_code_conversion_boundaries(void);
+void test_bytecode_convert_jump_lookup_scaling(void);
 void test_pipeline_golden(void);
 void test_pipeline_large_local_lookup_duplicate(void);
 void test_pipeline_source_golden(void);
@@ -573,6 +574,7 @@ static const test_case_t compiler_tests[] = {
     {"test_bytecode_convert_legacy_token_boundaries", test_bytecode_convert_legacy_token_boundaries},
     {"test_bytecode_convert_allocation_failures", test_bytecode_convert_allocation_failures},
     {"test_embedded_code_conversion_boundaries", test_embedded_code_conversion_boundaries},
+    {"test_bytecode_convert_jump_lookup_scaling", test_bytecode_convert_jump_lookup_scaling},
     {"test_pipeline_golden", test_pipeline_golden},
     {"test_pipeline_large_local_lookup_duplicate", test_pipeline_large_local_lookup_duplicate},
     {"test_pipeline_source_golden", test_pipeline_source_golden},

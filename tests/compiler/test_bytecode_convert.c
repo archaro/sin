@@ -175,3 +175,41 @@ void test_embedded_code_conversion_boundaries(void) {
     free(legacy);
   }
 }
+
+static uint8_t *make_jump_chain(size_t jumps, size_t *length) {
+  size_t n = 2u + 2u + jumps * 3u + 1u;
+  uint8_t *bytes = malloc(n);
+  if (!bytes) return NULL;
+  bytes[0] = 0;
+  bytes[1] = 0;
+  bytes[2] = 'b';
+  bytes[3] = 1u;
+  size_t p = 4u;
+  for (size_t i = 0; i < jumps; i++) {
+    bytes[p++] = 'j';
+    bytes[p++] = 2u;
+    bytes[p++] = 0u;
+  }
+  bytes[p++] = 'h';
+  *length = p;
+  return bytes;
+}
+
+void test_bytecode_convert_jump_lookup_scaling(void) {
+  const size_t counts[] = {10000u, 20000u, 40000u};
+  size_t probes[sizeof counts / sizeof counts[0]];
+  for (size_t i = 0; i < sizeof counts / sizeof counts[0]; i++) {
+    size_t length = 0;
+    uint8_t *legacy = make_jump_chain(counts[i], &length);
+    ASSERT_NOT_NULL(legacy);
+    bc_convert_test_reset_lookup_probes();
+    BC_ConvertResult result = bc_convert_latest(legacy, (uint32_t)length);
+    ASSERT_EQ_INT(BC_CONVERT_SUCCESS, result.status);
+    probes[i] = bc_convert_test_lookup_probes();
+    ASSERT_TRUE(probes[i] < counts[i] * 20u);
+    bc_convert_result_free(&result);
+    free(legacy);
+  }
+  ASSERT_TRUE(probes[1] < probes[0] * 3u);
+  ASSERT_TRUE(probes[2] < probes[1] * 3u);
+}

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 typedef enum {
@@ -23,3 +24,7 @@ typedef struct {
  * commit cd9dd1b (Sinistra 0.7.1), independent of the current registry. */
 BC_ConvertResult bc_convert_latest(const uint8_t *input, uint32_t length);
 void bc_convert_result_free(BC_ConvertResult *result);
+
+/* Deterministic relocation-lookup instrumentation used by scaling tests. */
+void bc_convert_test_reset_lookup_probes(void);
+size_t bc_convert_test_lookup_probes(void);
