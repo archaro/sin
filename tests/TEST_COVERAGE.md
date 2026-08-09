@@ -34,10 +34,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
-| core      |   150 | `tests/core/`           |
-| compiler  |    52 | `tests/compiler/`       |
-| runtime   |   103 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**305**|                         |
+| core      |   157 | `tests/core/`           |
+| compiler  |    57 | `tests/compiler/`       |
+| runtime   |   112 | `tests/core/`, `tests/interpreter/` |
+| **Total** |**326**|                         |
 
 ## core
 
@@ -245,30 +245,45 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 ## runtime
 
-The runtime suite contains 90 tests registered in `runtime_tests[]`.
-Twelve tests come
-from `tests/core/test_value_behavior.c` and exercise the decoder, interpreter
-contracts, and mandatory runtime bytecode safety directly. The remaining tests cover
-interpreter golden contracts, libcall registries, per-library call contracts,
-task lifecycle and introspection, networking, string operations, `sys.compile`
-integration, and an opt-in performance guard.
+The runtime suite contains 112 tests registered in `runtime_tests[]`.
+Twenty-three registered tests are defined in
+`tests/core/test_value_behavior.c`: 15 exercise the decoder, interpreter
+contracts, and mandatory runtime bytecode safety directly, while eight cover
+runtime/compiler error-item allocation failures, atomicity, ownership, and
+diagnostic preservation. The remaining tests cover interpreter golden
+contracts, libcall registries, per-library call contracts, task lifecycle and
+introspection, networking, string operations, `sys.compile` integration, and
+an opt-in performance guard.
 
 ### Covered entry points
-- **Runtime decoder, interpreter contracts, and bytecode safety** (12 tests,
+- **Runtime decoder, interpreter contracts, and bytecode safety** (15 tests,
   from `tests/core/test_value_behavior.c`)
   - `test_runtime_decode_requires_frame_bounds`
   - `test_interpreter_truncated_single_byte_operands`
+  - `test_interpreter_truncated_libcall_pair_preserves_vm_frames`
   - `test_assigncodeitem_rejects_malformed_source_block_with_runtime_bytecode_error`
   - `test_assigncodeitem_rejects_invalid_target_name_type_with_runtime_item_error`
   - `test_strict_runtime_contracts_default_preserves_fetch_argument_drops`
+  - `test_value_item_fetch_discards_arguments_and_reports_strict_contract`
   - `test_strict_validation_alone_preserves_fetch_argument_drops`
   - `test_strict_runtime_contracts_reports_too_many_item_arguments`
+  - `test_strict_runtime_contracts_reports_multiple_excess_fetch_arguments`
   - `test_strict_runtime_contracts_reports_invalid_item_name_arguments`
   - `test_strict_runtime_contracts_reports_missing_item_arguments`
   - `test_strict_runtime_contracts_uses_context_itemroot`
   - `test_runtime_bytecode_safety_is_mandatory` (independent of
     `--strict-validation`)
   - `test_runtime_bytecode_safety_rejects_null_bytecode`
+- **Runtime/compiler error-item failure and ownership contracts** (8 tests,
+  from `tests/core/test_value_behavior.c`)
+  - `test_error_item_oom_preserves_existing_diagnostic`
+  - `test_compiler_error_item_oom_preserves_existing_diagnostic`
+  - `test_error_item_oom_without_previous_diagnostic`
+  - `test_compiler_error_item_oom_without_previous_diagnostic`
+  - `test_error_item_oom_normalizes_incomplete_diagnostic`
+  - `test_compiler_error_item_oom_normalizes_incomplete_diagnostic`
+  - `test_clear_error_item_is_allocation_free_and_atomic`
+  - `test_error_item_null_inputs_provenance_and_pins`
 - **Interpreter semantics golden contracts**
   - `tests/interpreter/test_interpret_semantics_golden.c`
     - `test_interpret_semantics_golden` (includes VM numeric semantics such as
@@ -426,6 +441,22 @@ integration, and an opt-in performance guard.
 - **Core stack frames and caller-boundary restoration**
   - `tests/core/test_stack_frames.c` and
     `tests/interpreter/test_interpret_semantics_golden.c`
+    - checked `runtime_frame` entry/call/return boundary used by direct fetch
+      and `sys.fetch`/`sys.call`, including transactional capacity checks and
+      balanced frame pins
+    - `test_runtime_frame_direct_lifecycle_restores_state` covers direct
+      checkpoint, initial entry, missing-argument normalization, pending
+      transfer, result placement, return, and balanced pins/string cleanup
+    - `test_runtime_frame_normalizes_more_than_255_arguments` covers
+      transactional normalization of 600 supplied arguments after placing 900
+      total values on the stack, including 599 discarded excess arguments and
+      owned-string cleanup
+    - `test_runtime_frame_failure_ownership_and_return_capacity` covers
+      failed preparation preservation, pending-transfer unwind, preserved
+      outer pins, and representable return-placement failure
+    - `test_runtime_frame_nested_invocation_preserves_pending_transfer`
+      covers nested save/clear/restore of an outer pending transfer and final
+      balanced unwind
     - invocation caller-boundary restoration on normal,
       verification-failure, pending-interrupt, and interpretation-failure exits
 - **Runtime performance guard (opt-in strict mode)**

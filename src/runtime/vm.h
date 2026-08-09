@@ -38,9 +38,4 @@ VM_t *make_vm(void);
 void destroy_vm(VM_t *vm);
 CALLSTACK_t *make_callstack(void);
 void destroy_callstack(CALLSTACK_t *stack);
-bool push_callstack(VM_t *vm, ITEM_t *item, uint8_t *nextop, uint8_t args,
-                    uint8_t locals, uint8_t *bytecode_start,
-                    uint8_t *bytecode_end);
-FRAME_t *pop_callstack(VM_t *vm);
-bool enter_initial_frame(VM_t *vm, uint8_t locals, uint8_t params);
 int size_callstack(CALLSTACK_t *stack);

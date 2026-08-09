@@ -8,6 +8,7 @@
 #include "interpret.h"
 #include "item.h"
 #include "runtime_value.h"
+#include "runtime_frame.h"
 #include "stack.h"
 #include "test_assert.h"
 #include "value.h"
@@ -208,23 +209,258 @@ void test_stack_reset_to_frees_values_at_boundaries(void) {
 
 void test_transactional_frame_entry_rejects_stack_and_callstack_overflow(void) {
   VM_t *vm = make_vm();
+  RuntimeContext ctx;
+  RuntimeFrameCheckpoint checkpoint;
+  ITEM_t *frame_item;
   ASSERT_NOT_NULL(vm);
+  frame_item = make_root_item("frame");
+  ASSERT_NOT_NULL(frame_item);
+  runtime_context_init(&ctx, vm);
   vm->stack->current = vm->stack->max - 1;
   int32_t stack_before = vm->stack->current;
-  ASSERT_TRUE(!push_callstack(vm, NULL, NULL, 0, 3, NULL, NULL));
+  ASSERT_TRUE(runtime_frame_checkpoint(&ctx, &checkpoint));
+  ASSERT_TRUE(!runtime_frame_prepare_call(&ctx, frame_item, NULL, frame_item,
+                                           0, 3, 0, NULL, NULL, NULL));
   ASSERT_EQ_INT(stack_before, vm->stack->current);
   ASSERT_EQ_INT(-1, vm->callstack->current);
 
   vm->stack->current = -1;
   vm->callstack->current = vm->callstack->max;
-  ASSERT_TRUE(!push_callstack(vm, NULL, NULL, 0, 0, NULL, NULL));
+  ASSERT_TRUE(!runtime_frame_prepare_call(&ctx, frame_item, NULL, frame_item,
+                                           0, 0, 0, NULL, NULL, NULL));
   ASSERT_EQ_INT(vm->callstack->max, vm->callstack->current);
-  ASSERT_TRUE(enter_initial_frame(vm, 255, 0));
+  vm->callstack->current = -1;
+  ctx.current_item = frame_item;
+  ASSERT_TRUE(runtime_frame_enter_initial(&ctx, frame_item, 255, 0));
   ASSERT_EQ_INT(254, vm->stack->current);
   vm->stack->current = vm->stack->max - 1;
-  ASSERT_TRUE(!enter_initial_frame(vm, 255, 0));
+  ASSERT_TRUE(!runtime_frame_enter_initial(&ctx, frame_item, 255, 0));
   ASSERT_EQ_INT(vm->stack->max - 1, vm->stack->current);
+  runtime_frame_unwind(&ctx, &checkpoint);
+  runtime_frame_restore_ownership(&ctx, &checkpoint);
   destroy_vm(vm);
+  destroy_item(frame_item);
+}
+
+void test_runtime_frame_direct_lifecycle_restores_state(void) {
+  setup_stack_frame_runtime();
+  size_t baseline = strbuf_tracked_count_for_tests();
+  ITEM_t *caller = insert_frame_code("frames.api_caller",
+                                     (uint8_t[]){0, 0, 'h'}, 3);
+  ITEM_t *callee = insert_frame_code("frames.api_callee",
+                                     (uint8_t[]){3, 0, 'h'}, 3);
+  RuntimeContext ctx;
+  RuntimeFrameCheckpoint checkpoint;
+  RuntimeFrameReturn returned;
+  ITEM_t *transfer = NULL;
+  size_t discarded = 0u;
+  runtime_context_init(&ctx, config.vm);
+  ctx.current_item = caller;
+  ASSERT_TRUE(runtime_frame_checkpoint(&ctx, &checkpoint));
+  ASSERT_TRUE(runtime_frame_enter_initial(&ctx, caller, 1, 0));
+  ASSERT_TRUE(item_is_in_use(caller));
+  size_t effective = 0u;
+  ASSERT_TRUE(runtime_frame_preflight_call(&ctx, 2, 3, 3, &effective));
+  ASSERT_EQ_INT(2, effective);
+  push_stack(config.vm->stack, VALUE_TRUE);
+  push_stack(config.vm->stack, VALUE_FALSE);
+  ASSERT_TRUE(runtime_frame_prepare_call(
+      &ctx, caller, NULL, callee, 2, 3, 3, NULL, NULL, &discarded));
+  ASSERT_EQ_INT(0, discarded);
+  ASSERT_EQ_INT(3, config.vm->stack->current);
+  ASSERT_EQ_INT(0, config.vm->callstack->current);
+  ASSERT_TRUE(item_is_in_use(callee));
+  ASSERT_TRUE(runtime_frame_take_transfer(&ctx, &transfer));
+  ASSERT_TRUE(transfer == callee);
+  ctx.current_item = transfer;
+  push_stack(config.vm->stack,
+             concat_two_strings((VALUE_t){VALUE_str, {.s = strdup("ret")}},
+                                (VALUE_t){VALUE_str, {.s = strdup("")}}));
+  ASSERT_TRUE(runtime_frame_return(&ctx, &checkpoint, true, &returned));
+  ASSERT_TRUE(!returned.completed);
+  ASSERT_TRUE(ctx.current_item == caller);
+  ASSERT_TRUE(!item_is_in_use(callee));
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, "ret") == 0);
+  value_free(&result);
+  ASSERT_TRUE(runtime_frame_return(&ctx, &checkpoint, false, &returned));
+  ASSERT_TRUE(returned.completed);
+  ASSERT_TRUE(!item_is_in_use(caller));
+  runtime_frame_restore_ownership(&ctx, &checkpoint);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+  teardown_stack_frame_runtime();
+}
+
+void test_runtime_frame_normalizes_more_than_255_arguments(void) {
+  setup_stack_frame_runtime();
+  size_t baseline = strbuf_tracked_count_for_tests();
+  ITEM_t *caller = insert_frame_code("frames.api_many_caller",
+                                     (uint8_t[]){0, 0, 'h'}, 3);
+  ITEM_t *callee = insert_frame_code("frames.api_many_callee",
+                                     (uint8_t[]){1, 0, 'h'}, 3);
+  RuntimeContext ctx;
+  RuntimeFrameCheckpoint checkpoint;
+  RuntimeFrameReturn returned;
+  ITEM_t *transfer = NULL;
+  size_t discarded = 0u;
+  runtime_context_init(&ctx, config.vm);
+  ctx.current_item = caller;
+  ASSERT_TRUE(runtime_frame_checkpoint(&ctx, &checkpoint));
+  ASSERT_TRUE(runtime_frame_enter_initial(&ctx, caller, 0, 0));
+  for (size_t index = 0u; index < 300u; index++) {
+    push_stack(config.vm->stack, VALUE_TRUE);
+  }
+  for (size_t index = 0u; index < 600u; index++) {
+    push_stack(config.vm->stack,
+               concat_two_strings((VALUE_t){VALUE_str, {.s = strdup("x")}},
+                                  (VALUE_t){VALUE_str, {.s = strdup("")}}));
+  }
+  ASSERT_TRUE(runtime_frame_prepare_call(
+      &ctx, caller, NULL, callee, 600u, 255, 1, NULL, NULL, &discarded));
+  ASSERT_EQ_INT(599, discarded);
+  ASSERT_EQ_INT(554, config.vm->stack->current);
+  ASSERT_TRUE(runtime_frame_take_transfer(&ctx, &transfer));
+  ctx.current_item = transfer;
+  ASSERT_TRUE(runtime_frame_return(&ctx, &checkpoint, false, &returned));
+  ASSERT_TRUE(!returned.completed);
+  ASSERT_TRUE(!item_is_in_use(callee));
+  ASSERT_TRUE(runtime_frame_return(&ctx, &checkpoint, false, &returned));
+  ASSERT_TRUE(returned.completed);
+  runtime_frame_restore_ownership(&ctx, &checkpoint);
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+  ASSERT_TRUE(!item_is_in_use(caller));
+  teardown_stack_frame_runtime();
+}
+
+void test_runtime_frame_failure_ownership_and_return_capacity(void) {
+  setup_stack_frame_runtime();
+  size_t baseline = strbuf_tracked_count_for_tests();
+  ITEM_t *caller = insert_frame_code("frames.api_failure_caller",
+                                     (uint8_t[]){0, 0, 'h'}, 3);
+  ITEM_t *outer = insert_frame_code("frames.api_failure_outer",
+                                    (uint8_t[]){0, 0, 'h'}, 3);
+  RuntimeContext ctx;
+  RuntimeFrameCheckpoint checkpoint;
+  RuntimeFrameReturn returned;
+  ITEM_t *transfer = NULL;
+  size_t discarded = 0u;
+  runtime_context_init(&ctx, config.vm);
+  ctx.current_item = caller;
+
+  ASSERT_TRUE(runtime_frame_checkpoint(&ctx, &checkpoint));
+  ASSERT_TRUE(runtime_frame_enter_initial(&ctx, caller, 0, 0));
+  VALUE_t owned = concat_two_strings(
+      (VALUE_t){VALUE_str, {.s = strdup("owned")}},
+      (VALUE_t){VALUE_str, {.s = strdup(" argument")}});
+  push_stack(config.vm->stack, owned);
+  VALUE_t *saved_argument = peek_stack(config.vm->stack);
+  ASSERT_NOT_NULL(saved_argument);
+  config.vm->callstack->current = config.vm->callstack->max;
+  ASSERT_TRUE(!runtime_frame_prepare_call(
+      &ctx, caller, NULL, caller, 1, 1, 1, NULL, NULL, &discarded));
+  ASSERT_TRUE(peek_stack(config.vm->stack) == saved_argument);
+  ASSERT_EQ_INT(0, discarded);
+  ASSERT_EQ_INT(config.vm->callstack->max, config.vm->callstack->current);
+  ASSERT_TRUE(runtime_frame_pending_transfer(&ctx) == NULL);
+  ASSERT_TRUE(item_is_in_use(caller));
+  reset_stack_to(config.vm->stack, -1);
+  config.vm->callstack->current = -1;
+  runtime_frame_unwind(&ctx, &checkpoint);
+  runtime_frame_restore_ownership(&ctx, &checkpoint);
+  ASSERT_TRUE(!item_is_in_use(caller));
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+
+  item_enter_use(outer);
+  runtime_context_init(&ctx, config.vm);
+  ctx.current_item = caller;
+  ASSERT_TRUE(runtime_frame_checkpoint(&ctx, &checkpoint));
+  ASSERT_TRUE(runtime_frame_enter_initial(&ctx, caller, 0, 0));
+  push_stack(config.vm->stack, VALUE_TRUE);
+  ASSERT_TRUE(runtime_frame_prepare_call(
+      &ctx, caller, NULL, caller, 1, 1, 1, NULL, NULL, &discarded));
+  ASSERT_TRUE(runtime_frame_take_transfer(&ctx, &transfer));
+  ctx.current_item = transfer;
+  ASSERT_TRUE(item_is_in_use(caller));
+  runtime_frame_unwind(&ctx, &checkpoint);
+  runtime_frame_restore_ownership(&ctx, &checkpoint);
+  ASSERT_TRUE(!item_is_in_use(caller));
+  ASSERT_TRUE(item_is_in_use(outer));
+  item_leave_use(outer);
+
+  runtime_context_init(&ctx, config.vm);
+  ctx.current_item = caller;
+  ASSERT_TRUE(runtime_frame_checkpoint(&ctx, &checkpoint));
+  ASSERT_TRUE(runtime_frame_enter_initial(&ctx, caller, 0, 0));
+  config.vm->stack->current = config.vm->stack->max;
+  ASSERT_TRUE(runtime_frame_prepare_call(
+      &ctx, caller, NULL, outer, 0, 0, 0, NULL, NULL, &discarded));
+  ASSERT_TRUE(runtime_frame_take_transfer(&ctx, &transfer));
+  ctx.current_item = transfer;
+  ASSERT_TRUE(!runtime_frame_return(&ctx, &checkpoint, false, &returned));
+  ASSERT_TRUE(!item_is_in_use(outer));
+  ASSERT_TRUE(item_is_in_use(caller));
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  runtime_frame_unwind(&ctx, &checkpoint);
+  runtime_frame_restore_ownership(&ctx, &checkpoint);
+  ASSERT_TRUE(!item_is_in_use(caller));
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+  teardown_stack_frame_runtime();
+}
+
+void test_runtime_frame_nested_invocation_preserves_pending_transfer(void) {
+  setup_stack_frame_runtime();
+  ITEM_t *caller = insert_frame_code("frames.api_nested_caller",
+                                     (uint8_t[]){0, 0, 'h'}, 3);
+  ITEM_t *callee = insert_frame_code("frames.api_nested_callee",
+                                     (uint8_t[]){0, 0, 'h'}, 3);
+  ITEM_t *nested_caller = insert_large_stack_caller(
+      "frames.api_nested_runner", "frames.api_nested_fail_target", false);
+  ITEM_t *nested_fail_target = insert_frame_code(
+      "frames.api_nested_fail_target", (uint8_t[]){255, 0, 'h'}, 3);
+  RuntimeContext ctx;
+  RuntimeFrameCheckpoint checkpoint;
+  ITEM_t *transfer = NULL;
+  size_t discarded = 0u;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemstore = config.itemstore_ctx;
+  ctx.current_item = caller;
+  ASSERT_TRUE(runtime_frame_checkpoint(&ctx, &checkpoint));
+  ASSERT_TRUE(runtime_frame_enter_initial(&ctx, caller, 0, 0));
+  ASSERT_TRUE(runtime_frame_prepare_call(
+      &ctx, caller, NULL, callee, 0, 0, 0, NULL, NULL, &discarded));
+  ASSERT_TRUE(runtime_frame_pending_transfer(&ctx) == callee);
+  ASSERT_TRUE(item_is_in_use(caller));
+  ASSERT_TRUE(item_is_in_use(callee));
+
+  VALUE_t nested = interpret(&ctx, nested_caller);
+  ASSERT_EQ_INT(VALUE_nil, nested.type);
+  value_free(&nested);
+  ASSERT_TRUE(runtime_frame_pending_transfer(&ctx) == callee);
+  ASSERT_EQ_INT(0, config.vm->callstack->current);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_TRUE(item_is_in_use(caller));
+  ASSERT_TRUE(item_is_in_use(callee));
+  ASSERT_TRUE(!item_is_in_use(nested_caller));
+  ASSERT_TRUE(!item_is_in_use(nested_fail_target));
+
+  ASSERT_TRUE(runtime_frame_take_transfer(&ctx, &transfer));
+  ctx.current_item = transfer;
+  runtime_frame_unwind(&ctx, &checkpoint);
+  runtime_frame_restore_ownership(&ctx, &checkpoint);
+  ASSERT_TRUE(!item_is_in_use(caller));
+  ASSERT_TRUE(!item_is_in_use(callee));
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  teardown_stack_frame_runtime();
 }
 
 void test_large_local_direct_and_sys_call_rejection_reuses_vm(void) {

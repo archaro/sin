@@ -17,6 +17,7 @@
 #include "libcall_handlers.h"
 #include "log.h"
 #include "runtime_item_ops.h"
+#include "runtime_frame.h"
 #include "stack.h"
 #include "itemref.h"
 #include "list.h"
@@ -510,38 +511,15 @@ static ITEM_t *lc_sys_reference_target(RuntimeContext *ctx, ITEM_t *item,
 
 static bool lc_sys_schedule_code_call(RuntimeContext *ctx, uint8_t *nextop,
                                        ITEM_t *target, size_t supplied) {
-  if (!ctx || !ctx->vm || !ctx->vm->stack || !ctx->vm->callstack || !target ||
-      item_kind(target) != ITEM_code) return false;
+  if (!ctx || !target || item_kind(target) != ITEM_code) return false;
   const uint8_t *bytecode = item_bytecode(target);
   uint32_t bytecode_len = item_bytecode_length(target);
   BC_FormatHeader header;
   if (!bytecode || bc_decode_header(bytecode, bytecode_len, &header) != BC_FORMAT_OK) return false;
-  size_t params = header.params;
-  if (params > UINT8_MAX || params > header.locals ||
-      supplied > UINT8_MAX || ctx->vm->callstack->current >= ctx->vm->callstack->max ||
-      ctx->vm->stack->current < (int32_t)params - 1 ||
-      ctx->vm->stack->current > ctx->vm->stack->max -
-          (int32_t)(header.locals - params)) {
-    return false;
-  }
-  while (supplied > params) {
-    VALUE_t discarded = pop_stack(ctx->vm->stack);
-    value_free(&discarded);
-    lc_sys_report_strict_contract(ctx,
-        "sys.call discarded extra argument for target item");
-    supplied--;
-  }
-  while (supplied < params) {
-    push_stack(ctx->vm->stack, VALUE_NIL);
-    supplied++;
-  }
-  if (!push_callstack(ctx->vm, ctx->current_item, nextop, (uint8_t)params,
-                      header.locals, (uint8_t *)ctx->decoder.frame_start,
-                      (uint8_t *)ctx->decoder.frame_end)) {
-    return false;
-  }
-  ctx->pending_call_item = target;
-  return true;
+  return runtime_frame_prepare_call(
+      ctx, ctx->current_item, nextop, target, supplied, header.locals,
+      header.params, (uint8_t *)ctx->decoder.frame_start,
+      (uint8_t *)ctx->decoder.frame_end, NULL);
 }
 
 uint8_t *lc_sys_itemref(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -622,12 +600,9 @@ uint8_t *lc_sys_call(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     BC_FormatHeader header;
     bool header_ok = bytecode &&
         bc_decode_header(bytecode, item_bytecode_length(target), &header) == BC_FORMAT_OK;
-    size_t params = header_ok ? header.params : 0u;
-    size_t effective = count < params ? count : params;
-    prepared = header_ok && params <= header.locals && effective <= UINT8_MAX &&
-        (int32_t)effective <= ctx->vm->stack->max - ctx->vm->stack->current &&
-        (int32_t)(header.locals - params) <=
-            ctx->vm->stack->max - ctx->vm->stack->current - (int32_t)effective;
+    size_t effective = 0u;
+    prepared = header_ok && runtime_frame_preflight_call(
+        ctx, count, header.locals, header.params, &effective);
     while (prepared && pushed < effective) {
       const VALUE_t *source = sin_list_get(arguments.list, pushed);
       VALUE_t clone = VALUE_NIL;

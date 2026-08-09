@@ -15,6 +15,13 @@ runtime decoder, current item pointer, pending call item pointer, opcode table,
 and interpreter-initialization flag. The bytecode and items referenced by that
 bookkeeping remain owned by the itemstore or by the caller that supplied them.
 
+All multi-step frame changes go through the checked `runtime_frame` boundary.
+It captures the VM checkpoint for an invocation, validates stack/call-stack
+capacity before normalizing arguments or publishing a continuation, and owns
+the execution pin for each frame it enters. Return and unwind operations restore
+the checkpoint and release exactly the pins owned by that invocation, including
+the pending callee transfer on verification failure.
+
 The runtime input item is scheduled by `sin` with a repeating libuv timer at a
 nominal 10ms cadence. Timer eligibility is not a real-time guarantee: other
 callbacks or a long-running input item can delay the next invocation. The input

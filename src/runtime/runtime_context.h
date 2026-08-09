@@ -61,6 +61,8 @@ struct RuntimeContext {
   RuntimeDecoder decoder;
   ITEM_t *current_item;
   ITEM_t *pending_call_item;
+  /* Number of execution pins owned by the active frame invocation. */
+  size_t frame_owned_count;
   // Borrowed caller boundary for the active interpret() invocation. Nested
   // invocations save and restore both fields.
   int invocation_callstack_floor;

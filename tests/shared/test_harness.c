@@ -289,6 +289,10 @@ void test_value_bool_nil_truthiness_helpers(void);
 void test_stack_peek_returns_top_pointer_without_popping(void);
 void test_stack_reset_to_frees_values_at_boundaries(void);
 void test_transactional_frame_entry_rejects_stack_and_callstack_overflow(void);
+void test_runtime_frame_direct_lifecycle_restores_state(void);
+void test_runtime_frame_normalizes_more_than_255_arguments(void);
+void test_runtime_frame_failure_ownership_and_return_capacity(void);
+void test_runtime_frame_nested_invocation_preserves_pending_transfer(void);
 void test_large_local_direct_and_sys_call_rejection_reuses_vm(void);
 void test_nested_string_frames_release_locals_and_preserve_result(void);
 void test_deferred_interrupt_unwinds_nested_call_frames(void);
@@ -390,6 +394,7 @@ void test_strict_runtime_contracts_default_preserves_fetch_argument_drops(void);
 void test_value_item_fetch_discards_arguments_and_reports_strict_contract(void);
 void test_strict_validation_alone_preserves_fetch_argument_drops(void);
 void test_strict_runtime_contracts_reports_too_many_item_arguments(void);
+void test_strict_runtime_contracts_reports_multiple_excess_fetch_arguments(void);
 void test_strict_runtime_contracts_reports_invalid_item_name_arguments(void);
 void test_strict_runtime_contracts_reports_missing_item_arguments(void);
 void test_strict_runtime_contracts_uses_context_itemroot(void);
@@ -543,6 +548,14 @@ static const test_case_t core_tests[] = {
      test_stack_reset_to_frees_values_at_boundaries},
     {"test_transactional_frame_entry_rejects_stack_and_callstack_overflow",
      test_transactional_frame_entry_rejects_stack_and_callstack_overflow},
+    {"test_runtime_frame_direct_lifecycle_restores_state",
+     test_runtime_frame_direct_lifecycle_restores_state},
+    {"test_runtime_frame_normalizes_more_than_255_arguments",
+     test_runtime_frame_normalizes_more_than_255_arguments},
+    {"test_runtime_frame_failure_ownership_and_return_capacity",
+     test_runtime_frame_failure_ownership_and_return_capacity},
+    {"test_runtime_frame_nested_invocation_preserves_pending_transfer",
+     test_runtime_frame_nested_invocation_preserves_pending_transfer},
     {"test_large_local_direct_and_sys_call_rejection_reuses_vm",
      test_large_local_direct_and_sys_call_rejection_reuses_vm},
     {"test_nested_string_frames_release_locals_and_preserve_result",
@@ -640,6 +653,7 @@ static const test_case_t runtime_tests[] = {
     {"test_value_item_fetch_discards_arguments_and_reports_strict_contract", test_value_item_fetch_discards_arguments_and_reports_strict_contract},
     {"test_strict_validation_alone_preserves_fetch_argument_drops", test_strict_validation_alone_preserves_fetch_argument_drops},
     {"test_strict_runtime_contracts_reports_too_many_item_arguments", test_strict_runtime_contracts_reports_too_many_item_arguments},
+    {"test_strict_runtime_contracts_reports_multiple_excess_fetch_arguments", test_strict_runtime_contracts_reports_multiple_excess_fetch_arguments},
     {"test_strict_runtime_contracts_reports_invalid_item_name_arguments", test_strict_runtime_contracts_reports_invalid_item_name_arguments},
     {"test_strict_runtime_contracts_reports_missing_item_arguments", test_strict_runtime_contracts_reports_missing_item_arguments},
     {"test_strict_runtime_contracts_uses_context_itemroot", test_strict_runtime_contracts_uses_context_itemroot},

@@ -1330,12 +1330,15 @@ static void assert_strict_runtime_contract_detail(const char *needle) {
   ASSERT_TRUE(strstr(item_value(msg)->s, needle) != NULL);
 }
 
-static VALUE_t run_fetch_with_one_int_arg(const char *runner_name, VALUE_t fetch_name) {
+static VALUE_t run_fetch_with_int_args(const char *runner_name,
+                                       VALUE_t fetch_name, size_t arg_count) {
   uint8_t code[256] = {0};
   size_t pos = 0;
   code[pos++] = 0;
   code[pos++] = 0;
-  code[pos++] = 'p'; emit_i64(code, &pos, 42);
+  for (size_t arg = 0u; arg < arg_count; arg++) {
+    code[pos++] = 'p'; emit_i64(code, &pos, (int64_t)(42 + arg));
+  }
   if (fetch_name.type == VALUE_str) {
     code[pos++] = 'l'; emit_str(code, &pos, fetch_name.s);
   } else if (fetch_name.type == VALUE_int) {
@@ -1343,9 +1346,16 @@ static VALUE_t run_fetch_with_one_int_arg(const char *runner_name, VALUE_t fetch
   } else {
     ASSERT_TRUE(false);
   }
-  code[pos++] = 'F'; code[pos++] = 1; code[pos++] = 0;
+  code[pos++] = 'F';
+  uint16_t encoded_arg_count = (uint16_t)arg_count;
+  memcpy(code + pos, &encoded_arg_count, sizeof(encoded_arg_count));
+  pos += sizeof(encoded_arg_count);
   code[pos++] = 'h';
   return run_code(runner_name, code, pos);
+}
+
+static VALUE_t run_fetch_with_one_int_arg(const char *runner_name, VALUE_t fetch_name) {
+  return run_fetch_with_int_args(runner_name, fetch_name, 1u);
 }
 
 void test_strict_runtime_contracts_default_preserves_fetch_argument_drops(void) {
@@ -1415,6 +1425,24 @@ void test_strict_runtime_contracts_reports_too_many_item_arguments(void) {
   config.strict_runtime_contracts = true;
   VALUE_t name = {VALUE_str, {.s = "strict_runtime.target"}};
   VALUE_t result = run_fetch_with_one_int_arg("strict_runtime.too_many_runner", name);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_strict_runtime_contract_detail("extra argument for target item");
+  teardown_runtime();
+}
+
+void test_strict_runtime_contracts_reports_multiple_excess_fetch_arguments(void) {
+  setup_runtime();
+  uint8_t target_code[] = {0, 0, 'h'};
+  uint8_t *target = malloc(sizeof(target_code));
+  ASSERT_NOT_NULL(target);
+  memcpy(target, target_code, sizeof(target_code));
+  ASSERT_NOT_NULL(test_item_set_code(itemstore_root(config.itemstore_ctx),
+                                     "strict_runtime.many_target",
+                                     sizeof(target_code), target));
+  config.strict_runtime_contracts = true;
+  VALUE_t name = {VALUE_str, {.s = "strict_runtime.many_target"}};
+  VALUE_t result = run_fetch_with_int_args("strict_runtime.many_runner", name,
+                                           3u);
   ASSERT_EQ_INT(VALUE_nil, result.type);
   assert_strict_runtime_contract_detail("extra argument for target item");
   teardown_runtime();

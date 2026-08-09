@@ -24,6 +24,7 @@
 #include "item.h"
 #include "runtime_decode.h"
 #include "runtime_item_ops.h"
+#include "runtime_frame.h"
 #include "runtime_opcode.h"
 #include "runtime_value.h"
 #include "itemref.h"
@@ -67,17 +68,6 @@ static bool runtime_registry_track(LibcallRegistry *registry) {
     runtime_registry_cleanup_registered = true;
   }
   return true;
-}
-
-static VALUE_t pop_frame_result(STACK_t *stack, bool explicit_return) {
-  int32_t frame_value_floor = stack->base + stack->locals - 1;
-  VALUE_t result = VALUE_NIL;
-  if (explicit_return && stack->current > frame_value_floor) result = pop_stack(stack);
-  while (stack->current > frame_value_floor) {
-    VALUE_t discarded = pop_stack(stack);
-    value_free(&discarded);
-  }
-  return result;
 }
 
 static void runtime_registry_untrack(LibcallRegistry *registry) {
@@ -906,63 +896,29 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
           FREE_STR(itemname);
           return NULL;
         }
-        // Are there any arguments in excess of what this item takes?
-        // If so, lose 'em.
         BC_FormatHeader iheader;
         if (!runtime_code_header(i, &iheader)) { FREE_STR(itemname); return NULL; }
-        if (arg_count < iheader.params &&
-            VM->stack->current > VM->stack->max -
-                (int32_t)(iheader.params - arg_count)) {
-          set_runtime_bytecode_error(ctx, NULL, 0,
-              "unable to enter call frame: VM stack capacity exhausted");
-          FREE_STR(itemname);
-          return NULL;
-        }
-        uint16_t effective_args = arg_count < iheader.params
-            ? arg_count : iheader.params;
-        int32_t normalized_current = VM->stack->current -
-            (int32_t)(arg_count - effective_args) +
-            (int32_t)(iheader.params - effective_args);
-        if (VM->callstack->current >= VM->callstack->max ||
-            normalized_current < (int32_t)iheader.params - 1 ||
-            normalized_current > VM->stack->max -
-                (int32_t)(iheader.locals - iheader.params)) {
+        size_t discarded_args = 0u;
+        if (!runtime_frame_prepare_call(ctx, item, nextop, i, arg_count,
+                                        iheader.locals, iheader.params,
+                                        (uint8_t *)ctx->decoder.frame_start,
+                                        (uint8_t *)ctx->decoder.frame_end,
+                                        &discarded_args)) {
           set_runtime_bytecode_error(ctx, NULL, 0,
               "unable to enter call frame: VM capacity exhausted");
           FREE_STR(itemname);
           return NULL;
         }
-        while (arg_count > iheader.params) {
+        for (size_t discarded = 0u; discarded < discarded_args; discarded++) {
           logverbose("Popping unneeded argument.\n");
-          report_strict_runtime_contract(ctx, "OP_FETCHITEM discarded extra argument for target item");
-          throwaway_stack(VM->stack);
-          arg_count--;
-        }
-        // Contrariwise, do we have fewer arguments than we should?
-        while (arg_count < iheader.params) {
-          logverbose("Pushing additional nil-value argument.\n");
-          push_stack(VM->stack, VALUE_NIL);
-          arg_count++;
-        }
-        // Save our current caller continuation state.
-        // We pass the number of arguments, so that the stack is
-        // correctly adjusted to account for them at the top of the
-        // current stack (they will be at the bottom of the frame for
-        // the new item).
-        if (!push_callstack(VM, item, nextop, iheader.params, iheader.locals,
-                            (uint8_t *)ctx->decoder.frame_start,
-                            (uint8_t *)ctx->decoder.frame_end)) {
-          set_runtime_bytecode_error(ctx, NULL, 0,
-              "unable to enter call frame: VM capacity exhausted");
-          FREE_STR(itemname);
-          return NULL;
+          report_strict_runtime_contract(ctx,
+              "OP_FETCHITEM discarded extra argument for target item");
         }
         // Invariant at call-entry:
         // - caller VM stack/base/locals/params are captured in callstack.
         // - caller continuation (item + nextop + bytecode bounds) is captured.
         // - interpreter loop must transfer control to callee without recursion.
         logverbose("Executing item %s\n", item_layer_name(i));
-        ctx->pending_call_item = i;
         FREE_STR(itemname);
         return NULL;
       }
@@ -1306,6 +1262,12 @@ void init_interpreter(RuntimeContext *ctx) {
   }
 }
 
+static void restore_outer_transfer(RuntimeContext *ctx, ITEM_t *saved) {
+  if (!runtime_frame_restore_transfer(ctx, saved)) {
+    logerr("Unable to restore outer pending frame transfer.\n");
+  }
+}
+
 VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   if (!ctx) return VALUE_NIL;
   // Lazy initialization must complete before changing any per-invocation
@@ -1314,15 +1276,19 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   if (!ctx->initialized && !runtime_init(ctx, ctx->vm)) return VALUE_NIL;
   RuntimeDecoder saved_decoder = ctx->decoder;
   ITEM_t *saved_current_item = ctx->current_item;
-  ITEM_t *saved_pending_call_item = ctx->pending_call_item;
+  ITEM_t *saved_pending_call_item = NULL;
+  bool had_saved_pending_transfer =
+      runtime_frame_take_transfer(ctx, &saved_pending_call_item);
   int saved_invocation_callstack_floor = ctx->invocation_callstack_floor;
   ITEM_t *saved_invocation_caller_item = ctx->invocation_caller_item;
-  int entry_callstack_depth = size_callstack(VM->callstack);
-  int32_t entry_stack_current = VM->stack->current;
-  int32_t entry_stack_base = VM->stack->base;
-  uint8_t entry_stack_locals = VM->stack->locals;
-  uint8_t entry_stack_params = VM->stack->params;
-  ctx->invocation_callstack_floor = entry_callstack_depth;
+  RuntimeFrameCheckpoint checkpoint;
+  if (!runtime_frame_checkpoint(ctx, &checkpoint)) {
+    if (had_saved_pending_transfer) {
+      restore_outer_transfer(ctx, saved_pending_call_item);
+    }
+    return VALUE_NIL;
+  }
+  ctx->invocation_callstack_floor = checkpoint.callstack_depth;
   ctx->invocation_caller_item = saved_current_item;
   clear_error_item(itemstore_root(ctx->itemstore));
   // Given some bytecode, interpret it until the HALT instruction is seen
@@ -1330,34 +1296,36 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
   // not have an associated function.
 
   ctx->current_item = item;
-  ctx->pending_call_item = NULL;
   ctx->interrupted = false;
 
   if (!verify_runtime_bytecode(ctx, ctx->current_item)) {
     ctx->current_item = saved_current_item;
-    ctx->pending_call_item = saved_pending_call_item;
+    restore_outer_transfer(ctx, had_saved_pending_transfer
+                                      ? saved_pending_call_item : NULL);
     ctx->invocation_callstack_floor = saved_invocation_callstack_floor;
     ctx->invocation_caller_item = saved_invocation_caller_item;
     ctx->decoder = saved_decoder;
+    runtime_frame_restore_ownership(ctx, &checkpoint);
     return VALUE_NIL;
   }
   if (consume_runtime_interrupt(ctx)) {
     ctx->current_item = saved_current_item;
-    ctx->pending_call_item = saved_pending_call_item;
+    restore_outer_transfer(ctx, had_saved_pending_transfer
+                                      ? saved_pending_call_item : NULL);
     ctx->invocation_callstack_floor = saved_invocation_callstack_floor;
     ctx->invocation_caller_item = saved_invocation_caller_item;
     ctx->decoder = saved_decoder;
+    runtime_frame_restore_ownership(ctx, &checkpoint);
     return VALUE_NIL;
   }
 
   // Enter initial frame.
-  item_enter_use(ctx->current_item);
-  bool current_frame_pinned = true;
   const uint8_t *current_code = item_bytecode(ctx->current_item);
   uint32_t current_code_len = item_bytecode_length(ctx->current_item);
   BC_FormatHeader current_header;
   if (!runtime_code_header(ctx->current_item, &current_header)) goto interpretation_failure;
-  if (!enter_initial_frame(VM, current_header.locals, current_header.params)) {
+  if (!runtime_frame_enter_initial(ctx, ctx->current_item, current_header.locals,
+                                   current_header.params)) {
     set_runtime_bytecode_error(ctx, NULL, 0,
         "unable to enter initial frame: VM stack capacity exhausted");
     goto interpretation_failure;
@@ -1376,53 +1344,37 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
       goto interpretation_failure;
     }
     if (*op == 'h' || *op == 'Q') {
-      VALUE_t return_value = pop_frame_result(VM->stack, *op == 'Q');
-      item_leave_use(ctx->current_item);
-      current_frame_pinned = false;
-
-      if (size_callstack(VM->callstack) == entry_callstack_depth) {
-        reset_stack_to(VM->stack, entry_stack_current);
-        VM->stack->base = entry_stack_base;
-        VM->stack->locals = entry_stack_locals;
-        VM->stack->params = entry_stack_params;
-        ctx->decoder = saved_decoder;
-        ctx->current_item = saved_current_item;
-        ctx->pending_call_item = saved_pending_call_item;
-        ctx->invocation_callstack_floor = saved_invocation_callstack_floor;
-        ctx->invocation_caller_item = saved_invocation_caller_item;
-        return return_value;
-      }
-
-      FRAME_t *prev_frame = pop_callstack(VM);
-      // Invariant at return:
-      // - pop_callstack restored caller stack/base/locals/params.
-      // - caller continuation state tells us exactly where to resume.
-      ctx->current_item = prev_frame->item;
-      current_frame_pinned = true;
-      op = prev_frame->nextop;
-      runtime_decoder_init(&ctx->decoder, prev_frame->bytecode_start, prev_frame->bytecode_end);
-      if (VM->stack->current >= VM->stack->max) {
-        value_free(&return_value);
+      RuntimeFrameReturn returned;
+      if (!runtime_frame_return(ctx, &checkpoint, *op == 'Q', &returned)) {
         set_runtime_bytecode_error(ctx, NULL, 0,
             "unable to return from call: VM stack capacity exhausted");
         goto interpretation_failure;
       }
-      push_stack(VM->stack, return_value);
+      if (returned.completed) {
+        ctx->decoder = saved_decoder;
+        ctx->current_item = saved_current_item;
+        restore_outer_transfer(ctx, had_saved_pending_transfer
+                                          ? saved_pending_call_item : NULL);
+        ctx->invocation_callstack_floor = saved_invocation_callstack_floor;
+        ctx->invocation_caller_item = saved_invocation_caller_item;
+        runtime_frame_restore_ownership(ctx, &checkpoint);
+        return returned.result;
+      }
+      op = returned.nextop;
+      runtime_decoder_init(&ctx->decoder, returned.bytecode_start,
+                           returned.bytecode_end);
       continue;
     }
 
     uint8_t *nextop = op + 1;
     uint8_t *newop = ctx->opcode[*op](ctx, nextop, ctx->current_item);
     if (!newop) {
-      if (ctx->pending_call_item) {
-        ctx->current_item = ctx->pending_call_item;
-        ctx->pending_call_item = NULL;
-        current_frame_pinned = false;
+      ITEM_t *transfer_target = NULL;
+      if (runtime_frame_take_transfer(ctx, &transfer_target)) {
+        ctx->current_item = transfer_target;
         if (!verify_runtime_bytecode(ctx, ctx->current_item)) {
           goto interpretation_failure;
         }
-        item_enter_use(ctx->current_item);
-        current_frame_pinned = true;
         current_code = item_bytecode(ctx->current_item);
         current_code_len = item_bytecode_length(ctx->current_item);
         if (!runtime_code_header(ctx->current_item, &current_header)) goto interpretation_failure;
@@ -1431,21 +1383,14 @@ VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item) {
         continue;
       }
 interpretation_failure:
-      if (current_frame_pinned) item_leave_use(ctx->current_item);
-      while (size_callstack(VM->callstack) > entry_callstack_depth) {
-        FRAME_t *abandoned_frame = pop_callstack(VM);
-        if (!abandoned_frame) break;
-        if (abandoned_frame->item) item_leave_use(abandoned_frame->item);
-      }
-      reset_stack_to(VM->stack, entry_stack_current);
-      VM->stack->base = entry_stack_base;
-      VM->stack->locals = entry_stack_locals;
-      VM->stack->params = entry_stack_params;
+      runtime_frame_unwind(ctx, &checkpoint);
       ctx->decoder = saved_decoder;
       ctx->current_item = saved_current_item;
-      ctx->pending_call_item = saved_pending_call_item;
+      restore_outer_transfer(ctx, had_saved_pending_transfer
+                                        ? saved_pending_call_item : NULL);
       ctx->invocation_callstack_floor = saved_invocation_callstack_floor;
       ctx->invocation_caller_item = saved_invocation_caller_item;
+      runtime_frame_restore_ownership(ctx, &checkpoint);
       return VALUE_NIL;
     }
     op = newop;

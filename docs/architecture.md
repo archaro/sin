@@ -87,6 +87,13 @@ Key entry points:
 - `runtime_context_init()`, `runtime_init()`, and `runtime_destroy()` via
   `src/runtime/runtime_context.h`.
 
+Frame transitions are owned by `src/runtime/runtime_frame.[ch]`. Its checked
+boundary captures invocation checkpoints, reserves and normalizes call
+arguments, publishes continuations, acquires and releases one execution pin
+per active code frame, places return values, and unwinds failed or interrupted
+invocations. `interpret.c` and `libcall_sys.c` use this API rather than
+composing raw VM stack/call-stack transitions.
+
 ### Itemstore
 
 Files: `src/itemstore/item.h`, `src/itemstore/item_internal.h`,
