@@ -164,6 +164,35 @@ void test_sdiss_lists_and_itemrefs_show_full_operands(void) {
   ASSERT_TRUE(strstr(output, "MAKE ITEMREF") != NULL);
 }
 
+void test_sdiss_jump_display_offsets_and_range(void) {
+  const uint8_t forward[] = {0x00, 0x00, 'j', 0x02, 0x00, 'h'};
+  const uint8_t backward[] = {0x00, 0x00, 'F', 0x00, 0x00, 'j', 0xfc, 0xff, 'h'};
+  const uint8_t out_of_range[] = {0x00, 0x00, 'j', 0x00, 0x80, 'h'};
+  const SDissOptions options = {.raw = 0, .no_header = 1};
+  char output[4096];
+
+  SdissCapture capture = {output, 0, sizeof(output)};
+  SDissResult result = sdiss_disassemble_bytes(forward, sizeof(forward),
+                                                &options, capture_sdiss,
+                                                &capture);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+  ASSERT_TRUE(strstr(output, "JUMP rel=2 abs=5") != NULL);
+
+  memset(output, 0, sizeof(output));
+  capture.len = 0;
+  result = sdiss_disassemble_bytes(backward, sizeof(backward), &options,
+                                   capture_sdiss, &capture);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+  ASSERT_TRUE(strstr(output, "JUMP rel=-4 abs=2") != NULL);
+
+  memset(output, 0, sizeof(output));
+  capture.len = 0;
+  result = sdiss_disassemble_bytes(out_of_range, sizeof(out_of_range),
+                                   &options, capture_sdiss, &capture);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+  ASSERT_TRUE(strstr(output, "JUMP rel=-32768 abs=out-of-range") != NULL);
+}
+
 void test_sdiss_legacy_and_v1_headers_report_absolute_offsets(void) {
   const uint8_t legacy[] = {3, 1, 'b', 1, 'h'};
   const uint8_t v1[] = {0, 0xff, 'S', 'B', 1, 0, 3, 1, 'b', 1, 'h'};

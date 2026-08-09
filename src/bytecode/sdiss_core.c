@@ -112,9 +112,13 @@ static void print_operand_line(SDissState *state, const BC_Instruction *inst) {
     case IR_OP_JUMP:
     case IR_OP_JUMP_IF_FALSE: {
       int16_t off = inst->operand.value.i16;
-      uint32_t abs_offset = (uint32_t)((int64_t)inst->operand.offset + 2 + off);
-      outln(state, "%s rel=%d abs=%u\n", inst->mnemonic, off,
-            (unsigned int)abs_offset);
+      int64_t abs_offset = (int64_t)inst->operand.offset + (int64_t)off;
+      if (abs_offset < 0 || abs_offset > (int64_t)UINT32_MAX) {
+        outln(state, "%s rel=%d abs=out-of-range\n", inst->mnemonic, off);
+      } else {
+        outln(state, "%s rel=%d abs=%u\n", inst->mnemonic, off,
+              (unsigned int)abs_offset);
+      }
       break;
     }
     case IR_OP_ITEM_PUSH_LAYER:

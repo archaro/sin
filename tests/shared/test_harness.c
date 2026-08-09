@@ -352,6 +352,7 @@ void test_sdiss_fixture_basic(void);
 void test_sdiss_reads_compiler_operand_widths(void);
 void test_sdiss_lists_and_itemrefs_show_full_operands(void);
 void test_sdiss_malformed_fixture_reports_verifier_diagnostic(void);
+void test_sdiss_jump_display_offsets_and_range(void);
 void test_compiler_context_failures(void);
 void test_compiler_diag_pipeline(void);
 void test_compiler_diag_rejects_deep_foreach_with_dedicated_detail(void);
@@ -607,6 +608,7 @@ static const test_case_t compiler_tests[] = {
     {"test_sdiss_malformed_fixture_reports_verifier_diagnostic", test_sdiss_malformed_fixture_reports_verifier_diagnostic},
     {"test_sdiss_reads_compiler_operand_widths", test_sdiss_reads_compiler_operand_widths},
     {"test_sdiss_lists_and_itemrefs_show_full_operands", test_sdiss_lists_and_itemrefs_show_full_operands},
+    {"test_sdiss_jump_display_offsets_and_range", test_sdiss_jump_display_offsets_and_range},
     {"test_compiler_context_failures", test_compiler_context_failures},
     {"test_compiler_diag_pipeline", test_compiler_diag_pipeline},
     {"test_compiler_diag_rejects_deep_foreach_with_dedicated_detail", test_compiler_diag_rejects_deep_foreach_with_dedicated_detail},
