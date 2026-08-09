@@ -143,8 +143,8 @@ bool runtime_frame_prepare_call(RuntimeContext *ctx, ITEM_t *caller,
   }
 
   while (supplied > effective) {
-    VALUE_t discarded = pop_stack(stack);
-    value_free(&discarded);
+    VALUE_t discarded_value = pop_stack(stack);
+    value_free(&discarded_value);
     supplied--;
   }
   while (supplied < params) {
