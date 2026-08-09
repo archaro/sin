@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -10,7 +11,7 @@ typedef struct {
   int no_header;
 } SDissOptions;
 
-typedef void (*SDissWriteFn)(void *ctx, const char *data, size_t len);
+typedef bool (*SDissWriteFn)(void *ctx, const char *data, size_t len);
 
 typedef struct {
   BC_VerifyStatus status;
@@ -18,6 +19,7 @@ typedef struct {
   int instruction_count;
   int unknown_opcode_count;
   int warning_count;
+  bool output_error;
 } SDissResult;
 
 SDissResult sdiss_disassemble_bytes(const uint8_t *bytecode,

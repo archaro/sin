@@ -36,9 +36,9 @@ static void usage_error(const char *message) {
   logerr("Try 'sdiss --help' for more information.\n");
 }
 
-static void stdout_write(void *ctx, const char *data, size_t len) {
+static bool stdout_write(void *ctx, const char *data, size_t len) {
   (void)ctx;
-  fwrite(data, 1, len, stdout);
+  return fwrite(data, 1, len, stdout) == len;
 }
 
 int main(int argc, char **argv) {
@@ -131,7 +131,17 @@ int main(int argc, char **argv) {
     logerr("%s\n", result.diagnostic.message);
   }
 
-  logmsg("Finishing up.\n");
+  if (result.output_error) {
+    logerr("sdiss: failed to write disassembly output.\n");
+  } else {
+    logmsg("Finishing up.\n");
+  }
+  bool flush_error = fflush(stdout) != 0;
+  if (flush_error && !result.output_error) {
+    logerr("sdiss: failed to flush disassembly output.\n");
+  }
   free(bytecode);
-  return result.status == BC_VERIFY_ERROR ? EXIT_FAILURE : EXIT_SUCCESS;
+  return result.status == BC_VERIFY_ERROR || result.output_error || flush_error
+             ? EXIT_FAILURE
+             : EXIT_SUCCESS;
 }

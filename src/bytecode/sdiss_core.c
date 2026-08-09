@@ -19,10 +19,12 @@ typedef struct {
   SDissWriteFn write_fn;
   void *write_ctx;
   int header_printed;
+  bool output_error;
 } SDissState;
 
 static void write_bytes(SDissState *state, const char *data, size_t len) {
-  if (state->write_fn) state->write_fn(state->write_ctx, data, len);
+  if (state->output_error || !state->write_fn) return;
+  if (!state->write_fn(state->write_ctx, data, len)) state->output_error = true;
 }
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -33,6 +35,7 @@ static void outln(SDissState *state, const char *fmt, ...);
 #endif
 
 static void outln(SDissState *state, const char *fmt, ...) {
+  if (state->output_error) return;
   char buffer[512];
   va_list args;
   va_start(args, fmt);
@@ -163,7 +166,7 @@ static bool on_instruction(const BC_Instruction *inst, void *ctx) {
   print_operand_line(state, inst);
   print_raw(state, inst);
   if (state->options.raw) outln(state, "\n");
-  return true;
+  return !state->output_error;
 }
 
 SDissResult sdiss_disassemble_bytes(const uint8_t *bytecode,
@@ -184,12 +187,25 @@ SDissResult sdiss_disassemble_bytes(const uint8_t *bytecode,
   BC_VerifyResult result = bc_decode_bytecode_events(bytecode, bytecode_len,
                                                      "disassembly", &verify_options,
                                                      &metadata, on_instruction, &state);
+  bool output_error_during_decode = state.output_error;
   print_header_once(&state);
   sdiss_result.status = result.status;
   sdiss_result.diagnostic = result.diagnostic;
   if (result.status == BC_VERIFY_WARNING) sdiss_result.warning_count = (int)result.warning_count;
-  outln(&state, "Summary: instructions=%d unknown=%d warnings=%d\n",
-        sdiss_result.instruction_count, sdiss_result.unknown_opcode_count,
-        sdiss_result.warning_count);
+  if (!state.output_error) {
+    outln(&state, "Summary: instructions=%d unknown=%d warnings=%d\n",
+          sdiss_result.instruction_count, sdiss_result.unknown_opcode_count,
+          sdiss_result.warning_count);
+  }
+  sdiss_result.output_error = state.output_error;
+  if (output_error_during_decode) {
+    /* The verifier reports callback cancellation as a verification error.
+     * This cancellation was caused by the writer, so keep output failure
+     * distinct from bytecode verification status and diagnostic. */
+    if (sdiss_result.status == BC_VERIFY_ERROR) {
+      sdiss_result.status = BC_VERIFY_OK;
+      memset(&sdiss_result.diagnostic, 0, sizeof(sdiss_result.diagnostic));
+    }
+  }
   return sdiss_result;
 }

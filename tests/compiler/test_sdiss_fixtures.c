@@ -1,19 +1,118 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include "test_assert.h"
 #include "test_helpers.h"
 #include "sdiss_core.h"
 
 typedef struct { char *buf; size_t len; size_t cap; } SdissCapture;
-static void capture_sdiss(void *ctx, const char *data, size_t len) {
+static char *read_text(const char *path);
+
+static bool capture_sdiss(void *ctx, const char *data, size_t len) {
   SdissCapture *c = ctx;
-  if (c->len + len + 1u > c->cap) return;
+  if (c->len + len + 1u > c->cap) return false;
   memcpy(c->buf + c->len, data, len);
   c->len += len;
   c->buf[c->len] = '\0';
+  return true;
+}
+
+static bool failing_sdiss_writer(void *ctx, const char *data, size_t len) {
+  (void)data;
+  (void)len;
+  (*(int *)ctx)++;
+  return false;
+}
+
+typedef struct {
+  int calls;
+  int post_failure_calls;
+  bool failed;
+} SummaryFailureWriter;
+
+static bool fail_summary_sdiss_writer(void *ctx, const char *data, size_t len) {
+  SummaryFailureWriter *writer = ctx;
+  if (writer->failed) {
+    writer->post_failure_calls++;
+    return false;
+  }
+  writer->calls++;
+  if (len >= strlen("Summary:") && memcmp(data, "Summary:", strlen("Summary:")) == 0) {
+    writer->failed = true;
+    return false;
+  }
+  return true;
+}
+
+void test_sdiss_writer_failure_stops_output(void) {
+  const uint8_t bytes[] = {0x00, 0x00, 'N', 'h'};
+  int calls = 0;
+  SDissOptions options = {.raw = 0, .no_header = 1};
+
+  SDissResult result = sdiss_disassemble_bytes(bytes, sizeof(bytes), &options,
+                                                failing_sdiss_writer, &calls);
+  ASSERT_TRUE(result.output_error);
+  ASSERT_EQ_INT(1, calls);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+}
+
+void test_sdiss_summary_writer_failure_propagates(void) {
+  const uint8_t bytes[] = {0x00, 0x00, 'N', 'h'};
+  SummaryFailureWriter writer = {0};
+  SDissOptions options = {.raw = 0, .no_header = 1};
+
+  SDissResult result = sdiss_disassemble_bytes(bytes, sizeof(bytes), &options,
+                                                fail_summary_sdiss_writer, &writer);
+  ASSERT_TRUE(result.output_error);
+  ASSERT_EQ_INT(5, writer.calls);
+  ASSERT_EQ_INT(0, writer.post_failure_calls);
+  ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
+}
+
+void test_sdiss_summary_writer_failure_preserves_verifier_error(void) {
+  const uint8_t bytes[] = {0x00, 0x00, 'N', 'l'};
+  SummaryFailureWriter writer = {0};
+  SDissOptions options = {.raw = 0, .no_header = 1};
+
+  SDissResult result = sdiss_disassemble_bytes(bytes, sizeof(bytes), &options,
+                                                fail_summary_sdiss_writer, &writer);
+  ASSERT_TRUE(result.output_error);
+  ASSERT_EQ_INT(3, writer.calls);
+  ASSERT_EQ_INT(0, writer.post_failure_calls);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
+  ASSERT_TRUE(strstr(result.diagnostic.message, "truncated") != NULL);
+}
+
+void test_sdiss_cli_reports_output_failure(void) {
+  if (access("/dev/full", W_OK) != 0) return;
+
+  const uint8_t bytes[] = {0x00, 0x00, 'N', 'h'};
+  const char *tmp_path = "tests/fixtures/sdiss/output-failure.bin";
+  const char *err_path = "tests/fixtures/sdiss/output-failure.err";
+  FILE *out = fopen(tmp_path, "wb");
+  ASSERT_NOT_NULL(out);
+  ASSERT_EQ_INT((int)sizeof(bytes), (int)fwrite(bytes, 1, sizeof(bytes), out));
+  ASSERT_EQ_INT(0, fclose(out));
+
+  char cmd[512];
+  int written = snprintf(cmd, sizeof(cmd),
+                         "./sdiss --quiet --no-header -o %s > /dev/full 2> %s",
+                         tmp_path, err_path);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(cmd));
+  int rc = system(cmd);
+  ASSERT_TRUE(rc != -1);
+  ASSERT_TRUE(WIFEXITED(rc));
+  ASSERT_EQ_INT(1, WEXITSTATUS(rc));
+
+  char *error = read_text(err_path);
+  ASSERT_TRUE(strstr(error, "output") != NULL);
+  free(error);
+  ASSERT_EQ_INT(0, remove(tmp_path));
+  ASSERT_EQ_INT(0, remove(err_path));
 }
 
 static char *read_text(const char *path) {

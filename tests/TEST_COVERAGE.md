@@ -228,6 +228,14 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `test_sdiss_fixture_basic`
     - `test_sdiss_reads_compiler_operand_widths`
     - `test_sdiss_lists_and_itemrefs_show_full_operands`
+    - `test_sdiss_writer_failure_stops_output` (shared-core writer failure
+      propagation and suppression of subsequent writer callbacks)
+    - `test_sdiss_summary_writer_failure_propagates` (final summary-write
+      failure propagation and no callbacks after the failed write)
+    - `test_sdiss_summary_writer_failure_preserves_verifier_error` (post-decode
+      output failure preserves an earlier genuine verifier diagnostic)
+    - `test_sdiss_cli_reports_output_failure` (process-level `/dev/full`
+      output failure, stderr diagnostic, and nonzero exit status)
 
 ### Known gaps
 - The negative matrix now includes representative multi-fault priority checks,

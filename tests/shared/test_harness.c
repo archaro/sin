@@ -351,6 +351,10 @@ void test_pipeline_negative_matrix(void);
 void test_pipeline_ast_budget_subprocess(void);
 void test_parser_examples_obj_golden(void);
 void test_sdiss_fixture_basic(void);
+void test_sdiss_writer_failure_stops_output(void);
+void test_sdiss_summary_writer_failure_propagates(void);
+void test_sdiss_summary_writer_failure_preserves_verifier_error(void);
+void test_sdiss_cli_reports_output_failure(void);
 void test_sdiss_reads_compiler_operand_widths(void);
 void test_sdiss_lists_and_itemrefs_show_full_operands(void);
 void test_sdiss_malformed_fixture_reports_verifier_diagnostic(void);
@@ -609,6 +613,10 @@ static const test_case_t compiler_tests[] = {
     {"test_pipeline_ast_budget_subprocess", test_pipeline_ast_budget_subprocess},
     {"test_parser_examples_obj_golden", test_parser_examples_obj_golden},
     {"test_sdiss_fixture_basic", test_sdiss_fixture_basic},
+    {"test_sdiss_writer_failure_stops_output", test_sdiss_writer_failure_stops_output},
+    {"test_sdiss_summary_writer_failure_propagates", test_sdiss_summary_writer_failure_propagates},
+    {"test_sdiss_summary_writer_failure_preserves_verifier_error", test_sdiss_summary_writer_failure_preserves_verifier_error},
+    {"test_sdiss_cli_reports_output_failure", test_sdiss_cli_reports_output_failure},
     {"test_sdiss_malformed_fixture_reports_verifier_diagnostic", test_sdiss_malformed_fixture_reports_verifier_diagnostic},
     {"test_sdiss_reads_compiler_operand_widths", test_sdiss_reads_compiler_operand_widths},
     {"test_sdiss_lists_and_itemrefs_show_full_operands", test_sdiss_lists_and_itemrefs_show_full_operands},

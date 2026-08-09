@@ -43,11 +43,12 @@ void test_bytecode_wire_boundary_vectors(void) {
   }
 }
 
-static void append_disassembly(void *ctx, const char *data, size_t len) {
+static bool append_disassembly(void *ctx, const char *data, size_t len) {
   char *out = ctx;
   size_t used = strlen(out);
   memcpy(out + used, data, len);
   out[used + len] = '\0';
+  return true;
 }
 
 void test_bytecode_wire_subsystems_agree(void) {

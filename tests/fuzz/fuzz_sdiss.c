@@ -13,10 +13,11 @@ CONFIG_t config;
 
 static const size_t kMaxFuzzBytecodeSize = 64 * 1024;
 
-static void discard_output(void *ctx, const char *data, size_t len) {
+static bool discard_output(void *ctx, const char *data, size_t len) {
   (void)ctx;
   (void)data;
   (void)len;
+  return true;
 }
 
 int LLVMFuzzerInitialize(int *argc, char ***argv) {
