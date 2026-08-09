@@ -14,6 +14,7 @@
 #include "compiler/ir/opcode_schema.h"
 #include "memory.h"
 #include "list.h"
+#include "string_limits.h"
 
 static bool ensure_inst_capacity(IR_Function* function, size_t needed) {
   if (function->capacity >= needed) {
@@ -243,6 +244,38 @@ static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag, int8
   return errnum;
 }
 
+static int8_t ir_validate_embedded_payload(
+    const IR_EmbeddedCodePayload *payload, size_t index, char **errdetail,
+    CompilerDiagnostic *diag) {
+  if (!payload->source ||
+      (payload->param_count > 0 && !payload->params)) {
+    return ir_validate_error(
+        errdetail, diag, ERR_COMP_SYNTAX,
+        "Embedded code payload %zu has inconsistent source or parameters.",
+        index);
+  }
+  if (strlen(payload->source) > UINT16_MAX) {
+    return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                             "Embedded code payload %zu source is too long.",
+                             index);
+  }
+  for (size_t p = 0; p < payload->param_count; p++) {
+    if (!payload->params[p]) {
+      return ir_validate_error(
+          errdetail, diag, ERR_COMP_SYNTAX,
+          "Embedded code payload %zu parameter %zu is null.", index, p);
+    }
+    size_t param_len = strlen(payload->params[p]);
+    if (param_len == 0 || param_len > UINT16_MAX) {
+      return ir_validate_error(
+          errdetail, diag, ERR_COMP_SYNTAX,
+          "Embedded code payload %zu parameter %zu has invalid length %zu.",
+          index, p, param_len);
+    }
+  }
+  return ERR_NOERROR;
+}
+
 int8_t ir_validate_diag(IR_Unit* unit, uint32_t local_count, char **errdetail, CompilerDiagnostic *diag) {
   if (diag) compiler_diag_reset(diag);
   if (errdetail != NULL) {
@@ -253,73 +286,165 @@ int8_t ir_validate_diag(IR_Unit* unit, uint32_t local_count, char **errdetail, C
     return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX, "IR unit is null.");
   }
 
+  if (unit->function.count > unit->function.capacity ||
+      unit->labels.count > unit->labels.capacity ||
+      unit->embedded_code.count > unit->embedded_code.capacity ||
+      (unit->function.count > 0 && unit->function.code == NULL) ||
+      (unit->labels.count > 0 && unit->labels.entries == NULL) ||
+      (unit->embedded_code.count > 0 && unit->embedded_code.entries == NULL)) {
+    return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                             "IR table has inconsistent count, capacity, or storage.");
+  }
+
+  for (size_t i = 0; i < unit->embedded_code.count; i++) {
+    int8_t rc = ir_validate_embedded_payload(
+        &unit->embedded_code.entries[i], i, errdetail, diag);
+    if (rc != ERR_NOERROR) return rc;
+  }
+
   for (size_t i = 0; i < unit->labels.count; i++) {
     IR_Label* label = &unit->labels.entries[i];
     if (!label->bound) {
       return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
-                               "Unbound label .L%d.", label->id);
+                               "Unbound label .L%d (jump unbound label).", label->id);
+    }
+    if (label->position > unit->function.count) {
+      return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                               "Label .L%d has invalid position.", label->id);
     }
   }
 
   for (size_t i = 0; i < unit->function.count; i++) {
     const IR_Inst* inst = &unit->function.code[i];
-    switch (inst->op) {
-      case IR_OP_JUMP:
-      case IR_OP_JUMP_IF_FALSE:
-      case IR_OP_LABEL: {
-        if (inst->a < 0 || (size_t)inst->a >= unit->labels.count) {
+    const IR_OpSchema *meta = ir_opcode_schema(inst->op);
+    if (!meta || (meta->encoded_symbol == 0 && inst->op != IR_OP_LABEL)) {
+      return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                               "unsupported IR op %d at instruction %zu.", inst->op, i);
+    }
+    switch (meta->validator) {
+      case VALIDATE_NONE:
+        break;
+      case VALIDATE_A_U8:
+        if (inst->op == IR_OP_LOAD_LOCAL || inst->op == IR_OP_STORE_LOCAL ||
+            inst->op == IR_OP_INC_LOCAL || inst->op == IR_OP_DEC_LOCAL ||
+            inst->op == IR_OP_ITEM_PUSH_DEREF_LOCAL) {
+          if (inst->a < 0 || (uint32_t)inst->a >= local_count) {
+            return ir_validate_error(errdetail, diag,
+                                     ERR_COMP_LOCALBEFOREDEF,
+                                     "Instruction %zu (%s) has out-of-range local index %d (locals=%u).",
+                                     i, meta->name, inst->a, local_count);
+          }
+        } else if (inst->op == IR_OP_PUSH_BOOL) {
+          if (inst->a < 0 || inst->a > 1) {
+            return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                                     "Instruction %zu (PUSH_BOOL) has invalid boolean operand %d.",
+                                     i, inst->a);
+          }
+        } else if (inst->a < 0 || inst->a > UINT8_MAX) {
           return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
-                                   "Instruction %zu (%s) references invalid label id %d.",
-                                   i, ir_op_name(inst->op), inst->a);
-        }
-        if (!unit->labels.entries[inst->a].bound) {
-          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
-                                   "Instruction %zu (%s) references unbound label .L%d.",
-                                   i, ir_op_name(inst->op), inst->a);
+                                   "Instruction %zu (%s) has invalid u8 operand.",
+                                   i, meta->name);
         }
         break;
-      }
-      case IR_OP_LOAD_LOCAL:
-      case IR_OP_STORE_LOCAL:
-      case IR_OP_INC_LOCAL:
-      case IR_OP_DEC_LOCAL:
-      case IR_OP_ITEM_PUSH_DEREF_LOCAL: {
-        if (inst->a < 0 || (uint32_t)inst->a >= local_count) {
-          return ir_validate_error(errdetail, diag, ERR_COMP_LOCALBEFOREDEF,
-                                   "Instruction %zu (%s) has out-of-range local index %d (locals=%u).",
-                                   i, ir_op_name(inst->op), inst->a, local_count);
-        }
-        break;
-      }
-      case IR_OP_CALL: {
+      case VALIDATE_A_U16:
         if (inst->a < 0) {
-          return ir_validate_error(errdetail, diag, ERR_COMP_TOOMANYARGS,
-                                   "Instruction %zu (CALL) has negative arity %d.",
-                                   i, inst->a);
+          if (inst->op == IR_OP_CALL) {
+            return ir_validate_error(errdetail, diag,
+                                     ERR_COMP_TOOMANYARGS,
+                                     "Instruction %zu (CALL) has negative arity %d.",
+                                     i, inst->a);
+          }
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (%s) has negative operand %d.",
+                                   i, meta->name, inst->a);
+        }
+        if (inst->a > UINT16_MAX) {
+          if (inst->op == IR_OP_CALL) {
+            return ir_validate_error(errdetail, diag,
+                                     ERR_COMP_TOOMANYARGS,
+                                     "Instruction %zu (CALL) arity %d exceeds bytecode range.",
+                                     i, inst->a);
+          }
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (%s) operand %d exceeds bytecode range.",
+                                   i, meta->name, inst->a);
         }
         break;
-      }
-      case IR_OP_BUILD_LIST:
+      case VALIDATE_A_U32:
         if (inst->a < 0) {
           return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
-                                   "Instruction %zu (BUILD_LIST) has negative list count %d.",
-                                   i, inst->a);
+                                   "Instruction %zu (%s) has negative operand %d.",
+                                   i, meta->name, inst->a);
         }
-        if ((uint32_t)inst->a > SIN_LIST_MAX_ELEMENTS) {
+        if (inst->op == IR_OP_BUILD_LIST &&
+            (uint32_t)inst->a > SIN_LIST_MAX_ELEMENTS) {
           return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
                                    "Instruction %zu (BUILD_LIST) list count %d exceeds maximum %u.",
-                                   i, inst->a, (unsigned)SIN_LIST_MAX_ELEMENTS);
+                                   i, inst->a,
+                                   (unsigned)SIN_LIST_MAX_ELEMENTS);
         }
         break;
-      case IR_OP_LIBCALL:
-        if (inst->a < 0 || inst->a > UINT8_MAX || inst->b < 0 || inst->b > UINT8_MAX) {
+      case VALIDATE_A_B_U8:
+        if (inst->a < 0 || inst->a > UINT8_MAX ||
+            inst->b < 0 || inst->b > UINT8_MAX) {
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (%s) has invalid u8 operands (%d,%d).",
+                                   i, meta->name, inst->a, inst->b);
+        }
+        break;
+      case VALIDATE_LIBCALL_PAIR:
+        if (inst->a < 0 || inst->a > UINT8_MAX ||
+            inst->b < 0 || inst->b > UINT8_MAX) {
           return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
                                    "Instruction %zu (LIBCALL) has invalid pair (%d,%d).",
                                    i, inst->a, inst->b);
         }
         break;
-      default:
+      case VALIDATE_LABEL_ID: {
+        if (inst->a < 0 || (size_t)inst->a >= unit->labels.count) {
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (%s) references invalid label id %d (jump invalid label id).",
+                                   i, meta->name, inst->a);
+        }
+        if (!unit->labels.entries[inst->a].bound) {
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (%s) references unbound label .L%d (jump unbound label).",
+                                   i, meta->name, inst->a);
+        }
+        if ((inst->op == IR_OP_JUMP || inst->op == IR_OP_JUMP_IF_FALSE) &&
+            unit->labels.entries[inst->a].position >=
+                unit->function.count) {
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (%s) references label .L%d with invalid position.",
+                                   i, meta->name, inst->a);
+        }
         break;
+      }
+      case VALIDATE_NON_NULL_IMM: {
+        if (inst->imm == 0) {
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (%s) has null string payload.",
+                                   i, meta->name);
+        }
+        size_t len = strlen((const char *)(intptr_t)inst->imm);
+        size_t limit = meta->size_policy == SIZE_ITEM_PUSH_LAYER
+                           ? (size_t)UINT8_MAX
+                           : SIN_MAX_STRING_BYTES;
+        if (len > limit) {
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                                   "Instruction %zu (%s) string payload is too long (%zu).",
+                                   i, meta->name, len);
+        }
+        break;
+      }
+      case VALIDATE_EMBEDDED_INDEX: {
+        if (inst->a < 0 || (size_t)inst->a >= unit->embedded_code.count) {
+          return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+                                   "Instruction %zu references invalid embedded code index %d.",
+                                   i, inst->a);
+        }
+        break;
+      }
     }
   }
   return ERR_NOERROR;

@@ -3,6 +3,7 @@
 // Licensed under the MIT License - see LICENSE file for details.
 #include "compiler/emitbc.h"
 
+#include <inttypes.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +23,15 @@ typedef struct {
   int failed;
 } BC_Writer;
 
+bool emitbc_checked_size_add(size_t *total, size_t amount) {
+  size_t next = 0;
+  if (!total || alloc_add_overflow(*total, amount, &next) ||
+      next > UINT32_MAX) {
+    return false;
+  }
+  *total = next;
+  return true;
+}
 
 static int bw_ensure(BC_Writer *w, size_t extra) {
   if (w->failed) return 0;
@@ -111,6 +121,9 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     return errnum;
   }
 
+  int8_t validate_rc = ir_validate_diag(ir, local_count, errdetail, diag);
+  if (validate_rc != ERR_NOERROR) return validate_rc;
+
   size_t pos_count = ir->function.count > 0 ? ir->function.count : 1;
   size_t *pos = NULL;
   if (!alloc_grow_array((void **)&pos, pos_count, sizeof(size_t))) {
@@ -121,7 +134,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
   size_t pc = BC_V1_HEADER_SIZE;
   for (size_t i = 0; i < ir->function.count; i++) {
     const IR_Inst *in = &ir->function.code[i];
-    int isz = 0;
+    size_t isz = 0;
     const IR_OpSchema *meta = ir_opcode_schema(in->op);
     pos[i] = pc;
     if (!meta) continue;
@@ -133,26 +146,48 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
       case SIZE_FIXED_5: isz = 5; break;
       case SIZE_PUSH_INT: isz = 1 + 8; break;
       case SIZE_PUSH_FLOAT: isz = 1 + 8; break;
-      case SIZE_PUSH_STRING: isz = 1 + 2 + (int)strlen((const char *)(intptr_t)in->imm); break;
-      case SIZE_ITEM_PUSH_LAYER: isz = 1 + 1 + (int)strlen((const char *)(intptr_t)in->imm); break;
+      case SIZE_PUSH_STRING:
+        isz = 3;
+        if (!emitbc_checked_size_add(
+                &isz, strlen((const char *)(intptr_t)in->imm))) {
+          goto size_overflow;
+        }
+        break;
+      case SIZE_ITEM_PUSH_LAYER:
+        isz = 2;
+        if (!emitbc_checked_size_add(
+                &isz, strlen((const char *)(intptr_t)in->imm))) {
+          goto size_overflow;
+        }
+        break;
       case SIZE_ITEM_SAVE_CODE:
-        isz = 1 + 2;
+        isz = 3;
         if (in->a >= 0 && (size_t)in->a < ir->embedded_code.count) {
           const IR_EmbeddedCodePayload *payload = &ir->embedded_code.entries[in->a];
           /* Every payload carries an explicit parameter marker and terminator,
            * including parameterless code, so source lengths beginning with
            * 'P' cannot be mistaken for a parameter block. */
-          isz += 1 + 2;
+          if (!emitbc_checked_size_add(&isz, 3)) goto size_overflow;
           if (payload->param_count > 0) {
             for (size_t p = 0; p < payload->param_count; p++) {
-              isz += 2 + (int)strlen(payload->params[p]);
+              size_t add = 0;
+              if (!emitbc_checked_size_add(
+                      &add, strlen(payload->params[p])) ||
+                  !emitbc_checked_size_add(&add, 2) ||
+                  !emitbc_checked_size_add(&isz, add)) {
+                goto size_overflow;
+              }
             }
           }
-          if (payload->source != NULL) isz += (int)strlen(payload->source);
+          if (payload->source != NULL) {
+            if (!emitbc_checked_size_add(&isz, strlen(payload->source))) {
+              goto size_overflow;
+            }
+          }
         }
         break;
     }
-    pc += (size_t)isz;
+    if (!emitbc_checked_size_add(&pc, isz)) goto size_overflow;
   }
 
   BC_Writer w = {.out = out, .used = 0, .failed = 0};
@@ -162,6 +197,8 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
   bc_encode_v1_header(header, local_count, param_count);
   if (!bw_write_bytes(&w, header, sizeof(header))) goto oom;
 
+  /* Preflight establishes these invariants before output mutation. The cheap
+   * repeated checks below are defense-in-depth at the encoding boundary. */
   for (size_t i = 0; i < ir->function.count; i++) {
     IR_Inst *in = &ir->function.code[i];
     if (in->op == IR_OP_LABEL) continue;
@@ -279,13 +316,16 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
           compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "jump unbound label %d", in->a);
           return errnum;
         }
-        size_t from = pos[i] + 1;
+        int64_t from = (int64_t)pos[i] + 1;
         size_t to = pos[label->position];
-        long diff = (long)to - (long)from;
+        int64_t diff = (int64_t)to - from;
         if (diff < INT16_MIN || diff > INT16_MAX) {
           free(pos);
           int8_t errnum = ERR_NOERROR;
-          compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "jump offset out of range: %ld", diff);
+          compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX,
+                                  DIAG_PHASE_EMITBC, "emitbc",
+                                  "jump offset out of range: %" PRId64,
+                                  diff);
           return errnum;
         }
         if (!bw_write_i16(&w, (int16_t)diff)) goto oom;
@@ -380,6 +420,16 @@ oom:
   {
     int8_t errnum = ERR_NOERROR;
     compdiag_set_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc", "bytecode writer out of memory");
+    return errnum;
+  }
+
+size_overflow:
+  free(pos);
+  {
+    int8_t errnum = ERR_NOERROR;
+    compdiag_set_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX,
+                           DIAG_PHASE_EMITBC, "emitbc",
+                           "bytecode size overflow");
     return errnum;
   }
 }

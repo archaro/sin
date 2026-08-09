@@ -101,6 +101,14 @@ typedef struct {
   bool param;
 } IR_EmbeddedLocal;
 
+/*
+ * Pointer contract: pointer-valued instruction operands and embedded payload
+ * strings must reference accessible NUL-terminated storage for the IR unit's
+ * lifetime. When param_count is nonzero, params must reference an accessible
+ * table of that many string pointers. Preflight can validate nulls, table
+ * consistency, semantic shape, lengths, and wire-format representability; C
+ * cannot portably validate an arbitrary forged or dangling non-null address.
+ */
 typedef struct {
   const char* source;
   size_t param_count;

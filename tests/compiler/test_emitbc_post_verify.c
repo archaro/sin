@@ -6,9 +6,11 @@
 #include "test_assert.h"
 #include "test_helpers.h"
 
-static void assert_post_verify_failure(IR_Unit *unit, uint8_t local_count,
-                                       uint8_t param_count,
-                                       const char *expected_detail) {
+static void assert_emission_failure(IR_Unit *unit, uint8_t local_count,
+                                    uint8_t param_count,
+                                    int8_t expected_code,
+                                    const char *expected_origin,
+                                    const char *expected_detail) {
   OUTPUT_t out = {0};
   out.maxsize = 16;
   out.bytecode = malloc(out.maxsize);
@@ -21,10 +23,9 @@ static void assert_post_verify_failure(IR_Unit *unit, uint8_t local_count,
   if (rc == ERR_NOERROR) {
     TEST_FAILF("expected emission failure containing: %s", expected_detail);
   }
-  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_EQ_INT(expected_code, rc);
   ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "emitbc: bytecode verification failed") != NULL ||
-              strstr(errdetail, "emitbc: parameter count exceeds local count") != NULL);
+  ASSERT_TRUE(strstr(errdetail, expected_origin) != NULL);
   ASSERT_TRUE(strstr(errdetail, expected_detail) != NULL);
 
   free(errdetail);
@@ -35,30 +36,41 @@ static void assert_post_verify_failure(IR_Unit *unit, uint8_t local_count,
 void test_emitbc_post_emission_verification(void) {
   IR_Unit *unit = t_new_unit();
   t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
-  assert_post_verify_failure(unit, 0, 1,
-                             "parameter count exceeds local count");
+  assert_emission_failure(unit, 0, 1, ERR_COMP_SYNTAX,
+                          "emitbc: parameter count exceeds local count",
+                          "parameter count exceeds local count");
 
   unit = t_new_unit();
   t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 1});
-  assert_post_verify_failure(unit, 0, 0, "final physical instruction must be HALT");
+  assert_emission_failure(unit, 0, 0, ERR_COMP_SYNTAX,
+                          "emitbc: bytecode verification failed",
+                          "final physical instruction must be HALT");
 
   unit = t_new_unit();
   t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
   t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 1});
-  assert_post_verify_failure(unit, 0, 0, "final physical instruction must be HALT");
+  assert_emission_failure(unit, 0, 0, ERR_COMP_SYNTAX,
+                          "emitbc: bytecode verification failed",
+                          "final physical instruction must be HALT");
 
   unit = t_new_unit();
   t_emit(unit, (IR_Inst){.op = IR_OP_LOAD_LOCAL, .a = 1});
   t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
-  assert_post_verify_failure(unit, 1, 0, "local index 1 out of range");
+  assert_emission_failure(unit, 1, 0, ERR_COMP_LOCALBEFOREDEF,
+                          "ir: Instruction",
+                          "out-of-range local index 1");
 
   unit = t_new_unit();
   t_emit(unit, (IR_Inst){.op = IR_OP_ADD});
   t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
-  assert_post_verify_failure(unit, 0, 0, "stack underflow");
+  assert_emission_failure(unit, 0, 0, ERR_COMP_SYNTAX,
+                          "emitbc: bytecode verification failed",
+                          "stack underflow");
 
   unit = t_new_unit();
   t_emit(unit, (IR_Inst){.op = IR_OP_ITEM_BEGIN});
   t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
-  assert_post_verify_failure(unit, 0, 0, "unknown item-layer opcode");
+  assert_emission_failure(unit, 0, 0, ERR_COMP_SYNTAX,
+                          "emitbc: bytecode verification failed",
+                          "unknown item-layer opcode");
 }

@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "error.h"
+#include "compiler/emitbc.h"
 #include "compiler/ir.h"
 #include "compiler/compiler_pipeline.h"
 #include "test_assert.h"
@@ -31,6 +32,198 @@ static bool capture_embedded_source(const BC_Instruction *instruction,
   return true;
 }
 
+static void assert_preflight_rejects(IR_Unit *u, int8_t expected_code,
+                                     const char *expected_detail) {
+  const unsigned char sentinel[] = {
+      0xAA, 0xBB, 0xCC, 0xDD, 0x11, 0x22, 0x33, 0x44,
+      0x55, 0x66, 0x77, 0x88, 0x99, 0x00, 0xFE, 0xEF};
+  unsigned char *storage = malloc(sizeof(sentinel));
+  ASSERT_NOT_NULL(storage);
+  memcpy(storage, sentinel, sizeof(sentinel));
+  OUTPUT_t out = {
+      .bytecode = storage,
+      .nextbyte = storage + 2,
+      .maxsize = sizeof(sentinel)};
+  OUTPUT_t before = out;
+  char *err = NULL;
+
+  ASSERT_EQ_INT(expected_code, t_emit_bytecode(u, 0, 0, &out, &err));
+  ASSERT_NOT_NULL(err);
+  ASSERT_TRUE(strstr(err, "ir:") != NULL);
+  ASSERT_TRUE(strstr(err, expected_detail) != NULL);
+  ASSERT_EQ_INT(0, memcmp(storage, sentinel, sizeof(sentinel)));
+  ASSERT_TRUE(out.bytecode == before.bytecode);
+  ASSERT_TRUE(out.nextbyte == before.nextbyte);
+  ASSERT_EQ_INT(before.maxsize, out.maxsize);
+
+  free(err);
+  free(storage);
+  if (u->embedded_code.count > 0 && !u->embedded_code.entries) {
+    u->embedded_code.count = 0;
+  }
+  ir_destroy_unit(u);
+}
+
+static void test_emitbc_preflight_rejects_malformed_ir(void) {
+  IR_Unit *u = ir_create_unit();
+  ASSERT_NOT_NULL(u);
+  u->function.count = 1;
+  u->function.capacity = 1;
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "inconsistent count, capacity, or storage");
+
+  u = ir_create_unit();
+  ASSERT_NOT_NULL(u);
+  u->labels.count = 1;
+  u->labels.capacity = 1;
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "inconsistent count, capacity, or storage");
+
+  u = ir_create_unit();
+  ASSERT_NOT_NULL(u);
+  u->embedded_code.count = 1;
+  u->embedded_code.capacity = 1;
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "inconsistent count, capacity, or storage");
+
+  u = ir_create_unit();
+  t_emit(u, (IR_Inst){.op = (IR_Op)999});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX, "unsupported IR op");
+
+  u = ir_create_unit();
+  t_emit(u, (IR_Inst){.op = IR_OP_PUSH_BOOL, .a = 2});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "invalid boolean operand");
+
+  u = ir_create_unit();
+  t_emit(u, (IR_Inst){.op = IR_OP_CALL, .a = UINT16_MAX + 1});
+  assert_preflight_rejects(u, ERR_COMP_TOOMANYARGS,
+                           "exceeds bytecode range");
+
+  u = ir_create_unit();
+  t_emit(u, (IR_Inst){.op = IR_OP_BUILD_LIST, .a = -1});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX, "negative operand");
+
+  u = ir_create_unit();
+  t_emit(u, (IR_Inst){.op = IR_OP_LIBCALL, .a = 0, .b = 256});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX, "invalid pair");
+
+  u = ir_create_unit();
+  t_emit(u, (IR_Inst){.op = IR_OP_PUSH_STRING, .imm = 0});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX, "null string payload");
+
+  u = ir_create_unit();
+  t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = 7});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "invalid embedded code index");
+
+  u = ir_create_unit();
+  ASSERT_TRUE(ir_add_embedded_code_payload(
+                  u, (IR_EmbeddedCodePayload){.source = NULL}) >= 0);
+  t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = 0});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "inconsistent source or parameters");
+
+  u = ir_create_unit();
+  ASSERT_TRUE(ir_add_embedded_code_payload(
+                  u, (IR_EmbeddedCodePayload){.source = NULL}) >= 0);
+  t_emit(u, (IR_Inst){.op = IR_OP_HALT});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "inconsistent source or parameters");
+
+  u = ir_create_unit();
+  ASSERT_TRUE(ir_add_embedded_code_payload(
+                  u, (IR_EmbeddedCodePayload){.source = "x",
+                                              .param_count = 1}) >= 0);
+  t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = 0});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "inconsistent source or parameters");
+
+  u = ir_create_unit();
+  const char **null_params = calloc(1, sizeof(*null_params));
+  ASSERT_NOT_NULL(null_params);
+  ASSERT_TRUE(ir_add_embedded_code_payload(
+                  u, (IR_EmbeddedCodePayload){.source = "x",
+                                              .param_count = 1,
+                                              .params = null_params}) >= 0);
+  t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = 0});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "parameter 0 is null");
+
+  u = ir_create_unit();
+  const char **empty_params = malloc(sizeof(*empty_params));
+  ASSERT_NOT_NULL(empty_params);
+  empty_params[0] = "";
+  ASSERT_TRUE(ir_add_embedded_code_payload(
+                  u, (IR_EmbeddedCodePayload){.source = "x",
+                                              .param_count = 1,
+                                              .params = empty_params}) >= 0);
+  t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = 0});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "parameter 0 has invalid length 0");
+
+  u = ir_create_unit();
+  int32_t label = ir_new_label(u);
+  t_emit(u, (IR_Inst){.op = IR_OP_JUMP, .a = label});
+  ASSERT_TRUE(ir_bind_label(u, label));
+  ASSERT_EQ_INT(u->function.count, u->labels.entries[label].position);
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX, "invalid position");
+
+  char *layer = malloc(257);
+  memset(layer, 'x', 256);
+  layer[256] = '\0';
+  u = ir_create_unit();
+  t_emit(u, (IR_Inst){.op = IR_OP_ITEM_PUSH_LAYER, .imm = (int64_t)(intptr_t)layer});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "string payload is too long");
+  free(layer);
+
+  char *oversized = malloc((size_t)UINT16_MAX + 2);
+  ASSERT_NOT_NULL(oversized);
+  memset(oversized, 'x', (size_t)UINT16_MAX + 1);
+  oversized[(size_t)UINT16_MAX + 1] = '\0';
+
+  u = ir_create_unit();
+  t_emit(u, (IR_Inst){.op = IR_OP_PUSH_STRING,
+                      .imm = (int64_t)(intptr_t)oversized});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "string payload is too long");
+
+  u = ir_create_unit();
+  ASSERT_TRUE(ir_add_embedded_code_payload(
+                  u, (IR_EmbeddedCodePayload){.source = oversized}) >= 0);
+  t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = 0});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "source is too long");
+
+  u = ir_create_unit();
+  const char **oversized_params = malloc(sizeof(*oversized_params));
+  ASSERT_NOT_NULL(oversized_params);
+  oversized_params[0] = oversized;
+  ASSERT_TRUE(ir_add_embedded_code_payload(
+                  u, (IR_EmbeddedCodePayload){.source = "x",
+                                              .param_count = 1,
+                                              .params = oversized_params}) >=
+              0);
+  t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = 0});
+  assert_preflight_rejects(u, ERR_COMP_SYNTAX,
+                           "parameter 0 has invalid length");
+  free(oversized);
+}
+
+static void test_emitbc_checked_size_boundaries(void) {
+  size_t total = (size_t)UINT32_MAX - 1;
+  ASSERT_TRUE(emitbc_checked_size_add(&total, 1));
+  ASSERT_EQ_INT(UINT32_MAX, total);
+
+  ASSERT_TRUE(!emitbc_checked_size_add(&total, 1));
+  ASSERT_EQ_INT(UINT32_MAX, total);
+
+  total = SIZE_MAX;
+  ASSERT_TRUE(!emitbc_checked_size_add(&total, 1));
+  ASSERT_TRUE(total == SIZE_MAX);
+}
+
 static uint32_t lcg_next(uint32_t *state) {
   *state = (*state * 1664525u) + 1013904223u;
   return *state;
@@ -43,6 +236,45 @@ static OUTPUT_t make_out(size_t cap) {
   out.nextbyte = out.bytecode;
   ASSERT_NOT_NULL(out.bytecode);
   return out;
+}
+
+static void test_emitbc_accepts_unencoded_embedded_locals(void) {
+  IR_Unit *u = t_new_unit();
+  ASSERT_NOT_NULL(u);
+  int32_t payload = ir_add_embedded_code_payload(
+      u, (IR_EmbeddedCodePayload){.source = "return 1;", .local_count = 1,
+                                  .locals = NULL});
+  ASSERT_TRUE(payload >= 0);
+  t_emit(u, (IR_Inst){.op = IR_OP_PUSH_STRING,
+                      .imm = (int64_t)(intptr_t)"target"});
+  t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = payload});
+  t_emit(u, (IR_Inst){.op = IR_OP_HALT});
+
+  OUTPUT_t out = make_out(32);
+  char *err = NULL;
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 0, 0, &out, &err));
+  ASSERT_TRUE(err == NULL);
+
+  free(out.bytecode);
+  ir_destroy_unit(u);
+}
+
+static void test_emitbc_accepts_unreferenced_terminal_label(void) {
+  IR_Unit *u = t_new_unit();
+  ASSERT_NOT_NULL(u);
+  t_emit(u, (IR_Inst){.op = IR_OP_HALT});
+  int32_t terminal = ir_new_label(u);
+  ASSERT_TRUE(terminal >= 0);
+  ASSERT_TRUE(ir_bind_label(u, terminal));
+  ASSERT_EQ_INT(u->function.count, u->labels.entries[terminal].position);
+
+  OUTPUT_t out = make_out(16);
+  char *err = NULL;
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 0, 0, &out, &err));
+  ASSERT_TRUE(err == NULL);
+
+  free(out.bytecode);
+  ir_destroy_unit(u);
 }
 
 static void assert_class_layout(IR_Inst inst, size_t expected_body_len, size_t expected_arity_bytes,
@@ -350,6 +582,10 @@ static void test_emitbc_label_heavy_jump_targets_in_bounds(void) {
 }
 
 void test_emitbc_invariants(void) {
+  test_emitbc_preflight_rejects_malformed_ir();
+  test_emitbc_checked_size_boundaries();
+  test_emitbc_accepts_unencoded_embedded_locals();
+  test_emitbc_accepts_unreferenced_terminal_label();
   test_emitbc_op_class_invariants();
   test_embedded_code_canonical_boundaries();
   test_embedded_code_parameterized_compatibility();
