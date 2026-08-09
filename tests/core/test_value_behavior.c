@@ -1553,3 +1553,591 @@ void test_strict_validation_rejects_null_bytecode(void) {
   ASSERT_TRUE(strstr(item_value(msg)->s, "null bytecode") != NULL);
   teardown_runtime();
 }
+
+enum {
+  ERROR_TEST_FIELD_ERROR,
+  ERROR_TEST_FIELD_MESSAGE,
+  ERROR_TEST_FIELD_ITEM,
+  ERROR_TEST_FIELD_CODE,
+  ERROR_TEST_FIELD_STAGE,
+  ERROR_TEST_FIELD_FILE,
+  ERROR_TEST_FIELD_LINE,
+  ERROR_TEST_FIELD_COLUMN,
+  ERROR_TEST_FIELD_EXCERPT,
+  ERROR_TEST_FIELD_COUNT
+};
+
+#define ERROR_TEST_TEXT_CAPACITY 512u
+#define ERROR_OOM_SWEEP_BOUND 256L
+
+static const char *const error_test_field_names[ERROR_TEST_FIELD_COUNT] = {
+  "error",
+  "error.msg",
+  "error.item",
+  "error.code",
+  "error.stage",
+  "error.file",
+  "error.line",
+  "error.column",
+  "error.excerpt"
+};
+
+typedef struct {
+  VALUE_e types[ERROR_TEST_FIELD_COUNT];
+  int64_t integers[ERROR_TEST_FIELD_COUNT];
+  char strings[ERROR_TEST_FIELD_COUNT][ERROR_TEST_TEXT_CAPACITY];
+} ErrorItemSnapshot;
+
+static CompilerDiagnostic old_compiler_diagnostic(void) {
+  return (CompilerDiagnostic){
+    .code = ERR_COMP_UNKNOWNCHAR,
+    .phase = DIAG_PHASE_PARSE,
+    .message = "old compiler diagnostic",
+    .stable_code = "SIN-PARSE-OLD",
+    .source_name = "old.sin",
+    .excerpt = "old excerpt",
+    .line = 4,
+    .column = 8,
+    .span = 2,
+    .has_loc = true
+  };
+}
+
+static CompilerDiagnostic new_compiler_diagnostic(void) {
+  return (CompilerDiagnostic){
+    .code = ERR_COMP_TOOMANYLOCALS,
+    .phase = DIAG_PHASE_SEMANT,
+    .message = "new compiler diagnostic",
+    .stable_code = "SIN-SEMANT-NEW",
+    .source_name = "new.sin",
+    .excerpt = "new excerpt",
+    .line = 12,
+    .column = 6,
+    .span = 3,
+    .has_loc = true
+  };
+}
+
+static void init_error_snapshot(ErrorItemSnapshot *snapshot) {
+  memset(snapshot, 0, sizeof *snapshot);
+  for (size_t i = 0; i < ERROR_TEST_FIELD_COUNT; i++) {
+    snapshot->types[i] = VALUE_nil;
+  }
+}
+
+static void set_snapshot_int(ErrorItemSnapshot *snapshot, size_t field,
+                             int64_t value) {
+  snapshot->types[field] = VALUE_int;
+  snapshot->integers[field] = value;
+}
+
+static void set_snapshot_string(ErrorItemSnapshot *snapshot, size_t field,
+                                const char *value) {
+  snapshot->types[field] = VALUE_str;
+  int written = snprintf(snapshot->strings[field],
+                         sizeof snapshot->strings[field], "%s", value);
+  ASSERT_TRUE(written >= 0 &&
+              (size_t)written < sizeof snapshot->strings[field]);
+}
+
+static void snapshot_error_item(ITEM_t *root, ErrorItemSnapshot *snapshot) {
+  init_error_snapshot(snapshot);
+  for (size_t i = 0; i < ERROR_TEST_FIELD_COUNT; i++) {
+    ITEM_t *field = find_item(root, error_test_field_names[i]);
+    ASSERT_NOT_NULL(field);
+    const VALUE_t *value = item_value(field);
+    ASSERT_NOT_NULL(value);
+    snapshot->types[i] = value->type;
+    if (value->type == VALUE_int) {
+      snapshot->integers[i] = value->i;
+    } else if (value->type == VALUE_str) {
+      ASSERT_NOT_NULL(value->s);
+      int written = snprintf(snapshot->strings[i],
+                             sizeof snapshot->strings[i], "%s", value->s);
+      ASSERT_TRUE(written >= 0 &&
+                  (size_t)written < sizeof snapshot->strings[i]);
+    } else {
+      ASSERT_EQ_INT(VALUE_nil, value->type);
+    }
+  }
+}
+
+static bool error_item_matches_snapshot(ITEM_t *root,
+                                        const ErrorItemSnapshot *snapshot) {
+  for (size_t i = 0; i < ERROR_TEST_FIELD_COUNT; i++) {
+    ITEM_t *field = find_item(root, error_test_field_names[i]);
+    const VALUE_t *value = item_value(field);
+    if (!value || value->type != snapshot->types[i]) return false;
+    if (value->type == VALUE_int &&
+        value->i != snapshot->integers[i]) {
+      return false;
+    }
+    if (value->type == VALUE_str &&
+        (!value->s || strcmp(value->s, snapshot->strings[i]) != 0)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void assert_error_snapshot(ITEM_t *root,
+                                  const ErrorItemSnapshot *snapshot) {
+  ASSERT_TRUE(error_item_matches_snapshot(root, snapshot));
+}
+
+static void expected_simple_error(ErrorItemSnapshot *snapshot, int errnum,
+                                  const char *detail,
+                                  const char *current_item_name) {
+  init_error_snapshot(snapshot);
+  set_snapshot_int(snapshot, ERROR_TEST_FIELD_ERROR, errnum);
+
+  char message[ERROR_TEST_TEXT_CAPACITY];
+  int written = detail
+      ? snprintf(message, sizeof message, "%s (%s)", errmsg[errnum], detail)
+      : snprintf(message, sizeof message, "%s", errmsg[errnum]);
+  ASSERT_TRUE(written >= 0 && (size_t)written < sizeof message);
+  set_snapshot_string(snapshot, ERROR_TEST_FIELD_MESSAGE, message);
+  if (current_item_name) {
+    set_snapshot_string(snapshot, ERROR_TEST_FIELD_ITEM, current_item_name);
+  }
+}
+
+static void expected_compiler_error(ErrorItemSnapshot *snapshot,
+                                    const CompilerDiagnostic *diag) {
+  init_error_snapshot(snapshot);
+  const char *code = diag->stable_code
+      ? diag->stable_code
+      : compiler_diag_stable_code(diag->code, diag->phase);
+  const char *stage = compiler_diag_phase_name(diag->phase);
+  const char *file = diag->source_name ? diag->source_name : "";
+  const char *message = diag->message ? diag->message : "";
+  const char *excerpt = diag->excerpt ? diag->excerpt : "";
+  int line_number = diag->has_loc ? diag->line : 0;
+  int column = diag->has_loc ? diag->column : 0;
+
+  set_snapshot_int(snapshot, ERROR_TEST_FIELD_ERROR, diag->code);
+  char formatted[ERROR_TEST_TEXT_CAPACITY];
+  int written = snprintf(formatted, sizeof formatted,
+      "%s stage=%s file=%s line=%d column=%d message=%s excerpt=%s",
+      code, stage, file, line_number, column, message, excerpt);
+  ASSERT_TRUE(written >= 0 && (size_t)written < sizeof formatted);
+  set_snapshot_string(snapshot, ERROR_TEST_FIELD_MESSAGE, formatted);
+  set_snapshot_string(snapshot, ERROR_TEST_FIELD_CODE, code);
+  set_snapshot_string(snapshot, ERROR_TEST_FIELD_STAGE, stage);
+  set_snapshot_string(snapshot, ERROR_TEST_FIELD_FILE, file);
+  set_snapshot_int(snapshot, ERROR_TEST_FIELD_LINE, line_number);
+  set_snapshot_int(snapshot, ERROR_TEST_FIELD_COLUMN, column);
+  set_snapshot_string(snapshot, ERROR_TEST_FIELD_EXCERPT, excerpt);
+}
+
+static void capture_error_field_pointers(
+    ITEM_t *root, ITEM_t *pointers[ERROR_TEST_FIELD_COUNT]) {
+  for (size_t i = 0; i < ERROR_TEST_FIELD_COUNT; i++) {
+    bool found = false;
+    pointers[i] = find_item_cached(root, error_test_field_names[i], &found);
+    ASSERT_TRUE(found);
+    ASSERT_NOT_NULL(pointers[i]);
+  }
+}
+
+static void assert_error_field_pointers(
+    ITEM_t *root, ITEM_t *const pointers[ERROR_TEST_FIELD_COUNT]) {
+  for (size_t i = 0; i < ERROR_TEST_FIELD_COUNT; i++) {
+    ASSERT_TRUE(find_item(root, error_test_field_names[i]) == pointers[i]);
+    ASSERT_TRUE(find_item_cached(root, error_test_field_names[i], NULL) ==
+                pointers[i]);
+  }
+}
+
+static void assert_existing_error_fields_are_nil(ITEM_t *root) {
+  for (size_t i = 0; i < ERROR_TEST_FIELD_COUNT; i++) {
+    ITEM_t *field = find_item(root, error_test_field_names[i]);
+    if (field) {
+      const VALUE_t *value = item_value(field);
+      ASSERT_NOT_NULL(value);
+      ASSERT_EQ_INT(VALUE_nil, value->type);
+    }
+  }
+}
+
+static ITEM_t *set_test_error_string(ITEM_t *root, const char *name,
+                                     const char *string) {
+  char *copy = strdup(string);
+  ASSERT_NOT_NULL(copy);
+  ITEM_MUTATION_RESULT_t result = item_set_value(
+      root, name, (VALUE_t){.type = VALUE_str, .s = copy});
+  if (!item_mutation_succeeded(result)) free(copy);
+  ASSERT_TRUE(item_mutation_succeeded(result));
+  ASSERT_NOT_NULL(result.item);
+  return result.item;
+}
+
+static void populate_incomplete_error(
+    ITEM_t *root, ITEM_t *pointers[ERROR_TEST_FIELD_COUNT]) {
+  memset(pointers, 0, ERROR_TEST_FIELD_COUNT * sizeof *pointers);
+  pointers[ERROR_TEST_FIELD_ERROR] = test_item_set_value(
+      root, "error", (VALUE_t){.type = VALUE_int, .i = ERR_NETWORK_ERROR});
+  ASSERT_NOT_NULL(pointers[ERROR_TEST_FIELD_ERROR]);
+  pointers[ERROR_TEST_FIELD_MESSAGE] = set_test_error_string(
+      root, "error.msg", "incomplete old message");
+  pointers[ERROR_TEST_FIELD_CODE] = set_test_error_string(
+      root, "error.code", "INCOMPLETE-OLD");
+  pointers[ERROR_TEST_FIELD_LINE] = test_item_set_value(
+      root, "error.line", (VALUE_t){.type = VALUE_int, .i = 77});
+  ASSERT_NOT_NULL(pointers[ERROR_TEST_FIELD_LINE]);
+
+  for (size_t i = 0; i < ERROR_TEST_FIELD_COUNT; i++) {
+    if (pointers[i]) {
+      ASSERT_TRUE(find_item_cached(root, error_test_field_names[i], NULL) ==
+                  pointers[i]);
+    } else {
+      ASSERT_TRUE(find_item(root, error_test_field_names[i]) == NULL);
+    }
+  }
+}
+
+static void assert_incomplete_error_pointers(
+    ITEM_t *root, ITEM_t *const pointers[ERROR_TEST_FIELD_COUNT]) {
+  for (size_t i = 0; i < ERROR_TEST_FIELD_COUNT; i++) {
+    if (pointers[i]) {
+      ASSERT_TRUE(find_item(root, error_test_field_names[i]) == pointers[i]);
+      ASSERT_TRUE(find_item_cached(root, error_test_field_names[i], NULL) ==
+                  pointers[i]);
+    }
+  }
+}
+
+static bool all_error_fields_exist(ITEM_t *root) {
+  for (size_t i = 0; i < ERROR_TEST_FIELD_COUNT; i++) {
+    if (!find_item(root, error_test_field_names[i])) return false;
+  }
+  return true;
+}
+
+void test_error_item_oom_preserves_existing_diagnostic(void) {
+  init_errmsg();
+  alloc_test_fail_after(-1);
+  bool succeeded = false;
+  for (long fail_at = 0; fail_at <= ERROR_OOM_SWEEP_BOUND; fail_at++) {
+    ITEMSTORE_t *store = itemstore_create("root");
+    ASSERT_NOT_NULL(store);
+    ITEM_t *root = itemstore_root(store);
+    CompilerDiagnostic old_diag = old_compiler_diagnostic();
+    set_compiler_error_item(root, &old_diag);
+
+    ErrorItemSnapshot old_snapshot;
+    ErrorItemSnapshot new_snapshot;
+    snapshot_error_item(root, &old_snapshot);
+    expected_simple_error(&new_snapshot, ERR_RUNTIME_INVALIDARGS,
+                          "new detail", NULL);
+    ITEM_t *pointers[ERROR_TEST_FIELD_COUNT];
+    capture_error_field_pointers(root, pointers);
+    uint64_t payload_revision = itemstore_payload_revision(store);
+    uint64_t topology_revision = itemstore_topology_revision(store);
+
+    alloc_test_fail_after(fail_at);
+    set_error_item(root, ERR_RUNTIME_INVALIDARGS, "new detail", NULL);
+    alloc_test_fail_after(-1);
+
+    if (error_item_matches_snapshot(root, &new_snapshot)) {
+      assert_error_snapshot(root, &new_snapshot);
+      assert_error_field_pointers(root, pointers);
+      ASSERT_EQ_INT(payload_revision + 1u,
+                    itemstore_payload_revision(store));
+      ASSERT_EQ_INT(topology_revision, itemstore_topology_revision(store));
+      succeeded = true;
+    } else {
+      assert_error_snapshot(root, &old_snapshot);
+      assert_error_field_pointers(root, pointers);
+      ASSERT_EQ_INT(payload_revision, itemstore_payload_revision(store));
+      ASSERT_EQ_INT(topology_revision, itemstore_topology_revision(store));
+    }
+    itemstore_destroy(store);
+    if (succeeded) break;
+  }
+  ASSERT_TRUE(succeeded);
+}
+
+void test_compiler_error_item_oom_preserves_existing_diagnostic(void) {
+  init_errmsg();
+  alloc_test_fail_after(-1);
+  bool succeeded = false;
+  for (long fail_at = 0; fail_at <= ERROR_OOM_SWEEP_BOUND; fail_at++) {
+    ITEMSTORE_t *store = itemstore_create("root");
+    ASSERT_NOT_NULL(store);
+    ITEM_t *root = itemstore_root(store);
+    set_error_item(root, ERR_NETWORK_ERROR, "old detail", NULL);
+
+    CompilerDiagnostic new_diag = new_compiler_diagnostic();
+    ErrorItemSnapshot old_snapshot;
+    ErrorItemSnapshot new_snapshot;
+    snapshot_error_item(root, &old_snapshot);
+    expected_compiler_error(&new_snapshot, &new_diag);
+    ITEM_t *pointers[ERROR_TEST_FIELD_COUNT];
+    capture_error_field_pointers(root, pointers);
+    uint64_t payload_revision = itemstore_payload_revision(store);
+    uint64_t topology_revision = itemstore_topology_revision(store);
+
+    alloc_test_fail_after(fail_at);
+    set_compiler_error_item(root, &new_diag);
+    alloc_test_fail_after(-1);
+
+    if (error_item_matches_snapshot(root, &new_snapshot)) {
+      assert_error_snapshot(root, &new_snapshot);
+      assert_error_field_pointers(root, pointers);
+      ASSERT_EQ_INT(payload_revision + 1u,
+                    itemstore_payload_revision(store));
+      ASSERT_EQ_INT(topology_revision, itemstore_topology_revision(store));
+      succeeded = true;
+    } else {
+      assert_error_snapshot(root, &old_snapshot);
+      assert_error_field_pointers(root, pointers);
+      ASSERT_EQ_INT(payload_revision, itemstore_payload_revision(store));
+      ASSERT_EQ_INT(topology_revision, itemstore_topology_revision(store));
+    }
+    itemstore_destroy(store);
+    if (succeeded) break;
+  }
+  ASSERT_TRUE(succeeded);
+}
+
+void test_error_item_oom_without_previous_diagnostic(void) {
+  init_errmsg();
+  alloc_test_fail_after(-1);
+  ErrorItemSnapshot expected;
+  expected_simple_error(&expected, ERR_NETWORK_ERROR, "fresh detail", NULL);
+
+  bool succeeded = false;
+  for (long fail_at = 0; fail_at <= ERROR_OOM_SWEEP_BOUND; fail_at++) {
+    ITEMSTORE_t *store = itemstore_create("root");
+    ASSERT_NOT_NULL(store);
+    ITEM_t *root = itemstore_root(store);
+    uint64_t payload_revision = itemstore_payload_revision(store);
+
+    alloc_test_fail_after(fail_at);
+    set_error_item(root, ERR_NETWORK_ERROR, "fresh detail", NULL);
+    alloc_test_fail_after(-1);
+
+    if (error_item_matches_snapshot(root, &expected)) {
+      assert_error_snapshot(root, &expected);
+      ASSERT_EQ_INT(payload_revision + 1u,
+                    itemstore_payload_revision(store));
+      succeeded = true;
+    } else {
+      assert_existing_error_fields_are_nil(root);
+      ASSERT_EQ_INT(payload_revision, itemstore_payload_revision(store));
+    }
+    itemstore_destroy(store);
+    if (succeeded) break;
+  }
+  ASSERT_TRUE(succeeded);
+}
+
+void test_compiler_error_item_oom_without_previous_diagnostic(void) {
+  init_errmsg();
+  alloc_test_fail_after(-1);
+  CompilerDiagnostic diag = new_compiler_diagnostic();
+  ErrorItemSnapshot expected;
+  expected_compiler_error(&expected, &diag);
+
+  bool succeeded = false;
+  for (long fail_at = 0; fail_at <= ERROR_OOM_SWEEP_BOUND; fail_at++) {
+    ITEMSTORE_t *store = itemstore_create("root");
+    ASSERT_NOT_NULL(store);
+    ITEM_t *root = itemstore_root(store);
+    uint64_t payload_revision = itemstore_payload_revision(store);
+
+    alloc_test_fail_after(fail_at);
+    set_compiler_error_item(root, &diag);
+    alloc_test_fail_after(-1);
+
+    if (error_item_matches_snapshot(root, &expected)) {
+      assert_error_snapshot(root, &expected);
+      ASSERT_EQ_INT(payload_revision + 1u,
+                    itemstore_payload_revision(store));
+      succeeded = true;
+    } else {
+      assert_existing_error_fields_are_nil(root);
+      ASSERT_EQ_INT(payload_revision, itemstore_payload_revision(store));
+    }
+    itemstore_destroy(store);
+    if (succeeded) break;
+  }
+  ASSERT_TRUE(succeeded);
+}
+
+void test_error_item_oom_normalizes_incomplete_diagnostic(void) {
+  init_errmsg();
+  alloc_test_fail_after(-1);
+  ErrorItemSnapshot expected;
+  expected_simple_error(&expected, ERR_RUNTIME_INVALIDARGS,
+                        "replacement detail", NULL);
+
+  bool succeeded = false;
+  for (long fail_at = 0; fail_at <= ERROR_OOM_SWEEP_BOUND; fail_at++) {
+    ITEMSTORE_t *store = itemstore_create("root");
+    ASSERT_NOT_NULL(store);
+    ITEM_t *root = itemstore_root(store);
+    ITEM_t *pointers[ERROR_TEST_FIELD_COUNT];
+    populate_incomplete_error(root, pointers);
+    uint64_t payload_revision = itemstore_payload_revision(store);
+
+    alloc_test_fail_after(fail_at);
+    set_error_item(root, ERR_RUNTIME_INVALIDARGS, "replacement detail", NULL);
+    alloc_test_fail_after(-1);
+
+    if (error_item_matches_snapshot(root, &expected)) {
+      assert_error_snapshot(root, &expected);
+      succeeded = true;
+    } else {
+      assert_existing_error_fields_are_nil(root);
+    }
+    assert_incomplete_error_pointers(root, pointers);
+    ASSERT_EQ_INT(payload_revision + 1u,
+                  itemstore_payload_revision(store));
+    itemstore_destroy(store);
+    if (succeeded) break;
+  }
+  ASSERT_TRUE(succeeded);
+}
+
+void test_compiler_error_item_oom_normalizes_incomplete_diagnostic(void) {
+  init_errmsg();
+  alloc_test_fail_after(-1);
+  CompilerDiagnostic diag = new_compiler_diagnostic();
+  ErrorItemSnapshot expected;
+  expected_compiler_error(&expected, &diag);
+
+  bool succeeded = false;
+  for (long fail_at = 0; fail_at <= ERROR_OOM_SWEEP_BOUND; fail_at++) {
+    ITEMSTORE_t *store = itemstore_create("root");
+    ASSERT_NOT_NULL(store);
+    ITEM_t *root = itemstore_root(store);
+    ITEM_t *pointers[ERROR_TEST_FIELD_COUNT];
+    populate_incomplete_error(root, pointers);
+    uint64_t payload_revision = itemstore_payload_revision(store);
+
+    alloc_test_fail_after(fail_at);
+    set_compiler_error_item(root, &diag);
+    alloc_test_fail_after(-1);
+
+    if (error_item_matches_snapshot(root, &expected)) {
+      assert_error_snapshot(root, &expected);
+      succeeded = true;
+    } else {
+      assert_existing_error_fields_are_nil(root);
+    }
+    assert_incomplete_error_pointers(root, pointers);
+    ASSERT_EQ_INT(payload_revision + 1u,
+                  itemstore_payload_revision(store));
+    itemstore_destroy(store);
+    if (succeeded) break;
+  }
+  ASSERT_TRUE(succeeded);
+}
+
+void test_clear_error_item_is_allocation_free_and_atomic(void) {
+  init_errmsg();
+  alloc_test_fail_after(-1);
+
+  ITEMSTORE_t *store = itemstore_create("root");
+  ASSERT_NOT_NULL(store);
+  ITEM_t *root = itemstore_root(store);
+  CompilerDiagnostic diag = new_compiler_diagnostic();
+  set_compiler_error_item(root, &diag);
+  ErrorItemSnapshot old_snapshot;
+  snapshot_error_item(root, &old_snapshot);
+  ITEM_t *pointers[ERROR_TEST_FIELD_COUNT];
+  capture_error_field_pointers(root, pointers);
+  uint64_t payload_revision = itemstore_payload_revision(store);
+  uint64_t topology_revision = itemstore_topology_revision(store);
+
+  item_enter_use(pointers[ERROR_TEST_FIELD_STAGE]);
+  clear_error_item(root);
+  assert_error_snapshot(root, &old_snapshot);
+  assert_error_field_pointers(root, pointers);
+  ASSERT_EQ_INT(payload_revision, itemstore_payload_revision(store));
+  ASSERT_EQ_INT(topology_revision, itemstore_topology_revision(store));
+  item_leave_use(pointers[ERROR_TEST_FIELD_STAGE]);
+
+  alloc_test_fail_after(0);
+  clear_error_item(root);
+  alloc_test_fail_after(-1);
+  ErrorItemSnapshot nil_snapshot;
+  init_error_snapshot(&nil_snapshot);
+  assert_error_snapshot(root, &nil_snapshot);
+  assert_error_field_pointers(root, pointers);
+  ASSERT_EQ_INT(payload_revision + 1u, itemstore_payload_revision(store));
+  ASSERT_EQ_INT(topology_revision, itemstore_topology_revision(store));
+  itemstore_destroy(store);
+
+  bool completed_topology = false;
+  for (long fail_at = 0; fail_at <= ERROR_OOM_SWEEP_BOUND; fail_at++) {
+    store = itemstore_create("root");
+    ASSERT_NOT_NULL(store);
+    root = itemstore_root(store);
+    populate_incomplete_error(root, pointers);
+    payload_revision = itemstore_payload_revision(store);
+
+    alloc_test_fail_after(fail_at);
+    clear_error_item(root);
+    alloc_test_fail_after(-1);
+
+    assert_existing_error_fields_are_nil(root);
+    assert_incomplete_error_pointers(root, pointers);
+    ASSERT_EQ_INT(payload_revision + 1u, itemstore_payload_revision(store));
+    completed_topology = all_error_fields_exist(root);
+    itemstore_destroy(store);
+    if (completed_topology) break;
+  }
+  ASSERT_TRUE(completed_topology);
+}
+
+void test_error_item_null_inputs_provenance_and_pins(void) {
+  init_errmsg();
+  alloc_test_fail_after(-1);
+  CompilerDiagnostic diag = new_compiler_diagnostic();
+  set_error_item(NULL, ERR_NETWORK_ERROR, "ignored", NULL);
+  set_compiler_error_item(NULL, NULL);
+  set_compiler_error_item(NULL, &diag);
+
+  ITEMSTORE_t *store = itemstore_create("root");
+  ASSERT_NOT_NULL(store);
+  ITEM_t *root = itemstore_root(store);
+  set_compiler_error_item(root, NULL);
+  ErrorItemSnapshot expected;
+  expected_simple_error(&expected, ERR_COMP_UNKNOWN, NULL, NULL);
+  assert_error_snapshot(root, &expected);
+
+  ITEM_t *current = test_item_set_value(
+      root, "origin.child", (VALUE_t){.type = VALUE_int, .i = 1});
+  ASSERT_NOT_NULL(current);
+  ITEM_t *pointers[ERROR_TEST_FIELD_COUNT];
+  capture_error_field_pointers(root, pointers);
+  uint64_t payload_revision = itemstore_payload_revision(store);
+  set_error_item(root, ERR_RUNTIME_INVALIDARGS, "with provenance", current);
+  expected_simple_error(&expected, ERR_RUNTIME_INVALIDARGS,
+                        "with provenance", "origin.child");
+  assert_error_snapshot(root, &expected);
+  assert_error_field_pointers(root, pointers);
+  ASSERT_EQ_INT(payload_revision + 1u, itemstore_payload_revision(store));
+
+  ErrorItemSnapshot pinned_snapshot;
+  snapshot_error_item(root, &pinned_snapshot);
+  payload_revision = itemstore_payload_revision(store);
+  item_enter_use(pointers[ERROR_TEST_FIELD_STAGE]);
+  set_compiler_error_item(root, &diag);
+  assert_error_snapshot(root, &pinned_snapshot);
+  assert_error_field_pointers(root, pointers);
+  ASSERT_EQ_INT(payload_revision, itemstore_payload_revision(store));
+  item_leave_use(pointers[ERROR_TEST_FIELD_STAGE]);
+
+  CompilerDiagnostic empty_diag = {0};
+  set_compiler_error_item(root, &empty_diag);
+  expected_compiler_error(&expected, &empty_diag);
+  assert_error_snapshot(root, &expected);
+  assert_error_field_pointers(root, pointers);
+
+  alloc_test_fail_after(-1);
+  itemstore_destroy(store);
+}

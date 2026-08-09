@@ -388,6 +388,14 @@ void test_strict_runtime_contracts_reports_missing_item_arguments(void);
 void test_strict_runtime_contracts_uses_context_itemroot(void);
 void test_runtime_bytecode_safety_is_mandatory(void);
 void test_strict_validation_rejects_null_bytecode(void);
+void test_error_item_oom_preserves_existing_diagnostic(void);
+void test_compiler_error_item_oom_preserves_existing_diagnostic(void);
+void test_error_item_oom_without_previous_diagnostic(void);
+void test_compiler_error_item_oom_without_previous_diagnostic(void);
+void test_error_item_oom_normalizes_incomplete_diagnostic(void);
+void test_compiler_error_item_oom_normalizes_incomplete_diagnostic(void);
+void test_clear_error_item_is_allocation_free_and_atomic(void);
+void test_error_item_null_inputs_provenance_and_pins(void);
 static const test_case_t core_tests[] = {
     {"test_absyn_nested_binary_expressions", test_absyn_nested_binary_expressions},
     {"test_absyn_budget_limits_and_iterative_cleanup", test_absyn_budget_limits_and_iterative_cleanup},
@@ -623,6 +631,14 @@ static const test_case_t runtime_tests[] = {
     {"test_strict_runtime_contracts_uses_context_itemroot", test_strict_runtime_contracts_uses_context_itemroot},
     {"test_runtime_bytecode_safety_is_mandatory", test_runtime_bytecode_safety_is_mandatory},
     {"test_strict_validation_rejects_null_bytecode", test_strict_validation_rejects_null_bytecode},
+    {"test_error_item_oom_preserves_existing_diagnostic", test_error_item_oom_preserves_existing_diagnostic},
+    {"test_compiler_error_item_oom_preserves_existing_diagnostic", test_compiler_error_item_oom_preserves_existing_diagnostic},
+    {"test_error_item_oom_without_previous_diagnostic", test_error_item_oom_without_previous_diagnostic},
+    {"test_compiler_error_item_oom_without_previous_diagnostic", test_compiler_error_item_oom_without_previous_diagnostic},
+    {"test_error_item_oom_normalizes_incomplete_diagnostic", test_error_item_oom_normalizes_incomplete_diagnostic},
+    {"test_compiler_error_item_oom_normalizes_incomplete_diagnostic", test_compiler_error_item_oom_normalizes_incomplete_diagnostic},
+    {"test_clear_error_item_is_allocation_free_and_atomic", test_clear_error_item_is_allocation_free_and_atomic},
+    {"test_error_item_null_inputs_provenance_and_pins", test_error_item_null_inputs_provenance_and_pins},
     {"test_interpret_semantics_golden", test_interpret_semantics_golden},
     {"test_interpret_legacy_and_v1_headers_execute_equivalently", test_interpret_legacy_and_v1_headers_execute_equivalently},
     {"test_interpret_legacy_conversion_semantics", test_interpret_legacy_conversion_semantics},

@@ -89,20 +89,20 @@ static uint32_t hash_key(const char *key) {
 
 static ITEM_CHILDREN_t *create_children(uint32_t bucket_count,
                                         size_t ordered_capacity) {
-  ITEM_CHILDREN_t *children = calloc(1, sizeof *children);
+  ITEM_CHILDREN_t *children = alloc_calloc(1, sizeof *children);
   if (!children) return NULL;
 
   children->size = bucket_count > 0 ? bucket_count : 1u;
   children->ordered_capacity = ordered_capacity;
-  children->table = calloc(children->size, sizeof *children->table);
+  children->table = alloc_calloc(children->size, sizeof *children->table);
   if (!children->table) {
     free(children);
     return NULL;
   }
 
   if (ordered_capacity > 0) {
-    children->ordered_array = malloc(ordered_capacity *
-                                     sizeof *children->ordered_array);
+    children->ordered_array =
+        alloc_calloc(ordered_capacity, sizeof *children->ordered_array);
     if (!children->ordered_array) {
       free(children->table);
       free(children);
@@ -192,7 +192,7 @@ bool item_children_append(ITEM_CHILDREN_t *children, const char *name,
     return false;
   }
 
-  ItemEntry_t *entry = malloc(sizeof *entry);
+  ItemEntry_t *entry = alloc_malloc(sizeof *entry);
   if (!entry) return false;
   if (!grow_ordered_array(children)) {
     free(entry);
@@ -285,7 +285,7 @@ size_t item_children_ordered_capacity(const ITEM_CHILDREN_t *children) {
 }
 
 ITEM_t *allocate_item(void) {
-  return malloc(sizeof(ITEM_t));
+  return alloc_malloc(sizeof(ITEM_t));
 }
 
 void deallocate_item(ITEM_t *item) {
