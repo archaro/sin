@@ -164,6 +164,7 @@ void test_load_itemstore_rejects_structural_corruption(void);
 void test_load_itemstore_rejects_resource_limit_violations(void);
 void test_save_itemstore_preserves_existing_file_on_failure(void);
 void test_save_itemsource_reports_write_and_close_failure(void);
+void test_itemsource_paths_are_validated_and_contained(void);
 void test_itemstore_durability_modes(void);
 void test_itemstore_large_load_presizes_child_storage(void);
 void test_sconv_v1_to_v2_migrates_legacy_code(void);
@@ -485,6 +486,7 @@ static const test_case_t core_tests[] = {
     {"test_load_itemstore_rejects_resource_limit_violations", test_load_itemstore_rejects_resource_limit_violations},
     {"test_save_itemstore_preserves_existing_file_on_failure", test_save_itemstore_preserves_existing_file_on_failure},
     {"test_save_itemsource_reports_write_and_close_failure", test_save_itemsource_reports_write_and_close_failure},
+    {"test_itemsource_paths_are_validated_and_contained", test_itemsource_paths_are_validated_and_contained},
     {"test_itemstore_durability_modes", test_itemstore_durability_modes},
     {"test_itemstore_large_load_presizes_child_storage", test_itemstore_large_load_presizes_child_storage},
     {"test_sconv_v1_to_v2_migrates_legacy_code", test_sconv_v1_to_v2_migrates_legacy_code},

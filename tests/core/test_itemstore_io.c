@@ -1930,6 +1930,183 @@ void test_save_itemsource_reports_write_and_close_failure(void) {
   ASSERT_EQ_INT(0, rmdir(srcroot));
 }
 
+void test_itemsource_paths_are_validated_and_contained(void) {
+  char srcroot[] = "/tmp/sin-itemsource-path-XXXXXX";
+  char outside[] = "/tmp/sin-itemsource-out-XXXXXX";
+  char missing_srcroot[] = "/tmp/sin-itemsource-missing-XXXXXX";
+  ASSERT_NOT_NULL(mkdtemp(srcroot));
+  ASSERT_NOT_NULL(mkdtemp(outside));
+  ASSERT_NOT_NULL(mkdtemp(missing_srcroot));
+  ASSERT_EQ_INT(0, rmdir(missing_srcroot));
+
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  ITEM_t *child = make_item("child", root, ITEM_value, VALUE_NIL, NULL, 0);
+  ASSERT_NOT_NULL(child);
+  char detail[128];
+  char *root_file = get_itemfilename_in_srcroot(root, srcroot);
+  char *child_file = get_itemfilename_in_srcroot(child, srcroot);
+  ASSERT_NOT_NULL(root_file);
+  ASSERT_NOT_NULL(child_file);
+  ASSERT_TRUE(strstr(root_file, "/root/source.sin") != NULL);
+  ASSERT_TRUE(strstr(child_file, "/child/source.sin") != NULL);
+  free(root_file);
+  free(child_file);
+
+  ITEM_t *punctuation_root = make_root_item("context-root");
+  ASSERT_NOT_NULL(punctuation_root);
+  char *punctuation_file = get_itemfilename_in_srcroot(punctuation_root,
+                                                        srcroot);
+  ASSERT_NOT_NULL(punctuation_file);
+  char expected_punctuation_file[sizeof srcroot
+                                 + sizeof "/context-root/source.sin"];
+  ASSERT_TRUE(snprintf(expected_punctuation_file,
+                       sizeof expected_punctuation_file,
+                       "%s/context-root/source.sin", srcroot) > 0);
+  ASSERT_TRUE(strcmp(expected_punctuation_file, punctuation_file) == 0);
+  ASSERT_TRUE(save_itemsource_in_srcroot(punctuation_root,
+                                         "punctuation source\n", srcroot));
+  char *punctuation_source = read_itemsource_in_srcroot(
+      punctuation_root, srcroot, detail, sizeof detail);
+  ASSERT_NOT_NULL(punctuation_source);
+  ASSERT_TRUE(strcmp("punctuation source\n", punctuation_source) == 0);
+  free(punctuation_source);
+  ASSERT_EQ_INT(0, unlink(punctuation_file));
+  char punctuation_dir[sizeof srcroot + sizeof "/context-root"];
+  ASSERT_TRUE(snprintf(punctuation_dir, sizeof punctuation_dir,
+                       "%s/context-root", srcroot) > 0);
+  ASSERT_EQ_INT(0, rmdir(punctuation_dir));
+  free(punctuation_file);
+  destroy_item(punctuation_root);
+
+  ASSERT_TRUE(get_itemfilename_in_srcroot(NULL, srcroot) == NULL);
+  ASSERT_TRUE(get_itemfilename_in_srcroot(root, NULL) == NULL);
+  ASSERT_TRUE(!save_itemsource_in_srcroot(NULL, "x", srcroot));
+  ASSERT_TRUE(!save_itemsource_in_srcroot(root, NULL, srcroot));
+  ASSERT_TRUE(!save_itemsource_in_srcroot(root, "x", NULL));
+  ASSERT_TRUE(read_itemsource_in_srcroot(NULL, srcroot, detail,
+                                         sizeof detail) == NULL);
+  ASSERT_TRUE(read_itemsource_in_srcroot(root, NULL, detail,
+                                         sizeof detail) == NULL);
+
+  const char *bad_names[] = {"", "bad/name", "bad\\name", ".", "..",
+                             "bad.name", ".bad", "bad."};
+  for (size_t i = 0; i < sizeof bad_names / sizeof bad_names[0]; i++) {
+    ITEM_t *bad = make_root_item(bad_names[i]);
+    ASSERT_NOT_NULL(bad);
+    ASSERT_TRUE(get_itemfilename_in_srcroot(bad, srcroot) == NULL);
+    ASSERT_TRUE(!save_itemsource_in_srcroot(bad, "x", srcroot));
+    destroy_item(bad);
+  }
+
+  CONFIG_t saved = config;
+  config.srcroot = srcroot;
+  ASSERT_TRUE(save_itemsource(root, "configured\n"));
+  config = saved;
+
+  char linkpath[sizeof srcroot + sizeof "/child"];
+  ASSERT_TRUE(snprintf(linkpath, sizeof linkpath, "%s/child", srcroot) > 0);
+  ASSERT_EQ_INT(0, symlink(outside, linkpath));
+  ASSERT_TRUE(!save_itemsource_in_srcroot(child, "escape", srcroot));
+  ASSERT_TRUE(read_itemsource_in_srcroot(child, srcroot, detail,
+                                         sizeof detail) == NULL);
+  ASSERT_EQ_INT(0, unlink(linkpath));
+  char escaped_source[sizeof outside + sizeof "/source.sin"];
+  ASSERT_TRUE(snprintf(escaped_source, sizeof escaped_source,
+                       "%s/source.sin", outside) > 0);
+  ASSERT_TRUE(access(escaped_source, F_OK) != 0);
+
+  char child_dir[sizeof srcroot + sizeof "/child"];
+  ASSERT_TRUE(snprintf(child_dir, sizeof child_dir, "%s/child", srcroot) > 0);
+  ASSERT_EQ_INT(0, mkdir(child_dir, 0700));
+  char child_source[sizeof child_dir + sizeof "/source.sin"];
+  ASSERT_TRUE(snprintf(child_source, sizeof child_source, "%s/source.sin",
+                       child_dir) > 0);
+  char outside_source[sizeof outside + sizeof "/outside.sin"];
+  ASSERT_TRUE(snprintf(outside_source, sizeof outside_source, "%s/outside.sin",
+                       outside) > 0);
+  FILE *outside_file = fopen(outside_source, "wb");
+  ASSERT_NOT_NULL(outside_file);
+  ASSERT_TRUE(fputs("outside sentinel\n", outside_file) >= 0);
+  ASSERT_EQ_INT(0, fclose(outside_file));
+  ASSERT_EQ_INT(0, symlink(outside_source, child_source));
+  ASSERT_TRUE(!save_itemsource_in_srcroot(child, "overwrite\n", srcroot));
+  ASSERT_TRUE(read_itemsource_in_srcroot(child, srcroot, detail,
+                                         sizeof detail) == NULL);
+  outside_file = fopen(outside_source, "rb");
+  ASSERT_NOT_NULL(outside_file);
+  char outside_contents[32] = {0};
+  ASSERT_EQ_INT(strlen("outside sentinel\n"),
+                fread(outside_contents, 1, sizeof outside_contents - 1,
+                      outside_file));
+  ASSERT_TRUE(strcmp("outside sentinel\n", outside_contents) == 0);
+  ASSERT_EQ_INT(0, fclose(outside_file));
+
+  ASSERT_TRUE(save_itemsource_in_srcroot(root, "created root\n",
+                                         missing_srcroot));
+  char missing_file[sizeof missing_srcroot + sizeof "/root/source.sin"];
+  ASSERT_TRUE(snprintf(missing_file, sizeof missing_file,
+                       "%s/root/source.sin", missing_srcroot) > 0);
+  FILE *missing_source = fopen(missing_file, "rb");
+  ASSERT_NOT_NULL(missing_source);
+  char missing_contents[32] = {0};
+  ASSERT_EQ_INT(strlen("created root\n"),
+                fread(missing_contents, 1, sizeof missing_contents - 1,
+                      missing_source));
+  ASSERT_TRUE(strcmp("created root\n", missing_contents) == 0);
+  ASSERT_EQ_INT(0, fclose(missing_source));
+
+  char slash_item_dir[] = "/tmp/sin_itemsource_slash_XXXXXX";
+  ASSERT_NOT_NULL(mkdtemp(slash_item_dir));
+  ASSERT_EQ_INT(0, rmdir(slash_item_dir));
+  const char *slash_leaf_name = strrchr(slash_item_dir, '/');
+  ASSERT_NOT_NULL(slash_leaf_name);
+  slash_leaf_name++;
+  ITEM_t *slash_root = make_root_item("unused");
+  ASSERT_NOT_NULL(slash_root);
+  ITEM_t *slash_tmp = make_item("tmp", slash_root, ITEM_value, VALUE_NIL,
+                                NULL, 0);
+  ASSERT_NOT_NULL(slash_tmp);
+  ITEM_t *slash_leaf = make_item(slash_leaf_name, slash_tmp, ITEM_value,
+                                 VALUE_NIL, NULL, 0);
+  ASSERT_NOT_NULL(slash_leaf);
+  ASSERT_TRUE(save_itemsource_in_srcroot(slash_leaf, "slash root\n", "/"));
+  char slash_file[sizeof slash_item_dir + sizeof "/source.sin"];
+  ASSERT_TRUE(snprintf(slash_file, sizeof slash_file, "%s/source.sin",
+                       slash_item_dir) > 0);
+  FILE *slash_source = fopen(slash_file, "rb");
+  ASSERT_NOT_NULL(slash_source);
+  char slash_contents[32] = {0};
+  ASSERT_EQ_INT(strlen("slash root\n"),
+                fread(slash_contents, 1, sizeof slash_contents - 1,
+                      slash_source));
+  ASSERT_TRUE(strcmp("slash root\n", slash_contents) == 0);
+  ASSERT_EQ_INT(0, fclose(slash_source));
+  destroy_item(slash_root);
+  ASSERT_EQ_INT(0, unlink(slash_file));
+  ASSERT_EQ_INT(0, rmdir(slash_item_dir));
+
+  destroy_item(root);
+  ASSERT_EQ_INT(0, unlink(missing_file));
+  char missing_dir[sizeof missing_srcroot + sizeof "/root"];
+  ASSERT_TRUE(snprintf(missing_dir, sizeof missing_dir, "%s/root",
+                       missing_srcroot) > 0);
+  ASSERT_EQ_INT(0, rmdir(missing_dir));
+  ASSERT_EQ_INT(0, rmdir(missing_srcroot));
+  ASSERT_EQ_INT(0, unlink(child_source));
+  ASSERT_EQ_INT(0, rmdir(child_dir));
+  ASSERT_EQ_INT(0, unlink(outside_source));
+  char saved_file[sizeof srcroot + sizeof "/root/source.sin"];
+  ASSERT_TRUE(snprintf(saved_file, sizeof saved_file, "%s/root/source.sin",
+                       srcroot) > 0);
+  ASSERT_EQ_INT(0, unlink(saved_file));
+  char saved_dir[sizeof srcroot + sizeof "/root"];
+  ASSERT_TRUE(snprintf(saved_dir, sizeof saved_dir, "%s/root", srcroot) > 0);
+  ASSERT_EQ_INT(0, rmdir(saved_dir));
+  ASSERT_EQ_INT(0, rmdir(srcroot));
+  ASSERT_EQ_INT(0, rmdir(outside));
+}
+
 void test_itemstore_durability_modes(void) {
   ASSERT_TRUE(itemstore_durability_requires_sync(ITEMSTORE_DURABLE_FULL));
   ASSERT_TRUE(!itemstore_durability_requires_sync(ITEMSTORE_DURABLE_FAST));

@@ -6,15 +6,73 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <libgen.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #include "log.h"
+#include "config.h"
 #include "util.h"
 #include "item_internal.h"
 #include "string_limits.h"
 
 static ITEMSTORE_SOURCE_WRITE_HOOK_t source_write_hook = fputs;
 static ITEMSTORE_SOURCE_CLOSE_HOOK_t source_close_hook = fclose;
+
+extern CONFIG_t config;
+
+static int open_source_directory(const char *itemname, const char *srcroot,
+                                 bool create) {
+  int current_fd = open(srcroot, O_RDONLY | O_DIRECTORY);
+  if (current_fd < 0) return -1;
+
+  char path[MAX_ITEM_NAME];
+  int written = snprintf(path, sizeof path, "%s", itemname);
+  if (written < 0 || (size_t)written >= sizeof path) {
+    (void)close(current_fd);
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+
+  char *layer = path;
+  while (*layer != '\0') {
+    char *dot = strchr(layer, '.');
+    if (dot) *dot = '\0';
+
+    if (create && mkdirat(current_fd, layer, S_IRWXU) != 0
+        && errno != EEXIST) {
+      int saved_errno = errno;
+      (void)close(current_fd);
+      errno = saved_errno;
+      return -1;
+    }
+
+    int next_fd = openat(current_fd, layer,
+                         O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    if (next_fd < 0) {
+      int saved_errno = errno;
+      (void)close(current_fd);
+      errno = saved_errno;
+      return -1;
+    }
+    (void)close(current_fd);
+    current_fd = next_fd;
+    if (!dot) break;
+    layer = dot + 1;
+  }
+  return current_fd;
+}
+
+static bool create_source_root(const char *srcroot) {
+  char *rootcopy = strdup(srcroot);
+  if (!rootcopy) {
+    logerr("Failed to allocate source root path.\n");
+    return false;
+  }
+  bool result = make_path(rootcopy);
+  free(rootcopy);
+  return result;
+}
 
 void itemstore_set_source_io_hooks_for_tests(
     ITEMSTORE_SOURCE_WRITE_HOOK_t write_hook,
@@ -29,29 +87,42 @@ bool save_itemsource_in_srcroot(ITEM_t *item, char *source, const char *srcroot)
   // reported in the error log.  The function returns true if the
   // source was saved, otherwise false.
 
+  if (!item || !source || !srcroot || srcroot[0] == '\0') return false;
   char *filename = get_itemfilename_in_srcroot(item, srcroot);
   if (filename == NULL) {
-    logerr("Failed to allocate source filename.\n");
+    logerr("Failed to construct source filename.\n");
     return false;
   }
-  // There is a much better way to do this, but I don't care right now.
-  char *dircopy = strdup(filename);
-  if (dircopy == NULL) {
-    logerr("Failed to allocate source directory path for %s.\n", filename);
+  char itemname[MAX_ITEM_NAME];
+  get_itemname(item, itemname);
+  if (!create_source_root(srcroot)) {
     free(filename);
     return false;
   }
-  char *dir = dirname(dircopy);
-  bool res = make_path(dir);
-  free(dircopy);
-  if (!res) {
+
+  int dir_fd = open_source_directory(itemname, srcroot, true);
+  if (dir_fd < 0) {
+    logerr("Failed to open source directory for %s: %s\n", filename,
+           strerror(errno));
     free(filename);
     return false;
   }
-  // When we arrive here, we know that the path exists.
-  FILE *out = fopen(filename, "w");
-  if (!out) {
+
+  int out_fd = openat(dir_fd, "source.sin",
+                      O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0666);
+  int open_errno = errno;
+  (void)close(dir_fd);
+  if (out_fd < 0) {
+    errno = open_errno;
     logerr("Failed to open file %s: %s\n", filename, strerror(errno));
+    free(filename);
+    return false;
+  }
+  FILE *out = fdopen(out_fd, "w");
+  if (!out) {
+    logerr("Failed to associate stream with file %s: %s\n", filename,
+           strerror(errno));
+    (void)close(out_fd);
     free(filename);
     return false;
   }
@@ -69,7 +140,7 @@ bool save_itemsource_in_srcroot(ITEM_t *item, char *source, const char *srcroot)
 }
 
 bool save_itemsource(ITEM_t *item, char *source) {
-  return save_itemsource_in_srcroot(item, source, NULL);
+  return save_itemsource_in_srcroot(item, source, config.srcroot);
 }
 
 char *read_itemsource_in_srcroot(ITEM_t *item, const char *srcroot,
@@ -96,18 +167,43 @@ char *read_itemsource_in_srcroot(ITEM_t *item, const char *srcroot,
   if (!filename) {
     if (detail && detail_size > 0) {
       (void)snprintf(detail, detail_size,
-                     "unable to allocate source file path");
+                     "unable to construct source file path");
     }
     return NULL;
   }
 
-  file = fopen(filename, "rb");
-  if (!file) {
+  char itemname[MAX_ITEM_NAME];
+  get_itemname(item, itemname);
+  int dir_fd = open_source_directory(itemname, srcroot, false);
+  if (dir_fd < 0) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "unable to open source directory for '%s': %s",
+                     filename, strerror(errno));
+    }
+    goto fail;
+  }
+
+  int in_fd = openat(dir_fd, "source.sin", O_RDONLY | O_NOFOLLOW);
+  int open_errno = errno;
+  (void)close(dir_fd);
+  if (in_fd < 0) {
+    errno = open_errno;
     if (detail && detail_size > 0) {
       (void)snprintf(detail, detail_size,
                      "unable to open source file '%s': %s", filename,
                      strerror(errno));
     }
+    goto fail;
+  }
+  file = fdopen(in_fd, "rb");
+  if (!file) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size,
+                     "unable to associate stream with source file '%s': %s",
+                     filename, strerror(errno));
+    }
+    (void)close(in_fd);
     goto fail;
   }
   if (fseek(file, 0, SEEK_END) != 0) {

@@ -517,6 +517,17 @@ void get_itemname(ITEM_t *item, char *itemname) {
   }
 }
 
+static bool is_valid_source_root_component(const char *name) {
+  if (!name || *name == '\0') return false;
+  if (strnlen(name, ITEM_MAX_LAYER_NAME_LENGTH + 1u)
+      > ITEM_MAX_LAYER_NAME_LENGTH) {
+    return false;
+  }
+
+  /* Dots encode descendant separators in source-sidecar paths. */
+  return strpbrk(name, ".\\/") == NULL;
+}
+
 char *get_itemfilename_in_srcroot(ITEM_t *item, const char *srcroot) {
   // Returns the filename of the item (only relevant if it is a source
   // item).  The return value will need to be freed by the caller.
@@ -524,9 +535,14 @@ char *get_itemfilename_in_srcroot(ITEM_t *item, const char *srcroot) {
   char itemname[MAX_ITEM_NAME];
   size_t l;
 
-  if (!srcroot) srcroot = "";
+  if (!item || !srcroot || srcroot[0] == '\0') return NULL;
   itemname[0] = '\0';
   get_itemname(item, itemname);
+  if ((!item->parent && !is_valid_source_root_component(item->name))
+      || (item->parent
+          && !validate_item_name(itemname, "get_itemfilename_in_srcroot"))) {
+    return NULL;
+  }
   l = strlen(itemname) + strlen(srcroot) + 13;
   filename = malloc((size_t)l);
   if (!filename) return NULL;
