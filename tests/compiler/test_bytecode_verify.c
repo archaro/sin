@@ -19,62 +19,43 @@ static void assert_verify_status(const uint8_t *bytes, uint32_t len,
                                  BC_VerifyStatus expected,
                                  const char *label,
                                  const char *expected_message) {
-  BC_VerifyResult result = bc_verify_bytecode(bytes, len, label, NULL);
+  BC_VerifyResult result = bc_verify_executable_bytecode(bytes, len, label);
   ASSERT_EQ_INT(expected, result.status);
   if (expected_message != NULL) {
     ASSERT_TRUE(strstr(result.diagnostic.message, expected_message) != NULL);
   }
 }
 
-void test_bytecode_verify_policy_profiles(void) {
-  BC_VerifyOptions strict = bc_verify_strict_options();
-  ASSERT_TRUE(strict.validate_local_indices);
-  ASSERT_TRUE(strict.validate_control_flow);
-  ASSERT_TRUE(strict.validate_stack_effects);
-
-  BC_VerifyOptions runtime = bc_verify_runtime_options();
-  ASSERT_TRUE(runtime.validate_local_indices);
-  ASSERT_TRUE(runtime.validate_control_flow);
-  ASSERT_TRUE(runtime.validate_stack_effects);
-
+void test_bytecode_verify_executable_and_disassembly_profiles(void) {
   BC_VerifyOptions disassembly = bc_verify_disassembly_options();
   ASSERT_TRUE(disassembly.validate_local_indices);
   ASSERT_TRUE(!disassembly.validate_control_flow);
   ASSERT_TRUE(!disassembly.validate_stack_effects);
 
   const uint8_t trailing[] = {0, 0, 'h', 'h'};
-  BC_VerifyResult result = bc_verify_bytecode(
-      trailing, sizeof(trailing), "multiple terminators", &strict);
+  BC_VerifyResult result = bc_verify_executable_bytecode(
+      trailing, sizeof(trailing), "multiple terminators");
   ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
 
   const uint8_t invalid_jump[] = {0, 0, 'j', 4, 0, 'h'};
-  result = bc_verify_bytecode(invalid_jump, sizeof(invalid_jump),
-                              "strict jump", &strict);
-  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
-  result = bc_verify_bytecode(invalid_jump, sizeof(invalid_jump),
-                              "runtime jump", &runtime);
+  result = bc_verify_executable_bytecode(invalid_jump, sizeof(invalid_jump),
+                                         "executable jump");
   ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
   result = bc_verify_bytecode(invalid_jump, sizeof(invalid_jump),
                               "disassembly jump", &disassembly);
   ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
 
   const uint8_t underflow[] = {0, 0, 'a', 'h'};
-  result = bc_verify_bytecode(underflow, sizeof(underflow),
-                              "strict stack", &strict);
-  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
-  result = bc_verify_bytecode(underflow, sizeof(underflow),
-                              "runtime stack", &runtime);
+  result = bc_verify_executable_bytecode(underflow, sizeof(underflow),
+                                         "executable stack");
   ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
   result = bc_verify_bytecode(underflow, sizeof(underflow),
                               "disassembly stack", &disassembly);
   ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
 
   const uint8_t invalid_local[] = {0, 0, 'e', 1, 'h'};
-  result = bc_verify_bytecode(invalid_local, sizeof(invalid_local),
-                              "strict local", &strict);
-  ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
-  result = bc_verify_bytecode(invalid_local, sizeof(invalid_local),
-                              "runtime local", &runtime);
+  result = bc_verify_executable_bytecode(invalid_local, sizeof(invalid_local),
+                                         "executable local");
   ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
   result = bc_verify_bytecode(invalid_local, sizeof(invalid_local),
                               "disassembly local", &disassembly);
@@ -107,9 +88,8 @@ void test_bytecode_verify_analysis_storage_is_profile_scoped(void) {
       bytecode, (uint32_t)bytecode_len, "allocation-free disassembly", &disassembly);
   ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
 
-  BC_VerifyOptions strict = bc_verify_strict_options();
-  result = bc_verify_bytecode(bytecode, (uint32_t)bytecode_len,
-                              "analysis allocation failure", &strict);
+  result = bc_verify_executable_bytecode(
+      bytecode, (uint32_t)bytecode_len, "analysis allocation failure");
   ASSERT_EQ_INT(BC_VERIFY_ERROR, result.status);
   ASSERT_TRUE(strstr(result.diagnostic.message,
                      "out of memory recording instruction starts") != NULL);

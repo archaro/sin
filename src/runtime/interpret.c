@@ -202,10 +202,8 @@ static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
     set_runtime_bytecode_error(ctx, label, 0, "null bytecode pointer");
     return false;
   }
-  BC_VerifyOptions options = ctx->strict_validation
-      ? bc_verify_strict_options() : bc_verify_runtime_options();
-  BC_VerifyResult result = bc_verify_bytecode(item_bytecode(item),
-      item_bytecode_length(item), label, &options);
+  BC_VerifyResult result = bc_verify_executable_bytecode(
+      item_bytecode(item), item_bytecode_length(item), label);
   if (result.status != BC_VERIFY_ERROR) return true;
 
   set_runtime_bytecode_error(ctx, label, result.diagnostic.offset,

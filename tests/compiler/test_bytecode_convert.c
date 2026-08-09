@@ -27,8 +27,8 @@ void test_bytecode_convert_legacy_and_v1(void) {
   assert_bytes_equal_with_diag(expected, expected_len, converted.data,
                                converted.length, "rich migration fixture");
   ASSERT_EQ_INT(BC_VERIFY_OK,
-                bc_verify_bytecode(converted.data, converted.length, "test",
-                                   &(BC_VerifyOptions){true, true, true})
+                bc_verify_executable_bytecode(converted.data,
+                                              converted.length, "test")
                     .status);
   /* M token zero is the historical (library 1, call 0) permanent pair. */
   const uint8_t expected_m[] = {'M', 1, 0};
@@ -150,9 +150,9 @@ void test_embedded_code_conversion_boundaries(void) {
   ASSERT_TRUE(contains_bytes(upgraded.data, upgraded.length, canonical,
                              sizeof(canonical)));
   ASSERT_EQ_INT(BC_VERIFY_OK,
-                bc_verify_bytecode(upgraded.data, upgraded.length,
-                                   "upgraded markerless embedded code", NULL)
-                    .status);
+                bc_verify_executable_bytecode(
+                    upgraded.data, upgraded.length,
+                    "upgraded markerless embedded code").status);
   bc_convert_result_free(&upgraded);
 
   const uint32_t lengths[] = {0x50u, 0x150u, 0xff50u};

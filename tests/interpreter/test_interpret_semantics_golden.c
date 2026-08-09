@@ -301,7 +301,6 @@ static VALUE_t run_result_semantics_source(const char *label, const char *source
   ctx.itemstore = config.itemstore_ctx;
   ctx.itemstore_filename = config.itemstore;
   ctx.itemstore_durability = config.itemstore_durability;
-  ctx.strict_validation = config.strict_validation;
   ctx.strict_runtime_contracts = config.strict_runtime_contracts;
   return interpret(&ctx, item);
 }
@@ -580,7 +579,6 @@ void test_interpret_rejects_malformed_bytecode_before_execution(void) {
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
   ctx.itemstore = config.itemstore_ctx;
-  ctx.strict_validation = config.strict_validation;
   ctx.strict_runtime_contracts = config.strict_runtime_contracts;
   ctx.invocation_callstack_floor = 73;
   ctx.invocation_caller_item = itemstore_root(config.itemstore_ctx);
@@ -655,7 +653,6 @@ void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void) {
       RuntimeContext ctx;
       runtime_context_init(&ctx, config.vm);
       ctx.itemstore = config.itemstore_ctx;
-      ctx.strict_validation = config.strict_validation;
       VALUE_t result = interpret(&ctx, code);
       ASSERT_EQ_INT(VALUE_nil, result.type);
       ITEM_t *err = find_item(itemstore_root(config.itemstore_ctx), "error");

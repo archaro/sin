@@ -98,9 +98,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   fuzz_convert_itemstore_bytes(data, size);
 
   if (size <= kMaxBytecodeProbeSize) {
-    BC_VerifyOptions options = bc_verify_strict_options();
-    (void)bc_verify_bytecode(data, (uint32_t)size, "raw-fuzz-bytecode",
-                             &options);
+    (void)bc_verify_executable_bytecode(data, (uint32_t)size,
+                                        "raw-fuzz-bytecode");
   }
 
   return 0;

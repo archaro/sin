@@ -403,10 +403,8 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
     return errnum;
   }
 
-  BC_VerifyOptions verify_options = bc_verify_strict_options();
-  BC_VerifyResult verify = bc_verify_bytecode(
-      out->bytecode, (uint32_t)bytecode_len, "compiler output",
-      &verify_options);
+  BC_VerifyResult verify = bc_verify_executable_bytecode(
+      out->bytecode, (uint32_t)bytecode_len, "compiler output");
   if (verify.status != BC_VERIFY_OK) {
     int8_t errnum = ERR_NOERROR;
     compdiag_setf_once_diag(&errnum, errdetail, diag, ERR_COMP_SYNTAX, DIAG_PHASE_EMITBC, "emitbc",

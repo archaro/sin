@@ -109,9 +109,8 @@ typedef struct {
   char message[192];
 } BC_VerifyError;
 
-/* Verification behavior after a caller has chosen to invoke the verifier.
- * Runtime execution uses all memory-safety checks regardless of policy flags;
- * callers may choose narrower profiles for non-executable inspection paths. */
+/* Verification behavior for configurable, non-executable inspection paths.
+ * Use bc_verify_executable_bytecode() for bytecode that will execute. */
 typedef struct {
   bool validate_local_indices;
   bool validate_control_flow;
@@ -131,9 +130,10 @@ typedef enum {
   BC_ITEM_EXPR_RELATIVE = 1
 } BC_ItemExprKind;
 
-BC_VerifyOptions bc_verify_strict_options(void);
-BC_VerifyOptions bc_verify_runtime_options(void);
 BC_VerifyOptions bc_verify_disassembly_options(void);
+BC_VerifyResult bc_verify_executable_bytecode(const uint8_t *bytecode,
+                                              uint32_t bytecode_len,
+                                              const char *source_label);
 BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
                                    uint32_t bytecode_len,
                                    const char *source_label,

@@ -66,7 +66,6 @@ static VALUE_t run_interpret(ITEM_t *item) {
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
   ctx.itemstore = config.itemstore_ctx;
-  ctx.strict_validation = config.strict_validation;
   ctx.strict_runtime_contracts = config.strict_runtime_contracts;
   return interpret(&ctx, item);
 }
@@ -1537,11 +1536,10 @@ void test_runtime_bytecode_safety_is_mandatory(void) {
   teardown_runtime();
 }
 
-void test_strict_validation_rejects_null_bytecode(void) {
+void test_runtime_bytecode_safety_rejects_null_bytecode(void) {
   setup_runtime();
   ITEM_t *item = test_item_set_code(itemstore_root(config.itemstore_ctx), "nullcode", 0, NULL);
   ASSERT_NOT_NULL(item);
-  config.strict_validation = true;
   VALUE_t result = run_interpret(item);
   ASSERT_EQ_INT(VALUE_nil, result.type);
   ASSERT_TRUE(!item_is_in_use(item));

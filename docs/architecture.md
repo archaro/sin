@@ -62,6 +62,8 @@ invoke runtime execution.
 
 Key entry points:
 
+- `bc_verify_executable_bytecode()` from `src/bytecode/bytecode_verify.h`
+  performs the mandatory checks for bytecode that will execute.
 - `bc_verify_bytecode()` from `src/bytecode/bytecode_verify.h`.
 - `bc_convert_latest()` from `src/bytecode/bytecode_convert.h`.
 - `sdiss_*` APIs from `src/bytecode/sdiss_core.h`.

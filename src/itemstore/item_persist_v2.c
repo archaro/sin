@@ -318,9 +318,8 @@ ITEM_t *itemstore_read_v2_record(FILE *file, ITEM_t *parent,
         }
       }
       if (ctx->strict_validation) {
-        BC_VerifyOptions options = bc_verify_strict_options();
-        BC_VerifyResult verify = bc_verify_bytecode(
-            bytecode, bytecode_length, name, &options);
+        BC_VerifyResult verify = bc_verify_executable_bytecode(
+            bytecode, bytecode_length, name);
         if (verify.status != BC_VERIFY_OK) {
           goto fail;
         }

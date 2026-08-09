@@ -49,7 +49,6 @@ struct RuntimeContext {
   LibcallNetworkDeps network;
   bool *safe_shutdown;
   bool *shutdown_requested;
-  bool strict_validation;
   bool strict_runtime_contracts;
   /* Zero uses the compiler default; tests may lower this per invocation. */
   size_t compiler_ast_node_limit;

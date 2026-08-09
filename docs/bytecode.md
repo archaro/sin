@@ -222,9 +222,10 @@ started with `--strict-runtime-contracts`, the `F` primitive still performs the
 same stack normalization and return-value behavior, but each discarded argument
 caused by an over-arity code-item call, invalid item name, or missing target item
 sets `error` to `ERR_RUNTIME_INVALIDARGS` and writes a diagnostic to `error.msg`.
-This option is separate from `--strict-validation`, which validates bytecode
-structure before execution, and it has a runtime cost because it performs extra
-contract checks. For example, an over-arity call such as `add{1, 2, 3}` still
+This option is separate from `--strict-validation`, which optionally validates
+persisted code while loading itemstores; mandatory executable bytecode
+verification still occurs immediately before execution. It has a runtime cost
+because it performs extra contract checks. For example, an over-arity call such as `add{1, 2, 3}` still
 returns the same value that `add{1, 2}` would return, and a missing-target call
 such as `missing.item{1}` still returns `nil`; strict runtime contracts
 additionally set `ERR_RUNTIME_INVALIDARGS` and explain that an argument was

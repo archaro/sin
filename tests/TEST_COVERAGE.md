@@ -202,9 +202,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
       effects, control classes, dynamic CALL/LIBCALL/BUILD_LIST effects, and
       shared `F`
   - `tests/compiler/test_bytecode_verify.c`
-    - full-buffer terminator decoding, malformed later bytes, RETURN stack
-      underflow, post-terminator jump targets, and conflicting reachable
-      return-depth joins
+    - no-options executable verification of local indices, control-flow targets,
+      and stack effects; narrower disassembly verification; full-buffer
+      terminator decoding, malformed later bytes, RETURN stack underflow,
+      post-terminator jump targets, and conflicting reachable return-depth joins
 - **Pipeline / golden outputs**
   - `tests/compiler/test_pipeline_golden.c`
     - `test_pipeline_golden`
@@ -247,13 +248,13 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 The runtime suite contains 90 tests registered in `runtime_tests[]`.
 Twelve tests come
 from `tests/core/test_value_behavior.c` and exercise the decoder, interpreter
-contracts, and strict-validation machinery directly. The remaining tests cover
+contracts, and mandatory runtime bytecode safety directly. The remaining tests cover
 interpreter golden contracts, libcall registries, per-library call contracts,
 task lifecycle and introspection, networking, string operations, `sys.compile`
 integration, and an opt-in performance guard.
 
 ### Covered entry points
-- **Runtime decoder, interpreter contracts, and strict validation** (12 tests,
+- **Runtime decoder, interpreter contracts, and bytecode safety** (12 tests,
   from `tests/core/test_value_behavior.c`)
   - `test_runtime_decode_requires_frame_bounds`
   - `test_interpreter_truncated_single_byte_operands`
@@ -265,8 +266,9 @@ integration, and an opt-in performance guard.
   - `test_strict_runtime_contracts_reports_invalid_item_name_arguments`
   - `test_strict_runtime_contracts_reports_missing_item_arguments`
   - `test_strict_runtime_contracts_uses_context_itemroot`
-  - `test_runtime_bytecode_safety_is_mandatory`
-  - `test_strict_validation_rejects_null_bytecode`
+  - `test_runtime_bytecode_safety_is_mandatory` (independent of
+    `--strict-validation`)
+  - `test_runtime_bytecode_safety_rejects_null_bytecode`
 - **Interpreter semantics golden contracts**
   - `tests/interpreter/test_interpret_semantics_golden.c`
     - `test_interpret_semantics_golden` (includes VM numeric semantics such as

@@ -57,17 +57,8 @@ typedef struct {
   bool recording_top_level;
 } BC_Decoder;
 
-BC_VerifyOptions bc_verify_strict_options(void) {
+static BC_VerifyOptions bc_verify_executable_options(void) {
   return (BC_VerifyOptions){
-      .validate_local_indices = true,
-      .validate_control_flow = true,
-      .validate_stack_effects = true,
-  };
-}
-
-BC_VerifyOptions bc_verify_runtime_options(void) {
-  return (BC_VerifyOptions){
-      /* Executable bytecode must always satisfy memory-safety invariants. */
       .validate_local_indices = true,
       .validate_control_flow = true,
       .validate_stack_effects = true,
@@ -844,7 +835,7 @@ bool bc_decode_item_expression(const uint8_t *item_payload,
   d.base = item_payload;
   d.end = bytecode_end;
   d.label = kind == BC_ITEM_EXPR_RELATIVE ? "relative item expression" : "item expression";
-  d.options = bc_verify_strict_options();
+  d.options = bc_verify_executable_options();
   d.result.status = BC_VERIFY_OK;
   d.result.halt_offset = UINT32_MAX;
 
@@ -871,7 +862,7 @@ BC_VerifyResult bc_decode_bytecode_events(const uint8_t *bytecode,
   d.base = bytecode;
   d.end = bytecode ? bytecode + bytecode_len : NULL;
   d.label = source_label;
-  d.options = options ? *options : bc_verify_strict_options();
+  d.options = options ? *options : bc_verify_executable_options();
   d.callback = callback;
   d.callback_ctx = callback_ctx;
   d.result.status = BC_VERIFY_OK;
@@ -975,4 +966,12 @@ BC_VerifyResult bc_verify_bytecode(const uint8_t *bytecode,
                                    const BC_VerifyOptions *options) {
   return bc_decode_bytecode_events(bytecode, bytecode_len, source_label, options,
                                    NULL, NULL, NULL);
+}
+
+BC_VerifyResult bc_verify_executable_bytecode(const uint8_t *bytecode,
+                                              uint32_t bytecode_len,
+                                              const char *source_label) {
+  BC_VerifyOptions options = bc_verify_executable_options();
+  return bc_decode_bytecode_events(bytecode, bytecode_len, source_label,
+                                   &options, NULL, NULL, NULL);
 }

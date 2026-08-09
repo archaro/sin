@@ -55,7 +55,6 @@ static bool runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
   ctx->network.lastconn = &config.lastconn;
   ctx->network.inputline_name = config.inputline;
   ctx->network.inputtext_name = config.inputtext;
-  ctx->strict_validation = config.strict_validation;
   ctx->strict_runtime_contracts = config.strict_runtime_contracts;
   ctx->interrupt_pending = &recovery_pending;
   ctx->signal_shutdown_requested = &runtime_signal_shutdown;

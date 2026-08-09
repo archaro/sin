@@ -86,7 +86,6 @@ static RuntimeContext test_runtime_ctx;
 RuntimeContext *test_ctx(void) {
   runtime_context_init(&test_runtime_ctx, config.vm);
   test_runtime_ctx.itemstore = config.itemstore_ctx;
-  test_runtime_ctx.strict_validation = config.strict_validation;
   test_runtime_ctx.strict_runtime_contracts = config.strict_runtime_contracts;
   test_runtime_ctx.maxconns = &config.maxconns;
   test_runtime_ctx.lastconn = &config.lastconn;

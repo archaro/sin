@@ -321,7 +321,7 @@ void test_emitbc_all_ir_ops_accounted_for(void);
 void test_emitbc_jumps(void);
 void test_emitbc_invariants(void);
 void test_emitbc_post_emission_verification(void);
-void test_bytecode_verify_policy_profiles(void);
+void test_bytecode_verify_executable_and_disassembly_profiles(void);
 void test_bytecode_verify_analysis_storage_is_profile_scoped(void);
 void test_bytecode_verify_dense_budget_and_growth_failures(void);
 void test_bytecode_verify_constrained_address_space(void);
@@ -394,7 +394,7 @@ void test_strict_runtime_contracts_reports_invalid_item_name_arguments(void);
 void test_strict_runtime_contracts_reports_missing_item_arguments(void);
 void test_strict_runtime_contracts_uses_context_itemroot(void);
 void test_runtime_bytecode_safety_is_mandatory(void);
-void test_strict_validation_rejects_null_bytecode(void);
+void test_runtime_bytecode_safety_rejects_null_bytecode(void);
 void test_error_item_oom_preserves_existing_diagnostic(void);
 void test_compiler_error_item_oom_preserves_existing_diagnostic(void);
 void test_error_item_oom_without_previous_diagnostic(void);
@@ -583,7 +583,7 @@ static const test_case_t compiler_tests[] = {
     {"test_emitbc_jumps", test_emitbc_jumps},
     {"test_emitbc_invariants", test_emitbc_invariants},
     {"test_emitbc_post_emission_verification", test_emitbc_post_emission_verification},
-    {"test_bytecode_verify_policy_profiles", test_bytecode_verify_policy_profiles},
+    {"test_bytecode_verify_executable_and_disassembly_profiles", test_bytecode_verify_executable_and_disassembly_profiles},
     {"test_bytecode_verify_analysis_storage_is_profile_scoped", test_bytecode_verify_analysis_storage_is_profile_scoped},
     {"test_bytecode_verify_dense_budget_and_growth_failures", test_bytecode_verify_dense_budget_and_growth_failures},
     {"test_bytecode_verify_constrained_address_space", test_bytecode_verify_constrained_address_space},
@@ -644,7 +644,7 @@ static const test_case_t runtime_tests[] = {
     {"test_strict_runtime_contracts_reports_missing_item_arguments", test_strict_runtime_contracts_reports_missing_item_arguments},
     {"test_strict_runtime_contracts_uses_context_itemroot", test_strict_runtime_contracts_uses_context_itemroot},
     {"test_runtime_bytecode_safety_is_mandatory", test_runtime_bytecode_safety_is_mandatory},
-    {"test_strict_validation_rejects_null_bytecode", test_strict_validation_rejects_null_bytecode},
+    {"test_runtime_bytecode_safety_rejects_null_bytecode", test_runtime_bytecode_safety_rejects_null_bytecode},
     {"test_error_item_oom_preserves_existing_diagnostic", test_error_item_oom_preserves_existing_diagnostic},
     {"test_compiler_error_item_oom_preserves_existing_diagnostic", test_compiler_error_item_oom_preserves_existing_diagnostic},
     {"test_error_item_oom_without_previous_diagnostic", test_error_item_oom_without_previous_diagnostic},

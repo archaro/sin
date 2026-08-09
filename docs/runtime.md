@@ -119,9 +119,11 @@ borrowed until the store is destroyed.
 
 Executable code is always verified for memory-safe structure (including stack
 flow, local indices, and jump targets) before runtime execution; failures are
-reported as `ERR_RUNTIME_BYTECODE`. `--strict-validation` additionally applies
-the same verification while loading itemstores, rejecting malformed persisted
-code items before they enter the store.
+reported as `ERR_RUNTIME_BYTECODE`. The runtime uses the no-options
+`bc_verify_executable_bytecode()` API for this mandatory check, so no runtime
+configuration can weaken it. `--strict-validation` additionally applies the
+same verification while loading itemstores, rejecting malformed persisted code
+items before they enter the store.
 
 `--strict-runtime-contracts` is a separate diagnostic mode for runtime argument
 contracts. In default mode, item fetch/call execution may intentionally discard

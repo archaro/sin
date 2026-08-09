@@ -201,9 +201,8 @@ ITEM_t *itemstore_read_v1_record(FILE *file, ITEM_t *parent,
     }
 
     if (ctx->strict_validation) {
-      BC_VerifyOptions verify_options = bc_verify_strict_options();
-      BC_VerifyResult verify = bc_verify_bytecode(bytecode, bytecode_len,
-                                                  name, &verify_options);
+      BC_VerifyResult verify = bc_verify_executable_bytecode(
+          bytecode, bytecode_len, name);
       if (verify.status != BC_VERIFY_OK) {
         logerr("Corrupt itemstore '%s': bytecode verification failed for "
                "'%s': %s\n", ctx->filename, name,

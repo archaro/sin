@@ -196,15 +196,14 @@ void test_sconv_mixed_code_tree_and_failure_atomicity(void) {
   ASSERT_EQ_INT(12, legacy_item->bytecode_len);
   ASSERT_EQ_INT(12, versioned_item->bytecode_len);
   ASSERT_TRUE(memcmp(legacy_item->bytecode, versioned_item->bytecode, 12) == 0);
-  BC_VerifyOptions strict = bc_verify_strict_options();
-  ASSERT_EQ_INT(BC_VERIFY_OK, bc_verify_bytecode(legacy_item->bytecode,
-                                                 legacy_item->bytecode_len,
-                                                 "legacy output", &strict)
-                                  .status);
-  ASSERT_EQ_INT(BC_VERIFY_OK, bc_verify_bytecode(versioned_item->bytecode,
-                                                 versioned_item->bytecode_len,
-                                                 "v1 output", &strict)
-                                  .status);
+  ASSERT_EQ_INT(BC_VERIFY_OK,
+                bc_verify_executable_bytecode(legacy_item->bytecode,
+                                              legacy_item->bytecode_len,
+                                              "legacy output").status);
+  ASSERT_EQ_INT(BC_VERIFY_OK,
+                bc_verify_executable_bytecode(versioned_item->bytecode,
+                                              versioned_item->bytecode_len,
+                                              "v1 output").status);
   destroy_item(root);
 
   FILE *f = fopen(output, "wb");

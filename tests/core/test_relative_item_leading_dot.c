@@ -69,7 +69,6 @@ static VALUE_t compile_and_run(const char *name, const char *source) {
   RuntimeContext ctx;
   runtime_context_init(&ctx, config.vm);
   ctx.itemstore = config.itemstore_ctx;
-  ctx.strict_validation = config.strict_validation;
   ctx.strict_runtime_contracts = config.strict_runtime_contracts;
   VALUE_t result = interpret(&ctx, code);
 

@@ -326,8 +326,8 @@ BC_ConvertResult bc_convert_latest(const uint8_t *input, uint32_t length) {
   if (fs != BC_FORMAT_OK)
     return r;
   if (!h.legacy) {
-    BC_VerifyResult v = bc_verify_bytecode(
-        input, length, "conversion", &(BC_VerifyOptions){true, true, true});
+    BC_VerifyResult v = bc_verify_executable_bytecode(input, length,
+                                                      "conversion");
     if (v.status != BC_VERIFY_OK)
       return r;
     r.data = alloc_malloc(length);
@@ -393,9 +393,8 @@ BC_ConvertResult bc_convert_latest(const uint8_t *input, uint32_t length) {
   r.length = c.out_len;
   r.status = BC_CONVERT_SUCCESS;
   {
-    BC_VerifyResult v =
-        bc_verify_bytecode(r.data, r.length, "converted legacy",
-                           &(BC_VerifyOptions){true, true, true});
+    BC_VerifyResult v = bc_verify_executable_bytecode(
+        r.data, r.length, "converted legacy");
     if (v.status != BC_VERIFY_OK) {
       free(r.data);
       r.data = NULL;
