@@ -612,6 +612,41 @@ static void test_compiler_pipeline_parameter_seeding_oom(void) {
   ASSERT_TRUE(saw_seeding_oom);
 }
 
+static void test_compiler_crlf_source_handling(void) {
+  const char *ordinary_source = "@x = 1;\r\nreturn @x;";
+  const char *code_source = "target = code (\r\nreturn 1;\r\n);";
+  const char *code_params_source =
+      "target = code\r\n{\r\n@a,\r\n@b\r\n}\r\n(\r\nreturn @a + @b;\r\n);";
+  const char *sources[] = {ordinary_source, code_source, code_params_source};
+
+  for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
+    OUTPUT_t *out = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    int8_t rc = compile_source_to_bytecode_diag(sources[i], strlen(sources[i]),
+                                                &out, &diag);
+    ASSERT_EQ_INT(ERR_NOERROR, rc);
+    ASSERT_NOT_NULL(out);
+    free(out->bytecode);
+    free(out);
+    compiler_diag_reset(&diag);
+  }
+
+  const char *error_source = "@x = 1;\r\n@z = ;";
+  OUTPUT_t *out = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = compile_source_to_bytecode_diag(error_source, strlen(error_source),
+                                              &out, &diag);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_TRUE(out == NULL);
+  ASSERT_EQ_INT(2, diag.line);
+  ASSERT_EQ_INT(6, diag.column);
+  ASSERT_EQ_INT(1, diag.span);
+  ASSERT_TRUE(diag.has_loc);
+  compiler_diag_reset(&diag);
+}
+
 void test_compiler_diag_pipeline(void){
   test_shared_argv_capture_stdin_eof();
   test_compiler_pipeline_legacy_diag_success_parity();
@@ -620,6 +655,7 @@ void test_compiler_diag_pipeline(void){
   test_compiler_pipeline_invalid_inputs_clear_output();
   test_compiler_pipeline_failure_cleanup();
   test_compiler_pipeline_parameter_seeding_oom();
+  test_compiler_crlf_source_handling();
   test_compiler_diag_repeated_set_reset_cycles();
   test_compiler_diag_rejects_256_locals();
   test_scomp_cli_malformed_diagnostic_shape();

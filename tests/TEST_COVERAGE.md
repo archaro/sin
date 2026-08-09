@@ -34,10 +34,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
-| core      |   132 | `tests/core/`           |
-| compiler  |    34 | `tests/compiler/`       |
-| runtime   |    90 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**256**|                         |
+| core      |   150 | `tests/core/`           |
+| compiler  |    52 | `tests/compiler/`       |
+| runtime   |   103 | `tests/core/`, `tests/interpreter/` |
+| **Total** |**305**|                         |
 
 ## core
 
@@ -68,7 +68,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `run_suite(...)`
     - Per-test and per-suite elapsed-time reporting
     - Assertion-failure suite/test context via `tests/test_assert.h`
-    - Core suite registration (`core_tests[]` with 132 entries)
+    - Core suite registration (`core_tests[]` with 150 entries)
     - Suite registration validation rejects null/duplicate test entries
       before execution.
 - **Fixture contract integrity / regeneration policy**
@@ -86,7 +86,9 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - parser allocation-failure cleanup includes `RETURN` and post-test
       `DO..WHILE` trees plus nested list/item-reference trees; parser input
       coverage asserts bare and valued return AST nodes, `BREAK`/`CONTINUE`
-      nodes, and malformed return expressions
+      nodes, malformed return expressions, CRLF parser locations, and CRLF
+      normalization in captured `code (...)` bodies, including quoted embedded
+      strings
     - `test_parser_lists_and_itemrefs_ast` covers empty, singleton, nested,
       mixed, and expression-position lists; distinguishes dereference, item
       call/fetch, and item-reference ASTs; checks dynamic item-reference
@@ -106,6 +108,8 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   - `tests/core/test_relative_item_leading_dot.c`
     - `test_float_item_literal_layer_rejected_at_compile_time`
     - `test_float_local_deref_layer_returns_nil_and_does_not_save_item`
+    - `test_relative_item_leading_dot_rejects_whitespace_after_separator`
+      covers space, tab, LF, and CRLF after `.`
 - **IR/core metadata and cache behavior**
   - `tests/core/test_ir_validate.c`
     - `test_lower_float_value_emits_push_float` (float compiler/lowering
@@ -211,7 +215,8 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
   - `tests/compiler/test_compiler_context_failures.c`
     - `test_compiler_context_failures`
   - `tests/compiler/test_compiler_diag_pipeline.c`
-    - `test_compiler_diag_pipeline`
+    - `test_compiler_diag_pipeline`, including ordinary, `code (...)`, and
+      code-parameter CRLF compilation plus CRLF diagnostic locations
   - `tests/compiler/test_parser_examples_obj_golden.c`
     - `test_parser_examples_obj_golden`
   - `tests/compiler/test_sdiss_fixtures.c`

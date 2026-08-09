@@ -192,6 +192,80 @@ void test_parser_input_api(void) {
   rc = parse_source(&empty_input, &absyn, NULL);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
 
+  const char crlf_code_source[] = "target = code (\r\nreturn 1;\r\n);";
+  ParseInput crlf_code_input = {crlf_code_source, sizeof(crlf_code_source) - 1,
+                                "crlf-code.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&crlf_code_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  AS_STMTLIST *crlf_code_list = (AS_STMTLIST *)absyn->lhs;
+  ASSERT_EQ_INT(1, crlf_code_list->count);
+  AS_NODE *crlf_assignment = crlf_code_list->stmts[0];
+  ASSERT_EQ_INT(N_ASSITEM, crlf_assignment->nodetype);
+  AS_NODE *crlf_code = (AS_NODE *)crlf_assignment->rhs;
+  ASSERT_EQ_INT(N_CODE, crlf_code->nodetype);
+  AS_NODE *crlf_code_body = (AS_NODE *)crlf_code->rhs;
+  ASSERT_EQ_INT(N_VALUE, crlf_code_body->nodetype);
+  AS_VALUE *crlf_code_value = (AS_VALUE *)crlf_code_body->lhs;
+  ASSERT_EQ_INT(V_STR, crlf_code_value->valtype);
+  ASSERT_TRUE(strchr(crlf_code_value->value.s, '\r') == NULL);
+  ASSERT_TRUE(strcmp(crlf_code_value->value.s, " return 1; ") == 0);
+  as_delete(absyn);
+
+  const char crlf_embedded_string_source[] =
+      "target = code (\r\n\"first\r\nsecond\"\r\n);";
+  ParseInput crlf_embedded_string_input = {
+      crlf_embedded_string_source, sizeof(crlf_embedded_string_source) - 1,
+      "crlf-embedded-string.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&crlf_embedded_string_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  AS_STMTLIST *crlf_embedded_string_list = (AS_STMTLIST *)absyn->lhs;
+  ASSERT_EQ_INT(1, crlf_embedded_string_list->count);
+  AS_NODE *crlf_embedded_string_assignment =
+      crlf_embedded_string_list->stmts[0];
+  ASSERT_EQ_INT(N_ASSITEM, crlf_embedded_string_assignment->nodetype);
+  AS_NODE *crlf_embedded_string_code =
+      (AS_NODE *)crlf_embedded_string_assignment->rhs;
+  ASSERT_EQ_INT(N_CODE, crlf_embedded_string_code->nodetype);
+  AS_NODE *crlf_embedded_string_body =
+      (AS_NODE *)crlf_embedded_string_code->rhs;
+  ASSERT_EQ_INT(N_VALUE, crlf_embedded_string_body->nodetype);
+  AS_VALUE *crlf_embedded_string_value =
+      (AS_VALUE *)crlf_embedded_string_body->lhs;
+  ASSERT_EQ_INT(V_STR, crlf_embedded_string_value->valtype);
+  ASSERT_TRUE(strchr(crlf_embedded_string_value->value.s, '\r') == NULL);
+  ASSERT_TRUE(strcmp(crlf_embedded_string_value->value.s,
+                     " \"first\nsecond\" ") == 0);
+  as_delete(absyn);
+
+  const char crlf_error_source[] = "@x = 1;\r\n^;";
+  ParseInput crlf_error_input = {crlf_error_source,
+                                 sizeof(crlf_error_source) - 1,
+                                 "crlf-location.src"};
+  CompilerDiagnostic crlf_diag = {0};
+  SCANNER_STATE_t crlf_state = {0};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source_compiler_diag(&crlf_error_input, &absyn, &errdetail,
+                                  &crlf_diag, &crlf_state);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_EQ_INT(2, crlf_state.line);
+  ASSERT_EQ_INT(1, crlf_state.column);
+  ASSERT_EQ_INT(1, crlf_state.span);
+  ASSERT_EQ_INT(2, crlf_diag.line);
+  ASSERT_EQ_INT(1, crlf_diag.column);
+  ASSERT_TRUE(crlf_diag.has_loc);
+  free(errdetail);
+  free(crlf_state.offending_token);
+  compiler_diag_reset(&crlf_diag);
+
+  parse_lists_fails("@x = 1;\r@y = 2;");
+
   size_t literal_len = SIN_MAX_STRING_BYTES + 1;
   size_t source_len = literal_len + 3;
   char *large_literal = malloc(source_len + 1);

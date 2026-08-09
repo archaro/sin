@@ -112,7 +112,11 @@
       unsigned char c = (unsigned char)text[i];
       token_last_line = line;
       token_last_column = column;
-      if (c == '\n') {
+      if (c == '\r' && i + 1 < len && text[i + 1] == '\n') {
+        line++;
+        column = 1;
+        i++;
+      } else if (c == '\n') {
         line++;
         column = 1;
       } else if ((c & 0xC0) != 0x80) {
@@ -217,6 +221,7 @@ local       @[a-z_][a-z0-9_]*
 layer       [a-z0-9_]+
 integer     [0-9]+
 float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
+crlf        \r\n
 %%
                 // String literal payloads are capped by SIN_MAX_STRING_BYTES.
                 char *strbuf, *strbuf_ptr;
@@ -286,6 +291,7 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                   strbuf_size = 0;
                   BEGIN(STRINGLIT);
                 }
+  {crlf}         ; // Inline whitespace handling
   [ \t\n]+      ; // Inline whitespace handling
   {float}       { yylval->TSTRINGLIT = sin_strdup(yytext); return TFLOAT; }
   {integer}     { yylval->TSTRINGLIT = sin_strdup(yytext); return TINTEGER; }
@@ -367,12 +373,14 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                   BEGIN(CODEBODY);
                 }
   "{"           { BEGIN(CODEPARAMS); return TLBRACE; }
+  {crlf}         ; // Inline whitespace handling
   [ \t\n]+      ; // Inline whitespace handling
 }
 <CODEPARAMS>{
   {local}       { yylval->TSTRINGLIT = strdup_lc(yytext); return TLOCAL; }
   ","           { return TCOMMA; }
   "}"           { BEGIN(CODE); return TRBRACE; }
+  {crlf}         ; // Inline whitespace handling
   [ \t\n]+      ; // Inline whitespace handling
 }
 <CODEBODY>{
@@ -408,6 +416,8 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                                             &strbuf_capacity, '"');
                   BEGIN(CODESTREMBED);
                 }
+  {crlf}         { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
+                                                &strbuf_capacity, ' '); }
   [\t\n]        { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
                                                 &strbuf_capacity, ' '); }
   .             { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
@@ -427,11 +437,16 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
                                             &strbuf_capacity, '"');
                   BEGIN(CODEBODY);
                 }
-  [^\"]+        { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
+  {crlf}         { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
+                                            &strbuf_capacity, '\n'); }
+  [\r\n]        { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
+                                              &strbuf_capacity, yytext); }
+  [^\r\n\"]+    { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
                                               &strbuf_capacity, yytext); }
 }
 <COMMENT>{
   "*/"        { BEGIN(INITIAL); }
+  {crlf}       { /* Eat CRLF as one newline. */ }
   .|\n        { /* Eat everything else */ }
 }
 <LAYERCTX>{
@@ -439,8 +454,9 @@ float       [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?
   {integer}     { yylval->TSTRINGLIT = sin_strdup(yytext); BEGIN(INITIAL); return TINTEGER; }
   {layer}       { yylval->TSTRINGLIT = strdup_lc(yytext); BEGIN(INITIAL); return TLAYER; }
   "\["          { BEGIN(INITIAL); return TDEREFSTART; }
+  \n            { yylval->TSTRINGLIT = sin_strdup(yytext); return TUNKNOWNCHAR; }
 }
-<INITIAL,CODE,LAYERCTX>{
+<INITIAL,CODE,CODEPARAMS,LAYERCTX>{
   .             { yylval->TSTRINGLIT = sin_strdup(yytext); return TUNKNOWNCHAR; }
 }
 <STRINGLIT><<EOF>> {

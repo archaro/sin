@@ -42,6 +42,16 @@ static void assert_compile_err(const char *source, int8_t expected_code,
   free(errdetail);
 }
 
+static void assert_compile_rejected(const char *source) {
+  OUTPUT_t *out = NULL;
+  char *errdetail = NULL;
+  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+  ASSERT_TRUE(rc != ERR_NOERROR);
+  ASSERT_TRUE(out == NULL);
+  ASSERT_NOT_NULL(errdetail);
+  free(errdetail);
+}
+
 static VALUE_t compile_and_run(const char *name, const char *source) {
   OUTPUT_t *out = NULL;
   char *errdetail = NULL;
@@ -111,6 +121,13 @@ void test_relative_item_leading_dot_boundary_max_name_after_prefix_expansion_com
 void test_relative_item_leading_dot_existing_absolute_item_unchanged(void) {
   assert_compile_ok("relative item leading dot keeps existing absolute item behavior",
                     "foo.bar.baz = 1; foo.bar.baz = foo.bar.baz + 1;");
+}
+
+void test_relative_item_leading_dot_rejects_whitespace_after_separator(void) {
+  assert_compile_rejected("foo. bar = 1;");
+  assert_compile_rejected("foo.\tbar = 1;");
+  assert_compile_rejected("foo.\nbar = 1;");
+  assert_compile_rejected("foo.\r\nbar = 1;");
 }
 
 void test_keywords_as_layer_names_after_dot(void) {
