@@ -429,34 +429,45 @@ static SinParseResult parse_sin_options(int argc, char **argv,
 }
 
 static int ensure_source_root(void) {
-  if (!config.srcroot) {
+  bool default_root = config.srcroot == NULL;
+  if (default_root) {
     config.srcroot = strdup("srcroot");
     if (!config.srcroot) {
       logerr("Unable to allocate source root name.\n");
       return EXIT_FAILURE;
     }
-    struct stat s;
-    int err = stat(config.srcroot, &s);
-    if (err == -1) {
-      mkdir(config.srcroot, 0777);
+  }
+
+  struct stat s;
+  if (stat(config.srcroot, &s) != 0) {
+    int stat_errno = errno;
+    if (default_root && stat_errno == ENOENT) {
+      if (mkdir(config.srcroot, 0777) != 0) {
+        logerr("Unable to create source root '%s': %s\n", config.srcroot,
+               strerror(errno));
+        return EXIT_FAILURE;
+      }
       logmsg("Creating new source root in current directory.\n");
-    } else if(!S_ISDIR(s.st_mode)) {
-      logerr("./%s exists but it is not a directory.\n", config.srcroot);
-      return EXIT_FAILURE;
-    }
-  } else {
-    struct stat s;
-    int err = stat(config.srcroot, &s);
-    if (err == -1) {
+    } else if (!default_root && stat_errno == ENOENT) {
       logerr("Directory %s does not exist.\n", config.srcroot);
       return EXIT_FAILURE;
-    } else if(!S_ISDIR(s.st_mode)) {
-      logerr("./%s exists but it is not a directory.\n", config.srcroot);
-      return EXIT_FAILURE;
-    } else if (access(config.srcroot, W_OK) != 0) {
-      logerr("./%s exists, but it is not writable.\n", config.srcroot);
+    } else {
+      logerr("Unable to inspect source root '%s': %s\n", config.srcroot,
+             strerror(stat_errno));
       return EXIT_FAILURE;
     }
+  }
+
+  if (stat(config.srcroot, &s) != 0) {
+    logerr("Unable to inspect source root '%s': %s\n", config.srcroot,
+           strerror(errno));
+    return EXIT_FAILURE;
+  } else if (!S_ISDIR(s.st_mode)) {
+    logerr("./%s exists but it is not a directory.\n", config.srcroot);
+    return EXIT_FAILURE;
+  } else if (access(config.srcroot, W_OK) != 0) {
+    logerr("./%s exists, but it is not writable.\n", config.srcroot);
+    return EXIT_FAILURE;
   }
   logmsg("Using '%s' as the source root.\n", config.srcroot);
   return EXIT_SUCCESS;

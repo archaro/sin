@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
+#include <sys/stat.h>
 
 #include "item.h"
 #include "test_assert.h"
@@ -59,6 +61,92 @@ static void run_rejected(const char *path, const uint8_t *bytes, size_t length,
   }
   test_process_result_free(&result);
   assert_unchanged(path, bytes, length);
+}
+
+static void run_sin_from_directory(const char *directory, const char *sin_path,
+                                   const char *object_path,
+                                   TestProcessResult *result) {
+  char command[PATH_MAX * 3];
+  int written = snprintf(command, sizeof(command),
+                         "cd '%s' && exec '%s' --loadonly -o '%s'",
+                         directory, sin_path, object_path);
+  ASSERT_TRUE(written > 0 && (size_t)written < sizeof(command));
+  char *argv[] = {"/bin/sh", "-c", command, NULL};
+  ASSERT_EQ_INT(0, test_run_argv_capture(argv, 0, result));
+}
+
+void test_sin_default_source_root_validation(void) {
+  char cwd[PATH_MAX];
+  ASSERT_NOT_NULL(getcwd(cwd, sizeof(cwd)));
+
+  char sin_path[PATH_MAX];
+  char scomp_path[PATH_MAX];
+  char source_path[PATH_MAX];
+  char object_path[PATH_MAX];
+  ASSERT_TRUE(snprintf(sin_path, sizeof(sin_path), "%s/sin", cwd) > 0);
+  ASSERT_TRUE(snprintf(scomp_path, sizeof(scomp_path), "%s/scomp", cwd) > 0);
+  ASSERT_TRUE(snprintf(source_path, sizeof(source_path),
+                       "%s/examples/echo-load.src", cwd) > 0);
+  ASSERT_EQ_INT(0, test_make_temp_path("sin-default-source-object", object_path,
+                                       sizeof(object_path)));
+
+  char *compile_argv[] = {scomp_path, source_path, object_path, NULL};
+  TestProcessResult compile_result = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(compile_argv, 0, &compile_result));
+  ASSERT_EQ_INT(0, compile_result.exit_code);
+  test_process_result_free(&compile_result);
+
+  char run_dir[] = "/tmp/sin-default-srcroot-XXXXXX";
+  ASSERT_NOT_NULL(mkdtemp(run_dir));
+  TestProcessResult result = {0};
+  run_sin_from_directory(run_dir, sin_path, object_path, &result);
+  ASSERT_EQ_INT(0, result.exit_code);
+  ASSERT_TRUE(strstr(result.stdout_text,
+                     "Creating new source root in current directory.") != NULL);
+  ASSERT_TRUE(strstr(result.stdout_text,
+                     "Using 'srcroot' as the source root.") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "Unable to") == NULL);
+  test_process_result_free(&result);
+
+  char created_root[PATH_MAX];
+  char created_store[PATH_MAX];
+  ASSERT_TRUE(snprintf(created_root, sizeof(created_root), "%s/srcroot",
+                       run_dir) > 0);
+  ASSERT_TRUE(snprintf(created_store, sizeof(created_store), "%s/items.dat",
+                       run_dir) > 0);
+  struct stat root_stat;
+  ASSERT_EQ_INT(0, stat(created_root, &root_stat));
+  ASSERT_TRUE(S_ISDIR(root_stat.st_mode));
+  ASSERT_EQ_INT(0, unlink(created_store));
+  char created_source[PATH_MAX];
+  char created_input[PATH_MAX];
+  ASSERT_TRUE(snprintf(created_source, sizeof(created_source),
+                       "%s/input/source.sin", created_root) > 0);
+  ASSERT_TRUE(snprintf(created_input, sizeof(created_input), "%s/input",
+                       created_root) > 0);
+  ASSERT_EQ_INT(0, unlink(created_source));
+  ASSERT_EQ_INT(0, rmdir(created_input));
+  ASSERT_EQ_INT(0, rmdir(created_root));
+  ASSERT_EQ_INT(0, rmdir(run_dir));
+
+  ASSERT_TRUE(snprintf(run_dir, sizeof(run_dir),
+                       "/tmp/sin-default-srcroot-XXXXXX") > 0);
+  ASSERT_NOT_NULL(mkdtemp(run_dir));
+  char dangling_root[PATH_MAX];
+  ASSERT_TRUE(snprintf(dangling_root, sizeof(dangling_root), "%s/srcroot",
+                       run_dir) > 0);
+  ASSERT_EQ_INT(0, symlink("missing-target", dangling_root));
+  run_sin_from_directory(run_dir, sin_path, object_path, &result);
+  ASSERT_EQ_INT(1, result.exit_code);
+  ASSERT_TRUE(strstr(result.stderr_text, "Unable to create source root") != NULL);
+  ASSERT_TRUE(strstr(result.stdout_text,
+                     "Creating new source root in current directory.") == NULL);
+  ASSERT_TRUE(strstr(result.stdout_text,
+                     "Using 'srcroot' as the source root.") == NULL);
+  test_process_result_free(&result);
+  ASSERT_EQ_INT(0, unlink(dangling_root));
+  ASSERT_EQ_INT(0, rmdir(run_dir));
+  ASSERT_EQ_INT(0, unlink(object_path));
 }
 
 void test_sin_itemstore_version_policy(void) {

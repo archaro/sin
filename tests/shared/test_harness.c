@@ -174,6 +174,7 @@ void test_sconv_v2_canonical_and_invocation_modes(void);
 void test_sconv_collisions_aliases_and_replace(void);
 void test_sconv_rejects_bad_inputs_and_durability_failure(void);
 void test_sin_itemstore_version_policy(void);
+void test_sin_default_source_root_validation(void);
 void test_libcall_registry_roundtrip(void);
 void test_emitbc_libcall_pair_bytes(void);
 void test_runtime_init_validates_libcalls_once(void);
@@ -496,6 +497,7 @@ static const test_case_t core_tests[] = {
     {"test_sconv_collisions_aliases_and_replace", test_sconv_collisions_aliases_and_replace},
     {"test_sconv_rejects_bad_inputs_and_durability_failure", test_sconv_rejects_bad_inputs_and_durability_failure},
     {"test_sin_itemstore_version_policy", test_sin_itemstore_version_policy},
+    {"test_sin_default_source_root_validation", test_sin_default_source_root_validation},
     {"test_relative_item_leading_dot_parse_accepts_deref_chain", test_relative_item_leading_dot_parse_accepts_deref_chain},
     {"test_relative_item_leading_dot_nested_relative_deref_layers", test_relative_item_leading_dot_nested_relative_deref_layers},
     {"test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed", test_relative_item_leading_dot_nested_deref_nil_or_empty_leading_allowed},

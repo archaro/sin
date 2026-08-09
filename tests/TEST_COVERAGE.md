@@ -71,6 +71,11 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - Core suite registration (`core_tests[]` with 150 entries)
     - Suite registration validation rejects null/duplicate test entries
       before execution.
+- **sin startup source-root validation**
+  - `tests/core/test_sin_itemstore_policy.c`
+    - `test_sin_default_source_root_validation` runs `sin` from isolated
+      directories to cover successful default-root creation and a failed
+      default-root creation with exit status and diagnostic assertions.
 - **Fixture contract integrity / regeneration policy**
   - `tests/shared/test_fixture_policy.c`
     - `test_fixture_policy_declared_goldens_exist`
