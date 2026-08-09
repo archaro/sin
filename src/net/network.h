@@ -7,73 +7,60 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include <sys/socket.h>
 #include <uv.h>
 
-#include "libtelnet.h"
+/* Default maximum connections. */
+#define MAXCONNS 50
 
-// Default maximum connections
-#define MAXCONNS  50
-
-typedef struct {
-    uv_write_t req;
-    uv_buf_t buf;
-    size_t length; // Allocated size of buffer
-} write_req_t;
+typedef struct NetworkRuntime NetworkRuntime;
 
 typedef enum {
-  LINE_empty,
-  LINE_connecting,
-  LINE_disconnecting,
-  LINE_data,
-  LINE_idle
-} LINE_STATUS_t;
+  NETWORK_EVENT_NONE = 0,
+  NETWORK_EVENT_CONNECT = 1,
+  NETWORK_EVENT_DISCONNECT = 2,
+  NETWORK_EVENT_DATA = 3
+} NetworkEvent;
 
-typedef struct {
-  uv_tcp_t *line_handle;
-  LINE_STATUS_t status;
-  size_t linenum;
-  char address[40];
-  telnet_t *telnet;
-  write_req_t *outbuf;
-  write_req_t *inbuf;
-  bool output_write_in_flight;
-  size_t output_in_flight_length;
-  uint32_t output_backpressure_ticks;
-  bool close_after_output;
-  bool close_requested;
-  bool close_completed;
-  bool disconnect_event_delivered;
-  size_t input_line_length; // Bytes buffered since the last newline
-} LINE_t;
+typedef enum {
+  NETWORK_WRITE_INACTIVE = 0,
+  NETWORK_WRITE_SENT = 1,
+  NETWORK_WRITE_REJECTED = 2
+} NetworkWriteResult;
 
-extern LINE_t *line;
+/*
+ * A NetworkRuntime owns all connection slots and their transport state.  The
+ * loop and listener storage are borrowed from the caller: they must remain
+ * alive until network_runtime_destroy() has been called after the loop has
+ * drained all close callbacks. network_runtime_create() owns its allocation
+ * and slot storage; destroy releases both after shutdown is complete and
+ * returns false without mutating the runtime if live transport state remains.
+ */
+NetworkRuntime *network_runtime_create(uv_loop_t *loop, uv_tcp_t *listener,
+                                       uv_tcp_t *listener_ipv4,
+                                       size_t maxconns);
+bool network_runtime_listen(NetworkRuntime *runtime, uint32_t port);
+void network_runtime_shutdown(NetworkRuntime *runtime);
+bool network_runtime_destroy(NetworkRuntime *runtime);
+size_t network_runtime_max_connections(const NetworkRuntime *runtime);
+size_t network_runtime_current_line(const NetworkRuntime *runtime);
+NetworkEvent network_runtime_poll(NetworkRuntime *runtime, size_t *line_index,
+                                  char **input);
+NetworkWriteResult network_runtime_write(NetworkRuntime *runtime,
+                                         size_t line_index, const char *text,
+                                         size_t length);
+/* Flush and disconnect accept active connecting, idle, or data lines. */
+bool network_runtime_flush(NetworkRuntime *runtime, size_t line_index);
+void network_runtime_flush_all(NetworkRuntime *runtime);
+/* Echo negotiation is limited to writable idle or data Telnet lines. */
+void network_runtime_echo(NetworkRuntime *runtime, size_t line_index,
+                          bool enabled);
+bool network_runtime_disconnect(NetworkRuntime *runtime, size_t line_index);
+bool network_runtime_connected(const NetworkRuntime *runtime,
+                              size_t line_index);
+char *network_runtime_address(const NetworkRuntime *runtime,
+                              size_t line_index);
 
-typedef struct {
-  uv_loop_t *loop;
-  uv_tcp_t *listener;
-  uv_tcp_t *listener_ipv4;
-  LINE_t **lines;
-  size_t maxconns;
-  bool listener_initialized;
-  bool listener_ipv4_initialized;
-} NetworkRuntimeDeps;
-
-bool validate_network_deps(const NetworkRuntimeDeps *deps);
-bool line_is_active(const LINE_t *linep);
-bool line_is_disconnect_pending(const LINE_t *linep);
-bool line_is_disconnected(const LINE_t *linep);
-bool line_is_reusable(const LINE_t *linep);
-bool init_networking_with_deps(NetworkRuntimeDeps *deps);
-bool init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port);
-void client_on_close(uv_handle_t *handle);
-void close_network_handle(uv_handle_t *handle);
+/* Walk integration used by process shutdown to drain all libuv handles. */
+void close_network_handle(NetworkRuntime *runtime, uv_handle_t *handle);
 void network_close_walk_cb(uv_handle_t *handle, void *arg);
-void destroy_line(LINE_t *line);
 void input_processor(uv_timer_t *handle);
-char *get_input(LINE_t *line);
-void flush_output(LINE_t *line);
-void request_line_disconnect(LINE_t *line);
-void shutdown_listener_with_deps(NetworkRuntimeDeps *deps);
-void shutdown_networking(void);
-bool line_can_accept_output(LINE_t *linep, size_t len);

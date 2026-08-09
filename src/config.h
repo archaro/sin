@@ -26,8 +26,6 @@ typedef struct {
   char *inputline;      // Item to receive the input line number
   char *inputtext;      // Item to receive the input data
   VM_t *input_vm;       // VM for the input task
-  size_t maxconns;      // Maximum number of connected players
-  size_t lastconn;      // Last connection processed by net.input
   bool safe_shutdown;   // Determines how to shut down.
   bool shutdown_requested; // True after sys.shutdown or sys.abort stops loop.
   bool strict_validation; // Verify bytecode while loading itemstores.

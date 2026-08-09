@@ -9,14 +9,12 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 
-#include "config.h"
 #include "memory.h"
 #include "network.h"
+#include "libtelnet.h"
 #include "log.h"
 #include "util.h"
 #include "interpret.h"
-
-extern CONFIG_t config;
 
 #define OUTBUF_LENGTH 16384
 #define INBUF_LENGTH 16384
@@ -33,11 +31,56 @@ static const telnet_telopt_t telopts[] = {
 	{ -1, 0, 0 }
 };
 
-LINE_t *line;
-static size_t network_maxconns;
+typedef struct {
+  uv_write_t req;
+  uv_buf_t buf;
+  size_t length;
+} write_req_t;
 
-static NetworkRuntimeDeps *deps_from_server(uv_stream_t *server) {
-  return (server && server->data) ? (NetworkRuntimeDeps *)server->data : NULL;
+typedef enum {
+  LINE_empty,
+  LINE_connecting,
+  LINE_disconnecting,
+  LINE_data,
+  LINE_idle
+} LINE_STATUS_t;
+
+typedef struct {
+  uv_tcp_t *line_handle;
+  LINE_STATUS_t status;
+  size_t linenum;
+  char address[40];
+  telnet_t *telnet;
+  write_req_t *outbuf;
+  write_req_t *inbuf;
+  bool output_write_in_flight;
+  size_t output_in_flight_length;
+  uint32_t output_backpressure_ticks;
+  bool close_after_output;
+  bool close_requested;
+  bool close_completed;
+  bool disconnect_event_delivered;
+  size_t input_line_length;
+} LINE_t;
+
+struct NetworkRuntime {
+  uv_loop_t *loop;             /* borrowed */
+  uv_tcp_t *listener;          /* borrowed storage */
+  uv_tcp_t *listener_ipv4;     /* borrowed storage, optional */
+  LINE_t *lines;               /* owned */
+  size_t maxconns;
+  size_t lastconn;
+  bool listener_initialized;
+  bool listener_ipv4_initialized;
+};
+
+static void client_on_close(uv_handle_t *handle);
+static void flush_output(LINE_t *linep);
+static void telnet_event_handler(telnet_t *telnet, telnet_event_t *ev,
+                                 void *user_data);
+
+static NetworkRuntime *runtime_from_handle(const uv_handle_t *handle) {
+  return (handle && handle->data) ? (NetworkRuntime *)handle->data : NULL;
 }
 
 static void close_line_handle(LINE_t *linep) {
@@ -52,6 +95,11 @@ bool line_is_active(const LINE_t *linep) {
   return linep && (linep->status == LINE_connecting ||
                    linep->status == LINE_idle ||
                    linep->status == LINE_data);
+}
+
+static bool line_is_writable(const LINE_t *linep) {
+  return linep && linep->telnet != NULL &&
+         (linep->status == LINE_idle || linep->status == LINE_data);
 }
 
 bool line_is_disconnect_pending(const LINE_t *linep) {
@@ -77,12 +125,12 @@ bool line_is_reusable(const LINE_t *linep) {
          linep->input_line_length == 0;
 }
 
-bool validate_network_deps(const NetworkRuntimeDeps *deps) {
-  if (!deps || !deps->loop || !deps->listener) {
+static bool validate_runtime_args(uv_loop_t *loop, uv_tcp_t *listener,
+                                  size_t maxconns) {
+  if (!loop || !listener) {
     logerr("Invalid network runtime dependencies.\n");
     return false;
   }
-  size_t maxconns = deps ? deps->maxconns : 0;
   if (maxconns == 0) {
     logerr("Invalid maxconns: must be greater than zero.\n");
     return false;
@@ -100,36 +148,38 @@ bool validate_network_deps(const NetworkRuntimeDeps *deps) {
   return true;
 }
 
-bool init_networking_with_deps(NetworkRuntimeDeps *deps) {
-  // Do that which needs to be done before starting the network interface
-  if (!validate_network_deps(deps)) {
-    return false;
+NetworkRuntime *network_runtime_create(uv_loop_t *loop, uv_tcp_t *listener,
+                                        uv_tcp_t *listener_ipv4,
+                                        size_t maxconns) {
+  if (!validate_runtime_args(loop, listener, maxconns)) return NULL;
+  NetworkRuntime *runtime = calloc(1, sizeof(*runtime));
+  if (!runtime) {
+    logerr("Failed to allocate network runtime.\n");
+    return NULL;
   }
-
-  LINE_t **lines = deps->lines ? deps->lines : &line;
-  LINE_t *new_lines = calloc(deps->maxconns, sizeof *new_lines);
-  if (!new_lines) {
+  runtime->lines = calloc(maxconns, sizeof(*runtime->lines));
+  if (!runtime->lines) {
     logerr("Failed to allocate network line state.\n");
-    return false;
+    free(runtime);
+    return NULL;
   }
-  *lines = new_lines;
-  line = *lines;
-  network_maxconns = deps->maxconns;
-  for (size_t l = 0; l < deps->maxconns; l++) {
-    (*lines)[l].linenum = l;
+  runtime->loop = loop;
+  runtime->listener = listener;
+  runtime->listener_ipv4 = listener_ipv4;
+  runtime->maxconns = maxconns;
+  runtime->lastconn = maxconns;
+  for (size_t l = 0; l < maxconns; l++) {
+    runtime->lines[l].linenum = l;
   }
-  return true;
+  return runtime;
 }
 
-LINE_t *add_line(uv_tcp_t *line_handle) {
-  size_t l = 0;
-  while (!line_is_reusable(&line[l])) {
-    l++;
-    if (l >= (network_maxconns ? network_maxconns : config.maxconns)) {
-      return NULL;
-    }
+static LINE_t *add_line_at(NetworkRuntime *runtime, size_t l,
+                           uv_tcp_t *line_handle) {
+  if (!runtime || !line_handle || l >= runtime->maxconns ||
+      !line_is_reusable(&runtime->lines[l])) {
+    return NULL;
   }
-
   write_req_t *outbuf = (write_req_t *)malloc(sizeof(write_req_t));
   char *outbase = NULL;
   write_req_t *inbuf = NULL;
@@ -151,11 +201,11 @@ LINE_t *add_line(uv_tcp_t *line_handle) {
     free(inbuf);
     free(outbase);
     free(outbuf);
-    line[l].line_handle = NULL;
-    line[l].outbuf = NULL;
-    line[l].inbuf = NULL;
-    line[l].telnet = NULL;
-    line[l].status = LINE_empty;
+    runtime->lines[l].line_handle = NULL;
+    runtime->lines[l].outbuf = NULL;
+    runtime->lines[l].inbuf = NULL;
+    runtime->lines[l].telnet = NULL;
+    runtime->lines[l].status = LINE_empty;
     return NULL;
   }
 
@@ -169,21 +219,32 @@ LINE_t *add_line(uv_tcp_t *line_handle) {
   inbuf->buf.base[0] = '\0';
   inbuf->length = INBUF_LENGTH;
 
-  line[l].line_handle = line_handle;
-  line[l].status = LINE_connecting;
-  line[l].telnet = NULL;
-  line[l].address[0] = '\0';
-  line[l].outbuf = outbuf;
-  line[l].inbuf = inbuf;
-  line[l].output_write_in_flight = false;
-  line[l].output_in_flight_length = 0;
-  line[l].output_backpressure_ticks = 0;
-  line[l].close_after_output = false;
-  line[l].close_requested = false;
-  line[l].close_completed = false;
-  line[l].disconnect_event_delivered = false;
-  line[l].input_line_length = 0;
-  return &line[l];
+  runtime->lines[l].line_handle = line_handle;
+  runtime->lines[l].status = LINE_connecting;
+  runtime->lines[l].telnet = NULL;
+  runtime->lines[l].address[0] = '\0';
+  runtime->lines[l].outbuf = outbuf;
+  runtime->lines[l].inbuf = inbuf;
+  runtime->lines[l].output_write_in_flight = false;
+  runtime->lines[l].output_in_flight_length = 0;
+  runtime->lines[l].output_backpressure_ticks = 0;
+  runtime->lines[l].close_after_output = false;
+  runtime->lines[l].close_requested = false;
+  runtime->lines[l].close_completed = false;
+  runtime->lines[l].disconnect_event_delivered = false;
+  runtime->lines[l].input_line_length = 0;
+  line_handle->data = runtime;
+  return &runtime->lines[l];
+}
+
+static LINE_t *add_line(NetworkRuntime *runtime, uv_tcp_t *line_handle) {
+  if (!runtime || !line_handle) return NULL;
+  for (size_t l = 0; l < runtime->maxconns; l++) {
+    if (line_is_reusable(&runtime->lines[l])) {
+      return add_line_at(runtime, l, line_handle);
+    }
+  }
+  return NULL;
 }
 
 static void free_client_on_close(uv_handle_t *handle) {
@@ -212,7 +273,7 @@ static void release_line_resources(LINE_t *linep) {
   linep->input_line_length = 0;
 }
 
-void destroy_line(LINE_t *linep) {
+static void destroy_line(LINE_t *linep) {
   // Public teardown is only valid after the TCP close callback and writes.
   if (!linep || linep->line_handle || linep->output_write_in_flight) {
     return;
@@ -224,13 +285,13 @@ void destroy_line(LINE_t *linep) {
   linep->status = LINE_empty;
 }
 
-LINE_t *find_line(uv_tcp_t *client) {
+static LINE_t *find_line(NetworkRuntime *runtime, uv_tcp_t *client) {
   // Given a TCP client connection, find its associated line.
   // Return the line, or NULL if not found.
   size_t l = 0;
-  while (l < (network_maxconns ? network_maxconns : config.maxconns)) {
-    if (line[l].line_handle == client) {
-      return &line[l];
+  while (runtime && l < runtime->maxconns) {
+    if (runtime->lines[l].line_handle == client) {
+      return &runtime->lines[l];
     }
     l++;
   }
@@ -238,8 +299,9 @@ LINE_t *find_line(uv_tcp_t *client) {
   return NULL;
 }
 
-void client_on_close(uv_handle_t *handle) {
-  LINE_t *linep = find_line((uv_tcp_t *)handle);
+static void client_on_close(uv_handle_t *handle) {
+  NetworkRuntime *runtime = runtime_from_handle(handle);
+  LINE_t *linep = find_line(runtime, (uv_tcp_t *)handle);
   if (!linep) {
     free(handle);
     return;
@@ -255,14 +317,22 @@ void client_on_close(uv_handle_t *handle) {
   }
 }
 
-void close_network_handle(uv_handle_t *handle) {
+static bool runtime_owns_handle(const NetworkRuntime *runtime,
+                                const uv_handle_t *handle) {
+  if (!runtime || !handle) return false;
+  for (size_t l = 0; l < runtime->maxconns; l++) {
+    if ((uv_handle_t *)runtime->lines[l].line_handle == handle) return true;
+  }
+  return false;
+}
+
+void close_network_handle(NetworkRuntime *runtime, uv_handle_t *handle) {
   if (!handle || uv_is_closing(handle)) return;
-  uv_close(handle, find_line((uv_tcp_t *)handle) ? client_on_close : NULL);
+  uv_close(handle, runtime_owns_handle(runtime, handle) ? client_on_close : NULL);
 }
 
 void network_close_walk_cb(uv_handle_t *handle, void *arg) {
-  (void)arg;
-  close_network_handle(handle);
+  close_network_handle((NetworkRuntime *)arg, handle);
 }
 
 static void disconnect_line_for_output_limit(LINE_t *linep, const char *reason) {
@@ -500,8 +570,8 @@ char *get_input(LINE_t *linep) {
   return data;
 }
 
-void telnet_event_handler(telnet_t *telnet, telnet_event_t *ev,
-                                                    		void *user_data) {
+static void telnet_event_handler(telnet_t *telnet, telnet_event_t *ev,
+                                 void *user_data) {
   (void)telnet;
 	LINE_t *linep = (LINE_t *)user_data;
 	switch (ev->type) {
@@ -573,7 +643,7 @@ static void output_write_cb(uv_write_t *req, int status) {
   flush_output(linep);
 }
 
-void flush_output(LINE_t *linep) {
+static void flush_output(LINE_t *linep) {
   // Send the output to the line without reusing or mutating the write buffer
   // until libuv reports completion through output_write_cb.
   bool draining_disconnect =
@@ -664,7 +734,8 @@ void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
       uv_close((uv_handle_t *) client, client_on_close);
       return;
     }
-    LINE_t *linep = find_line((uv_tcp_t *)client);
+    NetworkRuntime *runtime = runtime_from_handle((uv_handle_t *)client);
+    LINE_t *linep = find_line(runtime, (uv_tcp_t *)client);
     if (line_is_active(linep)) {
       telnet_recv(linep->telnet, buf->base, (size_t)nread);
     }
@@ -674,7 +745,8 @@ void client_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
   if (nread < 0) {
     if (nread != UV_EOF)
       logerr("Read error %s\n", uv_err_name((int)nread));
-    LINE_t *linep = find_line((uv_tcp_t *)client);
+    NetworkRuntime *runtime = runtime_from_handle((uv_handle_t *)client);
+    LINE_t *linep = find_line(runtime, (uv_tcp_t *)client);
     if (linep) {
       linep->status = LINE_disconnecting;
       close_line_handle(linep);
@@ -690,8 +762,8 @@ void on_new_connection(uv_stream_t *server, int status) {
     logerr("Error on new connection: %s\n", uv_strerror(status));
     return;
   }
-  NetworkRuntimeDeps *deps = deps_from_server(server);
-  if (!deps || !deps->loop || !deps->listener) {
+  NetworkRuntime *runtime = runtime_from_handle((uv_handle_t *)server);
+  if (!runtime || !runtime->loop || !runtime->listener) {
     logerr("Rejected connection: network runtime dependencies are missing.\n");
     return;
   }
@@ -701,7 +773,7 @@ void on_new_connection(uv_stream_t *server, int status) {
     return;
   }
 
-  int err = uv_tcp_init(deps->loop, client);
+  int err = uv_tcp_init(runtime->loop, client);
   if (err < 0) {
     logerr("Rejected connection: uv_tcp_init failed: %s\n", uv_strerror(err));
     free(client);
@@ -715,12 +787,12 @@ void on_new_connection(uv_stream_t *server, int status) {
     return;
   }
 
-  LINE_t *newline = add_line(client);
+  LINE_t *newline = add_line(runtime, client);
   if (!newline) {
     uv_buf_t gamefull = {"Too many connections.\r\n", 23};
     uv_try_write((uv_stream_t *)client, &gamefull, 1);
     logmsg("Rejected connection: maximum connections (%zu) exceeded or allocation failed.\n",
-           (network_maxconns ? network_maxconns : config.maxconns));
+           runtime->maxconns);
     uv_close((uv_handle_t *)client, free_client_on_close);
     return;
   }
@@ -775,7 +847,7 @@ static void close_listener_handle(uv_tcp_t *listener, bool *initialized) {
   *initialized = false;
 }
 
-static bool init_ipv4_listener(NetworkRuntimeDeps *deps, uv_tcp_t *listener,
+static bool init_ipv4_listener(NetworkRuntime *runtime, uv_tcp_t *listener,
                                bool *initialized, uint16_t port) {
   struct sockaddr_in addr;
   int err = uv_ip4_addr("0.0.0.0", (int)port, &addr);
@@ -783,13 +855,13 @@ static bool init_ipv4_listener(NetworkRuntimeDeps *deps, uv_tcp_t *listener,
     logerr("Failed to create IPv4 listener address: %s\n", uv_strerror(err));
     return false;
   }
-  err = uv_tcp_init(deps->loop, listener);
+  err = uv_tcp_init(runtime->loop, listener);
   if (err < 0) {
     logerr("Failed to initialize IPv4 listener: %s\n", uv_strerror(err));
     return false;
   }
   *initialized = true;
-  listener->data = deps;
+  listener->data = runtime;
   err = uv_tcp_bind(listener, (const struct sockaddr *)&addr, 0);
   if (err < 0) {
     logerr("Failed to bind IPv4 listener: %s\n", uv_strerror(err));
@@ -823,8 +895,8 @@ static bool get_listener_port(uv_tcp_t *listener, int family,
   return true;
 }
 
-bool init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port) {
-  if (!deps || !deps->loop || !deps->listener) {
+bool network_runtime_listen(NetworkRuntime *runtime, uint32_t port) {
+  if (!runtime || !runtime->loop || !runtime->listener) {
     logerr("Invalid listener runtime dependencies.\n");
     return false;
   }
@@ -835,36 +907,36 @@ bool init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port) {
 
   /* Binding IPv4 first for port 0 avoids platform-specific failures when a
    * just-selected IPv6 ephemeral port cannot be reused by a second socket. */
-  if (port == 0 && deps->listener_ipv4) {
-    if (!init_ipv4_listener(deps, deps->listener_ipv4,
-                            &deps->listener_ipv4_initialized, 0)) {
-      close_listener_handle(deps->listener_ipv4,
-                            &deps->listener_ipv4_initialized);
+  if (port == 0 && runtime->listener_ipv4) {
+    if (!init_ipv4_listener(runtime, runtime->listener_ipv4,
+                            &runtime->listener_ipv4_initialized, 0)) {
+      close_listener_handle(runtime->listener_ipv4,
+                            &runtime->listener_ipv4_initialized);
       return false;
     }
     uint16_t selected_port = 0;
-    if (!get_listener_port(deps->listener_ipv4, AF_INET, &selected_port)) {
+    if (!get_listener_port(runtime->listener_ipv4, AF_INET, &selected_port)) {
       logerr("Failed to determine the ephemeral listener port.\n");
-      close_listener_handle(deps->listener_ipv4,
-                            &deps->listener_ipv4_initialized);
+      close_listener_handle(runtime->listener_ipv4,
+                            &runtime->listener_ipv4_initialized);
       return false;
     }
     struct sockaddr_in6 ephemeral_addr6;
     int ephemeral_err = uv_ip6_addr("::", (int)selected_port,
                                     &ephemeral_addr6);
     if (ephemeral_err == 0) {
-      ephemeral_err = uv_tcp_init(deps->loop, deps->listener);
+      ephemeral_err = uv_tcp_init(runtime->loop, runtime->listener);
       if (ephemeral_err == 0) {
-        deps->listener_initialized = true;
-        deps->listener->data = deps;
-        ephemeral_err = uv_tcp_bind(deps->listener,
+        runtime->listener_initialized = true;
+        runtime->listener->data = runtime;
+        ephemeral_err = uv_tcp_bind(runtime->listener,
                                     (const struct sockaddr *)&ephemeral_addr6,
                                     UV_TCP_IPV6ONLY);
         if (ephemeral_err == 0) {
-          ephemeral_err = uv_tcp_nodelay(deps->listener, 1);
+          ephemeral_err = uv_tcp_nodelay(runtime->listener, 1);
         }
         if (ephemeral_err == 0) {
-          ephemeral_err = uv_listen((uv_stream_t *)deps->listener, 10,
+          ephemeral_err = uv_listen((uv_stream_t *)runtime->listener, 10,
                                     on_new_connection);
         }
       }
@@ -873,7 +945,7 @@ bool init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port) {
       logmsg("Listening on port %u.\n", selected_port);
       return true;
     }
-    close_listener_handle(deps->listener, &deps->listener_initialized);
+    close_listener_handle(runtime->listener, &runtime->listener_initialized);
     logmsg("IPv6 listener unavailable on ephemeral port %u (%s); "
            "continuing with IPv4 only.\n", selected_port,
            uv_strerror(ephemeral_err));
@@ -886,34 +958,34 @@ bool init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port) {
   struct sockaddr_in6 addr6;
   int err = uv_ip6_addr("::", (int)port, &addr6);
   if (err == 0) {
-    err = uv_tcp_init(deps->loop, deps->listener);
+    err = uv_tcp_init(runtime->loop, runtime->listener);
     if (err == 0) {
-      deps->listener_initialized = true;
-      deps->listener->data = deps;
-      err = uv_tcp_bind(deps->listener, (const struct sockaddr *)&addr6,
+      runtime->listener_initialized = true;
+      runtime->listener->data = runtime;
+      err = uv_tcp_bind(runtime->listener, (const struct sockaddr *)&addr6,
                         UV_TCP_IPV6ONLY);
       if (err == 0) {
-        err = uv_tcp_nodelay(deps->listener, 1);
+        err = uv_tcp_nodelay(runtime->listener, 1);
       }
       if (err == 0) {
         uint16_t selected_port = (uint16_t)port;
         if (port == 0) {
-          if (!get_listener_port(deps->listener, AF_INET6, &selected_port)) {
+          if (!get_listener_port(runtime->listener, AF_INET6, &selected_port)) {
             err = UV_EINVAL;
           }
         }
         if (err == 0) {
-          err = uv_listen((uv_stream_t *)deps->listener, 10,
+          err = uv_listen((uv_stream_t *)runtime->listener, 10,
                           on_new_connection);
         }
-        if (err == 0 && deps->listener_ipv4) {
-          if (!init_ipv4_listener(deps, deps->listener_ipv4,
-                                  &deps->listener_ipv4_initialized,
+        if (err == 0 && runtime->listener_ipv4) {
+          if (!init_ipv4_listener(runtime, runtime->listener_ipv4,
+                                  &runtime->listener_ipv4_initialized,
                                   selected_port)) {
-            close_listener_handle(deps->listener_ipv4,
-                                  &deps->listener_ipv4_initialized);
-            close_listener_handle(deps->listener,
-                                  &deps->listener_initialized);
+            close_listener_handle(runtime->listener_ipv4,
+                                  &runtime->listener_ipv4_initialized);
+            close_listener_handle(runtime->listener,
+                                  &runtime->listener_initialized);
             return false;
           }
         }
@@ -925,20 +997,20 @@ bool init_listener_with_deps(NetworkRuntimeDeps *deps, uint32_t port) {
       if (err == UV_EADDRINUSE) {
         logerr("Failed to listen on port %u: %s\n", port,
                uv_strerror(err));
-        close_listener_handle(deps->listener, &deps->listener_initialized);
+        close_listener_handle(runtime->listener, &runtime->listener_initialized);
         return false;
       }
-      close_listener_handle(deps->listener, &deps->listener_initialized);
+      close_listener_handle(runtime->listener, &runtime->listener_initialized);
     }
   }
 
-  if (!deps->listener_ipv4) {
+  if (!runtime->listener_ipv4) {
     logerr("IPv6 listener unavailable and no IPv4 fallback is configured.\n");
     return false;
   }
-  if (!init_ipv4_listener(deps, deps->listener_ipv4,
-                          &deps->listener_ipv4_initialized, (uint16_t)port)) {
-    close_listener_handle(deps->listener_ipv4, &deps->listener_ipv4_initialized);
+  if (!init_ipv4_listener(runtime, runtime->listener_ipv4,
+                          &runtime->listener_ipv4_initialized, (uint16_t)port)) {
+    close_listener_handle(runtime->listener_ipv4, &runtime->listener_ipv4_initialized);
     return false;
   }
   logmsg("Listening on IPv4 port %u.\n", port);
@@ -984,32 +1056,247 @@ void input_processor(uv_timer_t *handle) {
     return;
   }
   reset_stack(input_ctx->vm->stack);
-  // Flush the output of every connected line
-  size_t maxconns = input_ctx->maxconns ? *input_ctx->maxconns : input_ctx->network.maxconns ? *input_ctx->network.maxconns : 0;
-  for (size_t l = 0; l < maxconns; l++) {
-    if (line[l].status != LINE_empty 
-                                  && line[l].status != LINE_disconnecting) {
-      flush_output(&line[l]);
+  network_runtime_flush_all(input_ctx->network);
+}
+
+size_t network_runtime_max_connections(const NetworkRuntime *runtime) {
+  return runtime ? runtime->maxconns : 0;
+}
+
+size_t network_runtime_current_line(const NetworkRuntime *runtime) {
+  return runtime ? runtime->lastconn : 0;
+}
+
+NetworkEvent network_runtime_poll(NetworkRuntime *runtime, size_t *line_index,
+                                  char **input) {
+  if (line_index) *line_index = 0;
+  if (input) *input = NULL;
+  if (!runtime || runtime->maxconns == 0) return NETWORK_EVENT_NONE;
+
+  for (size_t checked = 0; checked < runtime->maxconns; checked++) {
+    runtime->lastconn++;
+    if (runtime->lastconn >= runtime->maxconns) runtime->lastconn = 0;
+    LINE_t *linep = &runtime->lines[runtime->lastconn];
+    switch (linep->status) {
+      case LINE_connecting:
+        linep->status = LINE_idle;
+        if (line_index) *line_index = runtime->lastconn;
+        return NETWORK_EVENT_CONNECT;
+      case LINE_disconnecting:
+        if ((linep->close_requested && !linep->close_completed) ||
+            linep->output_write_in_flight ||
+            linep->disconnect_event_delivered) {
+          continue;
+        }
+        linep->disconnect_event_delivered = true;
+        destroy_line(linep);
+        if (line_index) *line_index = runtime->lastconn;
+        return NETWORK_EVENT_DISCONNECT;
+      case LINE_data: {
+        char *data = get_input(linep);
+        if (data) {
+          if (line_index) *line_index = runtime->lastconn;
+          if (input) *input = data;
+          else free(data);
+          return NETWORK_EVENT_DATA;
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return NETWORK_EVENT_NONE;
+}
+
+NetworkWriteResult network_runtime_write(NetworkRuntime *runtime,
+                                         size_t line_index, const char *text,
+                                         size_t length) {
+  if (!runtime || line_index >= runtime->maxconns || !text) {
+    return NETWORK_WRITE_INACTIVE;
+  }
+  LINE_t *linep = &runtime->lines[line_index];
+  if (!line_is_writable(linep)) {
+    return NETWORK_WRITE_INACTIVE;
+  }
+  if (!line_can_accept_output(linep, length)) {
+    logerr("net.write rejected for line %zu: output buffer limit or backpressure.\n",
+           line_index);
+    return NETWORK_WRITE_REJECTED;
+  }
+  telnet_send_text(linep->telnet, text, length);
+  return linep->status == LINE_disconnecting ? NETWORK_WRITE_REJECTED
+                                              : NETWORK_WRITE_SENT;
+}
+
+bool network_runtime_flush(NetworkRuntime *runtime, size_t line_index) {
+  if (!runtime || line_index >= runtime->maxconns) return false;
+  LINE_t *linep = &runtime->lines[line_index];
+  if (!line_is_active(linep)) return false;
+  flush_output(linep);
+  return true;
+}
+
+void network_runtime_flush_all(NetworkRuntime *runtime) {
+  if (!runtime) return;
+  for (size_t l = 0; l < runtime->maxconns; l++) {
+    if (line_is_active(&runtime->lines[l])) flush_output(&runtime->lines[l]);
+  }
+}
+
+void network_runtime_echo(NetworkRuntime *runtime, size_t line_index,
+                          bool enabled) {
+  if (!runtime || line_index >= runtime->maxconns) return;
+  LINE_t *linep = &runtime->lines[line_index];
+  if (!line_is_writable(linep)) return;
+  unsigned char command = enabled ? TELNET_WONT : TELNET_WILL;
+  telnet_negotiate(linep->telnet, command, TELNET_TELOPT_ECHO);
+}
+
+bool network_runtime_disconnect(NetworkRuntime *runtime, size_t line_index) {
+  if (!runtime || line_index >= runtime->maxconns) return false;
+  LINE_t *linep = &runtime->lines[line_index];
+  if (!line_is_active(linep)) return false;
+  request_line_disconnect(linep);
+  return true;
+}
+
+bool network_runtime_connected(const NetworkRuntime *runtime,
+                              size_t line_index) {
+  if (!runtime || line_index >= runtime->maxconns) return false;
+  const LINE_t *linep = &runtime->lines[line_index];
+  return line_is_writable(linep);
+}
+
+char *network_runtime_address(const NetworkRuntime *runtime,
+                              size_t line_index) {
+  if (!network_runtime_connected(runtime, line_index)) return NULL;
+  const LINE_t *linep = &runtime->lines[line_index];
+  if (!linep->address[0]) return NULL;
+  return strdup(linep->address);
+}
+
+void network_runtime_shutdown(NetworkRuntime *runtime) {
+  if (!runtime) return;
+  close_listener_handle(runtime->listener, &runtime->listener_initialized);
+  close_listener_handle(runtime->listener_ipv4,
+                        &runtime->listener_ipv4_initialized);
+  for (size_t l = 0; l < runtime->maxconns; l++) {
+    LINE_t *linep = &runtime->lines[l];
+    if (line_is_active(linep)) {
+      request_line_disconnect(linep);
+    } else if (linep->status == LINE_disconnecting &&
+               !linep->line_handle && !linep->output_write_in_flight) {
+      destroy_line(linep);
     }
   }
 }
 
-void shutdown_listener_with_deps(NetworkRuntimeDeps *deps) {
-  if (!deps) return;
-  close_listener_handle(deps->listener, &deps->listener_initialized);
-  close_listener_handle(deps->listener_ipv4, &deps->listener_ipv4_initialized);
-}
-
-void shutdown_networking(void) {
-  // Having been set-up, now shut it down.  Shut it down forever.
-  size_t maxconns = network_maxconns ? network_maxconns : config.maxconns;
-  for (size_t l = 0; line && l < maxconns; l++) {
-    if (line[l].status != LINE_empty || line[l].line_handle ||
-        line[l].telnet || line[l].outbuf || line[l].inbuf) {
-      destroy_line(&line[l]);
+bool network_runtime_destroy(NetworkRuntime *runtime) {
+  if (!runtime) return true;
+  if (runtime->listener_initialized || runtime->listener_ipv4_initialized) {
+    logerr("Cannot destroy network runtime with live listener state.\n");
+    return false;
+  }
+  for (size_t l = 0; l < runtime->maxconns; l++) {
+    LINE_t *linep = &runtime->lines[l];
+    if (linep->line_handle || linep->output_write_in_flight) {
+      logerr("Cannot destroy network runtime with live connection %zu.\n", l);
+      return false;
     }
   }
-  free(line);
-  line = NULL;
-  network_maxconns = 0;
+  for (size_t l = 0; l < runtime->maxconns; l++) {
+    LINE_t *linep = &runtime->lines[l];
+    if (!line_is_reusable(linep)) destroy_line(linep);
+  }
+  free(runtime->lines);
+  free(runtime);
+  return true;
+}
+
+/* Test fixture hooks intentionally live outside network.h. They let core
+ * tests establish deterministic slot state without exposing transport types
+ * to production clients. */
+bool network_runtime_test_set_line(NetworkRuntime *runtime, size_t line_index,
+                                   int state) {
+  if (!runtime || line_index >= runtime->maxconns || state < 0 || state > 5) {
+    return false;
+  }
+  LINE_t *linep = &runtime->lines[line_index];
+  if (state == 0) return line_is_reusable(linep);
+  if (!line_is_reusable(linep)) return false;
+  uv_tcp_t *handle = calloc(1, sizeof(*handle));
+  if (!handle || uv_tcp_init(runtime->loop, handle) < 0) {
+    free(handle);
+    return false;
+  }
+  linep = add_line_at(runtime, line_index, handle);
+  if (!linep) {
+    uv_close((uv_handle_t *)handle, free_client_on_close);
+    return false;
+  }
+  if (state != 5) {
+    linep->telnet = telnet_init(telopts, telnet_event_handler,
+                                TELNET_FLAG_NVT_EOL, linep);
+    if (!linep->telnet) {
+      uv_close((uv_handle_t *)handle, client_on_close);
+      return false;
+    }
+  } else {
+    linep->status = LINE_idle;
+  }
+  linep->status = state == 5 ? LINE_idle : (LINE_STATUS_t)state;
+  if (state == 2) {
+    linep->status = LINE_idle;
+    request_line_disconnect(linep);
+  }
+  return true;
+}
+
+bool network_runtime_test_set_input(NetworkRuntime *runtime, size_t line_index,
+                                    const char *input) {
+  if (!runtime || line_index >= runtime->maxconns || !input) return false;
+  LINE_t *linep = &runtime->lines[line_index];
+  if (!linep->telnet || !line_is_active(linep)) return false;
+  telnet_recv(linep->telnet, input, strlen(input));
+  return true;
+}
+
+bool network_runtime_test_feed(NetworkRuntime *runtime, size_t line_index,
+                               const char *data, size_t length) {
+  if (!runtime || line_index >= runtime->maxconns || !data) return false;
+  LINE_t *linep = &runtime->lines[line_index];
+  if (!linep->telnet || !line_is_active(linep)) return false;
+  telnet_recv(linep->telnet, data, length);
+  return true;
+}
+
+bool network_runtime_test_set_address(NetworkRuntime *runtime,
+                                      size_t line_index, const char *address) {
+  if (!runtime || line_index >= runtime->maxconns || !address) return false;
+  LINE_t *linep = &runtime->lines[line_index];
+  if (strlen(address) >= sizeof(linep->address)) return false;
+  strcpy(linep->address, address);
+  return true;
+}
+
+bool network_runtime_test_select_line(NetworkRuntime *runtime,
+                                      size_t line_index) {
+  if (!runtime || line_index >= runtime->maxconns) return false;
+  runtime->lastconn = line_index;
+  return true;
+}
+
+size_t network_runtime_test_take_output(NetworkRuntime *runtime,
+                                        size_t line_index, unsigned char *out,
+                                        size_t out_size) {
+  if (!runtime || line_index >= runtime->maxconns || !out) return 0;
+  LINE_t *linep = &runtime->lines[line_index];
+  if (!linep->outbuf || !linep->outbuf->buf.base) return 0;
+  size_t copied = linep->outbuf->buf.len < out_size
+                      ? linep->outbuf->buf.len : out_size;
+  memcpy(out, linep->outbuf->buf.base, copied);
+  linep->outbuf->buf.len = 0;
+  linep->outbuf->buf.base[0] = '\0';
+  return copied;
 }

@@ -21,7 +21,6 @@
 #include "string_limits.h"
 #include "version.h"
 
-#include "network.h"
 #include "list.h"
 #include "itemref.h"
 
@@ -40,7 +39,6 @@ uint8_t *lc_task_count(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 void execute_task_cb(uv_timer_t *req);
 uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
-LINE_t *add_line(uv_tcp_t *line_handle);
 uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_echo(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -92,28 +90,9 @@ uint8_t *lc_str_repeat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_padleft(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_padright(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
-extern LINE_t *line;
 extern CONFIG_t config;
 
 #include "shared/test_libcall_support.h"
-
-static char telnet_capture[128];
-static size_t telnet_capture_len;
-
-static void capture_telnet_event(telnet_t *telnet, telnet_event_t *event, void *user_data) {
-  (void)telnet;
-  (void)user_data;
-  if (event->type != TELNET_EV_SEND) return;
-  size_t room = sizeof(telnet_capture) - telnet_capture_len - 1;
-  size_t n = event->data.size < room ? event->data.size : room;
-  memcpy(telnet_capture + telnet_capture_len, event->data.buffer, n);
-  telnet_capture_len += n;
-  telnet_capture[telnet_capture_len] = '\0';
-}
-static void reset_telnet_capture(void) {
-  telnet_capture[0] = '\0';
-  telnet_capture_len = 0;
-}
 
 static void assert_sys_log_output(VALUE_t out, const char *expected) {
   FILE *capture = tmpfile();
@@ -139,26 +118,28 @@ static void assert_sys_log_output(VALUE_t out, const char *expected) {
 }
 
 static void assert_net_write_output(VALUE_t out, const char *expected) {
-  reset_telnet_capture();
-
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
   push_stack(config.vm->stack, out);
   (void)lc_net_write(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
-  ASSERT_TRUE(strcmp(telnet_capture, expected) == 0);
+  unsigned char output[256] = {0};
+  size_t output_len = network_runtime_test_take_output(
+      test_network_runtime(), 0, output, sizeof(output));
+  ASSERT_EQ_INT(strlen(expected), output_len);
+  ASSERT_TRUE(memcmp(output, expected, output_len) == 0);
 }
 
 static void assert_net_write_render_failure(VALUE_t out) {
-  reset_telnet_capture();
-
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
   push_stack(config.vm->stack, out);
   (void)lc_net_write(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
-  ASSERT_EQ_INT(0, telnet_capture_len);
+  unsigned char output[8] = {0};
+  ASSERT_EQ_INT(0, network_runtime_test_take_output(
+                        test_network_runtime(), 0, output, sizeof(output)));
 }
 
 static uint8_t *test_noop_libcall(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -504,9 +485,7 @@ void test_libcall_invalid_arg_branches_return_contracts(void) {
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_detail_contains("intervals");
 
-  config.maxconns = 1;
-  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
-  ASSERT_NOT_NULL(line);
+  ASSERT_TRUE(test_network_reset(1));
   VALUE_t bad_line = {VALUE_int, {.i = -1}};
   VALUE_t out = {VALUE_str, {.s = strdup("hello")}};
   push_stack(config.vm->stack, bad_line);
@@ -543,9 +522,7 @@ void test_libcall_float_integer_only_arguments_rejected(void) {
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   assert_invalid_args_float_detail_contains("task.killtask");
 
-  config.maxconns = 1;
-  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
-  ASSERT_NOT_NULL(line);
+  ASSERT_TRUE(test_network_reset(1));
   VALUE_t float_line = {VALUE_float, {.f = 0.0}};
   VALUE_t out = {VALUE_str, {.s = strdup("hello")}};
   push_stack(config.vm->stack, float_line);
@@ -603,12 +580,9 @@ void test_libcall_output_formats_values(void) {
     assert_sys_log_output(sys_cases[i].value, sys_cases[i].expected);
   }
 
-  config.maxconns = 1;
-  line = calloc((size_t)config.maxconns, sizeof(LINE_t));
-  ASSERT_NOT_NULL(line);
-  line[0].status = LINE_idle;
-  line[0].telnet = telnet_init(NULL, capture_telnet_event, 0, NULL);
-  ASSERT_NOT_NULL(line[0].telnet);
+  ASSERT_TRUE(test_network_reset(1));
+  ASSERT_TRUE(network_runtime_test_set_line(test_network_runtime(), 0,
+                                            NETWORK_TEST_IDLE));
 
   const output_case_t net_cases[] = {
     {(VALUE_t){VALUE_str, {.s = strdup("hello")}}, "hello"},

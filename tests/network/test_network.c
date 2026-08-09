@@ -85,13 +85,90 @@ int test_uv_write(uv_write_t *req, uv_stream_t *h, const uv_buf_t bufs[], unsign
 #pragma GCC diagnostic pop
 #endif
 
-static uv_stream_t *test_server_with_deps(NetworkRuntimeDeps *deps){static uv_tcp_t listener;static uv_loop_t loop;deps->loop=&loop;deps->listener=&listener;deps->lines=&line;deps->maxconns=config.maxconns;listener.data=deps;return (uv_stream_t *)&listener;}
-static LINE_t *make_line(void){reset_faults();config.maxconns=2;line=calloc(config.maxconns,sizeof(*line));uv_tcp_t*h=calloc(1,sizeof(*h));LINE_t*lp=add_line(h);ASSERT_NOT_NULL(lp);lp->status=LINE_idle;return lp;} static void cleanup_lines(void){for(size_t i=0;i<config.maxconns;i++){LINE_t*lp=&line[i];if(lp->status==LINE_empty)continue;if(lp->output_write_in_flight&&last_write_req&&last_write_req->data==lp)complete_last_write(UV_ECANCELED);if(lp->line_handle&&!lp->close_completed){request_line_disconnect(lp);}if(lp->line_handle&&last_close_cb&&last_close_handle==(uv_handle_t*)lp->line_handle){last_close_cb(last_close_handle);last_close_handle=NULL;last_close_cb=NULL;}destroy_line(lp);}free(line);line=NULL;memset(&config,0,sizeof(config));}
+static NetworkRuntime *test_runtime;
+static uv_loop_t test_loop;
+static uv_tcp_t test_listener;
+static uv_tcp_t test_listener_ipv4;
+static uv_stream_t *test_server(void) {
+  test_listener.data = test_runtime;
+  return (uv_stream_t *)&test_listener;
+}
+static LINE_t *make_line(void) {
+  reset_faults();
+  test_runtime = network_runtime_create(&test_loop, &test_listener,
+                                        &test_listener_ipv4, 2);
+  ASSERT_NOT_NULL(test_runtime);
+  uv_tcp_t *handle = calloc(1, sizeof(*handle));
+  ASSERT_NOT_NULL(handle);
+  LINE_t *linep = add_line(test_runtime, handle);
+  ASSERT_NOT_NULL(linep);
+  linep->status = LINE_idle;
+  return linep;
+}
+static void cleanup_lines(void) {
+  if (!test_runtime) return;
+  for (size_t i = 0; i < test_runtime->maxconns; i++) {
+    LINE_t *linep = &test_runtime->lines[i];
+    if (linep->status == LINE_empty) continue;
+    if (linep->output_write_in_flight && last_write_req &&
+        last_write_req->data == linep) complete_last_write(UV_ECANCELED);
+    if (linep->line_handle && !linep->close_completed) {
+      request_line_disconnect(linep);
+    }
+    if (linep->line_handle && last_close_cb &&
+        last_close_handle == (uv_handle_t *)linep->line_handle) {
+      last_close_cb(last_close_handle);
+      last_close_handle = NULL;
+      last_close_cb = NULL;
+    }
+    destroy_line(linep);
+  }
+  ASSERT_TRUE(network_runtime_destroy(test_runtime));
+  test_runtime = NULL;
+}
 void test_append_input_lines_and_limits(void){LINE_t*lp=make_line();append_input(lp,"one\n",4);ASSERT_EQ_INT(LINE_data,lp->status);append_input(lp,"two\nthree\n",10);ASSERT_EQ_INT(14,lp->inbuf->buf.len);ASSERT_EQ_INT(0,lp->input_line_length);cleanup_lines();lp=make_line();append_input(lp,"partial",7);ASSERT_EQ_INT(LINE_idle,lp->status);ASSERT_EQ_INT(7,lp->input_line_length);cleanup_lines();lp=make_line();char*big=calloc(4097,1);memset(big,'a',4096);append_input(lp,big,4096);append_input(lp,"b",1);ASSERT_EQ_INT(LINE_disconnecting,lp->status);free(big);cleanup_lines();lp=make_line();char*chunk=calloc(4097,1);memset(chunk,'x',4095);chunk[4095]='\n';for(int i=0;i<16;i++)append_input(lp,chunk,4096);append_input(lp,"z\n",2);ASSERT_EQ_INT(LINE_disconnecting,lp->status);free(chunk);cleanup_lines();}
 void test_get_input_cases(void){LINE_t*lp=make_line();append_input(lp,"missing",7);lp->status=LINE_data;ASSERT_TRUE(get_input(lp)==NULL);ASSERT_EQ_INT(LINE_idle,lp->status);cleanup_lines();lp=make_line();append_input(lp,"first\nsecond\n",13);char*s=get_input(lp);ASSERT_NOT_NULL(s);ASSERT_TRUE(strcmp(s,"first")==0);free(s);ASSERT_TRUE(strcmp(lp->inbuf->buf.base,"second\n")==0);ASSERT_EQ_INT(LINE_data,lp->status);cleanup_lines();lp=make_line();append_input(lp,"x\n",2);fail_malloc_after=malloc_calls;ASSERT_TRUE(get_input(lp)==NULL);ASSERT_EQ_INT(LINE_disconnecting,lp->status);cleanup_lines();}
+void test_runtime_poll_skips_failed_input(void){
+  LINE_t *lp = make_line();
+  append_input(lp, "failed\n", 7);
+  fail_malloc_after = malloc_calls;
+  size_t line_index = 99;
+  char *input = NULL;
+  ASSERT_EQ_INT(NETWORK_EVENT_NONE,
+                network_runtime_poll(test_runtime, &line_index, &input));
+  ASSERT_TRUE(input == NULL);
+  ASSERT_EQ_INT(LINE_disconnecting, lp->status);
+  cleanup_lines();
+}
 void test_output_flush_limits_and_callback(void){LINE_t*lp=make_line();append_output(lp,"abc",3);flush_output(lp);ASSERT_TRUE(lp->output_write_in_flight);ASSERT_EQ_INT(3,lp->output_in_flight_length);append_output(lp,"q",1);for(int i=0;i<129;i++)flush_output(lp);ASSERT_EQ_INT(LINE_disconnecting,lp->status);complete_last_write(UV_ECANCELED);cleanup_lines();lp=make_line();char*big=calloc(65537,1);memset(big,'o',65536);append_output(lp,big,65536);ASSERT_EQ_INT(LINE_disconnecting,lp->status);free(big);cleanup_lines();}
 void test_disconnect_waits_for_pending_output(void){LINE_t*lp=make_line();append_output(lp,"bye",3);request_line_disconnect(lp);ASSERT_EQ_INT(LINE_disconnecting,lp->status);ASSERT_TRUE(lp->output_write_in_flight);ASSERT_EQ_INT(0,uv_close_calls);complete_last_write(0);ASSERT_EQ_INT(1,uv_close_calls);cleanup_lines();}
-void test_line_lifecycle_states_and_reuse(void){reset_faults();config.maxconns=1;line=calloc(config.maxconns,sizeof(*line));ASSERT_TRUE(line_is_disconnected(&line[0]));ASSERT_TRUE(line_is_reusable(&line[0]));uv_tcp_t*h1=calloc(1,sizeof(*h1));LINE_t*lp=add_line(h1);ASSERT_NOT_NULL(lp);ASSERT_TRUE(line_is_active(lp));ASSERT_TRUE(!line_is_reusable(lp));lp->status=LINE_idle;request_line_disconnect(lp);ASSERT_TRUE(line_is_disconnect_pending(lp));ASSERT_EQ_INT(1,uv_close_calls);request_line_disconnect(lp);ASSERT_EQ_INT(1,uv_close_calls);append_output(lp,"ignored",7);ASSERT_EQ_INT(0,lp->outbuf->buf.len);last_close_cb(last_close_handle);ASSERT_TRUE(line_is_disconnect_pending(lp));destroy_line(lp);ASSERT_TRUE(line_is_disconnected(lp));ASSERT_TRUE(line_is_reusable(lp));uv_tcp_t*h2=calloc(1,sizeof(*h2));LINE_t*reused=add_line(h2);ASSERT_TRUE(reused==lp);ASSERT_TRUE(reused->line_handle==h2);ASSERT_TRUE(line_is_active(reused));cleanup_lines();}
+void test_line_lifecycle_states_and_reuse(void){
+  reset_faults();
+  test_runtime = network_runtime_create(&test_loop, &test_listener,
+                                        &test_listener_ipv4, 1);
+  ASSERT_NOT_NULL(test_runtime);
+  ASSERT_TRUE(line_is_disconnected(&test_runtime->lines[0]));
+  ASSERT_TRUE(line_is_reusable(&test_runtime->lines[0]));
+  uv_tcp_t *h1 = calloc(1, sizeof(*h1));
+  LINE_t *lp = add_line(test_runtime, h1);
+  ASSERT_NOT_NULL(lp);
+  ASSERT_TRUE(line_is_active(lp));
+  lp->status = LINE_idle;
+  request_line_disconnect(lp);
+  ASSERT_TRUE(line_is_disconnect_pending(lp));
+  ASSERT_EQ_INT(1, uv_close_calls);
+  request_line_disconnect(lp);
+  ASSERT_EQ_INT(1, uv_close_calls);
+  last_close_cb(last_close_handle);
+  destroy_line(lp);
+  ASSERT_TRUE(line_is_reusable(lp));
+  uv_tcp_t *h2 = calloc(1, sizeof(*h2));
+  LINE_t *reused = add_line(test_runtime, h2);
+  ASSERT_TRUE(reused == lp);
+  ASSERT_TRUE(reused->line_handle == h2);
+  ASSERT_TRUE(line_is_active(reused));
+  cleanup_lines();
+}
 void test_remote_disconnect_marks_line_before_close_callback(void){LINE_t*lp=make_line();uv_buf_t buf={calloc(1,1),1};client_read((uv_stream_t*)lp->line_handle,UV_EOF,&buf);ASSERT_TRUE(line_is_disconnect_pending(lp));ASSERT_EQ_INT(1,uv_close_calls);append_output(lp,"ignored",7);ASSERT_EQ_INT(0,lp->outbuf->buf.len);last_close_cb(last_close_handle);ASSERT_TRUE(line_is_disconnect_pending(lp));cleanup_lines();}
 void test_disconnect_close_write_callback_orders(void){
   LINE_t*lp=make_line();
@@ -149,16 +226,126 @@ void test_destroy_line_after_real_telnet_init_failure(void){
   ASSERT_TRUE(line_is_disconnected(lp));
   cleanup_lines();
 }
-void test_on_new_connection_rejections_and_close_ownership(void){NetworkRuntimeDeps deps;reset_faults();config.maxconns=1;line=calloc(1,sizeof(*line));on_new_connection(NULL,0);ASSERT_EQ_INT(0,uv_close_calls);free(line);line=NULL;reset_faults();config.maxconns=1;line=calloc(1,sizeof(*line));line[0].status=LINE_idle;on_new_connection(test_server_with_deps(&deps),0);ASSERT_EQ_INT(1,uv_close_calls);last_close_cb(last_close_handle);free(line);line=NULL;reset_faults();config.maxconns=1;line=calloc(1,sizeof(*line));fail_malloc_after=0;on_new_connection(test_server_with_deps(&deps),0);ASSERT_EQ_INT(0,uv_close_calls);free(line);line=NULL;reset_faults();config.maxconns=1;line=calloc(1,sizeof(*line));stub_telnet_init_fail=1;on_new_connection(test_server_with_deps(&deps),0);ASSERT_EQ_INT(1,uv_close_calls);cleanup_lines();reset_faults();config.maxconns=1;line=calloc(1,sizeof(*line));stub_uv_read_start_result=UV_EIO;on_new_connection(test_server_with_deps(&deps),0);ASSERT_EQ_INT(1,uv_close_calls);cleanup_lines();reset_faults();config.maxconns=1;line=calloc(1,sizeof(*line));stub_uv_accept_result=UV_ECONNRESET;on_new_connection(test_server_with_deps(&deps),0);ASSERT_EQ_INT(1,uv_close_calls);last_close_cb(last_close_handle);free(line);line=NULL;reset_faults();config.maxconns=1;line=calloc(1,sizeof(*line));uv_tcp_t*orphan=calloc(1,sizeof(*orphan));client_on_close((uv_handle_t*)orphan);free(line);line=NULL;}
+void test_runtime_destroy_failure_preserves_pending_disconnect(void){
+  reset_faults();
+  test_runtime = network_runtime_create(&test_loop, &test_listener,
+                                        &test_listener_ipv4, 2);
+  ASSERT_NOT_NULL(test_runtime);
+  uv_tcp_t *first_handle = calloc(1, sizeof(*first_handle));
+  uv_tcp_t *second_handle = calloc(1, sizeof(*second_handle));
+  ASSERT_NOT_NULL(first_handle);
+  ASSERT_NOT_NULL(second_handle);
+  LINE_t *first = add_line(test_runtime, first_handle);
+  LINE_t *second = add_line(test_runtime, second_handle);
+  ASSERT_NOT_NULL(first);
+  ASSERT_NOT_NULL(second);
+  first->status = LINE_idle;
+  request_line_disconnect(first);
+  ASSERT_NOT_NULL(last_close_cb);
+  last_close_cb(last_close_handle);
+  ASSERT_TRUE(first->close_completed);
+  ASSERT_TRUE(first->line_handle == NULL);
+  ASSERT_TRUE(!first->disconnect_event_delivered);
+  ASSERT_EQ_INT(LINE_disconnecting, first->status);
+
+  ASSERT_TRUE(!network_runtime_destroy(test_runtime));
+  ASSERT_NOT_NULL(test_runtime);
+  ASSERT_TRUE(!first->disconnect_event_delivered);
+  ASSERT_EQ_INT(LINE_disconnecting, first->status);
+
+  size_t line_index = 99;
+  char *input = NULL;
+  ASSERT_EQ_INT(NETWORK_EVENT_DISCONNECT,
+                network_runtime_poll(test_runtime, &line_index, &input));
+  ASSERT_EQ_INT(0, line_index);
+  ASSERT_TRUE(line_is_reusable(first));
+
+  request_line_disconnect(second);
+  ASSERT_NOT_NULL(last_close_cb);
+  last_close_cb(last_close_handle);
+  ASSERT_EQ_INT(NETWORK_EVENT_DISCONNECT,
+                network_runtime_poll(test_runtime, &line_index, &input));
+  ASSERT_EQ_INT(1, line_index);
+  ASSERT_TRUE(network_runtime_destroy(test_runtime));
+  test_runtime = NULL;
+}
+void test_on_new_connection_rejections_and_close_ownership(void){
+  reset_faults();
+  on_new_connection(NULL,0);
+  ASSERT_EQ_INT(0,uv_close_calls);
+  test_runtime = network_runtime_create(&test_loop, &test_listener,
+                                        &test_listener_ipv4, 1);
+  ASSERT_NOT_NULL(test_runtime);
+  test_listener.data = test_runtime;
+  ASSERT_TRUE(network_runtime_test_set_line(test_runtime, 0, 4));
+  on_new_connection(test_server(), 0);
+  ASSERT_EQ_INT(1, uv_close_calls);
+  last_close_cb(last_close_handle);
+  cleanup_lines();
+  reset_faults();
+  test_runtime = network_runtime_create(&test_loop, &test_listener,
+                                        &test_listener_ipv4, 1);
+  ASSERT_NOT_NULL(test_runtime);
+  test_listener.data = test_runtime;
+  fail_malloc_after = 0;
+  on_new_connection(test_server(), 0);
+  ASSERT_EQ_INT(0, uv_close_calls);
+  cleanup_lines();
+  reset_faults();
+  test_runtime = network_runtime_create(&test_loop, &test_listener,
+                                        &test_listener_ipv4, 1);
+  ASSERT_NOT_NULL(test_runtime);
+  test_listener.data = test_runtime;
+  stub_telnet_init_fail = 1;
+  on_new_connection(test_server(), 0);
+  ASSERT_EQ_INT(1, uv_close_calls);
+  ASSERT_NOT_NULL(last_close_cb);
+  last_close_cb(last_close_handle);
+  cleanup_lines();
+  reset_faults();
+  test_runtime = network_runtime_create(&test_loop, &test_listener,
+                                        &test_listener_ipv4, 1);
+  ASSERT_NOT_NULL(test_runtime);
+  test_listener.data = test_runtime;
+  stub_uv_read_start_result = UV_EIO;
+  on_new_connection(test_server(), 0);
+  ASSERT_EQ_INT(1, uv_close_calls);
+  ASSERT_NOT_NULL(last_close_cb);
+  last_close_cb(last_close_handle);
+  cleanup_lines();
+  reset_faults();
+  test_runtime = network_runtime_create(&test_loop, &test_listener,
+                                        &test_listener_ipv4, 1);
+  ASSERT_NOT_NULL(test_runtime);
+  test_listener.data = test_runtime;
+  stub_uv_accept_result = UV_ECONNRESET;
+  on_new_connection(test_server(), 0);
+  ASSERT_EQ_INT(1, uv_close_calls);
+  ASSERT_NOT_NULL(last_close_cb);
+  last_close_cb(last_close_handle);
+  cleanup_lines();
+  reset_faults();
+  uv_tcp_t *orphan = calloc(1, sizeof(*orphan));
+  ASSERT_NOT_NULL(orphan);
+  client_on_close((uv_handle_t *)orphan);
+  test_runtime = network_runtime_create(&test_loop, &test_listener,
+                                        &test_listener_ipv4, 1);
+  ASSERT_NOT_NULL(test_runtime);
+  uv_timer_t unrelated = {0};
+  unrelated.data = (void *)(uintptr_t)1;
+  network_close_walk_cb((uv_handle_t *)&unrelated, test_runtime);
+  ASSERT_EQ_INT(1, uv_close_calls);
+  ASSERT_TRUE(last_close_cb == NULL);
+  cleanup_lines();
+}
 void test_adversarial_long_stream_without_newline(void){LINE_t*lp=make_line();char chunk[1024];memset(chunk,'a',sizeof(chunk));for(int i=0;i<8&&lp->status!=LINE_disconnecting;i++)append_input(lp,chunk,sizeof(chunk));ASSERT_EQ_INT(LINE_disconnecting,lp->status);ASSERT_TRUE(lp->inbuf->buf.len<=65536);cleanup_lines();}
 void test_input_processor_releases_interpreter_results(void){
   uv_timer_t timer = {0};
   VM_t vm = {0};
   RuntimeContext ctx = {0};
-  size_t maxconns = 0;
   ctx.vm = &vm;
   ctx.input_name = "input";
-  ctx.maxconns = &maxconns;
+  ctx.network = NULL;
   timer.data = &ctx;
 
   input_interpret_calls = 0;
@@ -223,13 +410,12 @@ void test_input_processor_timer_is_nonblocking_and_sleepable(void) {
   uv_timer_t watchdog_timer;
   VM_t vm = {0};
   RuntimeContext ctx = {0};
-  size_t maxconns = 0;
 
   ASSERT_EQ_INT(0, uv_loop_init(&loop));
   ASSERT_EQ_INT(0, uv_loop_configure(&loop, UV_METRICS_IDLE_TIME));
   ctx.vm = &vm;
   ctx.input_name = "input";
-  ctx.maxconns = &maxconns;
+  ctx.network = NULL;
   input_interpret_calls = 0;
   input_timer_watchdog_fired = false;
 
@@ -254,4 +440,4 @@ void test_input_processor_timer_is_nonblocking_and_sleepable(void) {
   ASSERT_EQ_INT(0, uv_loop_close(&loop));
 }
 
-static const test_case_t tests[]={{"append_input_lines_and_limits",test_append_input_lines_and_limits},{"get_input_cases",test_get_input_cases},{"output_flush_limits_and_callback",test_output_flush_limits_and_callback},{"disconnect_waits_for_pending_output",test_disconnect_waits_for_pending_output},{"line_lifecycle_states_and_reuse",test_line_lifecycle_states_and_reuse},{"remote_disconnect_marks_line_before_close_callback",test_remote_disconnect_marks_line_before_close_callback},{"disconnect_close_write_callback_orders",test_disconnect_close_write_callback_orders},{"destroy_line_does_not_release_live_transport",test_destroy_line_does_not_release_live_transport},{"destroy_line_after_real_telnet_init_failure",test_destroy_line_after_real_telnet_init_failure},{"on_new_connection_rejections_and_close_ownership",test_on_new_connection_rejections_and_close_ownership},{"adversarial_long_stream_without_newline",test_adversarial_long_stream_without_newline},{"input_processor_releases_interpreter_results",test_input_processor_releases_interpreter_results},{"input_processor_missing_item_requests_unsafe_shutdown",test_input_processor_missing_item_requests_unsafe_shutdown},{"input_processor_timer_is_nonblocking_and_sleepable",test_input_processor_timer_is_nonblocking_and_sleepable}};int main(void){size_t total=sizeof(tests)/sizeof(tests[0]);current_test_total=total;for(size_t i=0;i<total;i++){current_test_index=i+1;current_test_name=tests[i].name;tests[i].fn();}printf("[network] totals: ran=%zu passed=%zu failed=0 skipped=0 status=SUCCESS\n",total,total);return 0;}
+static const test_case_t tests[]={{"append_input_lines_and_limits",test_append_input_lines_and_limits},{"get_input_cases",test_get_input_cases},{"runtime_poll_skips_failed_input",test_runtime_poll_skips_failed_input},{"output_flush_limits_and_callback",test_output_flush_limits_and_callback},{"disconnect_waits_for_pending_output",test_disconnect_waits_for_pending_output},{"line_lifecycle_states_and_reuse",test_line_lifecycle_states_and_reuse},{"remote_disconnect_marks_line_before_close_callback",test_remote_disconnect_marks_line_before_close_callback},{"disconnect_close_write_callback_orders",test_disconnect_close_write_callback_orders},{"destroy_line_does_not_release_live_transport",test_destroy_line_does_not_release_live_transport},{"destroy_line_after_real_telnet_init_failure",test_destroy_line_after_real_telnet_init_failure},{"runtime_destroy_failure_preserves_pending_disconnect",test_runtime_destroy_failure_preserves_pending_disconnect},{"on_new_connection_rejections_and_close_ownership",test_on_new_connection_rejections_and_close_ownership},{"adversarial_long_stream_without_newline",test_adversarial_long_stream_without_newline},{"input_processor_releases_interpreter_results",test_input_processor_releases_interpreter_results},{"input_processor_missing_item_requests_unsafe_shutdown",test_input_processor_missing_item_requests_unsafe_shutdown},{"input_processor_timer_is_nonblocking_and_sleepable",test_input_processor_timer_is_nonblocking_and_sleepable}};int main(void){size_t total=sizeof(tests)/sizeof(tests[0]);current_test_total=total;for(size_t i=0;i<total;i++){current_test_index=i+1;current_test_name=tests[i].name;tests[i].fn();}printf("[network] totals: ran=%zu passed=%zu failed=0 skipped=0 status=SUCCESS\n",total,total);return 0;}

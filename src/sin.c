@@ -36,7 +36,8 @@ static bool runtime_signal_shutdown;
 // The configuration object - for passing interesting data around globally.
 CONFIG_t config;
 
-static bool runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
+static bool runtime_context_from_config(RuntimeContext *ctx, VM_t *vm,
+                                        NetworkRuntime *network) {
   runtime_context_init(ctx, vm);
   ctx->itemstore = config.itemstore_ctx;
   ctx->loop = config.loop;
@@ -46,15 +47,9 @@ static bool runtime_context_from_config(RuntimeContext *ctx, VM_t *vm) {
   ctx->input_name = config.input;
   ctx->inputline_name = config.inputline;
   ctx->inputtext_name = config.inputtext;
-  ctx->maxconns = &config.maxconns;
-  ctx->lastconn = &config.lastconn;
   ctx->safe_shutdown = &config.safe_shutdown;
   ctx->shutdown_requested = &config.shutdown_requested;
-  ctx->network.lines = line;
-  ctx->network.maxconns = &config.maxconns;
-  ctx->network.lastconn = &config.lastconn;
-  ctx->network.inputline_name = config.inputline;
-  ctx->network.inputtext_name = config.inputtext;
+  ctx->network = network;
   ctx->strict_runtime_contracts = config.strict_runtime_contracts;
   ctx->interrupt_pending = &recovery_pending;
   ctx->signal_shutdown_requested = &runtime_signal_shutdown;
@@ -164,7 +159,7 @@ typedef struct SinStartupState {
   bool networking_initialized;
   bool log_redirected;
   bool loop_storage_retained;
-  NetworkRuntimeDeps network_deps;
+  NetworkRuntime *network;
   uv_tcp_t listener;
   uv_tcp_t listener_ipv4;
   uv_timer_t input_task;
@@ -570,7 +565,7 @@ restart_boot:
   if (!state->boot_context_initialized) {
     runtime_context_init(&state->boot_ctx, config.vm);
     state->boot_context_initialized = true;
-    if (!runtime_context_from_config(&state->boot_ctx, config.vm)) {
+    if (!runtime_context_from_config(&state->boot_ctx, config.vm, NULL)) {
       logerr("Unable to initialize the boot runtime context.\n");
       goto boot_failure;
     }
@@ -609,27 +604,22 @@ static int run_network_loop(uint16_t listener_port, SinStartupState *state) {
     return EXIT_FAILURE;
   }
   state->input_vm_initialized = true;
-  config.maxconns = MAXCONNS;
-  config.lastconn = config.maxconns;
-  state->network_deps = (NetworkRuntimeDeps){
-    .loop = config.loop,
-    .listener = &state->listener,
-    .listener_ipv4 = &state->listener_ipv4,
-    .lines = &line,
-    .maxconns = config.maxconns
-  };
+  state->network = network_runtime_create(config.loop, &state->listener,
+                                          &state->listener_ipv4, MAXCONNS);
+  if (!state->network) {
+    logerr("Unable to initialize network runtime.\n");
+    return EXIT_FAILURE;
+  }
+  state->networking_initialized = true;
   runtime_context_init(&state->input_ctx, config.input_vm);
   state->input_context_initialized = true;
-  if (!runtime_context_from_config(&state->input_ctx, config.input_vm)) {
+  if (!runtime_context_from_config(&state->input_ctx, config.input_vm,
+                                   state->network)) {
     logerr("Unable to initialize the input runtime context.\n");
     return EXIT_FAILURE;
   }
 
-  state->networking_initialized = true;
-  if (!init_networking_with_deps(&state->network_deps)) {
-    return EXIT_FAILURE;
-  }
-  if (!init_listener_with_deps(&state->network_deps, listener_port)) {
+  if (!network_runtime_listen(state->network, listener_port)) {
     return EXIT_FAILURE;
   }
   if (uv_timer_init(config.loop, &state->input_task) != 0) {
@@ -681,7 +671,7 @@ static int shutdown_startup(SinStartupState *state, SinStartupOptions *startup,
     state->input_task_started = false;
   }
   if (state->networking_initialized) {
-    shutdown_listener_with_deps(&state->network_deps);
+    network_runtime_shutdown(state->network);
   }
   if (state->tasks_initialized) {
     finalise_tasks(state->loop_initialized ? config.loop : NULL);
@@ -693,14 +683,19 @@ static int shutdown_startup(SinStartupState *state, SinStartupOptions *startup,
     state->input_task_initialized = false;
   }
   if (state->loop_initialized) {
-    uv_walk(config.loop, close_all_tasks, NULL);
+    uv_walk(config.loop, close_all_tasks, state->network);
     while (uv_run(config.loop, UV_RUN_DEFAULT) != 0) {
       // Drain close callbacks before freeing task and network state.
     }
   }
   if (state->networking_initialized) {
-    shutdown_networking();
-    state->networking_initialized = false;
+    if (network_runtime_destroy(state->network)) {
+      state->network = NULL;
+      state->networking_initialized = false;
+    } else {
+      logerr("Unable to destroy network runtime with live state.\n");
+      if (runloop_retval == 0) runloop_retval = EXIT_FAILURE;
+    }
   }
   if (state->input_context_initialized) {
     runtime_destroy(&state->input_ctx);

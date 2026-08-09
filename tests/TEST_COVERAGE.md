@@ -388,15 +388,18 @@ an opt-in performance guard.
       - `test_net_write_ignores_non_writable_lines`
     - `net.flush`
       - `test_net_flush_reports_line_status`
+      - `test_net_connecting_line_operation_contracts`
     - `net.ditch`
       - `test_net_ditch_disconnects_active_lines`
       - `test_net_ditch_reports_inactive_lines`
       - `test_net_ditch_invalid_line_returns_nil`
+      - `test_net_connecting_line_operation_contracts`
     - `net.input`
       - `test_net_input_fair_queue_progresses_connect_data_disconnect`
     - `net.echo`
       - `test_net_echo_negotiates_current_line_and_consumes_values`
       - `test_net_echo_ignores_unavailable_current_line`
+      - `test_net_connecting_line_operation_contracts`
 - **String libcalls (`str.*`)**
   - `tests/core/test_libcall_str.c`
     - `test_str_len_returns_string_byte_length`

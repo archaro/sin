@@ -18,14 +18,6 @@
 
 typedef struct RuntimeContext RuntimeContext;
 
-typedef struct {
-  LINE_t *lines;
-  size_t *maxconns;
-  size_t *lastconn;
-  const char *inputline_name;
-  const char *inputtext_name;
-} LibcallNetworkDeps;
-
 // Opcode functions have this form.  The runtime context owns the VM and
 // per-invocation interpreter state that handlers need while executing.
 typedef uint8_t *(*OP_t)(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -33,8 +25,9 @@ typedef uint8_t *(*OP_t)(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 struct RuntimeContext {
   // Borrowed runtime dependencies supplied by process startup. Runtime
   // execution mutates the VM stack/callstack, the item tree contents, the
-  // event loop handles, *maxconns, *lastconn, *safe_shutdown, and
-  // *shutdown_requested, but does not own or free these pointers or strings.
+  // event loop handles, *safe_shutdown, and *shutdown_requested, but does not
+  // own or free these pointers or strings. The network pointer is borrowed;
+  // its owner is the process startup state.
   VM_t *vm;
   ITEMSTORE_t *itemstore;
   uv_loop_t *loop;
@@ -44,9 +37,7 @@ struct RuntimeContext {
   const char *input_name;
   const char *inputline_name;
   const char *inputtext_name;
-  size_t *maxconns;
-  size_t *lastconn;
-  LibcallNetworkDeps network;
+  NetworkRuntime *network;
   bool *safe_shutdown;
   bool *shutdown_requested;
   bool strict_runtime_contracts;

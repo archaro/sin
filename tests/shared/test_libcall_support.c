@@ -22,6 +22,7 @@
 #include "version.h"
 
 #include "network.h"
+#include "test_network_fixture.h"
 
 uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -31,7 +32,6 @@ uint8_t *lc_task_count(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 void execute_task_cb(uv_timer_t *req);
 uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
-LINE_t *add_line(uv_tcp_t *line_handle);
 uint8_t *lc_net_flush(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_ditch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_echo(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -77,18 +77,63 @@ uint8_t *lc_str_repeat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_padleft(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_str_padright(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
-extern LINE_t *line;
 extern CONFIG_t config;
 
 #include "shared/test_libcall_support.h"
 
 static RuntimeContext test_runtime_ctx;
+static NetworkRuntime *test_network;
+static uv_loop_t test_network_loop;
+static uv_tcp_t test_network_listener;
+static uv_tcp_t test_network_listener_ipv4;
+
+static bool test_network_start(size_t maxconns) {
+  if (test_network) return true;
+  if (uv_loop_init(&test_network_loop) != 0) return false;
+  test_network = network_runtime_create(&test_network_loop,
+                                        &test_network_listener,
+                                        &test_network_listener_ipv4,
+                                        maxconns);
+  if (!test_network) {
+    uv_loop_close(&test_network_loop);
+    return false;
+  }
+  return true;
+}
+
+static void test_network_stop(void) {
+  if (!test_network) return;
+  network_runtime_shutdown(test_network);
+  uv_walk(&test_network_loop, network_close_walk_cb, test_network);
+  while (uv_run(&test_network_loop, UV_RUN_DEFAULT) != 0) {}
+  ASSERT_TRUE(network_runtime_destroy(test_network));
+  test_network = NULL;
+  ASSERT_EQ_INT(0, uv_loop_close(&test_network_loop));
+}
+
+NetworkRuntime *test_network_runtime(void) {
+  return test_network;
+}
+
+bool test_network_reset(size_t maxconns) {
+  test_network_stop();
+  return test_network_start(maxconns);
+}
+
+void test_network_clear(void) {
+  test_network_stop();
+}
+
+void test_network_drain(void) {
+  if (!test_network) return;
+  while (uv_run(&test_network_loop, UV_RUN_DEFAULT) != 0) {}
+}
+
 RuntimeContext *test_ctx(void) {
   runtime_context_init(&test_runtime_ctx, config.vm);
   test_runtime_ctx.itemstore = config.itemstore_ctx;
   test_runtime_ctx.strict_runtime_contracts = config.strict_runtime_contracts;
-  test_runtime_ctx.maxconns = &config.maxconns;
-  test_runtime_ctx.lastconn = &config.lastconn;
+  test_runtime_ctx.network = test_network;
   test_runtime_ctx.inputline_name = config.inputline;
   test_runtime_ctx.inputtext_name = config.inputtext;
   test_runtime_ctx.loop = config.loop;
@@ -102,19 +147,19 @@ void setup_libcall_runtime(void) {
   ASSERT_NOT_NULL(itemstore_root(config.itemstore_ctx));
   config.vm = make_vm();
   ASSERT_NOT_NULL(config.vm);
+  config.inputline = strdup("input.line");
+  config.inputtext = strdup("input.text");
+  ASSERT_NOT_NULL(config.inputline);
+  ASSERT_NOT_NULL(config.inputtext);
+  ASSERT_TRUE(test_network_start(8));
 }
 
 void teardown_libcall_runtime(void) {
-  if (line) {
-    for (size_t i = 0; i < config.maxconns; i++) {
-      if (line[i].telnet) {
-        telnet_free(line[i].telnet);
-        line[i].telnet = NULL;
-      }
-    }
-    free(line);
-    line = NULL;
-  }
+  test_network_stop();
+  free(config.inputline);
+  free(config.inputtext);
+  config.inputline = NULL;
+  config.inputtext = NULL;
   destroy_vm(config.vm);
   destroy_item(itemstore_root(config.itemstore_ctx));
 }

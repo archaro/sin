@@ -154,10 +154,17 @@ positional tokens. `libcall_func_pair()` resolves runtime dispatch directly.
 
 Files: `src/net/network.*`, `src/net/libtelnet.*`.
 
-Ownership: libuv/libtelnet integration, connection state, input queues, and
-output buffering. The `input_processor()` callback also runs the configured
-input code item and flushes network output, so this boundary depends on the
-runtime interpreter but not on compiler internals.
+Ownership: `NetworkRuntime` is the sole owner of libuv/libtelnet integration,
+connection slots, fair-poll state, input queues, and output buffering. Its
+loop and listener handle storage are borrowed from application startup and
+must outlive the runtime until close callbacks have drained. Destruction
+preflights listener and slot transport state; if live state remains, it fails
+without mutating the runtime. Runtime and libcall code borrow only the opaque
+runtime pointer and use polling, write, flush, echo, disconnect, connected, and
+copied-address operations; transport records and telnet state never cross that
+boundary. The `input_processor()` callback also runs the configured input code
+item and flushes network output, so this boundary depends on the runtime
+interpreter but not on compiler internals.
 
 ### Application Entry Points
 
@@ -208,7 +215,8 @@ item data. Crossings between them should be explicit. Examples:
 - The dedicated network harnesses live under `tests/network/`: one uses local
   libuv/libtelnet stubs and the other runs the chat example over localhost.
   Shared harness and fixture-policy code lives under `tests/shared/`; the
-  private libcall runtime fixture support is `test_libcall_support.[ch]`. Golden
+  private libcall runtime fixture support is `test_libcall_support.[ch]`, with
+  opaque network setup helpers declared in `test_network_fixture.h`. Golden
   inputs and outputs under `tests/fixtures/`, and fuzz harnesses/corpora under
   `tests/fuzz/`.
 - If moving files later, do it as behavior-preserving path/build/include updates
