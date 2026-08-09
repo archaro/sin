@@ -6,9 +6,10 @@
 
 #include "stack.h"
 #include "item.h"
+#include "bytecode/bytecode_abi.h"
 #include <stdbool.h>
 
-#define CALLSTACK_SIZE 1024
+#define CALLSTACK_SIZE SIN_BYTECODE_CALL_STACK_CAPACITY
 
 typedef struct {
   // Caller continuation state (the frame to resume after callee HALT).

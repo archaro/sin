@@ -52,7 +52,8 @@ Key entry points:
 
 ### Bytecode and Disassembly
 
-Files: `src/bytecode/bytecode_format.*`, `src/bytecode/bytecode_verify.*`,
+Files: `src/bytecode/bytecode_abi.*`, `src/bytecode/opcode_schema.def`,
+`src/bytecode/bytecode_format.*`, `src/bytecode/bytecode_verify.*`,
 `src/bytecode/bytecode_convert.*`,
 `src/bytecode/bytecode_wire.*`, `src/bytecode/sdiss_core.*`.
 

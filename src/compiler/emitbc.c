@@ -12,7 +12,7 @@
 #include "bytecode_verify.h"
 #include "bytecode_wire.h"
 #include "compiler/compdiag.h"
-#include "compiler/ir/opcode_schema.h"
+#include "bytecode/bytecode_abi.h"
 #include "error.h"
 #include "memory.h"
 #include "string_limits.h"

@@ -2,10 +2,11 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include "bytecode/bytecode_abi.h"
 #include "value.h"
 
-#define SIN_LIST_MAX_ELEMENTS ((size_t)1048576u)
-#define SIN_LIST_MAX_DEPTH ((size_t)64u)
+#define SIN_LIST_MAX_ELEMENTS SIN_BYTECODE_LIST_ELEMENT_LIMIT
+#define SIN_LIST_MAX_DEPTH SIN_BYTECODE_LIST_DEPTH_LIMIT
 
 typedef struct SIN_LIST SIN_LIST_t;
 

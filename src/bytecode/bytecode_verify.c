@@ -14,7 +14,7 @@
 #define BC_CTX_STMT BC_CONTEXT_STATEMENT
 #define BC_CTX_ITEM BC_CONTEXT_ITEM_EXPRESSION
 #define BC_CTX_DEREF BC_CONTEXT_DEREFERENCE
-#define BC_MAX_ASSIGNCODE_PARAMS 1024u
+#define BC_MAX_ASSIGNCODE_PARAMS SIN_BYTECODE_VALUE_STACK_CAPACITY
 typedef BC_Context BC_DecodeContext;
 
 typedef struct {
@@ -221,20 +221,17 @@ static BC_OperandKind bc_operand_encoding_from_ir(const IR_OpSchema *s) {
   return BC_OPERAND_NONE;
 }
 
-static bool bc_valid_context(IR_Op op, BC_Context ctx) {
-  switch (op) {
-    case IR_OP_ITEM_PUSH_LAYER:
-    case IR_OP_ITEM_PUSH_DEREF:
-    case IR_OP_ITEM_PUSH_DEREF_LOCAL:
-    case IR_OP_ITEM_END:
-      return ctx == BC_CONTEXT_ITEM_EXPRESSION || ctx == BC_CONTEXT_DEREFERENCE;
-    case IR_OP_ITEM_DEREF:
-      return ctx == BC_CONTEXT_DEREFERENCE;
-    case IR_OP_LABEL:
-      return false;
-    default:
-      return ctx == BC_CONTEXT_STATEMENT;
+static uint8_t bc_context_mask(BC_Context ctx) {
+  switch (ctx) {
+    case BC_CONTEXT_STATEMENT: return IR_OPCODE_CONTEXT_STATEMENT;
+    case BC_CONTEXT_ITEM_EXPRESSION: return IR_OPCODE_CONTEXT_ITEM_EXPRESSION;
+    case BC_CONTEXT_DEREFERENCE: return IR_OPCODE_CONTEXT_DEREFERENCE;
   }
+  return 0;
+}
+
+static bool bc_valid_context(const IR_OpSchema *schema, BC_Context ctx) {
+  return schema && (schema->context_mask & bc_context_mask(ctx)) != 0;
 }
 
 static BC_OpcodeSchema bc_make_schema(const IR_OpSchema *s) {
@@ -245,9 +242,9 @@ static BC_OpcodeSchema bc_make_schema(const IR_OpSchema *s) {
   out.mnemonic = s ? bc_disassembly_mnemonic(s->op) : "UNKNOWN";
   out.operand_encoding = bc_operand_encoding_from_ir(s);
   if (s) {
-    out.valid_in_statement = bc_valid_context(s->op, BC_CONTEXT_STATEMENT);
-    out.valid_in_item_expression = bc_valid_context(s->op, BC_CONTEXT_ITEM_EXPRESSION);
-    out.valid_in_dereference = bc_valid_context(s->op, BC_CONTEXT_DEREFERENCE);
+    out.valid_in_statement = bc_valid_context(s, BC_CONTEXT_STATEMENT);
+    out.valid_in_item_expression = bc_valid_context(s, BC_CONTEXT_ITEM_EXPRESSION);
+    out.valid_in_dereference = bc_valid_context(s, BC_CONTEXT_DEREFERENCE);
     out.stack_effect = (BC_StackEffect){s->stack_pops, s->stack_pushes,
                                         s->stack_policy != IR_STACK_FIXED};
     out.control_flow = s->control_class;
@@ -272,20 +269,14 @@ const BC_OpcodeSchema *bc_opcode_for_ir(IR_Op op) {
 }
 
 const BC_OpcodeSchema *bc_opcode_lookup(uint8_t opcode, BC_Context context) {
-  const BC_OpcodeSchema *fallback = NULL;
   for (size_t i = 0; i < g_ir_opcode_schema_count; i++) {
     const IR_OpSchema *s = &g_ir_opcode_schema[i];
     if (s->encoded_symbol != opcode || opcode == 0) continue;
     const BC_OpcodeSchema *bc = bc_opcode_for_ir(s->op);
     if (!bc) continue;
-    if (opcode == 'F') {
-      if (context == BC_CONTEXT_STATEMENT && s->op == IR_OP_CALL) return bc;
-      if (context == BC_CONTEXT_DEREFERENCE && s->op == IR_OP_ITEM_DEREF) return bc;
-    }
-    if (bc_valid_context(s->op, context)) return bc;
-    if (!fallback) fallback = bc;
+    if (bc_valid_context(s, context)) return bc;
   }
-  return fallback && bc_valid_context(fallback->ir->op, context) ? fallback : NULL;
+  return NULL;
 }
 
 const char *bc_opcode_mnemonic(const BC_OpcodeSchema *schema) {

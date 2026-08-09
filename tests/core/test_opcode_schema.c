@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "compiler/ir/opcode_schema.h"
+#include "bytecode/bytecode_abi.h"
 #include "bytecode_verify.h"
 #include "error.h"
 #include "test_assert.h"
@@ -27,19 +27,35 @@ void test_opcode_schema_consistency(void) {
     else ASSERT_TRUE(meta->encoded_symbol != 0);
   }
 
-  char *err_a = NULL;
-  char *err_b = NULL;
-  int8_t rc_a = ir_opcode_schema_validate_unique(&err_a);
-  int8_t rc_b = ir_opcode_schema_validate_unique(&err_b);
-  ASSERT_TRUE(rc_a != ERR_NOERROR);
-  ASSERT_TRUE(rc_b != ERR_NOERROR);
-  ASSERT_NOT_NULL(err_a);
-  ASSERT_NOT_NULL(err_b);
-  ASSERT_TRUE(strstr(err_a, "ITEM_DEREF") != NULL || strstr(err_a, "CALL") != NULL);
-  ASSERT_EQ_INT(0, strcmp(err_a, err_b));
+  char *err = NULL;
+  ASSERT_TRUE(ir_opcode_schema_validate_unique(g_ir_opcode_schema,
+                                               g_ir_opcode_schema_count,
+                                               &err));
+  ASSERT_TRUE(err == NULL);
 
-  free(err_a);
-  free(err_b);
+  const BC_OpcodeSchema *call = bc_opcode_lookup('F', BC_CONTEXT_STATEMENT);
+  const BC_OpcodeSchema *deref = bc_opcode_lookup('F', BC_CONTEXT_DEREFERENCE);
+  ASSERT_NOT_NULL(call);
+  ASSERT_NOT_NULL(deref);
+  ASSERT_EQ_INT(IR_OP_CALL, call->ir->op);
+  ASSERT_EQ_INT(IR_OP_ITEM_DEREF, deref->ir->op);
+
+  IR_OpSchema *collision = malloc(g_ir_opcode_schema_count * sizeof(*collision));
+  ASSERT_NOT_NULL(collision);
+  memcpy(collision, g_ir_opcode_schema,
+         g_ir_opcode_schema_count * sizeof(*collision));
+  collision[g_ir_opcode_schema_count - 1].encoded_symbol = 'a';
+  collision[g_ir_opcode_schema_count - 1].context_mask =
+      collision[IR_OP_ADD].context_mask;
+  collision[g_ir_opcode_schema_count - 1].name = "INJECTED_COLLISION";
+  ASSERT_TRUE(!ir_opcode_schema_validate_unique(collision,
+                                                 g_ir_opcode_schema_count,
+                                                 &err));
+  ASSERT_NOT_NULL(err);
+  ASSERT_TRUE(strstr(err, "ADD") != NULL);
+  ASSERT_TRUE(strstr(err, "INJECTED_COLLISION") != NULL);
+  free(collision);
+  free(err);
 }
 
 

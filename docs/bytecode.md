@@ -1,7 +1,7 @@
 # Sinistra Bytecode Reference
 
 This document is the canonical human-readable reference for Sinistra bytecode.
-The IR opcode metadata in `src/compiler/ir/opcode_schema.def` is the source of
+The bytecode ABI opcode metadata in `src/bytecode/opcode_schema.def` is the source of
 truth for opcode symbols, operand kinds, size policies, validators, and runtime
 handler requirements.
 
@@ -243,7 +243,7 @@ encoding or arity handling.
 
 ## Maintaining this reference
 
-`src/compiler/ir/opcode_schema.def` is the source of truth for IR opcode
+`src/bytecode/opcode_schema.def` is the source of truth for IR opcode
 metadata. When any row in that file changes, update this document in the same
 change set:
 

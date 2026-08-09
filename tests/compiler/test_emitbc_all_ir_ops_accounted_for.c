@@ -1,6 +1,6 @@
 #include <stddef.h>
 
-#include "compiler/ir/opcode_schema.h"
+#include "bytecode/bytecode_abi.h"
 #include "test_assert.h"
 
 typedef struct {
@@ -11,7 +11,7 @@ typedef struct {
 
 void test_emitbc_all_ir_ops_accounted_for(void) {
   /*
-   * Keep this manifest in sync with src/compiler/ir/opcode_schema.def.
+   * Keep this manifest in sync with src/bytecode/opcode_schema.def.
    * If a new IR opcode is added without updating this list, this test must fail.
    */
   static const ExpectedCoverage expected[] = {

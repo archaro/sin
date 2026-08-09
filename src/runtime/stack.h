@@ -7,9 +7,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "bytecode/bytecode_abi.h"
 #include "value.h"
 
-#define STACK_SIZE 1024
+#define STACK_SIZE SIN_BYTECODE_VALUE_STACK_CAPACITY
 
 typedef struct {
   int32_t max;

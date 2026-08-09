@@ -10,65 +10,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "bytecode/bytecode_abi.h"
 #include "compiler/absyn.h"
 #include "compiler/compdiag.h"
-
-typedef enum {
-  IR_OP_HALT = 0,
-
-  IR_OP_PUSH_INT,
-  IR_OP_PUSH_FLOAT,
-  IR_OP_PUSH_BOOL,
-  IR_OP_PUSH_STRING,
-  IR_OP_PUSH_NIL,
-
-  IR_OP_ADD,
-  IR_OP_SUB,
-  IR_OP_MUL,
-  IR_OP_DIV,
-  IR_OP_MOD,
-  IR_OP_NEG,
-
-  IR_OP_EQ,
-  IR_OP_NEQ,
-  IR_OP_LT,
-  IR_OP_GT,
-  IR_OP_LE,
-  IR_OP_GE,
-
-  IR_OP_NOT,
-  IR_OP_AND,
-  IR_OP_OR,
-  IR_OP_DISCARD,
-
-  IR_OP_LOAD_LOCAL,
-  IR_OP_STORE_LOCAL,
-  IR_OP_INC_LOCAL,
-  IR_OP_DEC_LOCAL,
-
-  IR_OP_JUMP,
-  IR_OP_JUMP_IF_FALSE,
-
-  IR_OP_LABEL,
-
-  IR_OP_ITEM_BEGIN,
-  IR_OP_ITEM_BEGIN_REL,
-  IR_OP_ITEM_PUSH_LAYER,
-  IR_OP_ITEM_PUSH_DEREF,
-  IR_OP_ITEM_PUSH_DEREF_LOCAL,
-  IR_OP_ITEM_END,
-  IR_OP_ITEM_DEREF,
-  IR_OP_ITEM_SAVE,
-
-  IR_OP_CALL,
-  IR_OP_LIBCALL,
-  IR_OP_ITEM_SAVE_CODE,
-
-  /* Keep new operations appended after the formerly last opcode. */
-  IR_OP_RETURN,
-  IR_OP_BUILD_LIST,
-  IR_OP_MAKE_ITEMREF
-} IR_Op;
 
 typedef struct {
   IR_Op op;

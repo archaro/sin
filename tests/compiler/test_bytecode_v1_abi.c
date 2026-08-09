@@ -1,5 +1,5 @@
 #include "bytecode_verify.h"
-#include "compiler/ir/opcode_schema.h"
+#include "bytecode/bytecode_abi.h"
 #include "libcall.h"
 #include "test_assert.h"
 

@@ -20,7 +20,7 @@ remain linked to their source files.
 - [`troubleshooting.md`](troubleshooting.md): compiler diagnostics, runtime
   error items, logging, and safe local-state recovery.
 - [`bytecode.md`](bytecode.md): bytecode encoding reference derived from
-  `src/compiler/ir/opcode_schema.def`.
+  `src/bytecode/opcode_schema.def`.
 - [`runtime.md`](runtime.md): runtime ownership, interpreter, and libcall API
   boundaries.
 - [`lists.md`](lists.md): planned list and item-reference contracts (in development).
@@ -35,6 +35,6 @@ When changing syntax, bytecode, libcalls, itemstore persistence, runtime error
 contracts, or command-line flags, update the relevant document in the same
 change. Module ownership and dependency direction are maintained in
 [`architecture.md`](architecture.md). Prefer linking to source-of-truth files such as
-`src/libcall/libcall_list.h`, `src/compiler/ir/opcode_schema.def`, and
+`src/libcall/libcall_list.h`, `src/bytecode/opcode_schema.def`, and
 `src/common/string_limits.h` rather than duplicating implementation details
 without context.

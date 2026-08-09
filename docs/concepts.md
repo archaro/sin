@@ -316,7 +316,7 @@ The `str` library contains libcalls which operate on or produce string values:
 
 ## Opcode schema workflow
 
-IR opcode semantics are centralized in `src/compiler/ir/opcode_schema.def`.
+IR opcode semantics are centralized in `src/bytecode/opcode_schema.def`.
 When adding a new opcode, update exactly one schema row (`OP(...)`) with:
 - enum name (must match `IR_OP_<NAME>`)
 - encoded symbol
@@ -324,6 +324,6 @@ When adding a new opcode, update exactly one schema row (`OP(...)`) with:
 - size policy
 - validator policy
 
-`src/compiler/ir.c` materializes the schema into `g_ir_opcode_schema` and `src/compiler/emitbc.c` consumes it for encoding, size accounting, and validator dispatch. Add any truly custom payload writing logic in `src/compiler/emitbc.c` only when the schema policy requires variable-length handling.
+`src/bytecode/bytecode_abi.c` materializes the schema into `g_ir_opcode_schema`; the compiler emitter and runtime verifier consume it for encoding, size accounting, validation, and context lookup. Add any truly custom payload writing logic in `src/compiler/emitbc.c` only when the schema policy requires variable-length handling.
 
 Run `make test` to validate schema consistency checks and emitter behavior.

@@ -11,7 +11,6 @@
 #include "compiler/compdiag.h"
 #include "error.h"
 #include "compiler/ir.h"
-#include "compiler/ir/opcode_schema.h"
 #include "memory.h"
 #include "list.h"
 #include "string_limits.h"
@@ -449,60 +448,6 @@ int8_t ir_validate_diag(IR_Unit* unit, uint32_t local_count, char **errdetail, C
   }
   return ERR_NOERROR;
 }
-const IR_OpSchema g_ir_opcode_schema[] = {
-#define RUNTIME_HANDLER_NAME_1(HANDLER) #HANDLER
-#define RUNTIME_HANDLER_NAME_0(HANDLER) NULL
-#define RUNTIME_HANDLER_NAME_SELECT(REQUIRES_RUNTIME_HANDLER, HANDLER) \
-    RUNTIME_HANDLER_NAME_##REQUIRES_RUNTIME_HANDLER(HANDLER)
-#define RUNTIME_HANDLER_NAME(REQUIRES_RUNTIME_HANDLER, HANDLER) \
-    RUNTIME_HANDLER_NAME_SELECT(REQUIRES_RUNTIME_HANDLER, HANDLER)
-#define OP(NAME, SYMBOL, REQUIRES_RUNTIME_HANDLER, OPERAND, SIZE, VALIDATOR, HANDLER, STACK_META, CONTROL_CLASS) \
-    [IR_OP_##NAME] = {IR_OP_##NAME, #NAME, (uint8_t)(SYMBOL), REQUIRES_RUNTIME_HANDLER, OPERAND, SIZE, VALIDATOR, \
-                      RUNTIME_HANDLER_NAME(REQUIRES_RUNTIME_HANDLER, HANDLER), STACK_META, .control_class = CONTROL_CLASS},
-#include "compiler/ir/opcode_schema.def"
-#undef OP
-#undef RUNTIME_HANDLER_NAME
-#undef RUNTIME_HANDLER_NAME_SELECT
-#undef RUNTIME_HANDLER_NAME_0
-#undef RUNTIME_HANDLER_NAME_1
-};
-const size_t g_ir_opcode_schema_count = sizeof(g_ir_opcode_schema) / sizeof(g_ir_opcode_schema[0]);
-
-const IR_OpSchema* ir_opcode_schema(IR_Op op) {
-  if (op < 0 || op >= (IR_Op)g_ir_opcode_schema_count) return NULL;
-  return &g_ir_opcode_schema[op];
-}
-
-void ir_opcode_schema_for_each_runtime_opcode(IR_RuntimeOpcodeVisitor visitor, void *ctx) {
-  if (!visitor) return;
-  for (size_t i = 0; i < g_ir_opcode_schema_count; i++) {
-    const IR_OpSchema *meta = &g_ir_opcode_schema[i];
-    if (!meta->requires_runtime_handler || meta->encoded_symbol == 0) continue;
-    if (!visitor(meta->encoded_symbol, meta->op, meta, ctx)) return;
-  }
-}
-
-int8_t ir_opcode_schema_validate_unique(char **errdetail) {
-  bool seen[256] = {0};
-  IR_Op seen_by[256] = {0};
-  if (errdetail) compdiag_reset_detail(errdetail);
-  for (size_t i = 0; i < g_ir_opcode_schema_count; i++) {
-    const IR_OpSchema *meta = &g_ir_opcode_schema[i];
-    if (meta->op != (IR_Op)i) continue;
-    if (meta->encoded_symbol == 0) continue;
-    if (seen[meta->encoded_symbol]) {
-      int8_t errnum = ERR_NOERROR;
-      compdiag_setf_once(&errnum, errdetail, ERR_COMP_SYNTAX, "opcode_schema",
-                         "ambiguous opcode encoding '%c' for %s and %s",
-                         (char)meta->encoded_symbol, ir_op_name(seen_by[meta->encoded_symbol]), meta->name);
-      return errnum;
-    }
-    seen[meta->encoded_symbol] = true;
-    seen_by[meta->encoded_symbol] = meta->op;
-  }
-  return ERR_NOERROR;
-}
-
 int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
   return ir_validate_diag(unit, local_count, errdetail, NULL);
 }

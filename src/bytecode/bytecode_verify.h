@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "compiler/ir/opcode_schema.h"
+#include "bytecode_abi.h"
 #include "bytecode_format.h"
 
 #define BC_MAX_ITEM_EXPRESSION_DEPTH 8u
