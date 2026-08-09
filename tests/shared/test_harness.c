@@ -167,6 +167,7 @@ void test_save_itemsource_reports_write_and_close_failure(void);
 void test_itemstore_durability_modes(void);
 void test_itemstore_large_load_presizes_child_storage(void);
 void test_sconv_v1_to_v2_migrates_legacy_code(void);
+void test_sconv_v1_embedded_nul_warns_with_full_path(void);
 void test_sconv_mixed_code_tree_and_failure_atomicity(void);
 void test_sconv_v2_canonical_and_invocation_modes(void);
 void test_sconv_collisions_aliases_and_replace(void);
@@ -478,6 +479,7 @@ static const test_case_t core_tests[] = {
     {"test_itemstore_durability_modes", test_itemstore_durability_modes},
     {"test_itemstore_large_load_presizes_child_storage", test_itemstore_large_load_presizes_child_storage},
     {"test_sconv_v1_to_v2_migrates_legacy_code", test_sconv_v1_to_v2_migrates_legacy_code},
+    {"test_sconv_v1_embedded_nul_warns_with_full_path", test_sconv_v1_embedded_nul_warns_with_full_path},
     {"test_sconv_mixed_code_tree_and_failure_atomicity", test_sconv_mixed_code_tree_and_failure_atomicity},
     {"test_sconv_v2_canonical_and_invocation_modes", test_sconv_v2_canonical_and_invocation_modes},
     {"test_sconv_collisions_aliases_and_replace", test_sconv_collisions_aliases_and_replace},

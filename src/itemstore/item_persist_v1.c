@@ -8,6 +8,45 @@
 #include "item_persist_internal.h"
 #include "bytecode_verify.h"
 #include "log.h"
+#include "memory.h"
+
+static void record_lossy_path(ITEMSTORE_READ_CTX_t *ctx, ITEM_t *item) {
+  if (!ctx->conversion_mode) return;
+  char path[MAX_ITEM_NAME];
+  path[0] = '\0';
+  get_itemname(item, path);
+  if (path[0] == '\0') {
+    ctx->lossy_path_record_failed = true;
+    return;
+  }
+  if (ctx->lossy_path_count == ctx->lossy_path_capacity) {
+    size_t required = 0;
+    if (alloc_add_overflow(ctx->lossy_path_count, 1u, &required)) {
+      ctx->lossy_path_record_failed = true;
+      return;
+    }
+    if (!alloc_grow_array_capacity((void **)&ctx->lossy_paths,
+                                   &ctx->lossy_path_capacity,
+                                   required,
+                                   sizeof(*ctx->lossy_paths))) {
+      ctx->lossy_path_record_failed = true;
+      return;
+    }
+  }
+  size_t path_len = strlen(path);
+  size_t allocation_size = 0;
+  if (alloc_add_overflow(path_len, 1u, &allocation_size)) {
+    ctx->lossy_path_record_failed = true;
+    return;
+  }
+  ctx->lossy_paths[ctx->lossy_path_count] = alloc_malloc(allocation_size);
+  if (ctx->lossy_paths[ctx->lossy_path_count] == NULL) {
+    ctx->lossy_path_record_failed = true;
+    return;
+  }
+  memcpy(ctx->lossy_paths[ctx->lossy_path_count], path, path_len + 1u);
+  ctx->lossy_path_count++;
+}
 
 /* Payload ownership remains here until make_item() accepts the record. */
 static void free_unowned_item_payload(ITEM_e type, VALUE_t *value,
@@ -26,6 +65,7 @@ ITEM_t *itemstore_read_v1_record(FILE *file, ITEM_t *parent,
   uint32_t numchildren;
   uint8_t *bytecode = NULL;
   uint32_t bytecode_len = 0;
+  bool lossy_string = false;
   VALUE_t itemval = {VALUE_nil, {0}};
 
   if (ctx->depth > ctx->max_depth) {
@@ -116,6 +156,8 @@ ITEM_t *itemstore_read_v1_record(FILE *file, ITEM_t *parent,
         if (!itemstore_read_bytes(file, itemval.s, length, "string payload")) {
           goto fail_before_item;
         }
+        lossy_string = ctx->conversion_mode
+            && memchr(itemval.s, '\0', length) != NULL;
         itemval.s[length] = '\0';
         break;
       }
@@ -211,6 +253,11 @@ ITEM_t *itemstore_read_v1_record(FILE *file, ITEM_t *parent,
   } else {
     item->bytecode = bytecode;
     bytecode = NULL;
+  }
+
+  if (lossy_string) {
+    /* This check is intentionally performed before v2 serialization. */
+    record_lossy_path(ctx, item);
   }
 
   for (uint32_t i = 0; i < numchildren; i++) {

@@ -549,7 +549,12 @@ ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,
     .max_bytecode_len = ITEMSTORE_MAX_BYTECODE_LEN,
     .filename = filename,
     .strict_validation = false,
-    .aggregate_budget = SIN_LIST_MAX_ELEMENTS
+    .aggregate_budget = SIN_LIST_MAX_ELEMENTS,
+    .conversion_mode = false,
+    .lossy_paths = NULL,
+    .lossy_path_count = 0,
+    .lossy_path_capacity = 0,
+    .lossy_path_record_failed = false
   };
   return ctx;
 }
@@ -672,6 +677,16 @@ static bool itemstore_paths_identify_same_file(const char *input_filename,
 #endif
 }
 
+static void free_lossy_paths(ITEMSTORE_READ_CTX_t *ctx) {
+  for (size_t i = 0; i < ctx->lossy_path_count; i++) {
+    free(ctx->lossy_paths[i]);
+  }
+  free(ctx->lossy_paths);
+  ctx->lossy_paths = NULL;
+  ctx->lossy_path_count = 0;
+  ctx->lossy_path_capacity = 0;
+}
+
 ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
     const char *input_filename, const char *output_filename,
     ITEMSTORE_DURABILITY_e durability, bool replace) {
@@ -695,6 +710,7 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
 
   ITEMSTORE_READ_CTX_t ctx = itemstore_read_context(input_filename, 0);
   ctx.strict_validation = false;
+  ctx.conversion_mode = true;
   ITEM_t *root = NULL;
   uint16_t version = 0;
   bool valid = read_itemstore_header(file, input_filename, &version);
@@ -712,11 +728,19 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
     logerr("Failed to close itemstore '%s' after reading: %s\n",
            input_filename, strerror(errno));
     if (root != NULL) destroy_item(root);
+    free_lossy_paths(&ctx);
     return ITEMSTORE_CONVERT_FAILURE;
   }
   if (root == NULL) {
+    free_lossy_paths(&ctx);
     logerr("Failed to load itemstore '%s': invalid or truncated data.\n",
            input_filename);
+    return ITEMSTORE_CONVERT_FAILURE;
+  }
+  if (ctx.lossy_path_record_failed) {
+    logerr("Failed to record v1 string conversion warning paths.\n");
+    free_lossy_paths(&ctx);
+    destroy_item(root);
     return ITEMSTORE_CONVERT_FAILURE;
   }
 
@@ -735,6 +759,7 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
   size_t stack_cap = 0;
   if (!alloc_grow_array_capacity((void **)&stack, &stack_cap, 1u,
                                  sizeof *stack)) {
+    free_lossy_paths(&ctx);
     destroy_item(root);
     return ITEMSTORE_CONVERT_FAILURE;
   }
@@ -750,6 +775,7 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
         for (size_t i = 0; i < prepared_count; i++) free(prepared[i].data);
         free(prepared);
         free(stack);
+        free_lossy_paths(&ctx);
         destroy_item(root);
         return ITEMSTORE_CONVERT_FAILURE;
       }
@@ -761,6 +787,7 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
         for (size_t i = 0; i < prepared_count; i++) free(prepared[i].data);
         free(prepared);
         free(stack);
+        free_lossy_paths(&ctx);
         destroy_item(root);
         return ITEMSTORE_CONVERT_FAILURE;
       }
@@ -774,6 +801,7 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
         for (size_t j = 0; j < prepared_count; j++) free(prepared[j].data);
         free(prepared);
         free(stack);
+        free_lossy_paths(&ctx);
         destroy_item(root);
         return ITEMSTORE_CONVERT_FAILURE;
       }
@@ -793,7 +821,15 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
              ? ITEMSTORE_SAVE_SUCCESS : ITEMSTORE_SAVE_FAILURE)
       : save_itemstore_no_replace(output_filename, root, durability);
   destroy_item(root);
-  if (save_result == ITEMSTORE_SAVE_SUCCESS) return ITEMSTORE_CONVERT_SUCCESS;
+  if (save_result == ITEMSTORE_SAVE_SUCCESS) {
+    for (size_t i = 0; i < ctx.lossy_path_count; i++) {
+      logerr("Warning: v1 string in item '%s' contained an embedded NUL; "
+             "conversion truncated the value.\n", ctx.lossy_paths[i]);
+    }
+    free_lossy_paths(&ctx);
+    return ITEMSTORE_CONVERT_SUCCESS;
+  }
+  free_lossy_paths(&ctx);
   if (save_result == ITEMSTORE_SAVE_TARGET_EXISTS) {
     return ITEMSTORE_CONVERT_TARGET_EXISTS;
   }

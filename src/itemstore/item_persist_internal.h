@@ -37,6 +37,11 @@ typedef struct ItemstoreReadContext {
   const char *filename;
   bool strict_validation;
   size_t aggregate_budget;
+  bool conversion_mode;
+  char **lossy_paths;
+  size_t lossy_path_count;
+  size_t lossy_path_capacity;
+  bool lossy_path_record_failed;
 } ITEMSTORE_READ_CTX_t;
 
 ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,

@@ -102,6 +102,67 @@ void test_sconv_v1_to_v2_migrates_legacy_code(void) {
   ASSERT_EQ_INT(0, unlink(output));
 }
 
+void test_sconv_v1_embedded_nul_warns_with_full_path(void) {
+  char input[64], output[64];
+  temp_path(input, sizeof input, "sconv-nul");
+  temp_path(output, sizeof output, "sconv-nul-out");
+  FILE *f = fopen(input, "wb");
+  ASSERT_NOT_NULL(f);
+  ASSERT_EQ_INT(8, fwrite("SINITEM\0", 1, 8, f));
+  write_u16(f, 1);
+  put_u8(f, 4);
+  ASSERT_EQ_INT(4, fwrite("root", 1, 4, f));
+  put_u8(f, 1);
+  put_u8(f, 3);
+  write_u32(f, 1);
+  put_u8(f, 5);
+  ASSERT_EQ_INT(5, fwrite("layer", 1, 5, f));
+  put_u8(f, 1);
+  put_u8(f, 3);
+  write_u32(f, 1);
+  put_u8(f, 4);
+  ASSERT_EQ_INT(4, fwrite("leaf", 1, 4, f));
+  put_u8(f, 1);
+  put_u8(f, 2);
+  write_u32(f, 5);
+  ASSERT_EQ_INT(5, fwrite("ab\0cd", 1, 5, f));
+  write_u32(f, 0);
+  ASSERT_EQ_INT(0, fclose(f));
+
+  char *argv[] = {"./sconv", "-q", input, output, NULL};
+  TestProcessResult result = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(argv, 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  ASSERT_TRUE(strstr(result.stderr_text, "layer.leaf") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, "embedded NUL") != NULL);
+  test_process_result_free(&result);
+  ITEM_t *root = load_itemstore_with_options(output, false);
+  ASSERT_NOT_NULL(root);
+  ITEM_t *child = find_item(root, "layer.leaf");
+  ASSERT_NOT_NULL(child);
+  ASSERT_EQ_INT(VALUE_str, child->value.type);
+  ASSERT_TRUE(strcmp(child->value.s, "ab") == 0);
+  destroy_item(root);
+  f = fopen(output, "wb");
+  ASSERT_NOT_NULL(f);
+  ASSERT_EQ_INT(8, fwrite("sentinel", 1, 8, f));
+  ASSERT_EQ_INT(0, fclose(f));
+  char *refuse_argv[] = {"./sconv", input, output, NULL};
+  TestProcessResult refused = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(refuse_argv, 0, &refused));
+  ASSERT_EQ_INT(1, refused.exit_code);
+  ASSERT_TRUE(strstr(refused.stderr_text, "embedded NUL") == NULL);
+  test_process_result_free(&refused);
+  f = fopen(output, "rb");
+  ASSERT_NOT_NULL(f);
+  char sentinel[8];
+  ASSERT_EQ_INT(8, fread(sentinel, 1, 8, f));
+  ASSERT_EQ_INT(0, fclose(f));
+  ASSERT_TRUE(memcmp(sentinel, "sentinel", 8) == 0);
+  ASSERT_EQ_INT(0, unlink(input));
+  ASSERT_EQ_INT(0, unlink(output));
+}
+
 void test_sconv_mixed_code_tree_and_failure_atomicity(void) {
   char input[64], output[64];
   temp_path(input, sizeof input, "sconv-mixed");
