@@ -7,6 +7,7 @@
 #include "bytecode_verify.h"
 #include "error.h"
 #include "item_internal.h"
+#include "item_persist_internal.h"
 #include "itemref.h"
 #include "list.h"
 #include "test_assert.h"
@@ -98,6 +99,108 @@ void test_sconv_v1_to_v2_migrates_legacy_code(void) {
   ASSERT_EQ_INT(12, program->bytecode_len);
   ASSERT_TRUE(memcmp(program->bytecode, "\0\xffSB\1\0\1\0b\1Qh", 12) == 0);
   destroy_item(loaded);
+  ASSERT_EQ_INT(0, unlink(input));
+  ASSERT_EQ_INT(0, unlink(output));
+}
+
+void test_sconv_conversion_work_budget_is_atomic(void) {
+  char input[64], output[64];
+  temp_path(input, sizeof input, "sconv-budget");
+  temp_path(output, sizeof output, "sconv-budget-out");
+  FILE *f = fopen(input, "wb");
+  ASSERT_NOT_NULL(f);
+  ASSERT_EQ_INT(8, fwrite("SINITEM\0", 1, 8, f));
+  write_u16(f, 1);
+  put_u8(f, 4);
+  ASSERT_EQ_INT(4, fwrite("root", 1, 4, f));
+  put_u8(f, 1);
+  put_u8(f, 0);
+  write_u64(f, 42);
+  write_u32(f, 0);
+  ASSERT_EQ_INT(0, fclose(f));
+  f = fopen(output, "wb");
+  ASSERT_NOT_NULL(f);
+  ASSERT_EQ_INT(8, fwrite("sentinel", 1, 8, f));
+  ASSERT_EQ_INT(0, fclose(f));
+  ASSERT_EQ_INT(ITEMSTORE_CONVERT_FAILURE,
+                itemstore_convert_with_limits(input, output,
+                                              ITEMSTORE_DURABLE_FAST, true,
+                                              ITEMSTORE_MAX_RECORDS,
+                                              ITEMSTORE_MAX_DECODE_BYTES, 63));
+  f = fopen(output, "rb");
+  ASSERT_NOT_NULL(f);
+  char sentinel[8];
+  ASSERT_EQ_INT(sizeof sentinel, fread(sentinel, 1, sizeof sentinel, f));
+  ASSERT_TRUE(memcmp(sentinel, "sentinel", sizeof sentinel) == 0);
+  ASSERT_EQ_INT(0, fclose(f));
+  ASSERT_EQ_INT(0, unlink(input));
+  ASSERT_EQ_INT(0, unlink(output));
+}
+
+void test_sconv_decode_budget_failures_are_atomic(void) {
+  char input[64], output[64];
+  temp_path(input, sizeof input, "sconv-decode-budget-v1");
+  temp_path(output, sizeof output, "sconv-decode-budget-out");
+  FILE *f = fopen(input, "wb");
+  ASSERT_NOT_NULL(f);
+  ASSERT_EQ_INT(8, fwrite("SINITEM\0", 1, 8, f));
+  write_u16(f, 1);
+  put_u8(f, 4);
+  ASSERT_EQ_INT(4, fwrite("root", 1, 4, f));
+  put_u8(f, 1);
+  put_u8(f, 0);
+  write_u64(f, 42);
+  write_u32(f, 0);
+  ASSERT_EQ_INT(0, fclose(f));
+  f = fopen(output, "wb");
+  ASSERT_NOT_NULL(f);
+  ASSERT_EQ_INT(8, fwrite("sentinel", 1, 8, f));
+  ASSERT_EQ_INT(0, fclose(f));
+  ASSERT_EQ_INT(ITEMSTORE_CONVERT_FAILURE,
+                itemstore_convert_with_limits(
+                    input, output, ITEMSTORE_DURABLE_FAST, true,
+                    ITEMSTORE_MAX_RECORDS, 0,
+                    ITEMSTORE_MAX_CONVERSION_BYTES));
+  ASSERT_EQ_INT(ITEMSTORE_CONVERT_FAILURE,
+                itemstore_convert_with_limits(
+                    input, output, ITEMSTORE_DURABLE_FAST, true, 0,
+                    ITEMSTORE_MAX_DECODE_BYTES,
+                    ITEMSTORE_MAX_CONVERSION_BYTES));
+  f = fopen(output, "rb");
+  ASSERT_NOT_NULL(f);
+  char sentinel[8];
+  ASSERT_EQ_INT(sizeof sentinel, fread(sentinel, 1, sizeof sentinel, f));
+  ASSERT_TRUE(memcmp(sentinel, "sentinel", sizeof sentinel) == 0);
+  ASSERT_EQ_INT(0, fclose(f));
+  ASSERT_EQ_INT(0, unlink(input));
+  ASSERT_EQ_INT(0, unlink(output));
+
+  temp_path(input, sizeof input, "sconv-decode-budget-v2");
+  temp_path(output, sizeof output, "sconv-decode-budget-v2-out");
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  ASSERT_TRUE(save_itemstore_with_options(input, root,
+                                          ITEMSTORE_DURABLE_FAST));
+  destroy_item(root);
+  f = fopen(output, "wb");
+  ASSERT_NOT_NULL(f);
+  ASSERT_EQ_INT(8, fwrite("sentinel", 1, 8, f));
+  ASSERT_EQ_INT(0, fclose(f));
+  ASSERT_EQ_INT(ITEMSTORE_CONVERT_FAILURE,
+                itemstore_convert_with_limits(
+                    input, output, ITEMSTORE_DURABLE_FAST, true,
+                    ITEMSTORE_MAX_RECORDS, 0,
+                    ITEMSTORE_MAX_CONVERSION_BYTES));
+  ASSERT_EQ_INT(ITEMSTORE_CONVERT_FAILURE,
+                itemstore_convert_with_limits(
+                    input, output, ITEMSTORE_DURABLE_FAST, true, 0,
+                    ITEMSTORE_MAX_DECODE_BYTES,
+                    ITEMSTORE_MAX_CONVERSION_BYTES));
+  f = fopen(output, "rb");
+  ASSERT_NOT_NULL(f);
+  ASSERT_EQ_INT(sizeof sentinel, fread(sentinel, 1, sizeof sentinel, f));
+  ASSERT_TRUE(memcmp(sentinel, "sentinel", sizeof sentinel) == 0);
+  ASSERT_EQ_INT(0, fclose(f));
   ASSERT_EQ_INT(0, unlink(input));
   ASSERT_EQ_INT(0, unlink(output));
 }

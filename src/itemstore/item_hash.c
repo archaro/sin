@@ -124,6 +124,26 @@ ITEM_CHILDREN_t *item_children_create_loaded(uint32_t expected_children) {
   return create_children(buckets, expected_children);
 }
 
+bool item_children_loaded_allocation_bytes(uint32_t expected_children,
+                                           size_t *bytes) {
+  uint32_t buckets = expected_children == 0
+      ? 1u
+      : (uint32_t)(((uint64_t)expected_children * 4u + 2u) / 3u);
+  size_t total = sizeof(ITEM_t);
+  size_t part = 0;
+  if (alloc_add_overflow(total, sizeof(struct ItemChildren), &total) ||
+      alloc_mul_overflow((size_t)buckets, sizeof(ItemEntry_t *), &part) ||
+      alloc_add_overflow(total, part, &total) ||
+      alloc_mul_overflow((size_t)expected_children, sizeof(ITEM_t *), &part) ||
+      alloc_add_overflow(total, part, &total) ||
+      alloc_mul_overflow((size_t)expected_children, sizeof(ItemEntry_t), &part) ||
+      alloc_add_overflow(total, part, &total)) {
+    return false;
+  }
+  if (bytes) *bytes = total;
+  return true;
+}
+
 static bool resize_children(ITEM_CHILDREN_t *children, uint32_t new_size) {
   ItemEntry_t **table = calloc(new_size, sizeof *table);
   if (!table) return false;

@@ -14,7 +14,7 @@
 #include "memory.h"
 #include "string_limits.h"
 
-static bool valid_ref_path(const char *path, size_t length) {
+bool itemstore_valid_ref_path(const char *path, size_t length) {
   size_t start = 0;
   size_t layers = 0;
 
@@ -87,7 +87,7 @@ bool itemstore_write_v2_value(FILE *file, const VALUE_t *value, size_t depth,
       const char *path = value->itemref == NULL
           ? NULL : sin_itemref_path(value->itemref);
       size_t length = path == NULL ? 0 : strlen(path);
-      if (!valid_ref_path(path, length) || length > UINT16_MAX) {
+      if (!itemstore_valid_ref_path(path, length) || length > UINT16_MAX) {
         logerr("Cannot write invalid item reference path.\n");
         return false;
       }
@@ -159,7 +159,12 @@ static bool read_value(FILE *file, ITEMSTORE_READ_CTX_t *ctx, VALUE_t *out,
           length > ctx->max_string_len) {
         return false;
       }
-      out->s = alloc_malloc((size_t)length + 1u);
+      size_t string_bytes = (size_t)length + 1u;
+      if (!itemstore_read_charge_bytes(ctx, string_bytes,
+                                       "v2 string payload")) {
+        return false;
+      }
+      out->s = alloc_malloc(string_bytes);
       if (out->s == NULL) {
         logerr("Failed to allocate v2 string payload.\n");
         return false;
@@ -195,7 +200,16 @@ static bool read_value(FILE *file, ITEMSTORE_READ_CTX_t *ctx, VALUE_t *out,
         logerr("Corrupt v2 item reference path length.\n");
         return false;
       }
-      path = alloc_malloc((size_t)length + 1u);
+      size_t path_bytes = (size_t)length + 1u;
+      size_t ref_bytes = 0;
+      if (!itemstore_read_charge_bytes(ctx, path_bytes,
+                                       "v2 item-reference path") ||
+          !sin_itemref_allocation_bytes(length, &ref_bytes) ||
+          !itemstore_read_charge_bytes(ctx, ref_bytes,
+                                       "v2 item-reference object")) {
+        return false;
+      }
+      path = alloc_malloc(path_bytes);
       if (path == NULL) {
         return false;
       }
@@ -203,7 +217,7 @@ static bool read_value(FILE *file, ITEMSTORE_READ_CTX_t *ctx, VALUE_t *out,
         goto fail_ref;
       }
       path[length] = '\0';
-      if (!valid_ref_path(path, length)) {
+      if (!itemstore_valid_ref_path(path, length)) {
         logerr("Corrupt v2 item reference path.\n");
         goto fail_ref;
       }
@@ -222,6 +236,8 @@ static bool read_value(FILE *file, ITEMSTORE_READ_CTX_t *ctx, VALUE_t *out,
       uint32_t count;
       VALUE_t *values = NULL;
       SIN_LIST_t *list = NULL;
+      size_t transient_bytes = 0;
+      size_t persistent_bytes = 0;
       if (depth >= SIN_LIST_MAX_DEPTH ||
           !itemstore_read_u32_le(file, &count, "list element count") ||
           count > SIN_LIST_MAX_ELEMENTS ||
@@ -231,12 +247,29 @@ static bool read_value(FILE *file, ITEMSTORE_READ_CTX_t *ctx, VALUE_t *out,
       }
       ctx->aggregate_budget -= count;
       if (count != 0) {
+        if (alloc_mul_overflow((size_t)count, sizeof *values,
+                               &transient_bytes) ||
+            !sin_list_decode_allocation_bytes(count, &persistent_bytes) ||
+            !itemstore_read_charge_bytes(ctx, transient_bytes,
+                                         "v2 list transient values") ||
+            !itemstore_read_charge_bytes(ctx, persistent_bytes,
+                                         "v2 list storage")) {
+          ctx->aggregate_budget += count;
+          return false;
+        }
         values = alloc_calloc(count, sizeof *values);
         if (values == NULL) {
           logerr("Failed to allocate v2 list values.\n");
           ctx->aggregate_budget += count;
           return false;
         }
+      }
+      if (count == 0 &&
+          (!sin_list_decode_allocation_bytes(0, &persistent_bytes) ||
+           !itemstore_read_charge_bytes(ctx, persistent_bytes,
+                                        "v2 empty list storage"))) {
+        ctx->aggregate_budget += count;
+        return false;
       }
       for (uint32_t i = 0; i < count; i++) {
         if (!read_value(file, ctx, &values[i], depth + 1u)) {
@@ -277,6 +310,8 @@ ITEM_t *itemstore_read_v2_record(FILE *file, ITEM_t *parent,
   uint32_t bytecode_length = 0;
   ITEM_t *item = NULL;
 
+  if (!itemstore_read_reserve_record(ctx)) return NULL;
+
   if (ctx->depth > ctx->max_depth ||
       !itemstore_read_u8(file, &name_length, "item name length") ||
       name_length > ITEM_MAX_LAYER_NAME_LENGTH ||
@@ -310,6 +345,10 @@ ITEM_t *itemstore_read_v2_record(FILE *file, ITEM_t *parent,
         goto fail;
       }
       if (bytecode_length != 0) {
+        if (!itemstore_read_charge_bytes(ctx, bytecode_length,
+                                         "v2 bytecode payload")) {
+          goto fail;
+        }
         bytecode = alloc_malloc(bytecode_length);
         if (bytecode == NULL ||
             !itemstore_read_bytes(file, bytecode, bytecode_length,
@@ -331,6 +370,13 @@ ITEM_t *itemstore_read_v2_record(FILE *file, ITEM_t *parent,
   }
   if (!itemstore_read_u32_le(file, &child_count, "child count") ||
       child_count > ctx->max_children_per_item || bytecode_length > INT_MAX) {
+    goto fail;
+  }
+
+  size_t item_bytes = 0;
+  if (!item_children_loaded_allocation_bytes(child_count, &item_bytes) ||
+      !itemstore_read_charge_bytes(ctx, item_bytes,
+                                   "v2 item and child storage")) {
     goto fail;
   }
 

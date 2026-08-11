@@ -108,6 +108,8 @@ is retained only for internal conversion decoding):
 | Children of one item | 250 |
 | String payload | 65,535 bytes (`SIN_MAX_STRING_BYTES`) |
 | Bytecode payload | 64 MiB (`64 * 1024 * 1024` bytes) |
+| Records in one file (root included) | 65,536 |
+| Cumulative requested decode heap bytes | 256 MiB (`256 * 1024 * 1024` bytes) |
 
 Strict bytecode verification uses a separate 16 MiB analysis-memory budget.
 Instruction metadata is stored per decoded top-level instruction and boundary
@@ -130,6 +132,14 @@ the supplied item's ancestor depth counts toward the depth limit. Its complete
 non-root path must fit within 263 bytes including separators. Invalid paths are
 rejected without creating intermediate items, changing the itemstore
 topology/payload revisions, or updating cache hit/miss counters.
+
+The record and cumulative decode-heap limits apply to every v2 load and to the
+v1 conversion reader. A record is reserved before its payload is decoded, and
+requested allocation sizes are charged cumulatively, including temporary list
+and conversion-path storage; released temporary allocations are not refunded.
+Conversion staging has a separate 256 MiB work budget. Budget failures reject
+the complete load or conversion, and save performs the same admissibility
+preflight before publishing a destination.
 
 `itemstore_load()` (or `itemstore_load_with_options()` when strict bytecode
 validation is requested) aborts the entire load on any validation, allocation,

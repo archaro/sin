@@ -95,6 +95,9 @@ void destroy_item(ITEM_t *item);
 
 bool save_itemstore_with_options(const char *filename, ITEM_t *root,
                                  ITEMSTORE_DURABILITY_e durability);
+bool save_itemstore_with_limits(const char *filename, ITEM_t *root,
+                                ITEMSTORE_DURABILITY_e durability,
+                                size_t max_records, size_t max_decode_bytes);
 ITEMSTORE_SAVE_RESULT_e save_itemstore_no_replace(
     const char *filename, ITEM_t *root, ITEMSTORE_DURABILITY_e durability);
 bool save_itemstore(const char *filename, ITEM_t *root);
@@ -111,6 +114,11 @@ typedef enum {
 ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
     const char *input_filename, const char *output_filename,
     ITEMSTORE_DURABILITY_e durability, bool replace);
+ITEMSTORE_CONVERT_RESULT_e itemstore_convert_with_limits(
+    const char *input_filename, const char *output_filename,
+    ITEMSTORE_DURABILITY_e durability, bool replace,
+    size_t max_records, size_t max_decode_bytes,
+    size_t conversion_work_limit);
 
 // Child-container internals.
 ITEM_CHILDREN_t *item_children_create_runtime(void);
@@ -126,6 +134,8 @@ size_t item_children_count(const ITEM_CHILDREN_t *children);
 ITEM_t *item_children_at(const ITEM_CHILDREN_t *children, size_t index);
 uint32_t item_children_bucket_count(const ITEM_CHILDREN_t *children);
 size_t item_children_ordered_capacity(const ITEM_CHILDREN_t *children);
+bool item_children_loaded_allocation_bytes(uint32_t expected_children,
+                                           size_t *bytes);
 uint32_t murmur3_32(const char *key, size_t len, uint32_t seed);
 
 // Persistence internals.

@@ -18,6 +18,7 @@ typedef struct SIN_LIST SIN_LIST_t;
  * rejected before consuming the input.
  */
 SIN_LIST_t *sin_list_build_owned(VALUE_t *elements, size_t count);
+bool sin_list_decode_allocation_bytes(size_t count, size_t *bytes);
 /* Retain/release list handles; all accessors below borrow their results. */
 SIN_LIST_t *sin_list_retain(SIN_LIST_t *list);
 void sin_list_release(SIN_LIST_t *list);

@@ -12,6 +12,8 @@ can quickly verify what is covered and what remains intentionally out of scope.
 `test_sconv_v1_to_v2_migrates_legacy_code`, `test_sconv_mixed_code_tree_and_failure_atomicity`,
 `test_sconv_v2_canonical_and_invocation_modes`,
 `test_sconv_collisions_aliases_and_replace`, and
+`test_sconv_conversion_work_budget_is_atomic`,
+`test_sconv_decode_budget_failures_are_atomic`,
 `test_sconv_rejects_bad_inputs_and_durability_failure` exercise converter
 argument parsing, v1/v2 canonical conversion, atomic publication modes,
 durability selection, malformed headers, and same-file safety.
@@ -154,6 +156,15 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `test_itemstore_v2_all_values_fixture`
     - `test_itemstore_v2_malformed_value_table`
     - `test_itemstore_v2_budget_and_malformed_save`
+    - `test_itemstore_whole_file_budgets`
+    - `test_itemstore_decode_budget_allocation_boundaries` (exact and one-byte-
+      over decode charges for item storage, strings, bytecode, lists, and
+      item references)
+    - `test_itemstore_v1_lossy_path_budget_aborts_record` (v1 conversion-mode
+      warning-path budget failure aborts before later child decoding)
+    - `test_itemstore_rejects_production_record_limit` (65,537-record broad
+      shallow fixture)
+    - `test_itemstore_save_preflight_budget_boundaries`
     - Loaded itemstore mutation after persistence: root-level children, nested
       children, code items, deletion, reinsertion, and ordered name enumeration
       before and after a second save/load cycle.

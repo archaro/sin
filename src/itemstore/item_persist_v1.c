@@ -10,42 +10,62 @@
 #include "log.h"
 #include "memory.h"
 
-static void record_lossy_path(ITEMSTORE_READ_CTX_t *ctx, ITEM_t *item) {
-  if (!ctx->conversion_mode) return;
+static bool record_lossy_path(ITEMSTORE_READ_CTX_t *ctx, ITEM_t *item) {
+  if (!ctx->conversion_mode) return true;
   char path[MAX_ITEM_NAME];
   path[0] = '\0';
   get_itemname(item, path);
   if (path[0] == '\0') {
     ctx->lossy_path_record_failed = true;
-    return;
+    return false;
   }
   if (ctx->lossy_path_count == ctx->lossy_path_capacity) {
     size_t required = 0;
     if (alloc_add_overflow(ctx->lossy_path_count, 1u, &required)) {
       ctx->lossy_path_record_failed = true;
-      return;
+      return false;
+    }
+    size_t new_capacity = 0;
+    if (!alloc_grow_capacity(ctx->lossy_path_capacity, required,
+                             &new_capacity)) {
+      ctx->lossy_path_record_failed = true;
+      return false;
+    }
+    size_t pointer_bytes = 0;
+    if (alloc_mul_overflow(new_capacity, sizeof(*ctx->lossy_paths),
+                           &pointer_bytes) ||
+        !itemstore_read_charge_bytes(ctx, pointer_bytes,
+                                     "v1 lossy-path table")) {
+      ctx->lossy_path_record_failed = true;
+      return false;
     }
     if (!alloc_grow_array_capacity((void **)&ctx->lossy_paths,
                                    &ctx->lossy_path_capacity,
                                    required,
                                    sizeof(*ctx->lossy_paths))) {
       ctx->lossy_path_record_failed = true;
-      return;
+      return false;
     }
   }
   size_t path_len = strlen(path);
   size_t allocation_size = 0;
   if (alloc_add_overflow(path_len, 1u, &allocation_size)) {
     ctx->lossy_path_record_failed = true;
-    return;
+    return false;
+  }
+  if (!itemstore_read_charge_bytes(ctx, allocation_size,
+                                   "v1 lossy-path record")) {
+    ctx->lossy_path_record_failed = true;
+    return false;
   }
   ctx->lossy_paths[ctx->lossy_path_count] = alloc_malloc(allocation_size);
   if (ctx->lossy_paths[ctx->lossy_path_count] == NULL) {
     ctx->lossy_path_record_failed = true;
-    return;
+    return false;
   }
   memcpy(ctx->lossy_paths[ctx->lossy_path_count], path, path_len + 1u);
   ctx->lossy_path_count++;
+  return true;
 }
 
 /* Payload ownership remains here until make_item() accepts the record. */
@@ -67,6 +87,8 @@ ITEM_t *itemstore_read_v1_record(FILE *file, ITEM_t *parent,
   uint32_t bytecode_len = 0;
   bool lossy_string = false;
   VALUE_t itemval = {VALUE_nil, {0}};
+
+  if (!itemstore_read_reserve_record(ctx)) return NULL;
 
   if (ctx->depth > ctx->max_depth) {
     logerr("Corrupt itemstore '%s': item depth %zu exceeds maximum %zu.\n",
@@ -147,7 +169,12 @@ ITEM_t *itemstore_read_v1_record(FILE *file, ITEM_t *parent,
                  ctx->max_string_len);
           return NULL;
         }
-        itemval.s = malloc((size_t)length + 1);
+        size_t string_bytes = (size_t)length + 1u;
+        if (!itemstore_read_charge_bytes(ctx, string_bytes,
+                                         "v1 string payload")) {
+          return NULL;
+        }
+        itemval.s = malloc(string_bytes);
         if (!itemval.s) {
           logerr("Failed to load itemstore '%s': cannot allocate %u bytes "
                  "for string item '%s'.\n", ctx->filename, length, name);
@@ -188,6 +215,10 @@ ITEM_t *itemstore_read_v1_record(FILE *file, ITEM_t *parent,
       return NULL;
     }
     if (bytecode_len > 0) {
+      if (!itemstore_read_charge_bytes(ctx, bytecode_len,
+                                       "v1 bytecode payload")) {
+        return NULL;
+      }
       bytecode = malloc(bytecode_len);
       if (!bytecode) {
         logerr("Failed to load itemstore '%s': cannot allocate %u bytes for "
@@ -219,6 +250,13 @@ ITEM_t *itemstore_read_v1_record(FILE *file, ITEM_t *parent,
     logerr("Corrupt itemstore '%s': child count %u for '%s' exceeds maximum "
            "%u.\n", ctx->filename, numchildren, name,
            ctx->max_children_per_item);
+    goto fail_before_item;
+  }
+
+  size_t item_bytes = 0;
+  if (!item_children_loaded_allocation_bytes(numchildren, &item_bytes) ||
+      !itemstore_read_charge_bytes(ctx, item_bytes,
+                                   "v1 item and child storage")) {
     goto fail_before_item;
   }
 
@@ -256,7 +294,10 @@ ITEM_t *itemstore_read_v1_record(FILE *file, ITEM_t *parent,
 
   if (lossy_string) {
     /* This check is intentionally performed before v2 serialization. */
-    record_lossy_path(ctx, item);
+    if (!record_lossy_path(ctx, item)) {
+      detach_item_and_destroy(item);
+      return NULL;
+    }
   }
 
   for (uint32_t i = 0; i < numchildren; i++) {

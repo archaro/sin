@@ -28,6 +28,7 @@
 #include "item_persist_internal.h"
 #include "string_limits.h"
 #include "list.h"
+#include "itemref.h"
 
 // The configuration object, defined in src/sin.c
 extern CONFIG_t config;
@@ -247,6 +248,37 @@ bool itemstore_read_bytes(FILE *file, void *data, size_t length,
   return false;
 }
 
+bool itemstore_read_reserve_record(ITEMSTORE_READ_CTX_t *ctx) {
+  if (ctx == NULL) return false;
+  if (ctx->record_count >= ctx->max_records) {
+    ctx->record_budget_exhausted = true;
+    logerr("Itemstore '%s' exceeds record budget: record %zu is beyond "
+           "limit %zu (records include the root).\n",
+           ctx->filename, ctx->record_count + 1u, ctx->max_records);
+    return false;
+  }
+  ctx->record_count++;
+  return true;
+}
+
+bool itemstore_read_charge_bytes(ITEMSTORE_READ_CTX_t *ctx, size_t amount,
+                                 const char *what) {
+  size_t requested;
+  if (ctx == NULL) return false;
+  if (ctx->decode_budget_exhausted) return false;
+  if (alloc_add_overflow(ctx->decode_bytes, amount, &requested) ||
+      requested > ctx->max_decode_bytes) {
+    ctx->decode_budget_exhausted = true;
+    logerr("Itemstore '%s' exceeds decode allocation budget: requested %zu "
+           "bytes for %s would exceed limit %zu bytes (already charged %zu).\n",
+           ctx->filename, amount, what != NULL ? what : "allocation",
+           ctx->max_decode_bytes, ctx->decode_bytes);
+    return false;
+  }
+  ctx->decode_bytes = requested;
+  return true;
+}
+
 bool itemstore_write_u8(FILE *file, uint8_t value, const char *context) {
   return itemstore_write_bytes(file, &value, sizeof(value), context);
 }
@@ -412,16 +444,139 @@ static int link_itemstore_no_replace(const char *temp_path,
 #endif
 }
 
+typedef struct {
+  size_t records;
+  size_t bytes;
+  size_t max_records;
+  size_t max_bytes;
+  const char *filename;
+  bool failed;
+} ITEMSTORE_SAVE_BUDGET_t;
+
+static bool save_charge_bytes(ITEMSTORE_SAVE_BUDGET_t *budget, size_t amount,
+                              const char *what) {
+  size_t total;
+  if (alloc_add_overflow(budget->bytes, amount, &total) ||
+      total > budget->max_bytes) {
+    logerr("Cannot save itemstore '%s': decode allocation budget: requested "
+           "%zu bytes for %s would exceed limit %zu bytes (already charged "
+           "%zu).\n", budget->filename, amount, what, budget->max_bytes,
+           budget->bytes);
+    budget->failed = true;
+    return false;
+  }
+  budget->bytes = total;
+  return true;
+}
+
+static bool save_reserve_record(ITEMSTORE_SAVE_BUDGET_t *budget) {
+  if (budget->records >= budget->max_records) {
+    logerr("Cannot save itemstore '%s': record budget exceeded at record "
+           "%zu (limit %zu; records include the root).\n", budget->filename,
+           budget->records + 1u, budget->max_records);
+    budget->failed = true;
+    return false;
+  }
+  budget->records++;
+  return true;
+}
+
+static bool preflight_value(const VALUE_t *value, size_t depth,
+                            ITEMSTORE_SAVE_BUDGET_t *budget) {
+  if (value == NULL) return false;
+  switch (value->type) {
+    case VALUE_str: {
+      size_t length = value->s == NULL ? 0 : strlen(value->s);
+      if (length > SIN_MAX_STRING_BYTES || length == SIZE_MAX) return false;
+      return save_charge_bytes(budget, length + 1u, "string payload");
+    }
+    case VALUE_itemref: {
+      const char *path = value->itemref == NULL
+          ? NULL : sin_itemref_path(value->itemref);
+      size_t length = path == NULL ? 0 : strlen(path);
+      size_t ref_bytes = 0;
+      if (!itemstore_valid_ref_path(path, length) ||
+          !sin_itemref_allocation_bytes(length, &ref_bytes)) return false;
+      return save_charge_bytes(budget, length + 1u,
+                               "item-reference path") &&
+          save_charge_bytes(budget, ref_bytes, "item-reference object");
+    }
+    case VALUE_list: {
+      size_t count;
+      size_t transient_bytes = 0;
+      size_t persistent_bytes = 0;
+      if (value->list == NULL || depth >= SIN_LIST_MAX_DEPTH) return false;
+      count = sin_list_count(value->list);
+      if (count > SIN_LIST_MAX_ELEMENTS ||
+          alloc_mul_overflow(count, sizeof(VALUE_t), &transient_bytes) ||
+          !sin_list_decode_allocation_bytes(count, &persistent_bytes)) {
+        return false;
+      }
+      if (!save_charge_bytes(budget, transient_bytes,
+                             "list transient values") ||
+          !save_charge_bytes(budget, persistent_bytes, "list storage")) {
+        return false;
+      }
+      for (size_t i = 0; i < count; i++) {
+        if (!preflight_value(sin_list_get(value->list, i), depth + 1u,
+                             budget)) return false;
+      }
+      return true;
+    }
+    default:
+      return value->type == VALUE_nil || value->type == VALUE_int ||
+          value->type == VALUE_float || value->type == VALUE_bool;
+  }
+}
+
+static bool preflight_item(ITEM_t *item, size_t depth,
+                           ITEMSTORE_SAVE_BUDGET_t *budget) {
+  size_t children;
+  size_t item_bytes = 0;
+  if (item == NULL || depth > ITEM_MAX_DEPTH ||
+      !save_reserve_record(budget)) return false;
+  children = item_children_count(item->children);
+  if (children > ITEMSTORE_MAX_CHILDREN_PER_ITEM ||
+      !item_children_loaded_allocation_bytes((uint32_t)children,
+                                              &item_bytes) ||
+      !save_charge_bytes(budget, item_bytes, "item and child storage")) {
+    return false;
+  }
+  if (item->type == ITEM_value) {
+    if (!preflight_value(&item->value, 0, budget)) return false;
+  } else if (item->type == ITEM_code) {
+    if (item->bytecode_len > ITEMSTORE_MAX_BYTECODE_LEN ||
+        (item->bytecode_len != 0 && item->bytecode == NULL) ||
+        !save_charge_bytes(budget, item->bytecode_len, "bytecode payload")) {
+      return false;
+    }
+  } else {
+    return false;
+  }
+  for (size_t i = 0; i < children; i++) {
+    if (!preflight_item(item_children_at(item->children, i), depth + 1u,
+                        budget)) return false;
+  }
+  return true;
+}
+
 static ITEMSTORE_SAVE_RESULT_e itemstore_save_core(
     const char *filename, ITEM_t *root,
     ITEMSTORE_DURABILITY_e durability,
-    ITEMSTORE_PUBLISH_MODE_e mode) {
+    ITEMSTORE_PUBLISH_MODE_e mode, size_t max_records,
+    size_t max_decode_bytes) {
   FILE *file = NULL;
   char *temp_path = NULL;
   ITEMSTORE_SAVE_RESULT_e result = ITEMSTORE_SAVE_FAILURE;
   bool published = false;
   bool temp_needs_cleanup = false;
   size_t aggregate_budget = SIN_LIST_MAX_ELEMENTS;
+  ITEMSTORE_SAVE_BUDGET_t preflight = {
+    .records = 0, .bytes = 0, .max_records = max_records,
+    .max_bytes = max_decode_bytes, .filename = filename, .failed = false
+  };
+
+  if (!preflight_item(root, 0, &preflight)) return ITEMSTORE_SAVE_FAILURE;
 
   file = create_temp_itemstore(filename, &temp_path);
   if (file == NULL) return ITEMSTORE_SAVE_FAILURE;
@@ -528,15 +683,27 @@ cleanup:
 
 bool save_itemstore_with_options(const char *filename, ITEM_t *root,
                                  ITEMSTORE_DURABILITY_e durability) {
-  ITEMSTORE_SAVE_RESULT_e r = itemstore_save_core(filename, root, durability,
-                                                   ITEMSTORE_PUBLISH_REPLACE);
+  ITEMSTORE_SAVE_RESULT_e r = itemstore_save_core(
+      filename, root, durability, ITEMSTORE_PUBLISH_REPLACE,
+      ITEMSTORE_MAX_RECORDS, ITEMSTORE_MAX_DECODE_BYTES);
+  return r == ITEMSTORE_SAVE_SUCCESS;
+}
+
+bool save_itemstore_with_limits(const char *filename, ITEM_t *root,
+                                ITEMSTORE_DURABILITY_e durability,
+                                size_t max_records, size_t max_decode_bytes) {
+  ITEMSTORE_SAVE_RESULT_e r = itemstore_save_core(
+      filename, root, durability, ITEMSTORE_PUBLISH_REPLACE, max_records,
+      max_decode_bytes);
   return r == ITEMSTORE_SAVE_SUCCESS;
 }
 
 ITEMSTORE_SAVE_RESULT_e save_itemstore_no_replace(
     const char *filename, ITEM_t *root, ITEMSTORE_DURABILITY_e durability) {
   return itemstore_save_core(filename, root, durability,
-                             ITEMSTORE_PUBLISH_NO_REPLACE);
+                             ITEMSTORE_PUBLISH_NO_REPLACE,
+                             ITEMSTORE_MAX_RECORDS,
+                             ITEMSTORE_MAX_DECODE_BYTES);
 }
 
 ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,
@@ -550,6 +717,12 @@ ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,
     .filename = filename,
     .strict_validation = false,
     .aggregate_budget = SIN_LIST_MAX_ELEMENTS,
+    .record_count = 0,
+    .max_records = ITEMSTORE_MAX_RECORDS,
+    .decode_bytes = 0,
+    .max_decode_bytes = ITEMSTORE_MAX_DECODE_BYTES,
+    .record_budget_exhausted = false,
+    .decode_budget_exhausted = false,
     .conversion_mode = false,
     .lossy_paths = NULL,
     .lossy_path_count = 0,
@@ -687,9 +860,41 @@ static void free_lossy_paths(ITEMSTORE_READ_CTX_t *ctx) {
   ctx->lossy_path_capacity = 0;
 }
 
-ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
+static bool conversion_charge(size_t *used, size_t amount,
+                              size_t limit, const char *filename) {
+  size_t total = 0;
+  if (alloc_add_overflow(*used, amount, &total) ||
+      total > limit) {
+    logerr("Itemstore conversion '%s' exceeds conversion-work budget: "
+           "requested %zu bytes would exceed limit %zu bytes (already "
+           "charged %zu).\n", filename, amount,
+           limit, *used);
+    return false;
+  }
+  *used = total;
+  return true;
+}
+
+static bool conversion_grow_array(void **pointer, size_t *capacity,
+                                   size_t required, size_t element_size,
+                                   size_t *used, size_t limit,
+                                   const char *filename) {
+  size_t new_capacity = 0;
+  size_t bytes = 0;
+  if (!alloc_grow_capacity(*capacity, required, &new_capacity) ||
+      alloc_mul_overflow(new_capacity, element_size, &bytes) ||
+      !conversion_charge(used, bytes, limit, filename) ||
+      !alloc_grow_array_capacity(pointer, capacity, required, element_size)) {
+    return false;
+  }
+  return true;
+}
+
+ITEMSTORE_CONVERT_RESULT_e itemstore_convert_with_limits(
     const char *input_filename, const char *output_filename,
-    ITEMSTORE_DURABILITY_e durability, bool replace) {
+    ITEMSTORE_DURABILITY_e durability, bool replace,
+    size_t max_records, size_t max_decode_bytes,
+    size_t conversion_work_limit) {
   bool same_file = input_filename != NULL && output_filename != NULL
       && itemstore_paths_identify_same_file(input_filename, output_filename);
   if (input_filename == NULL || output_filename == NULL || same_file) {
@@ -709,6 +914,8 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
   }
 
   ITEMSTORE_READ_CTX_t ctx = itemstore_read_context(input_filename, 0);
+  ctx.max_records = max_records;
+  ctx.max_decode_bytes = max_decode_bytes;
   ctx.strict_validation = false;
   ctx.conversion_mode = true;
   ITEM_t *root = NULL;
@@ -757,8 +964,12 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
   ITEM_t **stack = NULL;
   size_t stack_count = 0;
   size_t stack_cap = 0;
-  if (!alloc_grow_array_capacity((void **)&stack, &stack_cap, 1u,
-                                 sizeof *stack)) {
+  size_t conversion_bytes = 0;
+  bool conversion_budget_exhausted = false;
+  if (!conversion_grow_array((void **)&stack, &stack_cap, 1u,
+                              sizeof *stack, &conversion_bytes,
+                              conversion_work_limit,
+                              input_filename)) {
     free_lossy_paths(&ctx);
     destroy_item(root);
     return ITEMSTORE_CONVERT_FAILURE;
@@ -767,9 +978,18 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
   while (stack_count > 0) {
     ITEM_t *item = stack[--stack_count];
     if (item->type == ITEM_code) {
-      BC_ConvertResult converted =
-          bc_convert_latest(item->bytecode, item->bytecode_len);
+      BC_ConvertResult converted = bc_convert_latest_with_limits(
+          item->bytecode, item->bytecode_len, ITEMSTORE_MAX_BYTECODE_LEN,
+          &conversion_bytes, conversion_work_limit,
+          &conversion_budget_exhausted);
       if (converted.status != BC_CONVERT_SUCCESS) {
+        if (conversion_budget_exhausted) {
+          logerr("Failed to migrate bytecode item '%s': conversion-work "
+                 "budget: requested %zu bytes would exceed limit %zu bytes "
+                 "(already charged %zu).\n", item->name,
+                 converted.budget_request, conversion_work_limit,
+                 conversion_bytes);
+        }
         logerr("Failed to migrate bytecode item '%s' (status %d).\n",
                item->name, (int)converted.status);
         for (size_t i = 0; i < prepared_count; i++) free(prepared[i].data);
@@ -780,9 +1000,10 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
         return ITEMSTORE_CONVERT_FAILURE;
       }
       if (prepared_count == prepared_cap &&
-          !alloc_grow_array_capacity((void **)&prepared, &prepared_cap,
-                                     prepared_count + 1u,
-                                     sizeof *prepared)) {
+          !conversion_grow_array((void **)&prepared, &prepared_cap,
+                                 prepared_count + 1u, sizeof *prepared,
+                                 &conversion_bytes, conversion_work_limit,
+                                 input_filename)) {
         free(converted.data);
         for (size_t i = 0; i < prepared_count; i++) free(prepared[i].data);
         free(prepared);
@@ -796,8 +1017,10 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
     }
     for (size_t i = 0; i < item_children_count(item->children); i++) {
       if (stack_count == stack_cap &&
-          !alloc_grow_array_capacity((void **)&stack, &stack_cap,
-                                     stack_count + 1u, sizeof *stack)) {
+          !conversion_grow_array((void **)&stack, &stack_cap,
+                                 stack_count + 1u, sizeof *stack,
+                                 &conversion_bytes, conversion_work_limit,
+                                 input_filename)) {
         for (size_t j = 0; j < prepared_count; j++) free(prepared[j].data);
         free(prepared);
         free(stack);
@@ -834,6 +1057,16 @@ ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
     return ITEMSTORE_CONVERT_TARGET_EXISTS;
   }
   return ITEMSTORE_CONVERT_FAILURE;
+}
+
+ITEMSTORE_CONVERT_RESULT_e itemstore_convert(
+    const char *input_filename, const char *output_filename,
+    ITEMSTORE_DURABILITY_e durability, bool replace) {
+  return itemstore_convert_with_limits(input_filename, output_filename,
+                                       durability, replace,
+                                       ITEMSTORE_MAX_RECORDS,
+                                       ITEMSTORE_MAX_DECODE_BYTES,
+                                       ITEMSTORE_MAX_CONVERSION_BYTES);
 }
 
 ITEM_t *load_itemstore(const char *filename) {

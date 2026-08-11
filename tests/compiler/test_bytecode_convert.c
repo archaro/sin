@@ -137,6 +137,18 @@ void test_bytecode_convert_allocation_failures(void) {
   ASSERT_EQ_INT(BC_CONVERT_ALLOCATION_FAILURE, jump.status);
   ASSERT_TRUE(jump.data == NULL && jump.length == 0);
   bc_convert_result_free(&jump);
+
+  const uint8_t v1[] = {0, 0xff, 'S', 'B', 1, 0, 0, 0, 'h'};
+  size_t work_used = 0;
+  bool budget_exhausted = false;
+  BC_ConvertResult budget = bc_convert_latest_with_limits(
+      v1, sizeof v1, UINT32_MAX, &work_used, sizeof v1 - 1u,
+      &budget_exhausted);
+  ASSERT_EQ_INT(BC_CONVERT_ALLOCATION_FAILURE, budget.status);
+  ASSERT_TRUE(budget_exhausted);
+  ASSERT_EQ_INT(sizeof v1, budget.budget_request);
+  ASSERT_EQ_INT(0, work_used);
+  bc_convert_result_free(&budget);
 }
 
 void test_embedded_code_conversion_boundaries(void) {

@@ -291,6 +291,39 @@ static SIN_LIST_NODE *build_tree(SIN_LIST_NODE **nodes, size_t node_count) {
   return root;
 }
 
+bool sin_list_decode_allocation_bytes(size_t count, size_t *bytes) {
+  size_t total = sizeof(SIN_LIST_t);
+  size_t tail_count;
+  size_t full_leaves;
+  size_t nodes;
+  size_t part;
+  if (count > SIN_LIST_MAX_ELEMENTS) return false;
+  if (count == 0) {
+    if (bytes) *bytes = total;
+    return true;
+  }
+  tail_count = count <= LIST_BRANCH ? count : ((count - 1u) % LIST_BRANCH) + 1u;
+  full_leaves = (count - tail_count) / LIST_BRANCH;
+  if (full_leaves != 0) {
+    if (alloc_mul_overflow(full_leaves, sizeof(SIN_LIST_NODE *), &part) ||
+        alloc_add_overflow(total, part, &total) ||
+        alloc_mul_overflow(full_leaves, sizeof(SIN_LIST_NODE), &part) ||
+        alloc_add_overflow(total, part, &total)) return false;
+    nodes = full_leaves;
+    while (nodes > 1u) {
+      size_t output = (nodes + LIST_BRANCH - 1u) / LIST_BRANCH;
+      if (alloc_mul_overflow(output, sizeof(SIN_LIST_NODE *), &part) ||
+          alloc_add_overflow(total, part, &total) ||
+          alloc_mul_overflow(output, sizeof(SIN_LIST_NODE), &part) ||
+          alloc_add_overflow(total, part, &total)) return false;
+      nodes = output;
+    }
+  }
+  if (alloc_add_overflow(total, sizeof(SIN_LIST_NODE), &total)) return false;
+  if (bytes) *bytes = total;
+  return true;
+}
+
 static void consume_owned_values(VALUE_t *elements, size_t count) {
   if (!elements) return;
   for (size_t i = 0; i < count; ++i) value_free(&elements[i]);

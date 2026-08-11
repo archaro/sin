@@ -144,6 +144,11 @@ void test_itemstore_v2_lists_and_itemrefs_roundtrip(void);
 void test_itemstore_v2_all_values_fixture(void);
 void test_itemstore_v2_malformed_value_table(void);
 void test_itemstore_v2_budget_and_malformed_save(void);
+void test_itemstore_whole_file_budgets(void);
+void test_itemstore_decode_budget_allocation_boundaries(void);
+void test_itemstore_v1_lossy_path_budget_aborts_record(void);
+void test_itemstore_rejects_production_record_limit(void);
+void test_itemstore_save_preflight_budget_boundaries(void);
 void test_loaded_itemstore_mutation_roundtrip(void);
 void test_load_itemstore_handles_constructor_failure_with_children(void);
 void test_item_set_code_rejects_inuse_replacement(void);
@@ -170,6 +175,8 @@ void test_itemsource_paths_are_validated_and_contained(void);
 void test_itemstore_durability_modes(void);
 void test_itemstore_large_load_presizes_child_storage(void);
 void test_sconv_v1_to_v2_migrates_legacy_code(void);
+void test_sconv_conversion_work_budget_is_atomic(void);
+void test_sconv_decode_budget_failures_are_atomic(void);
 void test_sconv_v1_embedded_nul_warns_with_full_path(void);
 void test_sconv_mixed_code_tree_and_failure_atomicity(void);
 void test_sconv_v2_canonical_and_invocation_modes(void);
@@ -479,6 +486,11 @@ static const test_case_t core_tests[] = {
     {"test_itemstore_v2_all_values_fixture", test_itemstore_v2_all_values_fixture},
     {"test_itemstore_v2_malformed_value_table", test_itemstore_v2_malformed_value_table},
     {"test_itemstore_v2_budget_and_malformed_save", test_itemstore_v2_budget_and_malformed_save},
+    {"test_itemstore_whole_file_budgets", test_itemstore_whole_file_budgets},
+    {"test_itemstore_decode_budget_allocation_boundaries", test_itemstore_decode_budget_allocation_boundaries},
+    {"test_itemstore_v1_lossy_path_budget_aborts_record", test_itemstore_v1_lossy_path_budget_aborts_record},
+    {"test_itemstore_rejects_production_record_limit", test_itemstore_rejects_production_record_limit},
+    {"test_itemstore_save_preflight_budget_boundaries", test_itemstore_save_preflight_budget_boundaries},
     {"test_loaded_itemstore_mutation_roundtrip", test_loaded_itemstore_mutation_roundtrip},
     {"test_load_itemstore_handles_constructor_failure_with_children", test_load_itemstore_handles_constructor_failure_with_children},
     {"test_item_set_code_rejects_inuse_replacement", test_item_set_code_rejects_inuse_replacement},
@@ -505,6 +517,8 @@ static const test_case_t core_tests[] = {
     {"test_itemstore_durability_modes", test_itemstore_durability_modes},
     {"test_itemstore_large_load_presizes_child_storage", test_itemstore_large_load_presizes_child_storage},
     {"test_sconv_v1_to_v2_migrates_legacy_code", test_sconv_v1_to_v2_migrates_legacy_code},
+    {"test_sconv_conversion_work_budget_is_atomic", test_sconv_conversion_work_budget_is_atomic},
+    {"test_sconv_decode_budget_failures_are_atomic", test_sconv_decode_budget_failures_are_atomic},
     {"test_sconv_v1_embedded_nul_warns_with_full_path", test_sconv_v1_embedded_nul_warns_with_full_path},
     {"test_sconv_mixed_code_tree_and_failure_atomicity", test_sconv_mixed_code_tree_and_failure_atomicity},
     {"test_sconv_v2_canonical_and_invocation_modes", test_sconv_v2_canonical_and_invocation_modes},

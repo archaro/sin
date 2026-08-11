@@ -11,6 +11,17 @@ struct SIN_ITEMREF {
   char path[];
 };
 
+bool sin_itemref_allocation_bytes(size_t path_length, size_t *bytes) {
+  size_t total;
+  size_t path_bytes;
+  if (alloc_add_overflow(path_length, 1u, &path_bytes) ||
+      alloc_add_overflow(sizeof(struct SIN_ITEMREF), path_bytes, &total)) {
+    return false;
+  }
+  if (bytes) *bytes = total;
+  return true;
+}
+
 SIN_ITEMREF_t *sin_itemref_create(const char *path) {
   size_t length;
   SIN_ITEMREF_t *ref;

@@ -223,6 +223,41 @@ static void put_nested_nil_record(FILE *file, unsigned depth,
   }
 }
 
+static ITEM_t *read_v2_fixture_with_budget(const char *path,
+                                           size_t max_decode_bytes,
+                                           ITEMSTORE_READ_CTX_t *ctx_out) {
+  FILE *file = fopen(path, "rb");
+  ASSERT_NOT_NULL(file);
+  uint8_t header[10];
+  ASSERT_EQ_INT(sizeof header, fread(header, 1, sizeof header, file));
+  ITEMSTORE_READ_CTX_t ctx = itemstore_read_context(path, 0);
+  ctx.max_decode_bytes = max_decode_bytes;
+  ITEM_t *root = itemstore_read_record_for_version(2, file, NULL, &ctx);
+  ASSERT_EQ_INT(EOF, fgetc(file));
+  ASSERT_EQ_INT(0, fclose(file));
+  if (ctx_out != NULL) *ctx_out = ctx;
+  return root;
+}
+
+static void assert_v2_fixture_budget_boundary(const char *path,
+                                              size_t expected) {
+  ITEMSTORE_READ_CTX_t ctx;
+  ITEM_t *root = read_v2_fixture_with_budget(
+      path, ITEMSTORE_MAX_DECODE_BYTES, &ctx);
+  ASSERT_NOT_NULL(root);
+  ASSERT_EQ_INT(expected, ctx.decode_bytes);
+  detach_item_and_destroy(root);
+
+  root = read_v2_fixture_with_budget(path, expected, &ctx);
+  ASSERT_NOT_NULL(root);
+  ASSERT_EQ_INT(expected, ctx.decode_bytes);
+  detach_item_and_destroy(root);
+
+  root = read_v2_fixture_with_budget(path, expected - 1u, &ctx);
+  ASSERT_TRUE(root == NULL);
+  ASSERT_TRUE(ctx.decode_budget_exhausted);
+}
+
 static void build_max_item_path(char path[MAX_ITEM_NAME]) {
   size_t length = 0;
   for (size_t layer = 0; layer < ITEM_MAX_DEPTH; layer++) {
@@ -861,6 +896,207 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
     ASSERT_EQ_INT(3, constructor_attempts);
     ASSERT_EQ_INT(0, unlink(constructor_path));
   }
+}
+
+void test_itemstore_whole_file_budgets(void) {
+  char path[] = "/tmp/sin-itemstore-whole-budget-XXXXXX";
+  FILE *file = new_fixture(path);
+  put_header(file, 2);
+  put_nil_record_prefix(file, "root", 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  file = fopen(path, "rb");
+  ASSERT_NOT_NULL(file);
+  uint8_t header[10];
+  ASSERT_EQ_INT(sizeof header, fread(header, 1, sizeof header, file));
+  ITEMSTORE_READ_CTX_t ctx = itemstore_read_context(path, 0);
+  size_t root_bytes = 0;
+  ASSERT_TRUE(item_children_loaded_allocation_bytes(0, &root_bytes));
+  ctx.max_records = 1;
+  ctx.max_decode_bytes = root_bytes;
+  ITEM_t *root = itemstore_read_record_for_version(2, file, NULL, &ctx);
+  ASSERT_NOT_NULL(root);
+  ASSERT_EQ_INT(1, ctx.record_count);
+  ASSERT_EQ_INT(root_bytes, ctx.decode_bytes);
+  detach_item_and_destroy(root);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_EQ_INT(0, unlink(path));
+
+  char excess_path[] = "/tmp/sin-itemstore-whole-records-XXXXXX";
+  file = new_fixture(excess_path);
+  put_header(file, 2);
+  put_nil_record_prefix(file, "root", 1);
+  put_nil_record_prefix(file, "child", 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  file = fopen(excess_path, "rb");
+  ASSERT_NOT_NULL(file);
+  ASSERT_EQ_INT(sizeof header, fread(header, 1, sizeof header, file));
+  ctx = itemstore_read_context(excess_path, 0);
+  ctx.max_records = 1;
+  ASSERT_TRUE(itemstore_read_record_for_version(2, file, NULL, &ctx) == NULL);
+  ASSERT_TRUE(ctx.record_budget_exhausted);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_EQ_INT(0, unlink(excess_path));
+}
+
+void test_itemstore_decode_budget_allocation_boundaries(void) {
+  char path[] = "/tmp/sin-itemstore-decode-boundary-XXXXXX";
+
+  FILE *file = new_fixture(path);
+  put_header(file, 2);
+  put_nil_record_prefix(file, "root", 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  size_t item_bytes = 0;
+  ASSERT_TRUE(item_children_loaded_allocation_bytes(0, &item_bytes));
+  assert_v2_fixture_budget_boundary(path, item_bytes);
+
+  file = replace_fixture(path);
+  put_header(file, 2);
+  put_nil_record_prefix(file, "root", 1);
+  put_nil_record_prefix(file, "child", 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  size_t root_with_child_bytes = 0;
+  size_t child_bytes = 0;
+  ASSERT_TRUE(item_children_loaded_allocation_bytes(1,
+                                                    &root_with_child_bytes));
+  ASSERT_TRUE(item_children_loaded_allocation_bytes(0, &child_bytes));
+  assert_v2_fixture_budget_boundary(path, root_with_child_bytes + child_bytes);
+
+  file = replace_fixture(path);
+  put_header(file, 2);
+  put_string_record_prefix(file, "root", "x", 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  assert_v2_fixture_budget_boundary(path, item_bytes + strlen("x") + 1u);
+
+  static const uint8_t bytecode[] = {0};
+  file = replace_fixture(path);
+  put_header(file, 2);
+  put_code_record_prefix(file, "root", bytecode, sizeof bytecode, 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  assert_v2_fixture_budget_boundary(path, item_bytes + sizeof bytecode);
+
+  file = replace_fixture(path);
+  put_header(file, 2);
+  put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_LIST);
+  put_u32_le(file, 1);
+  put_u8(file, WIRE_VALUE_NIL);
+  put_u32_le(file, 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  size_t list_bytes = 0;
+  ASSERT_TRUE(sin_list_decode_allocation_bytes(1, &list_bytes));
+  assert_v2_fixture_budget_boundary(path,
+                                    item_bytes + sizeof(VALUE_t) + list_bytes);
+
+  file = replace_fixture(path);
+  put_header(file, 2);
+  put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_ITEMREF);
+  put_u16_le(file, 1);
+  put_u8(file, 'x');
+  put_u32_le(file, 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  size_t ref_bytes = 0;
+  ASSERT_TRUE(sin_itemref_allocation_bytes(1, &ref_bytes));
+  assert_v2_fixture_budget_boundary(path, item_bytes + 2u + ref_bytes);
+
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_itemstore_v1_lossy_path_budget_aborts_record(void) {
+  char path[] = "/tmp/sin-itemstore-v1-lossy-budget-XXXXXX";
+  FILE *file = new_fixture(path);
+  put_header(file, 1);
+  put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_STRING);
+  put_u32_le(file, 3);
+  put_bytes(file, "a\0b", 3);
+  put_u32_le(file, 1);
+  put_nil_record_prefix(file, "later", 0);
+  ASSERT_EQ_INT(0, fclose(file));
+
+  file = fopen(path, "rb");
+  ASSERT_NOT_NULL(file);
+  uint8_t header[10];
+  ASSERT_EQ_INT(sizeof header, fread(header, 1, sizeof header, file));
+  ITEMSTORE_READ_CTX_t ctx = itemstore_read_context(path, 0);
+  ctx.conversion_mode = true;
+  size_t root_bytes = 0;
+  ASSERT_TRUE(item_children_loaded_allocation_bytes(1, &root_bytes));
+  ctx.max_decode_bytes = root_bytes + 4u;
+  ASSERT_TRUE(itemstore_read_record_for_version(1, file, NULL, &ctx) == NULL);
+  ASSERT_TRUE(ctx.decode_budget_exhausted);
+  ASSERT_EQ_INT(1, ctx.record_count);
+  ASSERT_EQ_INT(0, ctx.lossy_path_count);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_itemstore_rejects_production_record_limit(void) {
+  char path[] = "/tmp/sin-itemstore-record-limit-XXXXXX";
+  FILE *file = new_fixture(path);
+  put_header(file, 2);
+  put_nil_record_prefix(file, "root", 250);
+  for (unsigned i = 0; i < 250u; i++) {
+    char first[8];
+    ASSERT_TRUE(snprintf(first, sizeof first, "f%03u", i) > 0);
+    put_nil_record_prefix(file, first, 250);
+    for (unsigned j = 0; j < 250u; j++) {
+      char second[16];
+      unsigned grandchildren = i == 0u && j < 12u ? 250u : 0u;
+      ASSERT_TRUE(snprintf(second, sizeof second, "n%03u_%03u", i, j) > 0);
+      put_nil_record_prefix(file, second, grandchildren);
+      for (unsigned k = 0; k < grandchildren; k++) {
+        char third[16];
+        ASSERT_TRUE(snprintf(third, sizeof third, "g%03u", k) > 0);
+        put_nil_record_prefix(file, third, 0);
+      }
+    }
+  }
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_TRUE(load_itemstore(path) == NULL);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_itemstore_save_preflight_budget_boundaries(void) {
+  char path[] = "/tmp/sin-itemstore-save-boundary-XXXXXX";
+  FILE *file = new_fixture(path);
+  static const uint8_t sentinel[] = {'s', 'e', 'n', 't', 'i', 'n', 'e', 'l'};
+  put_bytes(file, sentinel, sizeof sentinel);
+  ASSERT_EQ_INT(0, fclose(file));
+
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  ITEM_t *child = make_item("child", root, ITEM_value, VALUE_NIL, NULL, 0);
+  ASSERT_NOT_NULL(child);
+  size_t root_bytes = 0;
+  size_t child_bytes = 0;
+  ASSERT_TRUE(item_children_loaded_allocation_bytes(1, &root_bytes));
+  ASSERT_TRUE(item_children_loaded_allocation_bytes(0, &child_bytes));
+  size_t total_bytes = root_bytes + child_bytes;
+
+  char exact_path[] = "/tmp/sin-itemstore-save-exact-XXXXXX";
+  FILE *exact_file = new_fixture(exact_path);
+  ASSERT_EQ_INT(0, fclose(exact_file));
+  ASSERT_TRUE(save_itemstore_with_limits(
+      exact_path, root, ITEMSTORE_DURABLE_FAST, 2, total_bytes));
+  ITEM_t *loaded = load_itemstore_with_options(exact_path, false);
+  ASSERT_NOT_NULL(loaded);
+  destroy_item(loaded);
+  ASSERT_EQ_INT(0, unlink(exact_path));
+
+  ASSERT_TRUE(!save_itemstore_with_limits(
+      path, root, ITEMSTORE_DURABLE_FAST, 1, ITEMSTORE_MAX_DECODE_BYTES));
+  ASSERT_TRUE(!save_itemstore_with_limits(
+      path, root, ITEMSTORE_DURABLE_FAST, ITEMSTORE_MAX_RECORDS,
+      total_bytes - 1u));
+  destroy_item(root);
+  file = fopen(path, "rb");
+  ASSERT_NOT_NULL(file);
+  uint8_t actual[sizeof sentinel];
+  ASSERT_EQ_INT(sizeof actual, fread(actual, 1, sizeof actual, file));
+  ASSERT_TRUE(memcmp(actual, sentinel, sizeof sentinel) == 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_EQ_INT(0, unlink(path));
 }
 
 void test_loaded_itemstore_mutation_roundtrip(void) {

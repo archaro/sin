@@ -7,6 +7,9 @@
 
 #define ITEMSTORE_MAX_CHILDREN_PER_ITEM 250u
 #define ITEMSTORE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
+#define ITEMSTORE_MAX_RECORDS 65536u
+#define ITEMSTORE_MAX_DECODE_BYTES (256u * 1024u * 1024u)
+#define ITEMSTORE_MAX_CONVERSION_BYTES (256u * 1024u * 1024u)
 
 #define ITEMSTORE_V1_FORMAT_VERSION UINT16_C(1)
 #define ITEMSTORE_V2_FORMAT_VERSION UINT16_C(2)
@@ -37,12 +40,23 @@ typedef struct ItemstoreReadContext {
   const char *filename;
   bool strict_validation;
   size_t aggregate_budget;
+  size_t record_count;
+  size_t max_records;
+  size_t decode_bytes;
+  size_t max_decode_bytes;
+  bool record_budget_exhausted;
+  bool decode_budget_exhausted;
   bool conversion_mode;
   char **lossy_paths;
   size_t lossy_path_count;
   size_t lossy_path_capacity;
   bool lossy_path_record_failed;
 } ITEMSTORE_READ_CTX_t;
+
+bool itemstore_read_reserve_record(ITEMSTORE_READ_CTX_t *ctx);
+bool itemstore_read_charge_bytes(ITEMSTORE_READ_CTX_t *ctx, size_t amount,
+                                 const char *what);
+bool itemstore_valid_ref_path(const char *path, size_t length);
 
 ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,
                                             size_t depth);

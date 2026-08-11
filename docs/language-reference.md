@@ -64,6 +64,8 @@ configured network and CLI limits are documented separately by their options.
 | Item paths: 8 non-root layers, 32 bytes/layer, 263-byte complete non-root path; no NUL | Item path validation | Invalid lookup/fetch/call/reference assembly yields `nil` (`sys.exists` yields `false`); value assignment is discarded without mutation, code assignment reports `ERR_RUNTIME_INVALIDITEM`, and direct item mutation is atomic |
 | At most 250 persisted children/item; code payload at most 64 MiB | Itemstore save/load | Save reports failure; load rejects atomically |
 | V2 aggregate list-element budget 1,048,576 | Itemstore save/load stream | Save failure or atomic load rejection |
+| Itemstore file records 65,536 (root included) and 256 MiB cumulative requested decode bytes | Itemstore load/conversion | Atomic rejection with a record- or allocation-budget diagnostic |
+| Itemstore conversion staging work 256 MiB | `sconv` conversion staging | Destination is not published on budget exhaustion |
 
 Compilation and loading either produce a complete result or fail without
 exposing a partial result. Limits enforced by mutation APIs are checked before

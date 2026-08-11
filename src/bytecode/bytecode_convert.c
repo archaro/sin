@@ -31,12 +31,32 @@ typedef struct {
   uint8_t *out;
   bool record;
   bool alloc_failed;
+  size_t *work_used;
+  size_t work_limit;
+  bool budget_exhausted;
+  size_t budget_request;
 } ConvertCtx;
 
 static size_t g_map_offset_probes;
 
-static bool grow(void **p, size_t *cap, size_t n, size_t size) {
-  return alloc_grow_array_capacity(p, cap, n, size);
+static bool grow(ConvertCtx *c, void **p, size_t *cap, size_t n,
+                 size_t size) {
+  size_t newcap = 0;
+  size_t bytes = 0;
+  if (!alloc_grow_capacity(*cap, n, &newcap) ||
+      alloc_mul_overflow(newcap, size, &bytes)) return false;
+  if (c->work_used != NULL) {
+    size_t total = 0;
+    if (alloc_add_overflow(*c->work_used, bytes, &total) ||
+        total > c->work_limit) {
+      c->budget_request = bytes;
+      c->budget_exhausted = true;
+      return false;
+    }
+    *c->work_used = total;
+  }
+  if (!alloc_grow_array_capacity(p, cap, n, size)) return false;
+  return true;
 }
 
 static bool token_pair(uint8_t token, uint8_t *lib, uint8_t *call) {
@@ -83,7 +103,7 @@ static bool need(ConvertCtx *c, const uint8_t *p, size_t n) {
 }
 static bool add_pair(ConvertCtx *c, uint32_t old_off, uint32_t new_off,
                      bool top) {
-  if (!grow((void **)&c->pairs, &c->pair_cap, c->pair_count + 1u,
+  if (!grow(c, (void **)&c->pairs, &c->pair_cap, c->pair_count + 1u,
             sizeof *c->pairs)) {
     c->alloc_failed = true;
     return false;
@@ -93,7 +113,7 @@ static bool add_pair(ConvertCtx *c, uint32_t old_off, uint32_t new_off,
 }
 static bool add_jump(ConvertCtx *c, uint32_t old_operand, uint32_t new_operand,
                      int16_t rel) {
-  if (!grow((void **)&c->jumps, &c->jump_cap, c->jump_count + 1u,
+  if (!grow(c, (void **)&c->jumps, &c->jump_cap, c->jump_count + 1u,
             sizeof *c->jumps)) {
     c->alloc_failed = true;
     return false;
@@ -311,8 +331,13 @@ void bc_convert_test_reset_lookup_probes(void) { g_map_offset_probes = 0; }
 
 size_t bc_convert_test_lookup_probes(void) { return g_map_offset_probes; }
 
-BC_ConvertResult bc_convert_latest(const uint8_t *input, uint32_t length) {
-  BC_ConvertResult r = {BC_CONVERT_INVALID, NULL, 0};
+BC_ConvertResult bc_convert_latest_with_limits(const uint8_t *input,
+                                                uint32_t length,
+                                                uint32_t max_output_length,
+                                                size_t *work_used,
+                                                size_t work_limit,
+                                                bool *budget_exhausted) {
+  BC_ConvertResult r = {BC_CONVERT_INVALID, NULL, 0, 0};
   BC_FormatHeader h;
   BC_FormatStatus fs = bc_decode_header(input, length, &h);
   if (fs == BC_FORMAT_UNSUPPORTED_VERSION) {
@@ -330,6 +355,18 @@ BC_ConvertResult bc_convert_latest(const uint8_t *input, uint32_t length) {
                                                       "conversion");
     if (v.status != BC_VERIFY_OK)
       return r;
+    if (length > max_output_length) return r;
+    if (work_used != NULL) {
+      size_t total = 0;
+      if (alloc_add_overflow(*work_used, length, &total) ||
+          total > work_limit) {
+        r.budget_request = length;
+        if (budget_exhausted) *budget_exhausted = true;
+        r.status = BC_CONVERT_ALLOCATION_FAILURE;
+        return r;
+      }
+      *work_used = total;
+    }
     r.data = alloc_malloc(length);
     if (!r.data && length) {
       r.status = BC_CONVERT_ALLOCATION_FAILURE;
@@ -340,7 +377,9 @@ BC_ConvertResult bc_convert_latest(const uint8_t *input, uint32_t length) {
     r.status = BC_CONVERT_SUCCESS;
     return r;
   }
-  ConvertCtx c = {.in = input, .end = input + length, .record = true};
+  ConvertCtx c = {.in = input, .end = input + length, .record = true,
+                  .work_used = work_used, .work_limit = work_limit,
+                  .budget_exhausted = false};
   c.out_len = BC_V1_HEADER_SIZE;
   const uint8_t *p = h.instructions;
   while (p < c.end) {
@@ -349,6 +388,18 @@ BC_ConvertResult bc_convert_latest(const uint8_t *input, uint32_t length) {
   }
   if (p != c.end)
     goto done;
+  if (c.out_len > max_output_length) goto done;
+  if (work_used != NULL) {
+    size_t total = 0;
+    if (alloc_add_overflow(*work_used, c.out_len, &total) ||
+        total > work_limit) {
+      c.budget_request = c.out_len;
+      c.budget_exhausted = true;
+      r.status = BC_CONVERT_ALLOCATION_FAILURE;
+      goto done;
+    }
+    *work_used = total;
+  }
   r.data = alloc_malloc(c.out_len);
   if (!r.data) {
     r.status = BC_CONVERT_ALLOCATION_FAILURE;
@@ -403,6 +454,8 @@ BC_ConvertResult bc_convert_latest(const uint8_t *input, uint32_t length) {
     }
   }
 done:
+  if (budget_exhausted && c.budget_exhausted) *budget_exhausted = true;
+  r.budget_request = c.budget_request;
   if (c.alloc_failed) {
     free(r.data);
     r.data = NULL;
@@ -412,6 +465,11 @@ done:
   free(c.pairs);
   free(c.jumps);
   return r;
+}
+
+BC_ConvertResult bc_convert_latest(const uint8_t *input, uint32_t length) {
+  return bc_convert_latest_with_limits(input, length, UINT32_MAX, NULL, 0,
+                                       NULL);
 }
 
 void bc_convert_result_free(BC_ConvertResult *result) {
