@@ -6,6 +6,8 @@
 
 #include "value.h"
 
+// Runtime string tracking and runtime VALUE ownership follow the serialized
+// single-thread contract; these helpers are not safe for concurrent calls.
 void free_runtime_string(char *s);
 VALUE_t concat_two_strings(VALUE_t left, VALUE_t right);
 

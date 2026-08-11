@@ -47,6 +47,9 @@ typedef struct {
 
 extern const LIBCALL_t libcalls[];
 
+// Registry objects and the process-default registry are unsynchronized.
+// Lazy initialization, destruction, and test reset require process quiescence
+// and a serial flow with all registry users.
 bool libcall_registry_init(LibcallRegistry *registry);
 void libcall_registry_destroy(LibcallRegistry *registry);
 bool libcall_registry_validate(LibcallRegistry *registry);

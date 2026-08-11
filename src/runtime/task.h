@@ -35,6 +35,8 @@ typedef struct {
   char itemname[MAX_ITEM_NAME];
 } TASK_t;
 
+// Task list and timer mutation is confined to the owning event-loop thread;
+// these APIs do not make separate task objects safe for concurrent use.
 void init_tasks(void);
 // Requests all tasks to close and drains close callbacks on loop before freeing
 // task ID storage. The loop must own all initialized task timers.

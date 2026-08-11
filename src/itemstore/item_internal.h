@@ -64,6 +64,8 @@ void itemstore_bump_topology_revision_for(const ITEM_t *item);
 void itemstore_bump_payload_revision_for(const ITEM_t *item);
 void itemstore_invalidate_cache_for(const ITEM_t *item);
 bool itemstore_default_sync_hook(FILE *file, const char *path);
+// These process-global test hooks require process quiescence for installation
+// and reset; tests using them must run serially.
 void itemstore_set_load_constructor_failure_hook_for_tests(
     ITEMSTORE_LOAD_CONSTRUCTOR_FAILURE_HOOK_t hook);
 void itemstore_set_item_creation_failure_hook_for_tests(

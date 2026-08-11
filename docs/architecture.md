@@ -181,6 +181,33 @@ centralized startup cleanup path. Entry points are allowed to depend on the
 library modules they orchestrate. Library modules should not depend on CLI entry
 points.
 
+## Concurrency and Thread Confinement
+
+The executables and shared APIs currently assume single-threaded use. They do
+not provide synchronization for their mutable state: each process must run its
+compiler calls and shared-library calls in one serialized flow. Runtime,
+itemstore, task, and network mutation belongs on the owning libuv event-loop
+thread; callbacks that enter those services must remain on that thread.
+
+This contract also covers the less visible state used by those APIs:
+
+- `RuntimeContext` and its VM, itemstores, and tasks are thread-confined
+  objects. Separate contexts or separate itemstores do not make concurrent
+  calls supported.
+- Libcall registries, including the process-default registry and registries
+  initialized lazily, are unsynchronized. Registry initialization, lookup,
+  destruction, and test reset must be serialized with users of the registry.
+- Runtime strings and values, including the process-local string tracking
+  metadata used by runtime string helpers, must not be mutated or reclaimed
+  concurrently.
+- Process-global allocation-failure hooks, itemstore persistence and
+  source-sidecar test hooks, and the `sys.backup` test timestamp hook must be
+  installed, reset, and observed only while the process is quiescent. Tests
+  using them must run in a serial flow.
+
+These are concurrency requirements, not optional caller guidance; no locks,
+thread ownership checks, or context/store isolation are implied by the APIs.
+
 ## Intended Dependency Direction
 
 Most low-level dependencies flow from common support into bytecode/itemstore,

@@ -18,8 +18,10 @@
 
 typedef struct RuntimeContext RuntimeContext;
 
-// Opcode functions have this form.  The runtime context owns the VM and
-// per-invocation interpreter state that handlers need while executing.
+// Opcode functions have this form. The runtime context owns the VM and
+// per-invocation interpreter state that handlers need while executing. A
+// context, its VM, and its itemstore are confined to their owning event-loop
+// thread; separate contexts do not make concurrent calls supported.
 typedef uint8_t *(*OP_t)(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 struct RuntimeContext {

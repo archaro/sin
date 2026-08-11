@@ -24,7 +24,8 @@
 #include "version.h"
 #include "bytecode_format.h"
 
-/* Test hook for controlling the timestamp used by sys.backup. */
+/* Test-only process-global hook; install/reset it only during quiescent,
+ * serial test execution. */
 static const char *lc_sys_backup_test_timestamp;
 
 void lc_sys_backup_set_timestamp_for_tests(const char *ts) {

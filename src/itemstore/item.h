@@ -136,6 +136,8 @@ bool save_itemsource(ITEM_t *item, char *source);
 char *read_itemsource_in_srcroot(ITEM_t *item, const char *srcroot,
                                  char *detail, size_t detail_size);
 bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability);
+// Process-global test hook; install or reset it only while the process is
+// quiescent, and run hook-using tests serially.
 void itemstore_set_sync_hook_for_tests(ITEMSTORE_SYNC_HOOK_t hook);
 
 // Other item-related API functions
