@@ -87,7 +87,8 @@ bool save_itemsource_in_srcroot(ITEM_t *item, char *source, const char *srcroot)
   // reported in the error log.  The function returns true if the
   // source was saved, otherwise false.
 
-  if (!item || !source || !srcroot || srcroot[0] == '\0') return false;
+  if (!item || item->type != ITEM_code || !source || !srcroot ||
+      srcroot[0] == '\0') return false;
   char *filename = get_itemfilename_in_srcroot(item, srcroot);
   if (filename == NULL) {
     logerr("Failed to construct source filename.\n");
@@ -153,6 +154,12 @@ char *read_itemsource_in_srcroot(ITEM_t *item, const char *srcroot,
   if (!item) {
     if (detail && detail_size > 0) {
       (void)snprintf(detail, detail_size, "source item is unavailable");
+    }
+    return NULL;
+  }
+  if (item->type != ITEM_code) {
+    if (detail && detail_size > 0) {
+      (void)snprintf(detail, detail_size, "source item is not a code item");
     }
     return NULL;
   }

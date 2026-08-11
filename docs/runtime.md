@@ -93,8 +93,10 @@ other `ITEM_t` pointers are borrowed: the root remains valid until
 or one of its ancestors is deleted. The `VALUE_t` field pointer returned by
 `item_value()` returns a borrowed pointer only for value items; it returns
 `NULL` for code items and NULL inputs. The pointer remains valid while its item
-does, although its contents can change; any referenced string storage and the buffer returned by
-`item_bytecode()` may be invalidated when that payload is replaced.
+does, although its contents can change. `item_bytecode()` and
+`item_bytecode_length()` return the borrowed code payload and its length only
+for code items; they return `NULL` and zero for value items and NULL inputs.
+The bytecode buffer may be invalidated when that payload is replaced.
 
 Mutate the borrowed tree with the public item APIs such as `item_set_value()`
 and `item_set_code()`. On successful creation or replacement, supplied payload
@@ -117,8 +119,12 @@ input unchanged (except aliases already owned by the target, which remain
 store-owned).
 
 `get_itemfilename` allocates and returns a path string for the caller to free.
-`save_itemsource` borrows both the item and source text only for the duration of
-the call. A failed `itemstore_load()` returns `NULL` after discarding any
+Source sidecars belong only to code items: `save_itemsource` rejects NULL and
+value items before creating or modifying a sidecar, and
+`read_itemsource_in_srcroot` rejects them before opening a sidecar (reporting
+`source item is not a code item` for an existing value item). Both helpers
+borrow their item and source text only for the duration of the call. A failed
+`itemstore_load()` returns `NULL` after discarding any
 partially loaded data; a successful load returns a store whose root remains
 borrowed until the store is destroyed.
 

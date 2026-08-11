@@ -88,6 +88,8 @@ ITEM_t *item_parent(const ITEM_t *item);
 /* Returns the borrowed value payload for value items; code items and NULL
  * inputs return NULL. */
 const VALUE_t *item_value(const ITEM_t *item);
+/* Returns the borrowed bytecode payload and length only for code items;
+ * value items and NULL inputs return NULL and zero respectively. */
 const uint8_t *item_bytecode(const ITEM_t *item);
 uint32_t item_bytecode_length(const ITEM_t *item);
 size_t item_child_count(const ITEM_t *item);
@@ -122,19 +124,19 @@ void get_itemname(ITEM_t *item, char *itemname);
 char *get_itemfilename_in_srcroot(ITEM_t *item, const char *srcroot);
 char *get_itemfilename(ITEM_t *item);
 // Borrows item and source for the duration of the call. Does not take ownership
-// of source or modify/free it.
+// of source or modify/free it. Only code items may have source sidecars.
 bool save_itemsource_in_srcroot(ITEM_t *item, char *source, const char *srcroot);
 bool save_itemsource(ITEM_t *item, char *source);
 // Returns a newly allocated, NUL-terminated copy of the source file, including
 // an allocated empty string for an empty file. The caller owns the result and
 // must free it. On failure, returns NULL and writes a best-effort diagnostic to
 // detail when detail is non-NULL and detail_size is non-zero. The item and
-// srcroot are borrowed; neither is modified or freed.
+// srcroot are borrowed; neither is modified or freed. NULL and non-code items
+// are rejected before the sidecar filesystem is accessed.
 char *read_itemsource_in_srcroot(ITEM_t *item, const char *srcroot,
                                  char *detail, size_t detail_size);
 bool itemstore_durability_requires_sync(ITEMSTORE_DURABILITY_e durability);
 void itemstore_set_sync_hook_for_tests(ITEMSTORE_SYNC_HOOK_t hook);
-void dump_item(ITEM_t *item, char *item_name, bool isroot);
 
 // Other item-related API functions
 bool is_valid_layer(const char *str);

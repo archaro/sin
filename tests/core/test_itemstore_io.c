@@ -25,14 +25,25 @@ extern CONFIG_t config;
 void test_item_value_accessor_rejects_code_items(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
+  uint8_t inactive_bytecode = 0xA5;
+  root->bytecode = &inactive_bytecode;
+  root->bytecode_len = UINT32_MAX;
+  ASSERT_TRUE(item_bytecode(root) == NULL);
+  ASSERT_EQ_INT(0, item_bytecode_length(root));
+
   uint8_t *bytecode = malloc(1);
   ASSERT_NOT_NULL(bytecode);
   bytecode[0] = 0;
   ITEM_t *code = make_item("code", root, ITEM_code, VALUE_NIL, bytecode, 1);
   ASSERT_NOT_NULL(code);
   ASSERT_EQ_INT(ITEM_code, item_kind(code));
+  code->value = (VALUE_t){.type = VALUE_int, .i = 42};
   ASSERT_TRUE(item_value(code) == NULL);
+  ASSERT_TRUE(item_bytecode(code) == bytecode);
+  ASSERT_EQ_INT(1, item_bytecode_length(code));
   ASSERT_TRUE(item_value(NULL) == NULL);
+  ASSERT_TRUE(item_bytecode(NULL) == NULL);
+  ASSERT_EQ_INT(0, item_bytecode_length(NULL));
   destroy_item(root);
 }
 
@@ -1890,7 +1901,7 @@ void test_save_itemstore_preserves_existing_file_on_failure(void) {
 void test_save_itemsource_reports_write_and_close_failure(void) {
   char srcroot[] = "/tmp/sin-itemsource-save-XXXXXX";
   ASSERT_NOT_NULL(mkdtemp(srcroot));
-  ITEM_t *root = make_root_item("root");
+  ITEM_t *root = make_item("root", NULL, ITEM_code, VALUE_NIL, NULL, 0);
   ASSERT_NOT_NULL(root);
   char source[] = "persisted source\n";
 
@@ -1926,7 +1937,7 @@ void test_save_itemsource_reports_write_and_close_failure(void) {
   ASSERT_TRUE(snprintf(itemdir, sizeof itemdir, "%s/root", srcroot) > 0);
   ASSERT_EQ_INT(0, rmdir(itemdir));
   free(filename);
-  destroy_item(root);
+  detach_item_and_destroy(root);
   ASSERT_EQ_INT(0, rmdir(srcroot));
 }
 
@@ -1939,10 +1950,12 @@ void test_itemsource_paths_are_validated_and_contained(void) {
   ASSERT_NOT_NULL(mkdtemp(missing_srcroot));
   ASSERT_EQ_INT(0, rmdir(missing_srcroot));
 
-  ITEM_t *root = make_root_item("root");
+  ITEM_t *root = make_item("root", NULL, ITEM_code, VALUE_NIL, NULL, 0);
   ASSERT_NOT_NULL(root);
-  ITEM_t *child = make_item("child", root, ITEM_value, VALUE_NIL, NULL, 0);
+  ITEM_t *child = make_item("child", root, ITEM_code, VALUE_NIL, NULL, 0);
   ASSERT_NOT_NULL(child);
+  ITEM_t *value_item = make_item("value", root, ITEM_value, VALUE_NIL, NULL, 0);
+  ASSERT_NOT_NULL(value_item);
   char detail[128];
   char *root_file = get_itemfilename_in_srcroot(root, srcroot);
   char *child_file = get_itemfilename_in_srcroot(child, srcroot);
@@ -1953,7 +1966,17 @@ void test_itemsource_paths_are_validated_and_contained(void) {
   free(root_file);
   free(child_file);
 
-  ITEM_t *punctuation_root = make_root_item("context-root");
+  ASSERT_TRUE(!save_itemsource_in_srcroot(value_item, "rejected\n", srcroot));
+  char value_dir[sizeof srcroot + sizeof "/root/value"];
+  ASSERT_TRUE(snprintf(value_dir, sizeof value_dir, "%s/root/value", srcroot)
+              > 0);
+  ASSERT_TRUE(access(value_dir, F_OK) != 0);
+  ASSERT_TRUE(read_itemsource_in_srcroot(value_item, srcroot, detail,
+                                         sizeof detail) == NULL);
+  ASSERT_TRUE(strcmp("source item is not a code item", detail) == 0);
+
+  ITEM_t *punctuation_root = make_item("context-root", NULL, ITEM_code,
+                                       VALUE_NIL, NULL, 0);
   ASSERT_NOT_NULL(punctuation_root);
   char *punctuation_file = get_itemfilename_in_srcroot(punctuation_root,
                                                         srcroot);
@@ -1977,7 +2000,7 @@ void test_itemsource_paths_are_validated_and_contained(void) {
                        "%s/context-root", srcroot) > 0);
   ASSERT_EQ_INT(0, rmdir(punctuation_dir));
   free(punctuation_file);
-  destroy_item(punctuation_root);
+  detach_item_and_destroy(punctuation_root);
 
   ASSERT_TRUE(get_itemfilename_in_srcroot(NULL, srcroot) == NULL);
   ASSERT_TRUE(get_itemfilename_in_srcroot(root, NULL) == NULL);
@@ -2062,12 +2085,13 @@ void test_itemsource_paths_are_validated_and_contained(void) {
   const char *slash_leaf_name = strrchr(slash_item_dir, '/');
   ASSERT_NOT_NULL(slash_leaf_name);
   slash_leaf_name++;
-  ITEM_t *slash_root = make_root_item("unused");
+  ITEM_t *slash_root = make_item("unused", NULL, ITEM_code, VALUE_NIL, NULL,
+                                 0);
   ASSERT_NOT_NULL(slash_root);
-  ITEM_t *slash_tmp = make_item("tmp", slash_root, ITEM_value, VALUE_NIL,
+  ITEM_t *slash_tmp = make_item("tmp", slash_root, ITEM_code, VALUE_NIL,
                                 NULL, 0);
   ASSERT_NOT_NULL(slash_tmp);
-  ITEM_t *slash_leaf = make_item(slash_leaf_name, slash_tmp, ITEM_value,
+  ITEM_t *slash_leaf = make_item(slash_leaf_name, slash_tmp, ITEM_code,
                                  VALUE_NIL, NULL, 0);
   ASSERT_NOT_NULL(slash_leaf);
   ASSERT_TRUE(save_itemsource_in_srcroot(slash_leaf, "slash root\n", "/"));
@@ -2082,11 +2106,11 @@ void test_itemsource_paths_are_validated_and_contained(void) {
                       slash_source));
   ASSERT_TRUE(strcmp("slash root\n", slash_contents) == 0);
   ASSERT_EQ_INT(0, fclose(slash_source));
-  destroy_item(slash_root);
+  detach_item_and_destroy(slash_root);
   ASSERT_EQ_INT(0, unlink(slash_file));
   ASSERT_EQ_INT(0, rmdir(slash_item_dir));
 
-  destroy_item(root);
+  detach_item_and_destroy(root);
   ASSERT_EQ_INT(0, unlink(missing_file));
   char missing_dir[sizeof missing_srcroot + sizeof "/root"];
   ASSERT_TRUE(snprintf(missing_dir, sizeof missing_dir, "%s/root",
