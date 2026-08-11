@@ -312,8 +312,7 @@ void test_interpret_lazy_init_failure_is_transactional(void) {
   ASSERT_EQ_INT(-1, config.vm->stack->current);
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
   runtime_destroy(&ctx);
-  destroy_vm(config.vm);
-  destroy_item(itemstore_root(config.itemstore_ctx));
+  teardown_libcall_runtime();
 }
 
 void test_libcall_registry_init_failure_has_no_partial_state(void) {
