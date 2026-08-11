@@ -286,6 +286,41 @@ void test_parser_input_api(void) {
   free(large_literal);
 }
 
+void test_parser_compound_spans_preserve_construct_start(void) {
+  const char source[] =
+      "if 1 then\n"
+      "  @x = 2;\n"
+      "endif;\n"
+      "@y = 1 + 22;";
+  AS_NODE *absyn = parse_lists_ok(source);
+  AS_STMTLIST *stmts = (AS_STMTLIST *)absyn->lhs;
+  ASSERT_EQ_INT(2, stmts->count);
+
+  AS_NODE *ifstmt = stmts->stmts[0];
+  ASSERT_EQ_INT(N_IFSTMT, ifstmt->nodetype);
+  ASSERT_EQ_INT(1, ifstmt->span.line);
+  ASSERT_EQ_INT(1, ifstmt->span.column);
+  ASSERT_EQ_INT(9, ifstmt->span.span);
+
+  AS_NODE *assignment = stmts->stmts[1];
+  ASSERT_EQ_INT(N_ASSLOCAL, assignment->nodetype);
+  ASSERT_EQ_INT(4, assignment->span.line);
+  ASSERT_EQ_INT(1, assignment->span.column);
+  ASSERT_EQ_INT(11, assignment->span.span);
+  AS_NODE *sum = (AS_NODE *)assignment->rhs;
+  ASSERT_EQ_INT(N_ADD, sum->nodetype);
+  ASSERT_EQ_INT(4, sum->span.line);
+  ASSERT_EQ_INT(6, sum->span.column);
+  ASSERT_EQ_INT(6, sum->span.span);
+  AS_NODE *left = (AS_NODE *)sum->lhs;
+  AS_NODE *right = (AS_NODE *)sum->rhs;
+  ASSERT_EQ_INT(6, left->span.column);
+  ASSERT_EQ_INT(1, left->span.span);
+  ASSERT_EQ_INT(10, right->span.column);
+  ASSERT_EQ_INT(2, right->span.span);
+  as_delete(absyn);
+}
+
 void test_parser_scanner_setup_allocation_failures(void) {
   const char source[] = "1;";
   ParseInput input = {source, sizeof(source) - 1, "scanner-failure.src"};

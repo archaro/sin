@@ -108,17 +108,58 @@ static bool parser_take_ast_node(SCANNER_STATE_t *state) {
   return true;
 }
 
-static AS_NODE *parser_new_value(SCANNER_STATE_t *state, ENUM_VALUE type, char *text) {
+static CompilerSourceSpan parser_span_from_yy(const YYLTYPE *loc) {
+  CompilerSourceSpan span = COMPILER_SOURCE_SPAN_INVALID;
+  if (!loc) return span;
+  span.line = loc->first_line;
+  span.column = loc->first_column;
+  span.span = loc->last_line == loc->first_line
+                  ? loc->last_column - loc->first_column + 1
+                  : 1;
+  return compiler_source_span_valid(span) ? span : COMPILER_SOURCE_SPAN_INVALID;
+}
+
+static CompilerSourceSpan parser_node_span(const AS_NODE *node) {
+  return node ? node->span : COMPILER_SOURCE_SPAN_INVALID;
+}
+
+static CompilerSourceSpan parser_join_span(CompilerSourceSpan lhs,
+                                           CompilerSourceSpan rhs) {
+  if (!compiler_source_span_valid(lhs)) return rhs;
+  if (!compiler_source_span_valid(rhs)) return lhs;
+  if (rhs.line < lhs.line) return rhs;
+  if (rhs.line != lhs.line) return lhs;
+
+  int lhs_end = lhs.column + lhs.span - 1;
+  int rhs_end = rhs.column + rhs.span - 1;
+  if (rhs.column < lhs.column) lhs.column = rhs.column;
+  int end = lhs_end > rhs_end ? lhs_end : rhs_end;
+  lhs.span = end - lhs.column + 1;
+  return lhs;
+}
+
+static CompilerSourceSpan parser_construct_span(const AS_NODE *lhs,
+                                                const AS_NODE *rhs,
+                                                CompilerSourceSpan fallback) {
+  CompilerSourceSpan span = parser_join_span(fallback, parser_node_span(lhs));
+  span = parser_join_span(span, parser_node_span(rhs));
+  return span;
+}
+
+static AS_NODE *parser_new_value_loc(SCANNER_STATE_t *state, ENUM_VALUE type,
+                                     char *text, CompilerSourceSpan span) {
   if (!parser_take_ast_node(state)) {
     free(text);
     return NULL;
   }
   AS_NODE *node = as_new_valnode(type, text);
   if (!node) parser_set_failure(state, NULL);
+  if (node) node->span = span;
   return node;
 }
 
-static AS_NODE *parser_new_integer(SCANNER_STATE_t *state, char *text) {
+static AS_NODE *parser_new_integer_loc(SCANNER_STATE_t *state, char *text,
+                                       CompilerSourceSpan span) {
   uint64_t value = 0;
   bool valid = text && text[0] != '\0';
   for (const unsigned char *p = (const unsigned char *)text;
@@ -143,19 +184,27 @@ static AS_NODE *parser_new_integer(SCANNER_STATE_t *state, char *text) {
   if (!parser_take_ast_node(state)) return NULL;
   AS_NODE *node = as_new_intnode((int64_t)value);
   if (!node) parser_set_failure(state, NULL);
+  if (node) node->span = span;
   return node;
 }
 
-static AS_NODE *parser_new_stmtlist(SCANNER_STATE_t *state) {
+static AS_NODE *parser_new_stmtlist_loc(SCANNER_STATE_t *state,
+                                        CompilerSourceSpan span) {
   if (!parser_take_ast_node(state)) return NULL;
   AS_NODE *node = as_new_stmtlist_node();
   if (!node) parser_set_failure(state, NULL);
+  if (node) {
+    node->span = compiler_source_span_valid(span)
+                     ? span
+                     : (CompilerSourceSpan){state->line, state->column, 1};
+  }
   return node;
 }
 
-static AS_NODE *parser_new_node(SCANNER_STATE_t *state, ENUM_NODE type,
-                                AS_NODE *lhs, AS_NODE *rhs,
-                                bool lhs_required, bool rhs_required) {
+static AS_NODE *parser_new_node_loc(SCANNER_STATE_t *state, ENUM_NODE type,
+                                    AS_NODE *lhs, AS_NODE *rhs,
+                                    bool lhs_required, bool rhs_required,
+                                    CompilerSourceSpan span) {
   if ((lhs_required && !lhs) || (rhs_required && !rhs)) {
     as_delete(lhs);
     as_delete(rhs);
@@ -172,12 +221,15 @@ static AS_NODE *parser_new_node(SCANNER_STATE_t *state, ENUM_NODE type,
     as_delete(lhs);
     as_delete(rhs);
     parser_set_failure(state, NULL);
+  } else {
+    node->span = parser_construct_span(lhs, rhs, span);
   }
   return node;
 }
 
 static AS_IF *parser_new_if(SCANNER_STATE_t *state, AS_NODE *condition,
-                            AS_NODE *then, AS_IF *elsif) {
+                            AS_NODE *then, AS_IF *elsif,
+                            CompilerSourceSpan construct_span) {
   if (!then) {
     as_delete(condition);
     as_delete_if(elsif);
@@ -190,12 +242,17 @@ static AS_IF *parser_new_if(SCANNER_STATE_t *state, AS_NODE *condition,
     as_delete(then);
     as_delete_if(elsif);
     parser_set_failure(state, NULL);
+  } else {
+    newif->span = parser_join_span(construct_span, parser_node_span(condition));
+    newif->span = parser_join_span(newif->span, parser_node_span(then));
+    if (elsif) newif->span = parser_join_span(newif->span, elsif->span);
   }
   return newif;
 }
 
 static AS_NODE *parser_new_if_node(SCANNER_STATE_t *state, AS_NODE *condition,
-                                   AS_NODE *then, AS_IF *elsif) {
+                                   AS_NODE *then, AS_IF *elsif,
+                                   CompilerSourceSpan construct_span) {
   if (!condition) {
     as_delete(then);
     as_delete_if(elsif);
@@ -208,12 +265,15 @@ static AS_NODE *parser_new_if_node(SCANNER_STATE_t *state, AS_NODE *condition,
     as_delete_if(elsif);
     return NULL;
   }
-  AS_IF *if_data = parser_new_if(state, condition, then, elsif);
+  AS_IF *if_data = parser_new_if(state, condition, then, elsif,
+                                 construct_span);
   if (!if_data) return NULL;
   AS_NODE *node = as_new_node(N_IFSTMT, if_data, NULL);
   if (!node) {
     as_delete_if(if_data);
     parser_set_failure(state, NULL);
+  } else {
+    node->span = parser_join_span(construct_span, if_data->span);
   }
   return node;
 }
@@ -243,56 +303,72 @@ static AS_NODE *parser_new_unary_minus(AS_NODE *operand, SCANNER_STATE_t *state)
     parser_set_failure(state, NULL);
     return NULL;
   }
-  return parser_new_node(state, N_SUB, zero, operand, true, true);
+  zero->span = operand ? operand->span : COMPILER_SOURCE_SPAN_INVALID;
+  return parser_new_node_loc(state, N_SUB, zero, operand, true, true,
+                             parser_node_span(operand));
 }
 
 static AS_NODE *parser_new_libcall(SCANNER_STATE_t *state, char *library,
-                                   char *name, AS_NODE *args) {
-  AS_NODE *library_node = parser_new_value(state, V_LAYER, library);
+                                   char *name, AS_NODE *args,
+                                   CompilerSourceSpan library_span,
+                                   CompilerSourceSpan name_span,
+                                   CompilerSourceSpan construct_span) {
+  AS_NODE *library_node = parser_new_value_loc(state, V_LAYER, library,
+                                               library_span);
   if (!library_node) {
     free(name);
     as_delete(args);
     return NULL;
   }
-  AS_NODE *name_node = parser_new_value(state, V_LAYER, name);
+  AS_NODE *name_node = parser_new_value_loc(state, V_LAYER, name, name_span);
   if (!name_node) {
     as_delete(library_node);
     as_delete(args);
     return NULL;
   }
-  AS_NODE *tail = parser_new_node(state, N_ITEM, name_node, NULL, true, false);
+  AS_NODE *tail = parser_new_node_loc(state, N_ITEM, name_node, NULL, true,
+                                      false, construct_span);
   if (!tail) {
     as_delete(library_node);
     as_delete(args);
     return NULL;
   }
-  AS_NODE *item = parser_new_node(state, N_ITEM, library_node, tail, true, true);
+  AS_NODE *item = parser_new_node_loc(state, N_ITEM, library_node, tail, true,
+                                      true, construct_span);
   if (!item) {
     as_delete(args);
     return NULL;
   }
-  return parser_new_node(state, N_LIBCALL, item, args, true, false);
+  return parser_new_node_loc(state, N_LIBCALL, item, args, true, false,
+                             construct_span);
 }
 
 static AS_NODE *parser_new_code(SCANNER_STATE_t *state, AS_NODE *params,
-                                char *body) {
-  AS_NODE *body_node = parser_new_value(state, V_STR, body);
+                                char *body, CompilerSourceSpan body_span,
+                                CompilerSourceSpan construct_span) {
+  AS_NODE *body_node = parser_new_value_loc(state, V_STR, body, body_span);
   if (!body_node) {
     as_delete(params);
     return NULL;
   }
-  return parser_new_node(state, N_CODE, params, body_node, false, true);
+  return parser_new_node_loc(state, N_CODE, params, body_node, false, true,
+                             construct_span);
 }
 
 static AS_NODE *parser_new_relative_item(SCANNER_STATE_t *state,
-                                         AS_NODE *first, AS_NODE *rest) {
-  AS_NODE *item = parser_new_node(state, N_ITEM, first, rest, true, false);
+                                         AS_NODE *first, AS_NODE *rest,
+                                         CompilerSourceSpan construct_span) {
+  AS_NODE *item = parser_new_node_loc(state, N_ITEM, first, rest, true, false,
+                                      construct_span);
   if (!item) return NULL;
-  return parser_new_node(state, N_RELITEM, item, NULL, true, false);
+  return parser_new_node_loc(state, N_RELITEM, item, NULL, true, false,
+                             construct_span);
 }
 
 static AS_NODE *parser_new_list_elem(SCANNER_STATE_t *state, AS_NODE *value, AS_NODE *next) {
-  return parser_new_node(state, N_LISTELEM, value, next, true, false);
+  return parser_new_node_loc(state, N_LISTELEM, value, next, true, false,
+                             parser_construct_span(value, next,
+                                                   COMPILER_SOURCE_SPAN_INVALID));
 }
 
 void yyerror(YYLTYPE *locp, yyscan_t scanner, SCANNER_STATE_t *state, char const *s) {
@@ -492,7 +568,7 @@ input:  stmtlist { state->absyn = $1; }
         ;
 
 stmtlist: %empty {
-            $$ = parser_new_stmtlist(state);
+            $$ = parser_new_stmtlist_loc(state, parser_span_from_yy(&@$));
             if (!$$) { parser_set_failure(state, NULL); YYERROR; }
           }
         | stmtlist stmtsemi {
@@ -514,92 +590,92 @@ stmtsemi: stmt TSEMI {
 ;
 
 stmt:   TWHILE expr TDO stmtlist TENDWHILE {
-          $$ = parser_new_node(state, N_WHILESTMT, $2, $4, true, true);
+          $$ = parser_new_node_loc(state, N_WHILESTMT, $2, $4, true, true, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | TDO stmtlist TWHILE expr {
-          $$ = parser_new_node(state, N_DOWHILESTMT, $4, $2, true, true);
+          $$ = parser_new_node_loc(state, N_DOWHILESTMT, $4, $2, true, true, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | TIF expr TTHEN stmtlist elsif_else_opt TENDIF {
-          $$ = parser_new_if_node(state, $2, $4, $5);
+          $$ = parser_new_if_node(state, $2, $4, $5, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | TFOREACH TLOCAL TIN expr TDO stmtlist TENDFOR {
-          AS_NODE *iterator = parser_new_value(state, V_LOCAL, $2);
-          AS_NODE *spec = parser_new_node(state, N_FOREACHSPEC, iterator, $4, true, true);
-          $$ = parser_new_node(state, N_FOREACH, spec, $6, true, true);
+          AS_NODE *iterator = parser_new_value_loc(state, V_LOCAL, $2, parser_span_from_yy(&@2));
+          AS_NODE *spec = parser_new_node_loc(state, N_FOREACHSPEC, iterator, $4, true, true, parser_span_from_yy(&@$));
+          $$ = parser_new_node_loc(state, N_FOREACH, spec, $6, true, true, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | TBREAK {
-          $$ = parser_new_node(state, N_BREAK, NULL, NULL, false, false);
+          $$ = parser_new_node_loc(state, N_BREAK, NULL, NULL, false, false, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | TCONTINUE {
-          $$ = parser_new_node(state, N_CONTINUE, NULL, NULL, false, false);
+          $$ = parser_new_node_loc(state, N_CONTINUE, NULL, NULL, false, false, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | TRETURN {
-          $$ = parser_new_node(state, N_RETURN, NULL, NULL, false, false);
+          $$ = parser_new_node_loc(state, N_RETURN, NULL, NULL, false, false, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | TRETURN expr {
-          $$ = parser_new_node(state, N_RETURN, $2, NULL, true, false);
+          $$ = parser_new_node_loc(state, N_RETURN, $2, NULL, true, false, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | TLOCAL TASSIGN expr {
-          $$ = parser_new_node(state, N_ASSLOCAL,
-                               parser_new_value(state, V_LOCAL, $1), $3, true, true);
+          $$ = parser_new_node_loc(state, N_ASSLOCAL,
+                               parser_new_value_loc(state, V_LOCAL, $1, parser_span_from_yy(&@1)), $3, true, true, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | item TASSIGN item_assignment {
-          $$ = parser_new_node(state, N_ASSITEM, $1, $3, true, true);
+          $$ = parser_new_node_loc(state, N_ASSITEM, $1, $3, true, true, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | TLOCAL TINC {
-          $$ = parser_new_node(state, N_INC,
-                               parser_new_value(state, V_LOCAL, $1), NULL, true, false);
+          $$ = parser_new_node_loc(state, N_INC,
+                               parser_new_value_loc(state, V_LOCAL, $1, parser_span_from_yy(&@1)), NULL, true, false, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | TLOCAL TDEC {
-          $$ = parser_new_node(state, N_DEC,
-                               parser_new_value(state, V_LOCAL, $1), NULL, true, false);
+          $$ = parser_new_node_loc(state, N_DEC,
+                               parser_new_value_loc(state, V_LOCAL, $1, parser_span_from_yy(&@1)), NULL, true, false, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | expr {
-          $$ = parser_new_node(state, N_EXPRSTMT, $1, NULL, true, false);
+          $$ = parser_new_node_loc(state, N_EXPRSTMT, $1, NULL, true, false, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         ;
 
-expr:     TLOCAL { $$ = parser_new_value(state, V_LOCAL, $1); if (!$$) YYERROR; }
-        | TINTEGER { $$ = parser_new_integer(state, $1); if (!$$) YYERROR; }
-        | TFLOAT { $$ = parser_new_value(state, V_FLOAT, $1); if (!$$) YYERROR; }
-        | TSTRINGLIT { $$ = parser_new_value(state, V_STR, $1); if (!$$) YYERROR; }
-        | TTRUE { $$ = parser_new_value(state, V_BOOLTRUE, NULL); if (!$$) YYERROR; }
-        | TFALSE { $$ = parser_new_value(state, V_BOOLFALSE, NULL); if (!$$) YYERROR; }
-        | TNIL { $$ = parser_new_value(state, V_NIL, NULL); if (!$$) YYERROR; }
+expr:     TLOCAL { $$ = parser_new_value_loc(state, V_LOCAL, $1, parser_span_from_yy(&@1)); if (!$$) YYERROR; }
+        | TINTEGER { $$ = parser_new_integer_loc(state, $1, parser_span_from_yy(&@1)); if (!$$) YYERROR; }
+        | TFLOAT { $$ = parser_new_value_loc(state, V_FLOAT, $1, parser_span_from_yy(&@1)); if (!$$) YYERROR; }
+        | TSTRINGLIT { $$ = parser_new_value_loc(state, V_STR, $1, parser_span_from_yy(&@1)); if (!$$) YYERROR; }
+        | TTRUE { $$ = parser_new_value_loc(state, V_BOOLTRUE, NULL, parser_span_from_yy(&@1)); if (!$$) YYERROR; }
+        | TFALSE { $$ = parser_new_value_loc(state, V_BOOLFALSE, NULL, parser_span_from_yy(&@1)); if (!$$) YYERROR; }
+        | TNIL { $$ = parser_new_value_loc(state, V_NIL, NULL, parser_span_from_yy(&@1)); if (!$$) YYERROR; }
         | list { $$ = $1; }
         | itemref { $$ = $1; }
-        | item args { $$ = parser_new_node(state, N_CALL, $1, $2, true, false); if (!$$) YYERROR; }
-        | expr TEQUAL expr { $$ = parser_new_node(state, N_EQUAL, $1, $3, true, true); if (!$$) YYERROR; }
-        | expr TNOTEQUAL expr { $$ = parser_new_node(state, N_NOTEQ, $1, $3, true, true); if (!$$) YYERROR; }
-        | expr TOR expr { $$ = parser_new_node(state, N_OR, $1, $3, true, true); if (!$$) YYERROR; }
-        | expr TAND expr { $$ = parser_new_node(state, N_AND, $1, $3, true, true); if (!$$) YYERROR; }
-        | expr TLT expr { $$ = parser_new_node(state, N_LT, $1, $3, true, true); if (!$$) YYERROR; }
-        | expr TLTEQ expr { $$ = parser_new_node(state, N_LTEQ, $1, $3, true, true); if (!$$) YYERROR; }
-        | expr TGT expr { $$ = parser_new_node(state, N_GT, $1, $3, true, true); if (!$$) YYERROR; }
-        | expr TGTEQ expr { $$ = parser_new_node(state, N_GTEQ, $1, $3, true, true); if (!$$) YYERROR; }
-        | expr TPLUS expr { $$ = parser_new_node(state, N_ADD, $1, $3, true, true); if (!$$) YYERROR; }
-        | expr TMINUS expr { $$ = parser_new_node(state, N_SUB, $1, $3, true, true); if (!$$) YYERROR; }
-        | expr TMULT expr { $$ = parser_new_node(state, N_MUL, $1, $3, true, true); if (!$$) YYERROR; }
-        | expr TDIV expr { $$ = parser_new_node(state, N_DIV, $1, $3, true, true); if (!$$) YYERROR; }
-        | expr TMOD expr { $$ = parser_new_node(state, N_MOD, $1, $3, true, true); if (!$$) YYERROR; }
+        | item args { $$ = parser_new_node_loc(state, N_CALL, $1, $2, true, false, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TEQUAL expr { $$ = parser_new_node_loc(state, N_EQUAL, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TNOTEQUAL expr { $$ = parser_new_node_loc(state, N_NOTEQ, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TOR expr { $$ = parser_new_node_loc(state, N_OR, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TAND expr { $$ = parser_new_node_loc(state, N_AND, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TLT expr { $$ = parser_new_node_loc(state, N_LT, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TLTEQ expr { $$ = parser_new_node_loc(state, N_LTEQ, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TGT expr { $$ = parser_new_node_loc(state, N_GT, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TGTEQ expr { $$ = parser_new_node_loc(state, N_GTEQ, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TPLUS expr { $$ = parser_new_node_loc(state, N_ADD, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TMINUS expr { $$ = parser_new_node_loc(state, N_SUB, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TMULT expr { $$ = parser_new_node_loc(state, N_MUL, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TDIV expr { $$ = parser_new_node_loc(state, N_DIV, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
+        | expr TMOD expr { $$ = parser_new_node_loc(state, N_MOD, $1, $3, true, true, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
         | TLPAREN expr TRPAREN {
           $$ = $2;
           if (!$$) { parser_set_failure(state, NULL); YYERROR; }
         }
-        | TNOT expr { $$ = parser_new_node(state, N_NOT, $2, NULL, true, false); if (!$$) YYERROR; }
+        | TNOT expr { $$ = parser_new_node_loc(state, N_NOT, $2, NULL, true, false, parser_span_from_yy(&@$)); if (!$$) YYERROR; }
         | TMINUS expr %prec UMINUS { $$ = parser_new_unary_minus($2, state); if (!$$) YYERROR; }
         | libcall { $$ = $1; }
         | TUNKNOWNCHAR { $$ = NULL;
@@ -615,7 +691,10 @@ expr:     TLOCAL { $$ = parser_new_value(state, V_LOCAL, $1); if (!$$) YYERROR; 
         ;
 
 libcall:  TLIBNAME TLAYERSEP TLAYER args {
-          $$ = parser_new_libcall(state, $1, $3, $4);
+          $$ = parser_new_libcall(state, $1, $3, $4,
+                                  parser_span_from_yy(&@1),
+                                  parser_span_from_yy(&@3),
+                                  parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         ;
@@ -629,11 +708,11 @@ elsif_else_opt: %empty { $$ = NULL; }
             $$ = NULL;
             YYERROR;
           }
-          $$ = parser_new_if(state, $2, $4, $5);
+          $$ = parser_new_if(state, $2, $4, $5, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | TELSE stmtlist {
-          $$ = parser_new_if(state, NULL, $2, NULL);
+          $$ = parser_new_if(state, NULL, $2, NULL, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         ;
@@ -643,16 +722,16 @@ params:   %empty { $$ = NULL; }
         ;
 
 param_list: param_local {
-            $$ = parser_new_node(state, N_ARGLIST, $1, NULL, true, false);
+            $$ = parser_new_node_loc(state, N_ARGLIST, $1, NULL, true, false, parser_span_from_yy(&@$));
             if (!$$) YYERROR;
           }
         | param_local TCOMMA param_list {
-            $$ = parser_new_node(state, N_ARGLIST, $1, $3, true, true);
+            $$ = parser_new_node_loc(state, N_ARGLIST, $1, $3, true, true, parser_span_from_yy(&@$));
             if (!$$) YYERROR;
           }
         ;
 
-param_local: TLOCAL { $$ = parser_new_value(state, V_LOCAL, $1); if (!$$) YYERROR; }
+param_local: TLOCAL { $$ = parser_new_value_loc(state, V_LOCAL, $1, parser_span_from_yy(&@1)); if (!$$) YYERROR; }
         ;
 
 args:     %empty { $$ = NULL; }
@@ -660,28 +739,30 @@ args:     %empty { $$ = NULL; }
         ;
 
 arg_list: expr TCOMMA arg_list {
-          $$ = parser_new_node(state, N_ARGLIST, $1, $3, true, true);
+          $$ = parser_new_node_loc(state, N_ARGLIST, $1, $3, true, true, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | expr {
-          $$ = parser_new_node(state, N_ARGLIST, $1, NULL, true, false);
+          $$ = parser_new_node_loc(state, N_ARGLIST, $1, NULL, true, false, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         ;
 
 item_assignment: expr { $$ = $1; }
         | TCODE params TCODEBODY {
-          $$ = parser_new_code(state, $2, $3);
+          $$ = parser_new_code(state, $2, $3,
+                               parser_span_from_yy(&@3),
+                               parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         ;
 
 list: TLISTSTART TDEREFEND {
-        $$ = parser_new_node(state, N_LIST, NULL, NULL, false, false);
+        $$ = parser_new_node_loc(state, N_LIST, NULL, NULL, false, false, parser_span_from_yy(&@$));
         if (!$$) YYERROR;
       }
       | TLISTSTART list_elems TDEREFEND {
-        $$ = parser_new_node(state, N_LIST, $2, NULL, true, false);
+        $$ = parser_new_node_loc(state, N_LIST, $2, NULL, true, false, parser_span_from_yy(&@$));
         if (!$$) YYERROR;
       }
       ;
@@ -697,43 +778,43 @@ list_elems: expr {
            ;
 
 itemref: TITEMREF item {
-          $$ = parser_new_node(state, N_ITEMREF, $2, NULL, true, false);
+          $$ = parser_new_node_loc(state, N_ITEMREF, $2, NULL, true, false, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
 
 item:     first_layer subsequent_layers {
-          $$ = parser_new_node(state, N_ITEM, $1, $2, true, false);
+          $$ = parser_new_node_loc(state, N_ITEM, $1, $2, true, false, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         | TLAYERSEP first_layer subsequent_layers {
-          $$ = parser_new_relative_item(state, $2, $3);
+          $$ = parser_new_relative_item(state, $2, $3, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         ;
 
-first_layer: TLAYER { $$ = parser_new_value(state, V_LAYER, $1); if (!$$) YYERROR; }
+first_layer: TLAYER { $$ = parser_new_value_loc(state, V_LAYER, $1, parser_span_from_yy(&@1)); if (!$$) YYERROR; }
         | dereference { $$ = $1; }
         ;
 
 subsequent_layers: %empty { $$ = NULL; }
         | TLAYERSEP layer subsequent_layers {
-          $$ = parser_new_node(state, N_ITEM, $2, $3, true, false);
+          $$ = parser_new_node_loc(state, N_ITEM, $2, $3, true, false, parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
         ;
 
-layer:    TLAYER { $$ = parser_new_value(state, V_LAYER, $1); if (!$$) YYERROR; }
-        | TINTEGER { $$ = parser_new_integer(state, $1); if (!$$) YYERROR; }
+layer:    TLAYER { $$ = parser_new_value_loc(state, V_LAYER, $1, parser_span_from_yy(&@1)); if (!$$) YYERROR; }
+        | TINTEGER { $$ = parser_new_integer_loc(state, $1, parser_span_from_yy(&@1)); if (!$$) YYERROR; }
         | dereference { $$ = $1; }
 ;
 
 dereference: TDEREFSTART deref_content TDEREFEND {
-             $$ = parser_new_node(state, N_DEREF, $2, NULL, true, false);
+             $$ = parser_new_node_loc(state, N_DEREF, $2, NULL, true, false, parser_span_from_yy(&@$));
              if (!$$) YYERROR;
            }
         ;
 
 deref_content: item { $$ = $1; }
-        | TLOCAL { $$ = parser_new_value(state, V_LOCAL, $1); if (!$$) YYERROR; }
+        | TLOCAL { $$ = parser_new_value_loc(state, V_LOCAL, $1, parser_span_from_yy(&@1)); if (!$$) YYERROR; }
         ;
 %%

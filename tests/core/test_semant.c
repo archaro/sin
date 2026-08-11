@@ -4,6 +4,7 @@
 
 #include "error.h"
 #include "compiler/parse_input.h"
+#include "memory.h"
 #include "parser.h"
 #include "compiler/semant.h"
 #include "test_assert.h"
@@ -93,6 +94,44 @@ void test_sem_check_locals_reusable_context(void) {
   as_delete(ok_prog);
   as_delete(bad_prog);
   sem_delete_ctx(ctx);
+}
+
+void test_sem_local_table_growth_oom_preserves_source_span(void) {
+  const char source[] = "\n\n@x = 1;";
+  AS_NODE *root = parse_semantic_lists(source);
+  AS_STMTLIST *stmts = (AS_STMTLIST *)root->lhs;
+  ASSERT_EQ_INT(1, stmts->count);
+  AS_NODE *assignment = stmts->stmts[0];
+  ASSERT_EQ_INT(3, assignment->span.line);
+  ASSERT_EQ_INT(1, assignment->span.column);
+
+  for (int fail_index_growth = 0; fail_index_growth <= 1;
+       ++fail_index_growth) {
+    SEM_CTX *ctx = sem_create_ctx();
+    ASSERT_NOT_NULL(ctx);
+    if (fail_index_growth) {
+      ctx->locals = malloc(sizeof *ctx->locals);
+      ASSERT_NOT_NULL(ctx->locals);
+      ctx->capacity = 1;
+    }
+
+    CompilerDiagnostic diag = {0};
+    char *errdetail = NULL;
+    alloc_test_fail_after(0);
+    int8_t rc = sem_check_locals_diag(root, &errdetail, &diag, ctx);
+    alloc_test_fail_after(-1);
+    ASSERT_EQ_INT(ERR_COMP_UNKNOWN, rc);
+    ASSERT_NOT_NULL(errdetail);
+    ASSERT_EQ_INT(3, diag.line);
+    ASSERT_EQ_INT(1, diag.column);
+    ASSERT_EQ_INT(6, diag.span);
+    ASSERT_TRUE(diag.has_loc);
+    free(errdetail);
+    compiler_diag_reset(&diag);
+    sem_delete_ctx(ctx);
+  }
+
+  as_delete(root);
 }
 
 void test_sem_duplicate_local_keeps_original_index(void) {

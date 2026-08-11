@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "compiler/source_span.h"
+
 typedef enum { V_INT, V_FLOAT, V_STR, V_LOCAL, V_LAYER, V_BOOLTRUE, V_BOOLFALSE, V_NIL } ENUM_VALUE;
 struct AS_VALUE_s {
   ENUM_VALUE valtype;
@@ -29,6 +31,7 @@ typedef enum { N_VALUE, N_ADD, N_SUB, N_MUL, N_DIV, N_MOD, N_INC, N_DEC,
              } ENUM_NODE;
 struct AS_NODE_s {
   ENUM_NODE nodetype;
+  CompilerSourceSpan span;
   void *lhs; // May be AS_NODE or AS_VALUE
   void *rhs; // May be AS_NODE or AS_VALUE
   /* Reserved for allocation-free destructive traversal by as_delete(). */
@@ -58,6 +61,7 @@ struct AS_IF_s {
   AS_NODE *condition;
   AS_NODE *then;
   struct AS_IF_s *elsif;
+  CompilerSourceSpan span;
 };
 typedef struct AS_IF_s AS_IF;
 

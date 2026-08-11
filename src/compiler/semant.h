@@ -37,6 +37,7 @@ typedef struct {
   uint32_t foreach_depth;
   int8_t errnum;
   char *errdetail;
+  CompilerSourceSpan error_span;
 } SEM_CTX;
 
 SEM_CTX *sem_create_ctx(void);

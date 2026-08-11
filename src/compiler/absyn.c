@@ -117,6 +117,7 @@ AS_NODE *as_new_node(ENUM_NODE nodetype, void *lhs, void *rhs) {
   AS_NODE *newnode = alloc_malloc(sizeof *newnode);
   if (!newnode) return NULL;
   newnode->nodetype = nodetype;
+  newnode->span = COMPILER_SOURCE_SPAN_INVALID;
   newnode->cleanup_next = NULL;
   // Add nodetypes to the switch below.
   switch (nodetype) {
@@ -190,6 +191,7 @@ AS_IF *as_new_if(AS_NODE *condition, AS_NODE *then, AS_IF *elsif) {
   newif->condition = condition;
   newif->then = then;
   newif->elsif = elsif;
+  newif->span = COMPILER_SOURCE_SPAN_INVALID;
   return newif;
 }
 

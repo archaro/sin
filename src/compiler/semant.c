@@ -23,7 +23,8 @@ static bool sem_has_local(SEM_CTX *ctx, const char *name) {
   return sem_get_local_index(ctx, name, NULL);
 }
 
-static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name);
+static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name,
+                          CompilerSourceSpan span);
 
 static int sem_local_index_cmp(const void *a, const void *b) {
   const SEM_LOCAL_INDEX *lhs = (const SEM_LOCAL_INDEX *)a;
@@ -63,19 +64,21 @@ static bool sem_find_local_index_slot(SEM_CTX *ctx, const char *name,
   return true;
 }
 
-static void sem_set_oom_error(SEM_CTX *ctx, const char *what) {
+static void sem_set_oom_error(SEM_CTX *ctx, const char *what,
+                              CompilerSourceSpan span) {
   if (!ctx) return;
   compdiag_set_once(&ctx->errnum, &ctx->errdetail, ERR_COMP_UNKNOWN,
                     "semant", what ? what : "out of memory");
+  if (!compiler_source_span_valid(ctx->error_span)) ctx->error_span = span;
 }
 
-static bool sem_grow_local_tables(SEM_CTX *ctx) {
+static bool sem_grow_local_tables(SEM_CTX *ctx, CompilerSourceSpan span) {
   if (ctx->count == ctx->capacity) {
     size_t new_capacity = ctx->capacity;
     if (!alloc_grow_array_capacity((void **)&ctx->locals, &new_capacity,
                                    (size_t)ctx->count + 1u, sizeof *ctx->locals) ||
         new_capacity > UINT32_MAX) {
-      sem_set_oom_error(ctx, "out of memory growing local table");
+      sem_set_oom_error(ctx, "out of memory growing local table", span);
       return false;
     }
     ctx->capacity = (uint32_t)new_capacity;
@@ -86,7 +89,7 @@ static bool sem_grow_local_tables(SEM_CTX *ctx) {
     if (!alloc_grow_array_capacity((void **)&ctx->local_index, &new_capacity,
                                    (size_t)ctx->count + 1u, sizeof *ctx->local_index) ||
         new_capacity > UINT32_MAX) {
-      sem_set_oom_error(ctx, "out of memory growing local index");
+      sem_set_oom_error(ctx, "out of memory growing local index", span);
       return false;
     }
     ctx->index_capacity = (uint32_t)new_capacity;
@@ -95,7 +98,8 @@ static bool sem_grow_local_tables(SEM_CTX *ctx) {
   return true;
 }
 
-static void sem_add_local(SEM_CTX *ctx, const char *name) {
+static void sem_add_local(SEM_CTX *ctx, const char *name,
+                          CompilerSourceSpan span) {
   if (!ctx || !name || ctx->errnum != ERR_NOERROR) return;
 
   if (sem_get_local_index(ctx, name, NULL)) {
@@ -103,16 +107,16 @@ static void sem_add_local(SEM_CTX *ctx, const char *name) {
   }
 
   if (ctx->count >= SEM_LOCAL_BUDGET) {
-    sem_set_error(ctx, ERR_COMP_TOOMANYLOCALS, name);
+    sem_set_error(ctx, ERR_COMP_TOOMANYLOCALS, name, span);
     return;
   }
 
-  if (!sem_grow_local_tables(ctx)) return;
+  if (!sem_grow_local_tables(ctx, span)) return;
 
   SEM_LOCAL *local = &ctx->locals[ctx->count];
   local->name = strdup(name);
   if (!local->name) {
-    sem_set_oom_error(ctx, "out of memory copying local name");
+    sem_set_oom_error(ctx, "out of memory copying local name", span);
     return;
   }
   local->index = (uint8_t)ctx->count;
@@ -133,7 +137,7 @@ static uint32_t sem_resolve_local_index(SEM_CTX *ctx, const char *name) {
   if (ctx->errnum != ERR_NOERROR) return ctx->count > 0 ? ctx->count - 1 : 0;
 
   if (!sem_get_local_index(ctx, name, &narrowed)) {
-    sem_add_local(ctx, name);
+    sem_add_local(ctx, name, COMPILER_SOURCE_SPAN_INVALID);
     if (ctx->errnum != ERR_NOERROR) {
       return ctx->count > 0 ? ctx->count - 1 : 0;
     }
@@ -146,18 +150,22 @@ static uint32_t sem_resolve_local_index(SEM_CTX *ctx, const char *name) {
   return index;
 }
 
-static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name) {
+static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name,
+                          CompilerSourceSpan span) {
   if (!ctx) return;
   compdiag_set_once(&ctx->errnum, &ctx->errdetail, errnum, "semant",
                     local_name ? local_name : "<null>");
+  if (!compiler_source_span_valid(ctx->error_span)) ctx->error_span = span;
 }
 
 static void sem_set_embedded_error(SEM_CTX *ctx, int8_t errnum,
-                                   const char *embedded_detail) {
+                                   const char *embedded_detail,
+                                   CompilerSourceSpan span) {
   if (!ctx) return;
   compdiag_setf_once(&ctx->errnum, &ctx->errdetail, errnum, "semant",
                      "embedded code: %s",
                      embedded_detail ? embedded_detail : "<null>");
+  if (!compiler_source_span_valid(ctx->error_span)) ctx->error_span = span;
 }
 
 SEM_CTX *sem_create_ctx(void) {
@@ -173,6 +181,7 @@ SEM_CTX *sem_create_ctx(void) {
   (*ctx).foreach_depth = 0;
   (*ctx).errnum = ERR_NOERROR;
   (*ctx).errdetail = NULL;
+  ctx->error_span = COMPILER_SOURCE_SPAN_INVALID;
 
   return ctx;
 }
@@ -228,7 +237,7 @@ static void sem_visit_value(SEM_CTX *ctx, AS_NODE *node) {
   }
 
   if (!sem_has_local(ctx, value->value.s)) {
-    sem_set_error(ctx, ERR_COMP_LOCALBEFOREDEF, value->value.s);
+    sem_set_error(ctx, ERR_COMP_LOCALBEFOREDEF, value->value.s, node->span);
   }
 }
 
@@ -253,7 +262,7 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       if (!lhs || lhs->nodetype != N_VALUE) return;
       AS_VALUE *value = (AS_VALUE *)lhs->lhs;
       if (value->valtype == V_LOCAL) {
-        sem_add_local(ctx, value->value.s);
+        sem_add_local(ctx, value->value.s, node->span);
       }
       return;
     }
@@ -288,10 +297,10 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       sem_walk(ctx, sequence);
       if (ctx->errnum != ERR_NOERROR) return;
       if (!value || value->valtype != V_LOCAL || !value->value.s) {
-        sem_set_error(ctx, ERR_COMP_SYNTAX, "foreach iterator must be local");
+        sem_set_error(ctx, ERR_COMP_SYNTAX, "foreach iterator must be local", node->span);
         return;
       }
-      sem_add_local(ctx, value->value.s);
+      sem_add_local(ctx, value->value.s, node->span);
       if (ctx->errnum != ERR_NOERROR) return;
       for (i = 0; i < 3; ++i) {
         if (ctx->errnum != ERR_NOERROR ||
@@ -304,12 +313,12 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       if (need_hidden_locals &&
           ctx->count > SEM_LOCAL_BUDGET - 3u) {
         sem_set_error(ctx, ERR_COMP_TOOMANYLOCALS,
-                      "foreach nesting exceeds the local budget");
+                      "foreach nesting exceeds the local budget", node->span);
         return;
       }
       for (i = 0; i < 3; ++i) {
         if (ctx->errnum != ERR_NOERROR || !sem_foreach_hidden_name(name, sizeof name, ctx->foreach_depth, suffixes[i])) return;
-        sem_add_local(ctx, name);
+        sem_add_local(ctx, name, node->span);
       }
       if (ctx->errnum != ERR_NOERROR) return;
       ctx->foreach_depth++;
@@ -320,15 +329,15 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       return;
     }
     case N_BREAK:
-      if (ctx->loop_depth == 0) sem_set_error(ctx, ERR_COMP_SYNTAX, "BREAK outside loop");
+      if (ctx->loop_depth == 0) sem_set_error(ctx, ERR_COMP_SYNTAX, "BREAK outside loop", node->span);
       return;
     case N_CONTINUE:
-      if (ctx->loop_depth == 0) sem_set_error(ctx, ERR_COMP_SYNTAX, "CONTINUE outside loop");
+      if (ctx->loop_depth == 0) sem_set_error(ctx, ERR_COMP_SYNTAX, "CONTINUE outside loop", node->span);
       return;
     case N_CODE: {
       SEM_CTX *embedded = sem_create_ctx();
       if (!embedded) {
-        sem_set_oom_error(ctx, "out of memory creating embedded semantic context");
+        sem_set_oom_error(ctx, "out of memory creating embedded semantic context", node->span);
         return;
       }
       sem_seed_code_params(embedded, (AS_NODE *)node->lhs);
@@ -337,7 +346,10 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       if (embedded->errnum != ERR_NOERROR) {
         // Preserve embedded scope provenance in the final semantic error:
         // semant: embedded code: semant: <detail>
-        sem_set_embedded_error(ctx, embedded->errnum, embedded->errdetail);
+        sem_set_embedded_error(ctx, embedded->errnum, embedded->errdetail,
+                               compiler_source_span_valid(embedded->error_span)
+                                   ? embedded->error_span
+                                   : node->span);
       }
 
       sem_delete_ctx(embedded);
@@ -384,6 +396,7 @@ int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic
   ctx->errnum = ERR_NOERROR;
   ctx->loop_depth = 0;
   ctx->foreach_depth = 0;
+  ctx->error_span = COMPILER_SOURCE_SPAN_INVALID;
 
   sem_walk(ctx, root);
 
@@ -393,6 +406,7 @@ int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic
 
   if (diag && ctx->errnum != ERR_NOERROR) {
     compiler_diag_set(diag, ctx->errnum, DIAG_PHASE_SEMANT, ctx->errdetail ? ctx->errdetail : "");
+    compiler_diag_set_span(diag, ctx->error_span);
   }
 
   return ctx->errnum;

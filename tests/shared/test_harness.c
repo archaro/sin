@@ -88,6 +88,7 @@ void test_absyn_constructor_allocation_failures(void);
 void test_absyn_valnode_string_second_allocation_failure(void);
 void test_absyn_stmtlist_growth_failure_preserves_statement(void);
 void test_sem_check_locals_reusable_context(void);
+void test_sem_local_table_growth_oom_preserves_source_span(void);
 void test_sem_foreach_semantics(void);
 void test_sem_locals_in_lists_and_itemrefs(void);
 void test_sem_duplicate_local_keeps_original_index(void);
@@ -107,6 +108,7 @@ void test_bytecode_verify_local_index_bounds(void);
 void test_bytecode_verify_jump_targets(void);
 void test_bytecode_verify_stack_flow(void);
 void test_parser_input_api(void);
+void test_parser_compound_spans_preserve_construct_start(void);
 void test_parser_ast_node_budget_stops_construction_early(void);
 void test_parser_lists_and_itemrefs_ast(void);
 void test_parser_foreach_ast(void);
@@ -422,6 +424,7 @@ static const test_case_t core_tests[] = {
     {"test_absyn_valnode_string_second_allocation_failure", test_absyn_valnode_string_second_allocation_failure},
     {"test_absyn_stmtlist_growth_failure_preserves_statement", test_absyn_stmtlist_growth_failure_preserves_statement},
     {"test_sem_check_locals_reusable_context", test_sem_check_locals_reusable_context},
+    {"test_sem_local_table_growth_oom_preserves_source_span", test_sem_local_table_growth_oom_preserves_source_span},
     {"test_sem_foreach_semantics", test_sem_foreach_semantics},
     {"test_sem_locals_in_lists_and_itemrefs", test_sem_locals_in_lists_and_itemrefs},
     {"test_sem_duplicate_local_keeps_original_index", test_sem_duplicate_local_keeps_original_index},
@@ -440,6 +443,7 @@ static const test_case_t core_tests[] = {
     {"test_bytecode_verify_jump_targets", test_bytecode_verify_jump_targets},
     {"test_bytecode_verify_stack_flow", test_bytecode_verify_stack_flow},
     {"test_parser_input_api", test_parser_input_api},
+    {"test_parser_compound_spans_preserve_construct_start", test_parser_compound_spans_preserve_construct_start},
     {"test_parser_ast_node_budget_stops_construction_early", test_parser_ast_node_budget_stops_construction_early},
     {"test_parser_lists_and_itemrefs_ast", test_parser_lists_and_itemrefs_ast},
     {"test_parser_foreach_ast", test_parser_foreach_ast},

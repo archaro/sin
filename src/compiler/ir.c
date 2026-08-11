@@ -75,6 +75,7 @@ int32_t ir_new_label(IR_Unit* unit) {
   label->id = (int32_t)idx;
   label->position = 0;
   label->bound = false;
+  label->span = COMPILER_SOURCE_SPAN_INVALID;
 
   unit->labels.count++;
   return label->id;
@@ -200,15 +201,19 @@ void ir_dump(FILE* out, IR_Unit* unit) {
 }
 
 #if defined(__GNUC__) || defined(__clang__)
-static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag,
-                                int8_t errnum, const char *fmt, ...)
-    __attribute__((format(printf, 4, 5)));
+static int8_t ir_validate_error_at(char **errdetail, CompilerDiagnostic *diag,
+                                   CompilerSourceSpan span, int8_t errnum,
+                                   const char *fmt, ...)
+    __attribute__((format(printf, 5, 6)));
 #else
-static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag,
-                                int8_t errnum, const char *fmt, ...);
+static int8_t ir_validate_error_at(char **errdetail, CompilerDiagnostic *diag,
+                                   CompilerSourceSpan span, int8_t errnum,
+                                   const char *fmt, ...);
 #endif
 
-static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag, int8_t errnum, const char *fmt, ...) {
+static int8_t ir_validate_error_at(char **errdetail, CompilerDiagnostic *diag,
+                                   CompilerSourceSpan span, int8_t errnum,
+                                   const char *fmt, ...) {
   va_list args;
   int needed;
   char *msg;
@@ -221,6 +226,7 @@ static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag, int8
   if (needed < 0) {
     int8_t current = ERR_NOERROR;
     compdiag_set_once_diag(&current, errdetail, diag, errnum, DIAG_PHASE_IR_VALIDATE, "ir", "formatting error");
+    if (diag) compiler_diag_set_span(diag, span);
     return errnum;
   }
 
@@ -228,6 +234,7 @@ static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag, int8
   if (!msg) {
     int8_t current = ERR_NOERROR;
     compdiag_set_once_diag(&current, errdetail, diag, errnum, DIAG_PHASE_IR_VALIDATE, "ir", "out of memory");
+    if (diag) compiler_diag_set_span(diag, span);
     return errnum;
   }
 
@@ -238,6 +245,7 @@ static int8_t ir_validate_error(char **errdetail, CompilerDiagnostic *diag, int8
   {
     int8_t current = ERR_NOERROR;
     compdiag_set_once_diag(&current, errdetail, diag, errnum, DIAG_PHASE_IR_VALIDATE, "ir", msg);
+    if (diag) compiler_diag_set_span(diag, span);
   }
   free(msg);
   return errnum;
@@ -248,26 +256,26 @@ static int8_t ir_validate_embedded_payload(
     CompilerDiagnostic *diag) {
   if (!payload->source ||
       (payload->param_count > 0 && !payload->params)) {
-    return ir_validate_error(
-        errdetail, diag, ERR_COMP_SYNTAX,
+    return ir_validate_error_at(
+        errdetail, diag, payload->span, ERR_COMP_SYNTAX,
         "Embedded code payload %zu has inconsistent source or parameters.",
         index);
   }
   if (strlen(payload->source) > UINT16_MAX) {
-    return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
+    return ir_validate_error_at(errdetail, diag, payload->span, ERR_COMP_SYNTAX,
                              "Embedded code payload %zu source is too long.",
                              index);
   }
   for (size_t p = 0; p < payload->param_count; p++) {
     if (!payload->params[p]) {
-      return ir_validate_error(
-          errdetail, diag, ERR_COMP_SYNTAX,
+      return ir_validate_error_at(
+          errdetail, diag, payload->span, ERR_COMP_SYNTAX,
           "Embedded code payload %zu parameter %zu is null.", index, p);
     }
     size_t param_len = strlen(payload->params[p]);
     if (param_len == 0 || param_len > UINT16_MAX) {
-      return ir_validate_error(
-          errdetail, diag, ERR_COMP_SYNTAX,
+      return ir_validate_error_at(
+          errdetail, diag, payload->span, ERR_COMP_SYNTAX,
           "Embedded code payload %zu parameter %zu has invalid length %zu.",
           index, p, param_len);
     }
@@ -275,11 +283,17 @@ static int8_t ir_validate_embedded_payload(
   return ERR_NOERROR;
 }
 
+#define ir_validate_error(errdetail_arg, diag_arg, errnum_arg, ...) \
+  ir_validate_error_at((errdetail_arg), (diag_arg), current_span, \
+                       (errnum_arg), __VA_ARGS__)
+
 int8_t ir_validate_diag(IR_Unit* unit, uint32_t local_count, char **errdetail, CompilerDiagnostic *diag) {
   if (diag) compiler_diag_reset(diag);
   if (errdetail != NULL) {
     compdiag_reset_detail(errdetail);
   }
+
+  CompilerSourceSpan current_span = COMPILER_SOURCE_SPAN_INVALID;
 
   if (unit == NULL) {
     return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX, "IR unit is null.");
@@ -303,6 +317,7 @@ int8_t ir_validate_diag(IR_Unit* unit, uint32_t local_count, char **errdetail, C
 
   for (size_t i = 0; i < unit->labels.count; i++) {
     IR_Label* label = &unit->labels.entries[i];
+    current_span = label->span;
     if (!label->bound) {
       return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
                                "Unbound label .L%d (jump unbound label).", label->id);
@@ -315,6 +330,7 @@ int8_t ir_validate_diag(IR_Unit* unit, uint32_t local_count, char **errdetail, C
 
   for (size_t i = 0; i < unit->function.count; i++) {
     const IR_Inst* inst = &unit->function.code[i];
+    current_span = inst->span;
     const IR_OpSchema *meta = ir_opcode_schema(inst->op);
     if (!meta || (meta->encoded_symbol == 0 && inst->op != IR_OP_LABEL)) {
       return ir_validate_error(errdetail, diag, ERR_COMP_SYNTAX,
@@ -448,6 +464,7 @@ int8_t ir_validate_diag(IR_Unit* unit, uint32_t local_count, char **errdetail, C
   }
   return ERR_NOERROR;
 }
+#undef ir_validate_error
 int8_t ir_validate(IR_Unit* unit, uint32_t local_count, char **errdetail) {
   return ir_validate_diag(unit, local_count, errdetail, NULL);
 }

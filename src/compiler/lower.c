@@ -18,11 +18,15 @@
 
 static void lower_set_error(LOWER_CTX *ctx, int8_t errnum, const char *detail) {
   if (!ctx) return;
-  compdiag_set_once(&ctx->errnum, &ctx->errdetail, errnum, "lower", detail);
+  if (compdiag_set_once(&ctx->errnum, &ctx->errdetail, errnum, "lower", detail) &&
+      compiler_source_span_valid(ctx->current_span)) {
+    ctx->error_span = ctx->current_span;
+  }
 }
 
 static bool lower_emit(LOWER_CTX *ctx, IR_Inst inst) {
   if (ctx->errnum != ERR_NOERROR) return false;
+  if (!compiler_source_span_valid(inst.span)) inst.span = ctx->current_span;
   if (ir_emit(ctx->ir, inst) == SIZE_MAX) {
     lower_set_error(ctx, ERR_COMP_UNKNOWN, "failed to emit IR instruction");
     return false;
@@ -38,6 +42,7 @@ static bool lower_new_label(LOWER_CTX *ctx, int32_t *label_id) {
     lower_set_error(ctx, ERR_COMP_UNKNOWN, "failed to allocate IR label");
     return false;
   }
+  ctx->ir->labels.entries[id].span = ctx->current_span;
   if (label_id) *label_id = id;
   return true;
 }
@@ -63,6 +68,9 @@ static void lower_node(LOWER_CTX *ctx, AS_NODE *node);
 static void lower_expr(LOWER_CTX *ctx, AS_NODE *node);
 static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node);
 static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node);
+static void lower_expr_inner(LOWER_CTX *ctx, AS_NODE *node);
+static void lower_stmt_inner(LOWER_CTX *ctx, AS_NODE *node);
+static void lower_stmtlist_inner(LOWER_CTX *ctx, AS_NODE *node);
 static void lower_arglist(LOWER_CTX *ctx, AS_NODE *arglist, int32_t *argc);
 
 static void lower_item(LOWER_CTX *ctx, AS_NODE *item);
@@ -375,6 +383,15 @@ static void lower_short_circuit_expr(LOWER_CTX *ctx, AS_NODE *node,
 }
 
 static void lower_expr(LOWER_CTX *ctx, AS_NODE *node) {
+  CompilerSourceSpan previous;
+  if (!ctx || !node || ctx->errnum != ERR_NOERROR) return;
+  previous = ctx->current_span;
+  ctx->current_span = node->span;
+  lower_expr_inner(ctx, node);
+  ctx->current_span = previous;
+}
+
+static void lower_expr_inner(LOWER_CTX *ctx, AS_NODE *node) {
   if (!ctx || !node || ctx->errnum != ERR_NOERROR) return;
 
   switch (node->nodetype) {
@@ -510,6 +527,15 @@ static void lower_arglist(LOWER_CTX *ctx, AS_NODE *arglist, int32_t *argc) {
 }
 
 static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node) {
+  CompilerSourceSpan previous;
+  if (!ctx || !node || ctx->errnum != ERR_NOERROR) return;
+  previous = ctx->current_span;
+  ctx->current_span = node->span;
+  lower_stmtlist_inner(ctx, node);
+  ctx->current_span = previous;
+}
+
+static void lower_stmtlist_inner(LOWER_CTX *ctx, AS_NODE *node) {
   AS_STMTLIST *stmtlist;
 
   if (!ctx || !node || ctx->errnum != ERR_NOERROR) return;
@@ -527,6 +553,15 @@ static void lower_stmtlist(LOWER_CTX *ctx, AS_NODE *node) {
 }
 
 static void lower_stmt(LOWER_CTX *ctx, AS_NODE *node) {
+  CompilerSourceSpan previous;
+  if (!ctx || !node || ctx->errnum != ERR_NOERROR) return;
+  previous = ctx->current_span;
+  ctx->current_span = node->span;
+  lower_stmt_inner(ctx, node);
+  ctx->current_span = previous;
+}
+
+static void lower_stmt_inner(LOWER_CTX *ctx, AS_NODE *node) {
   if (!ctx || !node || ctx->errnum != ERR_NOERROR) return;
 
   switch (node->nodetype) {
@@ -782,6 +817,7 @@ static bool lower_build_embedded_payload(LOWER_CTX *ctx, AS_NODE *node, int32_t 
     return false;
   }
   payload.source = val->value.s;
+  payload.span = node->span;
   if (!ir_embedded_locals_from_params((AS_NODE *)node->lhs, &payload)) {
     lower_set_error(ctx, ERR_COMP_UNKNOWN, "failed to build embedded code parameter metadata");
     return false;
@@ -797,6 +833,7 @@ static bool lower_build_embedded_payload(LOWER_CTX *ctx, AS_NODE *node, int32_t 
 }
 
 static void lower_node(LOWER_CTX *ctx, AS_NODE *node) {
+  if (ctx && node) ctx->current_span = node->span;
   lower_stmt(ctx, node);
 }
 
@@ -819,6 +856,8 @@ int8_t lower_ast_to_ir_diag(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char 
   ctx.break_label = -1;
   ctx.continue_label = -1;
   ctx.foreach_depth = 0;
+  ctx.error_span = COMPILER_SOURCE_SPAN_INVALID;
+  ctx.current_span = COMPILER_SOURCE_SPAN_INVALID;
 
   if (!libcall_init_registry()) {
     ir_destroy_unit(ctx.ir);
@@ -843,6 +882,7 @@ int8_t lower_ast_to_ir_diag(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char 
   ir_destroy_unit(ctx.ir);
   if (diag && ctx.errnum != ERR_NOERROR) {
     compiler_diag_set(diag, ctx.errnum, DIAG_PHASE_LOWER, ctx.errdetail ? ctx.errdetail : "");
+    compiler_diag_set_span(diag, ctx.error_span);
   }
   if (errdetail) {
     *errdetail = ctx.errdetail;

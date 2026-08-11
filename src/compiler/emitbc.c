@@ -104,8 +104,24 @@ static int bw_write_bytes(BC_Writer *w, const void *src, size_t n) {
   return 1;
 }
 
+/* The emitter keeps a candidate span locally while encoding an instruction.
+ * Do not expose that candidate through CompilerDiagnostic until the helper
+ * actually records an error; successful preflight must leave diagnostics
+ * locationless. */
+#define compdiag_set_once_diag(...) do { \
+  compdiag_set_once_diag(__VA_ARGS__); \
+  if (diag && compiler_source_span_valid(current_span)) \
+    compiler_diag_set_span(diag, current_span); \
+} while (0)
+#define compdiag_setf_once_diag(...) do { \
+  compdiag_setf_once_diag(__VA_ARGS__); \
+  if (diag && compiler_source_span_valid(current_span)) \
+    compiler_diag_set_span(diag, current_span); \
+} while (0)
+
 int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
                           OUTPUT_t *out, char **errdetail, CompilerDiagnostic *diag) {
+  CompilerSourceSpan current_span = COMPILER_SOURCE_SPAN_INVALID;
   if (diag) compiler_diag_reset(diag);
   if (errdetail) compdiag_reset_detail(errdetail);
   if (!ir || !out) {
@@ -201,6 +217,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
    * repeated checks below are defense-in-depth at the encoding boundary. */
   for (size_t i = 0; i < ir->function.count; i++) {
     IR_Inst *in = &ir->function.code[i];
+    current_span = in->span;
     if (in->op == IR_OP_LABEL) continue;
     const IR_OpSchema *meta = ir_opcode_schema(in->op);
     if (!meta || bc_opcode_byte(in->op) == 0) {
@@ -393,6 +410,7 @@ int8_t emit_bytecode_diag(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
   }
 
   free(pos);
+  current_span = COMPILER_SOURCE_SPAN_INVALID;
 
   size_t bytecode_len = (size_t)(out->nextbyte - out->bytecode);
   if (bytecode_len > UINT32_MAX) {
@@ -431,6 +449,9 @@ size_overflow:
     return errnum;
   }
 }
+
+#undef compdiag_set_once_diag
+#undef compdiag_setf_once_diag
 
 int8_t emit_bytecode(IR_Unit *ir, uint8_t local_count, uint8_t param_count,
                      OUTPUT_t *out, char **errdetail) {

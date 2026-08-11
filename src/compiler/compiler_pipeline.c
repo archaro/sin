@@ -163,7 +163,7 @@ done:
     if (diag->phase == DIAG_PHASE_PARSE && parse_state.line > 0) {
       compiler_diag_set_location(diag, parse_state.line, parse_state.column,
                                  parse_state.span);
-    } else {
+    } else if (!diag->has_loc) {
       compiler_diag_set_location(diag, 1, 1, 1);
     }
 

@@ -182,6 +182,11 @@ void compiler_diag_set_location(CompilerDiagnostic *d, int line, int column, int
   d->has_loc = line > 0 && column > 0;
 }
 
+void compiler_diag_set_span(CompilerDiagnostic *d, CompilerSourceSpan span) {
+  if (!d) return;
+  compiler_diag_set_location(d, span.line, span.column, span.span);
+}
+
 void compiler_diag_set_source_name(CompilerDiagnostic *d, const char *source_name) {
   if (!d) return;
   compiler_diag_free(d->source_name);

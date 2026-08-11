@@ -19,6 +19,7 @@ typedef struct {
   int32_t a;
   int32_t b;
   int64_t imm;
+  CompilerSourceSpan span;
 } IR_Inst;
 
 typedef struct {
@@ -31,6 +32,7 @@ typedef struct {
   int32_t id;
   size_t position;
   bool bound;
+  CompilerSourceSpan span;
 } IR_Label;
 
 typedef struct {
@@ -59,6 +61,7 @@ typedef struct {
   const char** params;
   size_t local_count;
   IR_EmbeddedLocal* locals;
+  CompilerSourceSpan span;
 } IR_EmbeddedCodePayload;
 
 typedef struct {

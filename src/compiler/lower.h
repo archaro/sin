@@ -19,6 +19,8 @@ typedef struct {
   int32_t break_label;
   int32_t continue_label;
   uint32_t foreach_depth;
+  CompilerSourceSpan error_span;
+  CompilerSourceSpan current_span;
 } LOWER_CTX;
 
 int8_t lower_ast_to_ir_diag(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **errdetail, CompilerDiagnostic *diag);

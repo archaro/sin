@@ -12,6 +12,12 @@ location is available. Stable codes have the form `SIN-<PHASE>-<4-digit>`.
 Current phases are `PARSE`, `SEMANT`, `LOWER`, `IR_VALIDATE`, `EMITBC`,
 `COMPILE`, and `IO`.
 
+Locations from semantic analysis, lowering, IR validation, and bytecode
+emission are preserved when the failing construct came from source. The
+excerpt therefore shows the responsible source line; genuinely global setup
+or allocation failures remain locationless (and use the standard fallback
+only when no source provenance exists).
+
 Use the stable code and source location when reporting or matching a compiler
 failure; the prose message can become more specific over time. `-q` suppresses
 progress and status messages, while `-v` adds verbose progress and diagnostic

@@ -41,7 +41,9 @@ Files: `src/compiler/*`, including `src/compiler/parser.y` and
 
 Ownership: parsing, semantic analysis, IR construction/lowering, bytecode
 emission, compiler diagnostics, and compiler pipeline orchestration. The
-compiler may depend on common support, bytecode definitions/verification, and
+`compiler/source_span.h` value carries non-owning source provenance from AST
+through IR and diagnostics without entering emitted bytecode.
+The compiler may depend on common support, bytecode definitions/verification, and
 item/value data structures where needed. It should not depend on networking or
 runtime task scheduling.
 

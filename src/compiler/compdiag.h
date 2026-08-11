@@ -7,6 +7,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "compiler/source_span.h"
+
 typedef enum {
   DIAG_PHASE_NONE = 0,
   DIAG_PHASE_PARSE,
@@ -59,6 +61,7 @@ void compiler_diag_init(CompilerDiagnostic *d);
 void compiler_diag_reset(CompilerDiagnostic *d);
 void compiler_diag_set(CompilerDiagnostic *d, int8_t code, DiagPhase phase, const char *message);
 void compiler_diag_set_location(CompilerDiagnostic *d, int line, int column, int span);
+void compiler_diag_set_span(CompilerDiagnostic *d, CompilerSourceSpan span);
 void compiler_diag_set_source_name(CompilerDiagnostic *d, const char *source_name);
 void compiler_diag_set_excerpt(CompilerDiagnostic *d, const char *excerpt);
 const char *compiler_diag_stable_code(int8_t errnum, DiagPhase phase);

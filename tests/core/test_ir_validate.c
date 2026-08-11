@@ -5,6 +5,8 @@
 #include "error.h"
 #include "compiler/ir.h"
 #include "compiler/lower.h"
+#include "compiler/emitbc.h"
+#include "memory.h"
 #include "compiler/semant.h"
 #include "test_assert.h"
 #include "test_helpers.h"
@@ -81,6 +83,154 @@ static void test_ir_validate_negative_arity_rejected(void) {
   t_emit(unit, (IR_Inst){.op = IR_OP_LIBCALL, .a = -2, .b = 0});
   assert_validate_error(unit, 0, ERR_COMP_SYNTAX, "invalid pair");
   ir_destroy_unit(unit);
+}
+
+static void test_ir_validate_preserves_instruction_provenance(void) {
+  IR_Unit *unit = t_new_unit();
+  CompilerDiagnostic diag;
+  char *errdetail = NULL;
+  compiler_diag_init(&diag);
+  t_emit(unit, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = 2,
+                         .span = {4, 3, 1}});
+
+  ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF,
+                ir_validate_diag(unit, 2, &errdetail, &diag));
+  ASSERT_TRUE(diag.has_loc);
+  ASSERT_EQ_INT(4, diag.line);
+  ASSERT_EQ_INT(3, diag.column);
+  ASSERT_EQ_INT(1, diag.span);
+  free(errdetail);
+  compiler_diag_reset(&diag);
+  ir_destroy_unit(unit);
+}
+
+static void test_validation_and_emission_location_lifecycle(void) {
+  IR_Unit *unit = t_new_unit();
+  CompilerDiagnostic diag;
+  char *errdetail = NULL;
+  compiler_diag_init(&diag);
+  t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 1,
+                         .span = {4, 3, 1}});
+
+  ASSERT_EQ_INT(ERR_NOERROR,
+                ir_validate_diag(unit, 0, &errdetail, &diag));
+  ASSERT_TRUE(!diag.has_loc);
+  ASSERT_TRUE(errdetail == NULL);
+
+  OUTPUT_t output = {0};
+  alloc_test_fail_after(1);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX,
+                emit_bytecode_diag(unit, 0, 0, &output, &errdetail, &diag));
+  ASSERT_EQ_INT(DIAG_PHASE_EMITBC, diag.phase);
+  ASSERT_TRUE(!diag.has_loc);
+  alloc_test_fail_after(-1);
+  free(errdetail);
+  free(output.bytecode);
+  compiler_diag_reset(&diag);
+  ir_destroy_unit(unit);
+
+  unit = t_new_unit();
+  t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 1,
+                         .span = {9, 5, 1}});
+  output = (OUTPUT_t){0};
+  errdetail = NULL;
+  alloc_test_fail_after(3);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX,
+                emit_bytecode_diag(unit, 0, 0, &output, &errdetail, &diag));
+  ASSERT_EQ_INT(DIAG_PHASE_EMITBC, diag.phase);
+  ASSERT_TRUE(diag.has_loc);
+  ASSERT_EQ_INT(9, diag.line);
+  ASSERT_EQ_INT(5, diag.column);
+  alloc_test_fail_after(-1);
+  free(errdetail);
+  free(output.bytecode);
+  compiler_diag_reset(&diag);
+  ir_destroy_unit(unit);
+}
+
+static void test_lower_and_emit_preserve_provenance(void) {
+  AS_NODE *root = t_stmtlist_with_one(t_node(N_VALUE, NULL, NULL));
+  IR_Unit *ir = NULL;
+  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  AS_STMTLIST *list = (AS_STMTLIST *)root->lhs;
+  list->stmts[0]->span = (CompilerSourceSpan){6, 2, 1};
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX,
+                lower_ast_to_ir_diag(root, NULL, &ir, &errdetail, &diag));
+  ASSERT_TRUE(diag.has_loc);
+  ASSERT_EQ_INT(6, diag.line);
+  ASSERT_EQ_INT(2, diag.column);
+  free(errdetail);
+  compiler_diag_reset(&diag);
+  as_delete(root);
+
+  ir = t_new_unit();
+  t_emit(ir, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = 2,
+                       .span = {8, 4, 1}});
+  OUTPUT_t output = {0};
+  errdetail = NULL;
+  ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF,
+                emit_bytecode_diag(ir, 2, 0, &output, &errdetail, &diag));
+  ASSERT_TRUE(diag.has_loc);
+  ASSERT_EQ_INT(8, diag.line);
+  ASSERT_EQ_INT(4, diag.column);
+  free(errdetail);
+  compiler_diag_reset(&diag);
+  free(output.bytecode);
+  ir_destroy_unit(ir);
+}
+
+static void test_lower_restores_parent_provenance_after_recursion(void) {
+  AS_NODE *left = t_int(1);
+  AS_NODE *right = t_int(2);
+  left->span = (CompilerSourceSpan){11, 2, 1};
+  right->span = (CompilerSourceSpan){11, 6, 1};
+  AS_NODE *binary = t_node(N_ADD, left, right);
+  binary->span = (CompilerSourceSpan){11, 2, 5};
+  AS_NODE *root = t_stmtlist_with_one(t_node(N_EXPRSTMT, binary, NULL));
+  AS_STMTLIST *list = (AS_STMTLIST *)root->lhs;
+  list->stmts[0]->span = (CompilerSourceSpan){11, 2, 5};
+
+  IR_Unit *ir = NULL;
+  char *errdetail = NULL;
+  ASSERT_EQ_INT(ERR_NOERROR,
+                lower_ast_to_ir(root, NULL, &ir, &errdetail));
+  ASSERT_NOT_NULL(ir);
+  ASSERT_EQ_INT(IR_OP_PUSH_INT, ir->function.code[0].op);
+  ASSERT_EQ_INT(11, ir->function.code[0].span.line);
+  ASSERT_EQ_INT(2, ir->function.code[0].span.column);
+  ASSERT_EQ_INT(IR_OP_PUSH_INT, ir->function.code[1].op);
+  ASSERT_EQ_INT(6, ir->function.code[1].span.column);
+  ASSERT_EQ_INT(IR_OP_ADD, ir->function.code[2].op);
+  ASSERT_EQ_INT(2, ir->function.code[2].span.column);
+  free(errdetail);
+  ir_destroy_unit(ir);
+  as_delete(root);
+
+  AS_NODE *condition = t_int(1);
+  condition->span = (CompilerSourceSpan){20, 3, 1};
+  AS_NODE *body_stmt = t_node(N_BREAK, NULL, NULL);
+  body_stmt->span = (CompilerSourceSpan){21, 4, 5};
+  AS_NODE *body = t_stmtlist_with_one(body_stmt);
+  body->span = (CompilerSourceSpan){21, 4, 5};
+  AS_NODE *loop = t_node(N_WHILESTMT, condition, body);
+  loop->span = (CompilerSourceSpan){20, 1, 20};
+  root = t_stmtlist_with_one(loop);
+  list = (AS_STMTLIST *)root->lhs;
+  list->stmts[0]->span = loop->span;
+  ir = NULL;
+  errdetail = NULL;
+  ASSERT_EQ_INT(ERR_NOERROR,
+                lower_ast_to_ir(root, NULL, &ir, &errdetail));
+  ASSERT_NOT_NULL(ir);
+  ASSERT_EQ_INT(IR_OP_JUMP_IF_FALSE, ir->function.code[2].op);
+  ASSERT_EQ_INT(1, ir->function.code[2].span.column);
+  ASSERT_EQ_INT(IR_OP_JUMP, ir->function.code[4].op);
+  ASSERT_EQ_INT(1, ir->function.code[4].span.column);
+  free(errdetail);
+  ir_destroy_unit(ir);
+  as_delete(root);
 }
 
 static void assert_lower_local_error(AS_NODE *root, const char *expected_name) {
@@ -224,6 +374,10 @@ void test_ir_validate(void) {
   test_ir_validate_invalid_label_ids_rejected();
   test_ir_validate_local_index_out_of_range_rejected();
   test_ir_validate_negative_arity_rejected();
+  test_ir_validate_preserves_instruction_provenance();
+  test_validation_and_emission_location_lifecycle();
+  test_lower_and_emit_preserve_provenance();
+  test_lower_restores_parent_provenance_after_recursion();
   test_lower_float_value_emits_push_float();
   test_lower_nil_value_emits_push_nil();
   test_lower_returns_and_discards_expression_statements();

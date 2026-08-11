@@ -802,4 +802,17 @@ void test_compiler_diag_pipeline(void){
   ASSERT_EQ_INT(DIAG_PHASE_COMPILE, d.phase);
 
   compiler_diag_reset(&d);
+
+  const char *semantic_source = "return 1;\n@defined = 2;\n@missing;";
+  rc = compile_source_to_bytecode_diag(semantic_source, strlen(semantic_source),
+                                       &out, &d);
+  ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
+  ASSERT_EQ_INT(DIAG_PHASE_SEMANT, d.phase);
+  ASSERT_EQ_INT(3, d.line);
+  ASSERT_EQ_INT(1, d.column);
+  ASSERT_EQ_INT(8, d.span);
+  ASSERT_TRUE(d.has_loc);
+  ASSERT_NOT_NULL(d.excerpt);
+  ASSERT_TRUE(strcmp("@missing;", d.excerpt) == 0);
+  compiler_diag_reset(&d);
 }
