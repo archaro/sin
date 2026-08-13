@@ -19,6 +19,7 @@
 #include "itemref.h"
 #include "item_persist_internal.h"
 #include "test_assert.h"
+#include "shared/test_libcall_support.h"
 
 static uint64_t now_ns(void) {
   struct timespec ts;
@@ -649,6 +650,108 @@ static uint64_t bench_interpreter_ops(InterpreterBenchmark_t *benchmark,
   return elapsed;
 }
 
+typedef struct {
+  const char *name;
+  const unsigned char *input;
+  size_t input_bytes;
+} NetworkBenchmarkCase;
+
+static void run_network_benchmark_case(const NetworkBenchmarkCase *test_case) {
+  const size_t sample_count = 5;
+  uint64_t elapsed_samples[sample_count];
+  uint64_t maintenance_samples[sample_count];
+  uint64_t allocation_samples[sample_count];
+  uint64_t record_samples[sample_count];
+
+  for (size_t sample = 0; sample < sample_count; sample++) {
+    ASSERT_TRUE(test_network_reset(1));
+    NetworkRuntime *runtime = test_network_runtime();
+    network_runtime_test_reset_input_counters();
+    ASSERT_TRUE(network_runtime_test_set_line(runtime, 0, NETWORK_TEST_IDLE));
+    uint64_t start = now_ns();
+    ASSERT_TRUE(network_runtime_test_feed(runtime, 0,
+                                          (const char *)test_case->input,
+                                          test_case->input_bytes));
+    size_t records = 0;
+    for (;;) {
+      size_t line_index = 0;
+      char *input = NULL;
+      NetworkEvent event = network_runtime_poll(runtime, &line_index, &input);
+      if (event == NETWORK_EVENT_NONE) break;
+      if (event == NETWORK_EVENT_DATA) {
+        ASSERT_TRUE(line_index == 0);
+        ASSERT_NOT_NULL(input);
+        free(input);
+        records++;
+      }
+    }
+    elapsed_samples[sample] = now_ns() - start;
+    maintenance_samples[sample] =
+        (uint64_t)network_runtime_test_input_maintenance_bytes();
+    allocation_samples[sample] =
+        (uint64_t)network_runtime_test_input_buffer_allocations();
+    record_samples[sample] = (uint64_t)records;
+  }
+
+  printf("[bench][network] case=%s records=%llu input_bytes=%zu "
+         "maintenance_bytes=%llu input_buffer_allocations=%llu "
+         "median_elapsed_ns=%llu samples=%zu\n",
+         test_case->name,
+         (unsigned long long)median_u64(record_samples, sample_count),
+         test_case->input_bytes,
+         (unsigned long long)median_u64(maintenance_samples, sample_count),
+         (unsigned long long)median_u64(allocation_samples, sample_count),
+         (unsigned long long)median_u64(elapsed_samples, sample_count),
+         sample_count);
+}
+
+static void run_extended_network_benchmarks(void) {
+  const size_t short_batch_16k_bytes = 16384;
+  const size_t short_batch_64k_bytes = 65534;
+  unsigned char *short_batch_16k =
+      (unsigned char *)malloc(short_batch_16k_bytes);
+  unsigned char *short_batch_64k =
+      (unsigned char *)malloc(short_batch_64k_bytes);
+  ASSERT_NOT_NULL(short_batch_16k);
+  ASSERT_NOT_NULL(short_batch_64k);
+  memset(short_batch_16k, 'x', short_batch_16k_bytes);
+  memset(short_batch_64k, 'x', short_batch_64k_bytes);
+  for (size_t i = 1; i < short_batch_16k_bytes; i += 2) {
+    short_batch_16k[i] = '\n';
+  }
+  for (size_t i = 1; i < short_batch_64k_bytes; i += 2) {
+    short_batch_64k[i] = '\n';
+  }
+
+  unsigned char mixed[16384];
+  size_t mixed_bytes = 0;
+  const char *partial = "partial";
+  memcpy(mixed + mixed_bytes, partial, strlen(partial));
+  mixed_bytes += strlen(partial);
+  const char *complete = " record\n";
+  memcpy(mixed + mixed_bytes, complete, strlen(complete));
+  mixed_bytes += strlen(complete);
+  memset(mixed + mixed_bytes, 'l', 4096);
+  mixed_bytes += 4096;
+  mixed[mixed_bytes++] = '\n';
+  while (mixed_bytes + 3 <= sizeof(mixed)) {
+    mixed[mixed_bytes++] = 'm';
+    mixed[mixed_bytes++] = '\n';
+  }
+
+  const NetworkBenchmarkCase cases[] = {
+      {"short-16k", short_batch_16k, short_batch_16k_bytes},
+      {"short-64k", short_batch_64k, short_batch_64k_bytes},
+      {"mixed-partial-complete-long", mixed, mixed_bytes},
+  };
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+    run_network_benchmark_case(&cases[i]);
+  }
+  free(short_batch_64k);
+  free(short_batch_16k);
+  test_network_clear();
+}
+
 void test_runtime_benchmark_optin(void) {
   uint8_t lib_index = 0, call_index = 0;
   uint8_t args = 0;
@@ -742,6 +845,9 @@ void test_runtime_benchmark_optin(void) {
   ASSERT_TRUE(sink == 0 || sink != 0);
 
   if (extended_bench_enabled()) {
+    setup_libcall_runtime();
+    run_extended_network_benchmarks();
+    teardown_libcall_runtime();
     run_extended_list_benchmarks();
     run_extended_itemstore_benchmarks();
     run_extended_itemref_and_syscall_benchmarks();

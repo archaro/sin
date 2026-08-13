@@ -61,7 +61,28 @@ typedef struct {
   bool close_completed;
   bool disconnect_event_delivered;
   size_t input_line_length;
+  /* Input bytes in [input_unread_start, inbuf->buf.len) are unread. */
+  size_t input_unread_start;
 } LINE_t;
+
+/* These counters are intentionally not declared by network.h.  The shared
+ * test fixture uses them for deterministic maintenance/allocation coverage;
+ * production callers have no supported access to the counters. */
+static size_t test_input_maintenance_bytes;
+static size_t test_input_buffer_allocations;
+
+void network_runtime_test_reset_input_counters(void) {
+  test_input_maintenance_bytes = 0;
+  test_input_buffer_allocations = 0;
+}
+
+size_t network_runtime_test_input_maintenance_bytes(void) {
+  return test_input_maintenance_bytes;
+}
+
+size_t network_runtime_test_input_buffer_allocations(void) {
+  return test_input_buffer_allocations;
+}
 
 struct NetworkRuntime {
   uv_loop_t *loop;             /* borrowed */
@@ -122,7 +143,8 @@ bool line_is_reusable(const LINE_t *linep) {
          !linep->close_after_output &&
          (!linep->close_requested ||
           (linep->close_completed && linep->disconnect_event_delivered)) &&
-         linep->input_line_length == 0;
+         linep->input_line_length == 0 && linep->input_unread_start == 0 &&
+         (!linep->inbuf || linep->inbuf->buf.len == 0);
 }
 
 static bool validate_runtime_args(uv_loop_t *loop, uv_tcp_t *listener,
@@ -206,6 +228,8 @@ static LINE_t *add_line_at(NetworkRuntime *runtime, size_t l,
     runtime->lines[l].inbuf = NULL;
     runtime->lines[l].telnet = NULL;
     runtime->lines[l].status = LINE_empty;
+    runtime->lines[l].input_line_length = 0;
+    runtime->lines[l].input_unread_start = 0;
     return NULL;
   }
 
@@ -218,6 +242,9 @@ static LINE_t *add_line_at(NetworkRuntime *runtime, size_t l,
   inbuf->buf.base = inbase;
   inbuf->buf.base[0] = '\0';
   inbuf->length = INBUF_LENGTH;
+  if (test_input_buffer_allocations < SIZE_MAX) {
+    test_input_buffer_allocations++;
+  }
 
   runtime->lines[l].line_handle = line_handle;
   runtime->lines[l].status = LINE_connecting;
@@ -233,6 +260,7 @@ static LINE_t *add_line_at(NetworkRuntime *runtime, size_t l,
   runtime->lines[l].close_completed = false;
   runtime->lines[l].disconnect_event_delivered = false;
   runtime->lines[l].input_line_length = 0;
+  runtime->lines[l].input_unread_start = 0;
   line_handle->data = runtime;
   return &runtime->lines[l];
 }
@@ -271,6 +299,7 @@ static void release_line_resources(LINE_t *linep) {
   linep->output_backpressure_ticks = 0;
   linep->close_after_output = false;
   linep->input_line_length = 0;
+  linep->input_unread_start = 0;
 }
 
 static void destroy_line(LINE_t *linep) {
@@ -422,6 +451,7 @@ static void disconnect_line_for_input_limit(LINE_t *linep, const char *reason) {
     linep->inbuf->buf.base[0] = '\0';
   }
   linep->input_line_length = 0;
+  linep->input_unread_start = 0;
   linep->status = LINE_disconnecting;
   close_line_handle(linep);
 }
@@ -451,6 +481,14 @@ static size_t unterminated_input_line_length(const char *buf, size_t len) {
   return len;
 }
 
+static size_t input_unread_length(const LINE_t *linep) {
+  if (!linep || !linep->inbuf ||
+      linep->input_unread_start > linep->inbuf->buf.len) {
+    return 0;
+  }
+  return linep->inbuf->buf.len - linep->input_unread_start;
+}
+
 void append_input(LINE_t *linep, const char *msg, size_t len) {
   // Append input to the input buffer, ready for processing later.
   // This is where telnet processing will happen.
@@ -462,14 +500,22 @@ void append_input(LINE_t *linep, const char *msg, size_t len) {
       return;
     }
 
+    if (linep->input_unread_start > linep->inbuf->buf.len ||
+        linep->inbuf->buf.len >= linep->inbuf->length ||
+        linep->inbuf->length == 0) {
+      disconnect_line_for_input_limit(linep, "invalid input buffer offsets");
+      return;
+    }
+
+    size_t unread_len = input_unread_length(linep);
     if (msg_len > MAX_INPUT_BUFFER_LENGTH ||
-        linep->inbuf->buf.len > MAX_INPUT_BUFFER_LENGTH - msg_len) {
+        unread_len > MAX_INPUT_BUFFER_LENGTH - msg_len) {
       disconnect_line_for_input_limit(linep, "input buffer too large");
       return;
     }
 
-    size_t required_len = linep->inbuf->buf.len + msg_len;
-    if (required_len == SIZE_MAX) {
+    size_t required_len = unread_len + msg_len;
+    if (required_len > SIZE_MAX - 1) {
       disconnect_line_for_input_limit(linep, "input buffer length overflow");
       return;
     }
@@ -484,10 +530,34 @@ void append_input(LINE_t *linep, const char *msg, size_t len) {
       return;
     }
 
-    if (required_capacity > linep->inbuf->length) {
-      size_t new_capacity = ((required_capacity + INBUF_LENGTH - 1) / INBUF_LENGTH) * INBUF_LENGTH;
-      if (new_capacity < required_capacity || new_capacity > MAX_INPUT_BUFFER_LENGTH) {
-        new_capacity = required_capacity;
+    if (msg_len > linep->inbuf->length - linep->inbuf->buf.len - 1) {
+      if (linep->input_unread_start > 0) {
+        memmove(linep->inbuf->buf.base,
+                linep->inbuf->buf.base + linep->input_unread_start,
+                unread_len);
+        if (test_input_maintenance_bytes > SIZE_MAX - unread_len) {
+          test_input_maintenance_bytes = SIZE_MAX;
+        } else {
+          test_input_maintenance_bytes += unread_len;
+        }
+        linep->input_unread_start = 0;
+        linep->inbuf->buf.len = unread_len;
+        linep->inbuf->buf.base[unread_len] = '\0';
+      }
+    }
+
+    if (msg_len > linep->inbuf->length - linep->inbuf->buf.len - 1) {
+      size_t new_capacity = required_capacity;
+      if (new_capacity < INBUF_LENGTH) new_capacity = INBUF_LENGTH;
+      if (new_capacity > INBUF_LENGTH) {
+        size_t remainder = new_capacity % INBUF_LENGTH;
+        if (remainder != 0 && new_capacity <= SIZE_MAX -
+                                      (INBUF_LENGTH - remainder)) {
+          new_capacity += INBUF_LENGTH - remainder;
+        }
+      }
+      if (new_capacity > MAX_INPUT_BUFFER_LENGTH) {
+        new_capacity = MAX_INPUT_BUFFER_LENGTH;
       }
       char *newbase = (char *)realloc(linep->inbuf->buf.base, new_capacity);
       if (!newbase) {
@@ -496,13 +566,23 @@ void append_input(LINE_t *linep, const char *msg, size_t len) {
       }
       linep->inbuf->buf.base = newbase;
       linep->inbuf->length = new_capacity;
+      if (test_input_buffer_allocations < SIZE_MAX) {
+        test_input_buffer_allocations++;
+      }
     }
 
-    memcpy(linep->inbuf->buf.base + linep->inbuf->buf.len, msg, msg_len);
-    linep->inbuf->buf.len = required_len;
-    linep->inbuf->buf.base[linep->inbuf->buf.len] = '\0';
+    size_t append_offset = linep->inbuf->buf.len;
+    if (append_offset > SIZE_MAX - msg_len) {
+      disconnect_line_for_input_limit(linep, "input buffer length overflow");
+      return;
+    }
+    size_t new_write_end = append_offset + msg_len;
+    memcpy(linep->inbuf->buf.base + append_offset, msg, msg_len);
+    linep->inbuf->buf.len = new_write_end;
+    linep->inbuf->buf.base[new_write_end] = '\0';
     linep->input_line_length = unterminated_input_line_length(
-        linep->inbuf->buf.base, linep->inbuf->buf.len);
+        linep->inbuf->buf.base + linep->input_unread_start,
+        linep->inbuf->buf.len - linep->input_unread_start);
     if (memchr(msg, '\n', msg_len)) {
       linep->status = LINE_data;
     }
@@ -518,53 +598,66 @@ char *get_input(LINE_t *linep) {
   if (!linep->inbuf || !linep->inbuf->buf.base) {
     logerr("Line %zu (%s) has no input buffer. Disconnecting.\n",
            linep->linenum, linep->address[0] ? linep->address : "unknown");
+    linep->input_unread_start = 0;
     linep->status = LINE_disconnecting;
     close_line_handle(linep);
     return NULL;
   }
 
-  char *eol = memchr(linep->inbuf->buf.base, '\n', linep->inbuf->buf.len);
+  if (linep->input_unread_start > linep->inbuf->buf.len ||
+      linep->inbuf->buf.len > linep->inbuf->length) {
+    logerr("Line %zu (%s) has invalid input buffer offsets. Disconnecting.\n",
+           linep->linenum, linep->address[0] ? linep->address : "unknown");
+    linep->input_unread_start = 0;
+    linep->status = LINE_disconnecting;
+    close_line_handle(linep);
+    return NULL;
+  }
+
+  size_t unread_len = linep->inbuf->buf.len - linep->input_unread_start;
+  char *unread = linep->inbuf->buf.base + linep->input_unread_start;
+  char *eol = memchr(unread, '\n', unread_len);
   if (!eol) {
     logverbose("Line %zu (%s) marked as data without a newline. Returning to idle.\n",
                linep->linenum, linep->address[0] ? linep->address : "unknown");
     linep->status = LINE_idle;
-    linep->input_line_length = unterminated_input_line_length(
-        linep->inbuf->buf.base, linep->inbuf->buf.len);
+    linep->input_line_length = unterminated_input_line_length(unread,
+                                                               unread_len);
     return NULL;
   }
 
-  *eol = '\0';
-  char *data = strdup(linep->inbuf->buf.base);
+  size_t line_len = (size_t)(eol - unread);
+  if (line_len == SIZE_MAX) {
+    logerr("Input line length overflow for line %zu.\n", linep->linenum);
+    linep->status = LINE_disconnecting;
+    close_line_handle(linep);
+    return NULL;
+  }
+  char *data = (char *)malloc(line_len + 1);
   if (!data) {
     logerr("Failed to allocate input line for line %zu.\n", linep->linenum);
     linep->status = LINE_disconnecting;
     close_line_handle(linep);
     return NULL;
   }
-  // Ok, we have the line of data, now take it out of the input buffer.
-  size_t consumed_len = (size_t)(eol - linep->inbuf->buf.base) + 1;
-  size_t remaining_len = linep->inbuf->buf.len - consumed_len;
-  size_t new_capacity = INBUF_LENGTH;
-  if (remaining_len + 1 > new_capacity) {
-    new_capacity = remaining_len + 1;
-  }
-  char *newbuffer = malloc(new_capacity);
-  if (!newbuffer) {
-    logerr("Failed to allocate replacement input buffer for line %zu.\n",
-           linep->linenum);
-    free(data);
-    linep->status = LINE_disconnecting;
-    close_line_handle(linep);
-    return NULL;
-  }
-  memcpy(newbuffer, eol + 1, remaining_len);
-  newbuffer[remaining_len] = '\0';
-  free(linep->inbuf->buf.base);
-  linep->inbuf->length = new_capacity;
-  linep->inbuf->buf.base = newbuffer;
-  linep->inbuf->buf.len = remaining_len;
-  linep->input_line_length = unterminated_input_line_length(newbuffer, remaining_len);
-  if (!memchr(linep->inbuf->buf.base, '\n', linep->inbuf->buf.len)) {
+  memcpy(data, unread, line_len);
+  data[line_len] = '\0';
+
+  /* Extraction only advances the cursor.  The next append compacts unread
+   * bytes if the existing tail has no room for the new input. */
+  size_t consumed_len = line_len + 1;
+  linep->input_unread_start += consumed_len;
+  size_t remaining_len = linep->inbuf->buf.len - linep->input_unread_start;
+  linep->input_line_length = unterminated_input_line_length(
+      linep->inbuf->buf.base + linep->input_unread_start, remaining_len);
+  if (remaining_len == 0) {
+    linep->input_unread_start = 0;
+    linep->inbuf->buf.len = 0;
+    linep->inbuf->buf.base[0] = '\0';
+    linep->input_line_length = 0;
+    linep->status = LINE_idle;
+  } else if (!memchr(linep->inbuf->buf.base + linep->input_unread_start,
+                     '\n', remaining_len)) {
     linep->status = LINE_idle;
   }
   return data;

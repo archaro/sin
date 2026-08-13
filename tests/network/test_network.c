@@ -126,8 +126,114 @@ static void cleanup_lines(void) {
   ASSERT_TRUE(network_runtime_destroy(test_runtime));
   test_runtime = NULL;
 }
+static size_t drain_polled_records(void) {
+  size_t records = 0;
+  for (;;) {
+    size_t line_index = 99;
+    char *input = NULL;
+    NetworkEvent event = network_runtime_poll(test_runtime, &line_index, &input);
+    if (event == NETWORK_EVENT_NONE) break;
+    ASSERT_EQ_INT(NETWORK_EVENT_DATA, event);
+    ASSERT_EQ_INT(0, line_index);
+    ASSERT_NOT_NULL(input);
+    free(input);
+    records++;
+  }
+  return records;
+}
+static void assert_polled_short_batch(size_t byte_count,
+                                      size_t expected_records,
+                                      size_t expected_allocations) {
+  network_runtime_test_reset_input_counters();
+  LINE_t *lp = make_line();
+  unsigned char *batch = malloc(byte_count);
+  ASSERT_NOT_NULL(batch);
+  memset(batch, 'x', byte_count);
+  for (size_t i = 1; i < byte_count; i += 2) batch[i] = '\n';
+  append_input(lp, (const char *)batch, byte_count);
+  ASSERT_EQ_INT(expected_records, drain_polled_records());
+  ASSERT_EQ_INT(0, network_runtime_test_input_maintenance_bytes());
+  ASSERT_EQ_INT(expected_allocations,
+                network_runtime_test_input_buffer_allocations());
+  free(batch);
+  cleanup_lines();
+}
 void test_append_input_lines_and_limits(void){LINE_t*lp=make_line();append_input(lp,"one\n",4);ASSERT_EQ_INT(LINE_data,lp->status);append_input(lp,"two\nthree\n",10);ASSERT_EQ_INT(14,lp->inbuf->buf.len);ASSERT_EQ_INT(0,lp->input_line_length);cleanup_lines();lp=make_line();append_input(lp,"partial",7);ASSERT_EQ_INT(LINE_idle,lp->status);ASSERT_EQ_INT(7,lp->input_line_length);cleanup_lines();lp=make_line();char*big=calloc(4097,1);memset(big,'a',4096);append_input(lp,big,4096);append_input(lp,"b",1);ASSERT_EQ_INT(LINE_disconnecting,lp->status);free(big);cleanup_lines();lp=make_line();char*chunk=calloc(4097,1);memset(chunk,'x',4095);chunk[4095]='\n';for(int i=0;i<16;i++)append_input(lp,chunk,4096);append_input(lp,"z\n",2);ASSERT_EQ_INT(LINE_disconnecting,lp->status);free(chunk);cleanup_lines();}
-void test_get_input_cases(void){LINE_t*lp=make_line();append_input(lp,"missing",7);lp->status=LINE_data;ASSERT_TRUE(get_input(lp)==NULL);ASSERT_EQ_INT(LINE_idle,lp->status);cleanup_lines();lp=make_line();append_input(lp,"first\nsecond\n",13);char*s=get_input(lp);ASSERT_NOT_NULL(s);ASSERT_TRUE(strcmp(s,"first")==0);free(s);ASSERT_TRUE(strcmp(lp->inbuf->buf.base,"second\n")==0);ASSERT_EQ_INT(LINE_data,lp->status);cleanup_lines();lp=make_line();append_input(lp,"x\n",2);fail_malloc_after=malloc_calls;ASSERT_TRUE(get_input(lp)==NULL);ASSERT_EQ_INT(LINE_disconnecting,lp->status);cleanup_lines();}
+void test_get_input_cases(void){LINE_t*lp=make_line();append_input(lp,"missing",7);lp->status=LINE_data;ASSERT_TRUE(get_input(lp)==NULL);ASSERT_EQ_INT(LINE_idle,lp->status);cleanup_lines();lp=make_line();append_input(lp,"first\nsecond\n",13);char*s=get_input(lp);ASSERT_NOT_NULL(s);ASSERT_TRUE(strcmp(s,"first")==0);free(s);ASSERT_TRUE(strcmp(lp->inbuf->buf.base+lp->input_unread_start,"second\n")==0);ASSERT_EQ_INT(6,lp->input_unread_start);ASSERT_EQ_INT(LINE_data,lp->status);cleanup_lines();lp=make_line();append_input(lp,"x\n",2);fail_malloc_after=malloc_calls;ASSERT_TRUE(get_input(lp)==NULL);ASSERT_EQ_INT(LINE_disconnecting,lp->status);cleanup_lines();}
+void test_input_cursor_drain_and_compaction_counters(void){
+  network_runtime_test_reset_input_counters();
+  LINE_t *lp=make_line();
+  ASSERT_EQ_INT(1,network_runtime_test_input_buffer_allocations());
+  network_runtime_test_reset_input_counters();
+  append_input(lp,"a\nb\nc\nd\n",8);
+  ASSERT_EQ_INT(0,network_runtime_test_input_maintenance_bytes());
+  for (size_t i=0;i<4;i++){char *line=get_input(lp);ASSERT_NOT_NULL(line);ASSERT_EQ_INT('a'+(int)i,line[0]);free(line);}
+  ASSERT_EQ_INT(0,network_runtime_test_input_maintenance_bytes());
+  ASSERT_EQ_INT(0,lp->input_unread_start);
+  ASSERT_EQ_INT(0,lp->inbuf->buf.len);
+  ASSERT_EQ_INT(LINE_idle,lp->status);
+  cleanup_lines();
+
+  lp=make_line();
+  append_input(lp,"one\ntwo\n",8);
+  char *line=get_input(lp); ASSERT_NOT_NULL(line); ASSERT_TRUE(strcmp(line,"one")==0); free(line);
+  append_input(lp,"three\n",6);
+  ASSERT_EQ_INT(4,lp->input_unread_start);
+  ASSERT_EQ_INT(14,lp->inbuf->buf.len);
+  line=get_input(lp); ASSERT_NOT_NULL(line); ASSERT_TRUE(strcmp(line,"two")==0); free(line);
+  line=get_input(lp); ASSERT_NOT_NULL(line); ASSERT_TRUE(strcmp(line,"three")==0); free(line);
+  cleanup_lines();
+
+  assert_polled_short_batch(16382, 8191, 1);
+  assert_polled_short_batch(65534, 32767, 2);
+
+  lp=make_line();
+  network_runtime_test_reset_input_counters();
+  append_input(lp,"one\n",4);
+  char filler[4095]; memset(filler,'q',sizeof(filler)); filler[4094]='\n';
+  append_input(lp,filler,sizeof(filler));
+  append_input(lp,filler,sizeof(filler));
+  append_input(lp,filler,sizeof(filler));
+  line=get_input(lp); ASSERT_NOT_NULL(line); free(line);
+  ASSERT_EQ_INT(4,lp->input_unread_start);
+  append_input(lp,filler,sizeof(filler));
+  ASSERT_EQ_INT(12285,network_runtime_test_input_maintenance_bytes());
+  ASSERT_TRUE(lp->input_unread_start == 0);
+  line=get_input(lp); ASSERT_NOT_NULL(line); ASSERT_EQ_INT('q',line[0]); free(line);
+  line=get_input(lp); ASSERT_NOT_NULL(line); ASSERT_EQ_INT('q',line[0]); free(line);
+  line=get_input(lp); ASSERT_NOT_NULL(line); ASSERT_EQ_INT('q',line[0]); free(line);
+  line=get_input(lp); ASSERT_NOT_NULL(line); ASSERT_EQ_INT('q',line[0]); free(line);
+  append_input(lp,"z\n",2);
+  line=get_input(lp); ASSERT_NOT_NULL(line); ASSERT_TRUE(strcmp(line,"z")==0); free(line);
+  ASSERT_EQ_INT(0,lp->input_unread_start);
+  cleanup_lines();
+}
+void test_input_buffer_boundary_preserves_64k_limit(void){
+  LINE_t *lp=make_line();
+  unsigned char *batch=malloc(65535);
+  ASSERT_NOT_NULL(batch);
+  memset(batch,'x',65535);
+  for(size_t i=1;i<65534;i+=2) batch[i]='\n';
+  batch[65534]='\n';
+  append_input(lp,(const char *)batch,65535);
+  ASSERT_EQ_INT(LINE_data,lp->status);
+  ASSERT_EQ_INT(65535,lp->inbuf->buf.len);
+  append_input(lp,"x",1);
+  ASSERT_EQ_INT(LINE_disconnecting,lp->status);
+  free(batch);
+  cleanup_lines();
+}
+void test_input_cursor_growth_failure_disconnects(void){
+  LINE_t *lp=make_line();
+  append_input(lp,"x\n",2);
+  char *line=get_input(lp); ASSERT_NOT_NULL(line); free(line);
+  fail_malloc_after=malloc_calls;
+  char chunk[16384]; memset(chunk,'q',sizeof(chunk));
+  append_input(lp,chunk,sizeof(chunk));
+  ASSERT_EQ_INT(LINE_disconnecting,lp->status);
+  ASSERT_EQ_INT(0,lp->input_unread_start);
+  cleanup_lines();
+}
 void test_runtime_poll_skips_failed_input(void){
   LINE_t *lp = make_line();
   append_input(lp, "failed\n", 7);
@@ -162,6 +268,8 @@ void test_line_lifecycle_states_and_reuse(void){
   last_close_cb(last_close_handle);
   destroy_line(lp);
   ASSERT_TRUE(line_is_reusable(lp));
+  ASSERT_EQ_INT(0, lp->input_unread_start);
+  ASSERT_EQ_INT(0, lp->input_line_length);
   uv_tcp_t *h2 = calloc(1, sizeof(*h2));
   LINE_t *reused = add_line(test_runtime, h2);
   ASSERT_TRUE(reused == lp);
@@ -440,4 +548,4 @@ void test_input_processor_timer_is_nonblocking_and_sleepable(void) {
   ASSERT_EQ_INT(0, uv_loop_close(&loop));
 }
 
-static const test_case_t tests[]={{"append_input_lines_and_limits",test_append_input_lines_and_limits},{"get_input_cases",test_get_input_cases},{"runtime_poll_skips_failed_input",test_runtime_poll_skips_failed_input},{"output_flush_limits_and_callback",test_output_flush_limits_and_callback},{"disconnect_waits_for_pending_output",test_disconnect_waits_for_pending_output},{"line_lifecycle_states_and_reuse",test_line_lifecycle_states_and_reuse},{"remote_disconnect_marks_line_before_close_callback",test_remote_disconnect_marks_line_before_close_callback},{"disconnect_close_write_callback_orders",test_disconnect_close_write_callback_orders},{"destroy_line_does_not_release_live_transport",test_destroy_line_does_not_release_live_transport},{"destroy_line_after_real_telnet_init_failure",test_destroy_line_after_real_telnet_init_failure},{"runtime_destroy_failure_preserves_pending_disconnect",test_runtime_destroy_failure_preserves_pending_disconnect},{"on_new_connection_rejections_and_close_ownership",test_on_new_connection_rejections_and_close_ownership},{"adversarial_long_stream_without_newline",test_adversarial_long_stream_without_newline},{"input_processor_releases_interpreter_results",test_input_processor_releases_interpreter_results},{"input_processor_missing_item_requests_unsafe_shutdown",test_input_processor_missing_item_requests_unsafe_shutdown},{"input_processor_timer_is_nonblocking_and_sleepable",test_input_processor_timer_is_nonblocking_and_sleepable}};int main(void){size_t total=sizeof(tests)/sizeof(tests[0]);current_test_total=total;for(size_t i=0;i<total;i++){current_test_index=i+1;current_test_name=tests[i].name;tests[i].fn();}printf("[network] totals: ran=%zu passed=%zu failed=0 skipped=0 status=SUCCESS\n",total,total);return 0;}
+static const test_case_t tests[]={{"append_input_lines_and_limits",test_append_input_lines_and_limits},{"get_input_cases",test_get_input_cases},{"input_cursor_drain_and_compaction_counters",test_input_cursor_drain_and_compaction_counters},{"input_buffer_boundary_preserves_64k_limit",test_input_buffer_boundary_preserves_64k_limit},{"input_cursor_growth_failure_disconnects",test_input_cursor_growth_failure_disconnects},{"runtime_poll_skips_failed_input",test_runtime_poll_skips_failed_input},{"output_flush_limits_and_callback",test_output_flush_limits_and_callback},{"disconnect_waits_for_pending_output",test_disconnect_waits_for_pending_output},{"line_lifecycle_states_and_reuse",test_line_lifecycle_states_and_reuse},{"remote_disconnect_marks_line_before_close_callback",test_remote_disconnect_marks_line_before_close_callback},{"disconnect_close_write_callback_orders",test_disconnect_close_write_callback_orders},{"destroy_line_does_not_release_live_transport",test_destroy_line_does_not_release_live_transport},{"destroy_line_after_real_telnet_init_failure",test_destroy_line_after_real_telnet_init_failure},{"runtime_destroy_failure_preserves_pending_disconnect",test_runtime_destroy_failure_preserves_pending_disconnect},{"on_new_connection_rejections_and_close_ownership",test_on_new_connection_rejections_and_close_ownership},{"adversarial_long_stream_without_newline",test_adversarial_long_stream_without_newline},{"input_processor_releases_interpreter_results",test_input_processor_releases_interpreter_results},{"input_processor_missing_item_requests_unsafe_shutdown",test_input_processor_missing_item_requests_unsafe_shutdown},{"input_processor_timer_is_nonblocking_and_sleepable",test_input_processor_timer_is_nonblocking_and_sleepable}};int main(void){size_t total=sizeof(tests)/sizeof(tests[0]);current_test_total=total;for(size_t i=0;i<total;i++){current_test_index=i+1;current_test_name=tests[i].name;tests[i].fn();}printf("[network] totals: ran=%zu passed=%zu failed=0 skipped=0 status=SUCCESS\n",total,total);return 0;}

@@ -28,4 +28,11 @@ size_t network_runtime_test_take_output(NetworkRuntime *runtime,
                                         size_t line_index, unsigned char *out,
                                         size_t out_size);
 
+/* Reset/read input-drain observability.  Maintenance counts bytes moved while
+ * compacting unread input; allocation counts successful initial and grown
+ * input-buffer allocations, excluding returned-line allocations. */
+void network_runtime_test_reset_input_counters(void);
+size_t network_runtime_test_input_maintenance_bytes(void);
+size_t network_runtime_test_input_buffer_allocations(void);
+
 #endif

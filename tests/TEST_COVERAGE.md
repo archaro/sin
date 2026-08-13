@@ -487,6 +487,12 @@ an opt-in performance guard.
     - extended list/itemstore/itemref/sys.call matrix enabled with
       `SIN_EXTENDED_BENCH=1`; `SIN_BENCH_REPORT=1` replays captured benchmark
       output on passing tests, and `make test-benchmark` runs it in `BUILD=release`
+    - the extended matrix also runs the real `network_runtime_poll` /
+      `get_input` path for repeatable short-record batches near 16 KiB and
+      64 KiB plus mixed partial/complete/long records; each case reports a
+      five-sample median with records, input bytes, maintenance bytes copied,
+      and input-buffer allocation counts. These are reports, not
+      machine-dependent timing thresholds.
 - **Code-item results**
   - `tests/interpreter/test_interpret_semantics_golden.c`
     - explicit valued and bare returns, fallthrough `nil`, discarded final
@@ -535,7 +541,11 @@ unified `tests/test-suite` harness:
   long-stream case exercises input buffering limits in-process. Lifecycle
   cases define active, disconnecting, disconnected, and reusable line states,
   and cover local ditch, remote EOF, repeated disconnect, writes after ditch,
-  and line slot reuse.
+  and line slot reuse. Cursor-drain regressions cover empty/partial/multiline
+  input, O(N) short-line draining (no per-line suffix copying) through
+  near-16 KiB and near-64 KiB generated batches, append-with-tail-space write
+  cursor correctness, the historical 64 KiB boundary, bounded compaction,
+  growth allocation failure, and counter reset/reuse semantics.
 
 - **`make test-chat-smoke` (real localhost end-to-end)**
   Builds and runs `tests/network/test_chat_smoke.c` with the real
