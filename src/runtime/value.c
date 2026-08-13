@@ -16,6 +16,7 @@
 #include "string_limits.h"
 #include "itemref.h"
 #include "list.h"
+#include "list_internal.h"
 #include "memory.h"
 #include "strbuilder.h"
 
@@ -92,15 +93,28 @@ static VALUE_text_result_e value_render_append(
       if (!value->list || depth >= SIN_LIST_MAX_DEPTH)
         return VALUE_TEXT_MALFORMED;
       if (!sin_sb_append_cstr(sb, "#[")) return VALUE_TEXT_FORMAT_ERROR;
-      size_t count = sin_list_count(value->list);
-      for (size_t i = 0; i < count; i++) {
-        const VALUE_t *elem = sin_list_get(value->list, i);
-        if (!elem) return VALUE_TEXT_MALFORMED;
-        if (i && !sin_sb_append_cstr(sb, ", ")) return VALUE_TEXT_FORMAT_ERROR;
-        VALUE_text_result_e child = value_render_append(
-            sb, elem, VALUE_TEXT_NIL_LITERAL, depth + 1u, true);
-        if (child != VALUE_TEXT_OK) return child;
+      SIN_LIST_ITER_t iter;
+      const VALUE_t *values = NULL;
+      const SIN_LIST_NODE *leaf = NULL;
+      size_t span_count = 0;
+      size_t total_count = sin_list_count(value->list);
+      size_t seen = 0;
+      bool have_value = false;
+      if (!sin_list_iter_init(&iter, value->list)) return VALUE_TEXT_MALFORMED;
+      while (sin_list_iter_next(&iter, &values, &span_count, &leaf)) {
+        if (span_count > total_count - seen) return VALUE_TEXT_MALFORMED;
+        for (size_t i = 0; i < span_count; ++i) {
+          if (have_value && !sin_sb_append_cstr(sb, ", ")) {
+            return VALUE_TEXT_FORMAT_ERROR;
+          }
+          VALUE_text_result_e child = value_render_append(
+              sb, &values[i], VALUE_TEXT_NIL_LITERAL, depth + 1u, true);
+          if (child != VALUE_TEXT_OK) return child;
+          have_value = true;
+        }
+        seen += span_count;
       }
+      if (seen != total_count) return VALUE_TEXT_MALFORMED;
       return sin_sb_append_cstr(sb, "]")
           ? VALUE_TEXT_OK : VALUE_TEXT_FORMAT_ERROR;
     }

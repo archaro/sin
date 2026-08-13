@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "list.h"
+#include "list_internal.h"
 #include "memory.h"
 #include "test_assert.h"
 #include "value.h"
@@ -16,6 +17,106 @@ static SIN_LIST_t *make_int_list(size_t count) {
   list = sin_list_build_owned(values, count);
   free(values);
   return list;
+}
+
+static void assert_list_iterator_order(size_t count) {
+  SIN_LIST_t *list = make_int_list(count);
+  SIN_LIST_ITER_t iter;
+  const VALUE_t *values = NULL;
+  const SIN_LIST_NODE *leaf = NULL;
+  size_t span_count = 0;
+  size_t seen = 0;
+  size_t full_leaves = count <= 32u ? 0u : (count - 1u) / 32u;
+  size_t expected_nodes = 0;
+  size_t level = full_leaves;
+  while (level > 1u) {
+    level = (level + 31u) / 32u;
+    expected_nodes += level;
+  }
+  ASSERT_NOT_NULL(list);
+  sin_list_test_reset_traversal_stats();
+  ASSERT_TRUE(sin_list_iter_init(&iter, list));
+  alloc_test_fail_after(0);
+  while (sin_list_iter_next(&iter, &values, &span_count, &leaf)) {
+    ASSERT_TRUE(values != NULL);
+    ASSERT_TRUE(leaf != NULL);
+    for (size_t i = 0; i < span_count; ++i) {
+      ASSERT_EQ_INT((long long)seen, values[i].i);
+      ++seen;
+    }
+  }
+  alloc_test_fail_after(-1);
+  ASSERT_EQ_INT((long long)count, seen);
+  ASSERT_EQ_INT((long long)((count + 31u) / 32u),
+                sin_list_test_traversal_stats().leaf_visits);
+  ASSERT_EQ_INT((long long)expected_nodes,
+                sin_list_test_traversal_stats().node_visits);
+  ASSERT_EQ_INT((long long)count,
+                sin_list_test_traversal_stats().values_yielded);
+  sin_list_release(list);
+}
+
+void test_list_leaf_iterator_boundaries_and_observability(void) {
+  const size_t sizes[] = {0u, 1u, 31u, 32u, 33u, 1024u, 1056u,
+                          SIN_LIST_MAX_ELEMENTS};
+  for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); ++i) {
+    assert_list_iterator_order(sizes[i]);
+  }
+}
+
+void test_list_equality_iterator_fast_paths_and_early_exit(void) {
+  SIN_LIST_t *base = make_int_list(1056);
+  SIN_LIST_t *first;
+  SIN_LIST_t *middle;
+  SIN_LIST_t *last;
+  SIN_LIST_t *nested_left;
+  SIN_LIST_t *nested_right;
+  SIN_LIST_t *inner_left;
+  SIN_LIST_t *inner_right;
+  VALUE_t replacement = {VALUE_int, {.i = -1}};
+  VALUE_t nested_left_value;
+  VALUE_t nested_right_value;
+  ASSERT_NOT_NULL(base);
+
+  sin_list_test_reset_traversal_stats();
+  ASSERT_TRUE(sin_list_equal(base, base));
+  ASSERT_EQ_INT(0, sin_list_test_traversal_stats().leaf_visits);
+
+  first = sin_list_set(base, 0, &replacement);
+  middle = sin_list_set(base, 512, &replacement);
+  last = sin_list_set(base, 1055, &replacement);
+  ASSERT_NOT_NULL(first);
+  ASSERT_NOT_NULL(middle);
+  ASSERT_NOT_NULL(last);
+  sin_list_test_reset_traversal_stats();
+  ASSERT_TRUE(!sin_list_equal(base, first));
+  ASSERT_EQ_INT(1, sin_list_test_traversal_stats().value_comparisons);
+  sin_list_test_reset_traversal_stats();
+  ASSERT_TRUE(!sin_list_equal(base, middle));
+  ASSERT_EQ_INT(1, sin_list_test_traversal_stats().value_comparisons);
+  ASSERT_TRUE(sin_list_test_traversal_stats().shared_leaf_skips > 0);
+  sin_list_test_reset_traversal_stats();
+  ASSERT_TRUE(!sin_list_equal(base, last));
+  ASSERT_EQ_INT(1, sin_list_test_traversal_stats().value_comparisons);
+  ASSERT_TRUE(sin_list_test_traversal_stats().shared_leaf_skips > 0);
+
+  inner_left = make_int_list(33);
+  inner_right = make_int_list(33);
+  ASSERT_NOT_NULL(inner_left);
+  ASSERT_NOT_NULL(inner_right);
+  nested_left_value = (VALUE_t){VALUE_list, {.list = inner_left}};
+  nested_right_value = (VALUE_t){VALUE_list, {.list = inner_right}};
+  nested_left = sin_list_build_owned(&nested_left_value, 1);
+  nested_right = sin_list_build_owned(&nested_right_value, 1);
+  ASSERT_NOT_NULL(nested_left);
+  ASSERT_NOT_NULL(nested_right);
+  ASSERT_TRUE(sin_list_equal(nested_left, nested_right));
+  sin_list_release(nested_left);
+  sin_list_release(nested_right);
+  sin_list_release(first);
+  sin_list_release(middle);
+  sin_list_release(last);
+  sin_list_release(base);
 }
 
 void test_list_basic_ownership_and_access(void) {

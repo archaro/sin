@@ -75,6 +75,7 @@ Key entry points:
 
 Files: `src/runtime/interpret.*`, `src/runtime/runtime_*`,
 `src/runtime/itemref.*`, `src/runtime/list.*`,
+`src/runtime/list_internal.h`,
 `src/runtime/vm.*`, `src/runtime/stack.*`, `src/runtime/value.*`,
 `src/runtime/task.*`.
 

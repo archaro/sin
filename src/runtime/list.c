@@ -1,5 +1,7 @@
 #include "list.h"
 
+#include "list_internal.h"
+
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -7,7 +9,7 @@
 
 #define LIST_BRANCH 32u
 
-typedef struct SIN_LIST_NODE {
+struct SIN_LIST_NODE {
   size_t refs;
   size_t count; /* Number of values below this node. */
   size_t depth;
@@ -18,7 +20,26 @@ typedef struct SIN_LIST_NODE {
     VALUE_t values[LIST_BRANCH];
     struct SIN_LIST_NODE *children[LIST_BRANCH];
   } data;
-} SIN_LIST_NODE;
+};
+
+static SIN_LIST_TRAVERSAL_STATS_t traversal_stats;
+
+static void traversal_stat_inc(size_t *counter) {
+  if (*counter != SIZE_MAX) ++*counter;
+}
+
+static void traversal_stat_add(size_t *counter, size_t amount) {
+  if (amount > SIZE_MAX - *counter) *counter = SIZE_MAX;
+  else *counter += amount;
+}
+
+void sin_list_test_reset_traversal_stats(void) {
+  traversal_stats = (SIN_LIST_TRAVERSAL_STATS_t){0};
+}
+
+SIN_LIST_TRAVERSAL_STATS_t sin_list_test_traversal_stats(void) {
+  return traversal_stats;
+}
 
 struct SIN_LIST {
   size_t refs;
@@ -417,6 +438,84 @@ size_t sin_list_count(const SIN_LIST_t *list) { return list ? list->count : 0; }
 
 size_t sin_list_depth(const SIN_LIST_t *list) { return list ? list->depth : 0; }
 
+static const SIN_LIST_NODE *iter_descend(SIN_LIST_ITER_t *iter) {
+  const SIN_LIST_NODE *node = iter->node;
+  while (node != NULL && !node->leaf) {
+    if (iter->depth >= SIN_LIST_ITER_MAX_LEVELS) return NULL;
+    iter->stack[iter->depth] = node;
+    iter->slots[iter->depth] = 0;
+    ++iter->depth;
+    traversal_stat_inc(&traversal_stats.node_visits);
+    node = node->data.children[0];
+  }
+  if (node != NULL) traversal_stat_inc(&traversal_stats.leaf_visits);
+  return node;
+}
+
+bool sin_list_iter_init(SIN_LIST_ITER_t *iter, const SIN_LIST_t *list) {
+  if (iter == NULL) return false;
+  *iter = (SIN_LIST_ITER_t){
+    .list = list,
+    .node = list == NULL ? NULL : list->root,
+    .tail_pending = list != NULL && list->tail != NULL
+  };
+  return true;
+}
+
+bool sin_list_iter_next(SIN_LIST_ITER_t *iter, const VALUE_t **values,
+                        size_t *count, const SIN_LIST_NODE **leaf) {
+  const SIN_LIST_NODE *current;
+  if (iter == NULL || values == NULL || count == NULL || leaf == NULL) {
+    return false;
+  }
+  *values = NULL;
+  *count = 0;
+  *leaf = NULL;
+
+  if (iter->current_leaf != NULL) {
+    iter->current_leaf = NULL;
+    while (iter->depth != 0) {
+      const SIN_LIST_NODE *parent = iter->stack[iter->depth - 1u];
+      unsigned slot = iter->slots[iter->depth - 1u] + 1u;
+      if (slot < parent->slots) {
+        iter->slots[iter->depth - 1u] = slot;
+        iter->node = parent->data.children[slot];
+        current = iter_descend(iter);
+        if (current == NULL) return false;
+        goto yielded_root_leaf;
+      }
+      --iter->depth;
+    }
+    iter->node = NULL;
+  }
+
+  if (iter->node != NULL) {
+    current = iter_descend(iter);
+    if (current == NULL) return false;
+  yielded_root_leaf:
+    iter->current_leaf = current;
+    *values = current->data.values;
+    *count = current->slots;
+    *leaf = current;
+    traversal_stat_add(&traversal_stats.values_yielded, current->slots);
+    return true;
+  }
+
+  if (iter->tail_pending) {
+    iter->tail_pending = false;
+    current = iter->list->tail;
+    if (current == NULL || !current->leaf) return false;
+    iter->current_leaf = current;
+    traversal_stat_inc(&traversal_stats.leaf_visits);
+    traversal_stat_add(&traversal_stats.values_yielded, current->slots);
+    *values = current->data.values;
+    *count = current->slots;
+    *leaf = current;
+    return true;
+  }
+  return false;
+}
+
 const VALUE_t *sin_list_get(const SIN_LIST_t *list, size_t index) {
   if (!list || index >= list->count) return NULL;
   if (!list->root || index >= list->root->count)
@@ -702,13 +801,55 @@ SIN_LIST_t *sin_list_slice(const SIN_LIST_t *list, size_t start, size_t length) 
 }
 
 bool sin_list_equal(const SIN_LIST_t *left, const SIN_LIST_t *right) {
+  SIN_LIST_ITER_t left_iter;
+  SIN_LIST_ITER_t right_iter;
+  const VALUE_t *left_values = NULL;
+  const VALUE_t *right_values = NULL;
+  const SIN_LIST_NODE *left_leaf = NULL;
+  const SIN_LIST_NODE *right_leaf = NULL;
+  size_t left_count = 0;
+  size_t right_count = 0;
+  size_t left_offset = 0;
+  size_t right_offset = 0;
+  bool have_left;
+  bool have_right;
   if (!left || !right) return false;
   if (left == right) return true;
   if (left->count != right->count) return false;
-  for (size_t i = 0; i < left->count; ++i) {
-    const VALUE_t *lhs = sin_list_get(left, i);
-    const VALUE_t *rhs = sin_list_get(right, i);
-    if (!lhs || !rhs || !value_equal(lhs, rhs)) return false;
+  if (!sin_list_iter_init(&left_iter, left) ||
+      !sin_list_iter_init(&right_iter, right)) return false;
+
+  have_left = sin_list_iter_next(&left_iter, &left_values, &left_count,
+                                 &left_leaf);
+  have_right = sin_list_iter_next(&right_iter, &right_values, &right_count,
+                                  &right_leaf);
+  while (have_left && have_right) {
+    size_t remaining_left = left_count - left_offset;
+    size_t remaining_right = right_count - right_offset;
+    size_t paired = remaining_left < remaining_right
+        ? remaining_left : remaining_right;
+    if (left_offset == 0 && right_offset == 0 && paired == left_count &&
+        paired == right_count && left_leaf == right_leaf) {
+      traversal_stat_inc(&traversal_stats.shared_leaf_skips);
+    } else {
+      for (size_t i = 0; i < paired; ++i) {
+        traversal_stat_inc(&traversal_stats.value_comparisons);
+        if (!value_equal(&left_values[left_offset + i],
+                         &right_values[right_offset + i])) return false;
+      }
+    }
+    left_offset += paired;
+    right_offset += paired;
+    if (left_offset == left_count) {
+      left_offset = 0;
+      have_left = sin_list_iter_next(&left_iter, &left_values, &left_count,
+                                     &left_leaf);
+    }
+    if (right_offset == right_count) {
+      right_offset = 0;
+      have_right = sin_list_iter_next(&right_iter, &right_values, &right_count,
+                                      &right_leaf);
+    }
   }
-  return true;
+  return !have_left && !have_right;
 }

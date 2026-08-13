@@ -319,6 +319,8 @@ void test_value_comparison_mismatched_type_equality_quirk(void);
 void test_value_comparison_unsupported_ordering_is_false(void);
 void test_list_basic_ownership_and_access(void);
 void test_list_rendering_contract(void);
+void test_list_leaf_iterator_boundaries_and_observability(void);
+void test_list_equality_iterator_fast_paths_and_early_exit(void);
 void test_list_boundaries_persistence_and_equality(void);
 void test_list_limits_invalid_inputs_and_failures(void);
 
@@ -596,6 +598,8 @@ static const test_case_t core_tests[] = {
     {"test_value_comparison_unsupported_ordering_is_false", test_value_comparison_unsupported_ordering_is_false},
     {"test_list_basic_ownership_and_access", test_list_basic_ownership_and_access},
     {"test_list_rendering_contract", test_list_rendering_contract},
+    {"test_list_leaf_iterator_boundaries_and_observability", test_list_leaf_iterator_boundaries_and_observability},
+    {"test_list_equality_iterator_fast_paths_and_early_exit", test_list_equality_iterator_fast_paths_and_early_exit},
     {"test_list_boundaries_persistence_and_equality", test_list_boundaries_persistence_and_equality},
     {"test_list_limits_invalid_inputs_and_failures", test_list_limits_invalid_inputs_and_failures},
 };

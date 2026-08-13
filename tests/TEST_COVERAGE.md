@@ -6,6 +6,10 @@ Immutable list coverage is in `tests/core/test_list.c`, including owned-element
 consumption, tail/tree boundaries, persistent updates, depth/count limits, and
 allocation-failure cleanup. `test_list_rendering_contract` covers deterministic
 nested rendering, escaping, explicit failure statuses, and debug truncation.
+`test_list_leaf_iterator_boundaries_and_observability` covers zero-allocation
+leaf-span traversal at representation boundaries through the maximum list
+height. `test_list_equality_iterator_fast_paths_and_early_exit` covers recursive
+equality, shared-leaf skipping, and first/middle/last mismatch short-circuiting.
 This document maps major subsystems to concrete test entry points so reviewers
 can quickly verify what is covered and what remains intentionally out of scope.
 

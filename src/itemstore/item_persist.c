@@ -28,6 +28,7 @@
 #include "item_persist_internal.h"
 #include "string_limits.h"
 #include "list.h"
+#include "list_internal.h"
 #include "itemref.h"
 
 // The configuration object, defined in src/sin.c
@@ -517,11 +518,20 @@ static bool preflight_value(const VALUE_t *value, size_t depth,
           !save_charge_bytes(budget, persistent_bytes, "list storage")) {
         return false;
       }
-      for (size_t i = 0; i < count; i++) {
-        if (!preflight_value(sin_list_get(value->list, i), depth + 1u,
-                             budget)) return false;
+      SIN_LIST_ITER_t iter;
+      const VALUE_t *values = NULL;
+      const SIN_LIST_NODE *leaf = NULL;
+      size_t span_count = 0;
+      size_t seen = 0;
+      if (!sin_list_iter_init(&iter, value->list)) return false;
+      while (sin_list_iter_next(&iter, &values, &span_count, &leaf)) {
+        if (span_count > count - seen) return false;
+        for (size_t i = 0; i < span_count; ++i) {
+          if (!preflight_value(&values[i], depth + 1u, budget)) return false;
+        }
+        seen += span_count;
       }
-      return true;
+      return seen == count;
     }
     default:
       return value->type == VALUE_nil || value->type == VALUE_int ||
