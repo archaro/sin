@@ -312,6 +312,31 @@ static void run_extended_list_benchmarks(void) {
                    median_u64(slice_samples, samples), iters, "invocation");
     sin_list_release(list);
   }
+  const struct {
+    size_t left;
+    size_t right;
+    const char *label;
+  } concat_shapes[] = {
+    {31u, 1025u, "unaligned"},
+    {32u, 1024u, "aligned"},
+    {1023u, 1025u, "unaligned"},
+    {1024u, 1024u, "aligned"},
+  };
+  for (size_t i = 0; i < sizeof(concat_shapes) / sizeof(concat_shapes[0]);
+       ++i) {
+    SIN_LIST_t *left = bench_make_list(concat_shapes[i].left);
+    SIN_LIST_t *right = bench_make_list(concat_shapes[i].right);
+    uint64_t concat_samples[samples];
+    for (size_t n = 0; n < samples; n++) {
+      concat_samples[n] = bench_concat(left, right, iters, &sink);
+    }
+    print_list_row(concat_shapes[i].label,
+                   concat_shapes[i].left + concat_shapes[i].right,
+                   median_u64(concat_samples, samples), iters,
+                   "concat_invocation");
+    sin_list_release(left);
+    sin_list_release(right);
+  }
   const size_t append_boundaries[] = {31, 32, 1055, 1056};
   for (size_t s = 0;
        s < sizeof(append_boundaries) / sizeof(append_boundaries[0]); s++) {

@@ -56,6 +56,40 @@ static void assert_list_iterator_order(size_t count) {
   sin_list_release(list);
 }
 
+static void assert_rhs_root_leaves_shared(const SIN_LIST_t *result,
+                                          const SIN_LIST_t *right) {
+  SIN_LIST_ITER_t right_iter;
+  SIN_LIST_ITER_t result_iter;
+  const VALUE_t *right_values = NULL;
+  const VALUE_t *result_values = NULL;
+  const SIN_LIST_NODE *right_leaf = NULL;
+  const SIN_LIST_NODE *result_leaf = NULL;
+  size_t right_count = 0;
+  size_t result_count = 0;
+  size_t right_root_count = sin_list_count(right);
+  size_t right_tail_count = right_root_count <= 32u
+      ? right_root_count
+      : ((right_root_count - 1u) % 32u) + 1u;
+  size_t span_count = 0;
+  if (right_root_count == 0) return;
+  right_root_count -= right_tail_count;
+  ASSERT_TRUE(sin_list_iter_init(&right_iter, right));
+  ASSERT_TRUE(sin_list_iter_init(&result_iter, result));
+  while (right_count < right_root_count) {
+    ASSERT_TRUE(sin_list_iter_next(&right_iter, &right_values, &span_count,
+                                   &right_leaf));
+    ASSERT_TRUE(span_count <= right_root_count - right_count);
+    ASSERT_TRUE(sin_list_iter_next(&result_iter, &result_values, &result_count,
+                                   &result_leaf));
+    while (result_leaf != right_leaf) {
+      ASSERT_TRUE(sin_list_iter_next(&result_iter, &result_values, &result_count,
+                                     &result_leaf));
+    }
+    ASSERT_TRUE(result_leaf == right_leaf);
+    right_count += span_count;
+  }
+}
+
 void test_list_leaf_iterator_boundaries_and_observability(void) {
   const size_t sizes[] = {0u, 1u, 31u, 32u, 33u, 1024u, 1056u,
                           SIN_LIST_MAX_ELEMENTS};
@@ -413,6 +447,36 @@ void test_list_boundaries_persistence_and_equality(void) {
   sin_list_release(appended);
   sin_list_release(set);
   sin_list_release(height2);
+}
+
+void test_list_concat_shares_rhs_leaves(void) {
+  const size_t left_sizes[] = {31u, 32u, 33u, 1023u, 1024u, 1025u};
+  const size_t right_sizes[] = {33u, 1025u};
+  for (size_t left_index = 0;
+       left_index < sizeof(left_sizes) / sizeof(left_sizes[0]); ++left_index) {
+    for (size_t right_index = 0;
+         right_index < sizeof(right_sizes) / sizeof(right_sizes[0]);
+         ++right_index) {
+      SIN_LIST_t *left = make_int_list(left_sizes[left_index]);
+      SIN_LIST_t *right = make_int_list(right_sizes[right_index]);
+      SIN_LIST_t *result;
+      ASSERT_NOT_NULL(left);
+      ASSERT_NOT_NULL(right);
+      result = sin_list_concat(left, right);
+      ASSERT_NOT_NULL(result);
+      ASSERT_EQ_INT((long long)(left_sizes[left_index] + right_sizes[right_index]),
+                    sin_list_count(result));
+      assert_rhs_root_leaves_shared(result, right);
+      if ((left_index + right_index) % 2u == 0u) {
+        sin_list_release(result);
+        sin_list_release(right);
+      } else {
+        sin_list_release(right);
+        sin_list_release(result);
+      }
+      sin_list_release(left);
+    }
+  }
 }
 
 void test_list_limits_invalid_inputs_and_failures(void) {
