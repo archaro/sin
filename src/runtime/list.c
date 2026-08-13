@@ -609,56 +609,6 @@ static SIN_LIST_NODE *append_tree(const SIN_LIST_NODE *root,
   return new_root;
 }
 
-/* Wrap an owned tree until it reaches the requested branch height. */
-static SIN_LIST_NODE *tree_raise_owned(SIN_LIST_NODE *tree,
-                                       unsigned height) {
-  if (!tree || tree->height > height) return NULL;
-  while (tree->height < height) {
-    SIN_LIST_NODE *children[1] = {tree};
-    SIN_LIST_NODE *parent = branch_from_owned(children, 1,
-                                              tree->height + 1u);
-    if (!parent) {
-      node_release(tree);
-      return NULL;
-    }
-    tree = parent;
-  }
-  return tree;
-}
-
-/* Join two owned trees, rebuilding only the new top spine. */
-static SIN_LIST_NODE *tree_join_owned(SIN_LIST_NODE *left,
-                                      SIN_LIST_NODE *right) {
-  SIN_LIST_NODE *children[2];
-  unsigned height;
-  SIN_LIST_NODE *result;
-  if (!left) return right;
-  if (!right) return left;
-  height = left->height > right->height ? left->height : right->height;
-  if (left->height < height) {
-    left = tree_raise_owned(left, height);
-    if (!left) {
-      node_release(right);
-      return NULL;
-    }
-  }
-  if (right->height < height) {
-    right = tree_raise_owned(right, height);
-    if (!right) {
-      node_release(left);
-      return NULL;
-    }
-  }
-  children[0] = left;
-  children[1] = right;
-  result = branch_from_owned(children, 2, height + 1u);
-  if (!result) {
-    node_release(left);
-    node_release(right);
-  }
-  return result;
-}
-
 /* Append an owned leaf to an owned tree, releasing the old spine. */
 static SIN_LIST_NODE *tree_append_owned(SIN_LIST_NODE *tree,
                                         SIN_LIST_NODE *leaf) {
@@ -678,56 +628,6 @@ static SIN_LIST_NODE *tree_append_owned(SIN_LIST_NODE *tree,
   result = append_tree(tree, leaf);
   node_release(tree);
   return result;
-}
-
-/* Retain a tree after dropping its first complete leaf. */
-static SIN_LIST_NODE *tree_suffix_owned(const SIN_LIST_NODE *node,
-                                       bool *ok) {
-  SIN_LIST_NODE *children[LIST_BRANCH] = {0};
-  SIN_LIST_NODE *suffix;
-  unsigned out_slots = 0;
-  if (!ok) return NULL;
-  *ok = false;
-  if (!node) return NULL;
-  if (node->leaf) {
-    *ok = true;
-    return NULL;
-  }
-  suffix = tree_suffix_owned(node->data.children[0], ok);
-  if (!*ok) return NULL;
-  if (suffix) children[out_slots++] = suffix;
-  for (unsigned i = 1; i < node->slots; ++i) {
-    if (!node_retain(node->data.children[i])) {
-      for (unsigned j = 0; j < out_slots; ++j) node_release(children[j]);
-      return NULL;
-    }
-    children[out_slots++] = node->data.children[i];
-  }
-  if (out_slots == 0) return NULL;
-  suffix = branch_from_owned(children, out_slots, node->height);
-  if (!suffix) {
-    for (unsigned i = 0; i < out_slots; ++i) node_release(children[i]);
-    return NULL;
-  }
-  return suffix;
-}
-
-/* Retain a list's complete prefix, promoting its tail into that prefix. */
-static SIN_LIST_NODE *retain_full_tree(const SIN_LIST_t *list) {
-  SIN_LIST_NODE *tree;
-  SIN_LIST_NODE *tail;
-  if (!list || !list->tail) return NULL;
-  if (!list->root) return node_retain(list->tail) ? list->tail : NULL;
-  if (!node_retain(list->root)) return NULL;
-  tree = list->root;
-  if (!node_retain(list->tail)) {
-    node_release(tree);
-    return NULL;
-  }
-  tail = list->tail;
-  tree = tree_append_owned(tree, tail);
-  if (!tree) return NULL;
-  return tree;
 }
 
 SIN_LIST_t *sin_list_append(const SIN_LIST_t *list, const VALUE_t *value) {
@@ -835,118 +735,112 @@ SIN_LIST_t *sin_list_set(const SIN_LIST_t *list, size_t index,
 }
 
 SIN_LIST_t *sin_list_concat(const SIN_LIST_t *left, const SIN_LIST_t *right) {
-  SIN_LIST_NODE *root = NULL;
-  SIN_LIST_NODE *tail = NULL;
-  SIN_LIST_NODE *right_root = NULL;
-  SIN_LIST_NODE *right_suffix = NULL;
-  SIN_LIST_NODE *boundary = NULL;
-  size_t left_tail_count;
-  size_t right_tail_count;
-  size_t tail_sum;
-  size_t prefix_from_tail;
-  size_t right_tail_start;
-  bool left_aligned;
   SIN_LIST_t *result;
   if (!left || !right || left->count > SIN_LIST_MAX_ELEMENTS - right->count)
     return NULL;
   if (left->count == 0) return sin_list_retain((SIN_LIST_t *)right);
   if (right->count == 0) return sin_list_retain((SIN_LIST_t *)left);
-  left_tail_count = left->tail_count;
-  right_tail_count = right->tail_count;
-  tail_sum = left_tail_count + right_tail_count;
-  left_aligned = left_tail_count == LIST_BRANCH;
-  right_tail_start = right->count - right_tail_count;
+  if (left->tail_count == LIST_BRANCH) {
+    SIN_LIST_ITER_t iter;
+    const VALUE_t *values = NULL;
+    const SIN_LIST_NODE *leaf = NULL;
+    size_t span = 0;
+    size_t seen = 0;
+    SIN_LIST_NODE *root = NULL;
+    SIN_LIST_NODE *tail = NULL;
 
-  /* An aligned left side can promote its full tail and retain the RHS tail. */
-  if (left_aligned) {
-    root = retain_full_tree(left);
-    if (!root) return NULL;
-    if (right->root && !node_retain(right->root)) {
-      node_release(root);
-      return NULL;
-    }
-    right_root = right->root;
-    root = tree_join_owned(root, right_root);
-    if (!root) return NULL;
-    tail = node_retain(right->tail) ? right->tail : NULL;
-    if (!tail) {
-      node_release(root);
-      return NULL;
-    }
-  } else if (tail_sum <= LIST_BRANCH) {
-    /* The final tail spans both incomplete boundary leaves. */
     if (left->root && !node_retain(left->root)) return NULL;
     root = left->root;
-    if (right->root && !node_retain(right->root)) {
+    if (!node_retain(left->tail)) {
       node_release(root);
       return NULL;
     }
-    right_root = right->root;
-    root = tree_join_owned(root, right_root);
-    tail = leaf_clone_append_range(left->tail, right, right_tail_start,
-                                   right_tail_count);
-    if (!tail) {
-      node_release(root);
-      return NULL;
-    }
-  } else {
-    /* Keep all complete RHS leaves.  Only the RHS tail crosses the boundary. */
-    prefix_from_tail = LIST_BRANCH - left_tail_count;
-    if (left->root && !node_retain(left->root)) return NULL;
-    root = left->root;
-    boundary = leaf_clone_append_range(left->tail, right, 0,
-                                       prefix_from_tail);
-    if (!boundary) {
-      node_release(root);
-      return NULL;
-    }
-    root = tree_append_owned(root, boundary);
+    root = tree_append_owned(root, left->tail);
     if (!root) return NULL;
-    if (right->root) {
-      bool suffix_ok = false;
-      SIN_LIST_NODE *remainder = leaf_clone_append_range(
-          NULL, right, prefix_from_tail, LIST_BRANCH - prefix_from_tail);
-      if (!remainder) {
-        node_release(root);
-        return NULL;
-      }
-      right_suffix = tree_suffix_owned(right->root, &suffix_ok);
-      if (!suffix_ok) {
-        node_release(remainder);
-        node_release(root);
-        return NULL;
-      }
-      root = tree_append_owned(root, remainder);
-      if (!root) {
-        node_release(right_suffix);
-        return NULL;
-      }
-      root = tree_join_owned(root, right_suffix);
-      if (!root) return NULL;
-      boundary = leaf_clone_append_range(NULL, right, right_tail_start,
-                                         prefix_from_tail);
-      if (!boundary) {
-        node_release(root);
-        return NULL;
-      }
-      root = tree_append_owned(root, boundary);
-      if (!root) return NULL;
-      tail = leaf_clone_append_range(NULL, right,
-                                     right_tail_start + prefix_from_tail,
-                                     right_tail_count - prefix_from_tail);
-    } else {
-      tail = leaf_clone_append_range(NULL, right, prefix_from_tail,
-                                     right->count - prefix_from_tail);
-    }
-    if (!tail) {
+    if (!sin_list_iter_init(&iter, right)) {
       node_release(root);
       return NULL;
     }
+    while (seen < right->count - right->tail_count) {
+      if (!sin_list_iter_next(&iter, &values, &span, &leaf) ||
+          span > right->count - right->tail_count - seen ||
+          !node_retain((SIN_LIST_NODE *)leaf)) {
+        node_release(root);
+        return NULL;
+      }
+      root = tree_append_owned(root, (SIN_LIST_NODE *)leaf);
+      if (!root) return NULL;
+      seen += span;
+    }
+    if (!node_retain(right->tail)) {
+      node_release(root);
+      return NULL;
+    }
+    tail = right->tail;
+    result = list_new(left->count + right->count, right->tail_count,
+                      root, tail);
+    if (!result) return NULL;
+    return result;
   }
-  result = list_new(left->count + right->count,
-                    ((left->count + right->count - 1u) % LIST_BRANCH) + 1u,
-                    root, tail);
+
+  /* Unaligned inputs use the canonical value-batch fallback. */
+  result = sin_list_retain((SIN_LIST_t *)left);
   if (!result) return NULL;
+  for (size_t i = 0; i < right->count;) {
+    SIN_LIST_NODE *root = NULL;
+    SIN_LIST_NODE *tail = NULL;
+    SIN_LIST_NODE *promoted = NULL;
+    size_t batch;
+    size_t new_tail_count;
+    SIN_LIST_t *next;
+
+    if (result->tail_count < LIST_BRANCH) {
+      batch = right->count - i;
+      if (batch > LIST_BRANCH - result->tail_count)
+        batch = LIST_BRANCH - result->tail_count;
+      tail = leaf_clone_append_range(result->tail, right, i, batch);
+      if (!tail) {
+        sin_list_release(result);
+        return NULL;
+      }
+      if (result->root && !node_retain(result->root)) {
+        node_release(tail);
+        sin_list_release(result);
+        return NULL;
+      }
+      root = result->root;
+      new_tail_count = result->tail_count + batch;
+    } else {
+      batch = right->count - i;
+      if (batch > LIST_BRANCH) batch = LIST_BRANCH;
+      if (!node_retain(result->tail)) {
+        sin_list_release(result);
+        return NULL;
+      }
+      promoted = result->tail;
+      tail = leaf_clone_append_range(NULL, right, i, batch);
+      if (!tail) {
+        node_release(promoted);
+        sin_list_release(result);
+        return NULL;
+      }
+      root = append_tree(result->root, promoted);
+      if (!root) {
+        node_release(tail);
+        sin_list_release(result);
+        return NULL;
+      }
+      new_tail_count = batch;
+    }
+    next = list_new(result->count + batch, new_tail_count, root, tail);
+    if (!next) {
+      sin_list_release(result);
+      return NULL;
+    }
+    sin_list_release(result);
+    result = next;
+    i += batch;
+  }
   return result;
 }
 

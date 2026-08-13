@@ -451,7 +451,7 @@ void test_list_boundaries_persistence_and_equality(void) {
 
 void test_list_concat_shares_rhs_leaves(void) {
   const size_t left_sizes[] = {31u, 32u, 33u, 1023u, 1024u, 1025u};
-  const size_t right_sizes[] = {33u, 1025u};
+  const size_t right_sizes[] = {31u, 32u, 33u, 1023u, 1024u, 1025u};
   for (size_t left_index = 0;
        left_index < sizeof(left_sizes) / sizeof(left_sizes[0]); ++left_index) {
     for (size_t right_index = 0;
@@ -466,7 +466,13 @@ void test_list_concat_shares_rhs_leaves(void) {
       ASSERT_NOT_NULL(result);
       ASSERT_EQ_INT((long long)(left_sizes[left_index] + right_sizes[right_index]),
                     sin_list_count(result));
-      assert_rhs_root_leaves_shared(result, right);
+      for (size_t i = 0; i < left_sizes[left_index]; ++i)
+        ASSERT_EQ_INT((long long)i, sin_list_get(result, i)->i);
+      for (size_t i = 0; i < right_sizes[right_index]; ++i)
+        ASSERT_EQ_INT((long long)i,
+                      sin_list_get(result, left_sizes[left_index] + i)->i);
+      if (left_sizes[left_index] % 32u == 0u)
+        assert_rhs_root_leaves_shared(result, right);
       if ((left_index + right_index) % 2u == 0u) {
         sin_list_release(result);
         sin_list_release(right);
@@ -477,6 +483,94 @@ void test_list_concat_shares_rhs_leaves(void) {
       sin_list_release(left);
     }
   }
+
+  SIN_LIST_t *acc = make_int_list(32);
+  SIN_LIST_t *piece = make_int_list(32);
+  ASSERT_NOT_NULL(acc);
+  ASSERT_NOT_NULL(piece);
+  for (size_t i = 0; i < 256u; ++i) {
+    SIN_LIST_t *next = sin_list_concat(acc, piece);
+    ASSERT_NOT_NULL(next);
+    ASSERT_TRUE(sin_list_depth(next) <= SIN_LIST_MAX_DEPTH);
+    ASSERT_EQ_INT((long long)((i + 2u) * 32u), sin_list_count(next));
+    ASSERT_EQ_INT(0, sin_list_get(next, 0)->i);
+    ASSERT_EQ_INT(31, sin_list_get(next, sin_list_count(next) - 1u)->i);
+    SIN_LIST_ITER_t iter;
+    const VALUE_t *values = NULL;
+    const SIN_LIST_NODE *leaf = NULL;
+    size_t span = 0;
+    size_t seen = 0;
+    ASSERT_TRUE(sin_list_iter_init(&iter, next));
+    while (sin_list_iter_next(&iter, &values, &span, &leaf)) seen += span;
+    ASSERT_EQ_INT((long long)((i + 2u) * 32u), seen);
+    sin_list_release(acc);
+    acc = next;
+  }
+  sin_list_release(acc);
+  sin_list_release(piece);
+
+  const size_t failure_left[] = {31u, 1024u};
+  const size_t failure_right[] = {1025u, 1024u};
+  for (size_t shape = 0; shape < 2u; ++shape) {
+    SIN_LIST_t *left = make_int_list(failure_left[shape]);
+    SIN_LIST_t *right = make_int_list(failure_right[shape]);
+    bool saw_failure = false;
+    bool saw_success_after_failure = false;
+    ASSERT_NOT_NULL(left);
+    ASSERT_NOT_NULL(right);
+    for (long fail_at = 0; fail_at < 512; ++fail_at) {
+      SIN_LIST_t *result;
+      alloc_test_fail_after(fail_at);
+      result = sin_list_concat(left, right);
+      alloc_test_fail_after(-1);
+      if (result) {
+        if (saw_failure) saw_success_after_failure = true;
+        sin_list_release(result);
+      } else {
+        saw_failure = true;
+      }
+      ASSERT_EQ_INT((long long)failure_left[shape], sin_list_count(left));
+      ASSERT_EQ_INT((long long)failure_right[shape], sin_list_count(right));
+      ASSERT_EQ_INT(0, sin_list_get(left, 0)->i);
+      ASSERT_EQ_INT((long long)(failure_left[shape] - 1u),
+                    sin_list_get(left, failure_left[shape] - 1u)->i);
+      ASSERT_EQ_INT(0, sin_list_get(right, 0)->i);
+      ASSERT_EQ_INT((long long)(failure_right[shape] - 1u),
+                    sin_list_get(right, failure_right[shape] - 1u)->i);
+    }
+    ASSERT_TRUE(saw_failure);
+    ASSERT_TRUE(saw_success_after_failure);
+    sin_list_release(left);
+    sin_list_release(right);
+  }
+
+  SIN_LIST_t *inner = make_int_list(2);
+  VALUE_t left_values[2] = {
+    {VALUE_str, {.s = strdup("left")}},
+    {VALUE_list, {.list = sin_list_retain(inner)}}
+  };
+  VALUE_t right_values[2] = {
+    {VALUE_str, {.s = strdup("right")}},
+    {VALUE_list, {.list = sin_list_retain(inner)}}
+  };
+  SIN_LIST_t *nested_left = sin_list_build_owned(left_values, 2);
+  SIN_LIST_t *nested_right = sin_list_build_owned(right_values, 2);
+  SIN_LIST_t *nested_result;
+  ASSERT_NOT_NULL(inner);
+  ASSERT_NOT_NULL(nested_left);
+  ASSERT_NOT_NULL(nested_right);
+  nested_result = sin_list_concat(nested_left, nested_right);
+  ASSERT_NOT_NULL(nested_result);
+  sin_list_release(nested_left);
+  sin_list_release(nested_right);
+  ASSERT_EQ_INT(VALUE_str, sin_list_get(nested_result, 0)->type);
+  ASSERT_TRUE(strcmp(sin_list_get(nested_result, 0)->s, "left") == 0);
+  ASSERT_EQ_INT(VALUE_str, sin_list_get(nested_result, 2)->type);
+  ASSERT_TRUE(strcmp(sin_list_get(nested_result, 2)->s, "right") == 0);
+  ASSERT_TRUE(sin_list_get(nested_result, 1)->list == inner);
+  ASSERT_TRUE(sin_list_get(nested_result, 3)->list == inner);
+  sin_list_release(nested_result);
+  sin_list_release(inner);
 }
 
 void test_list_limits_invalid_inputs_and_failures(void) {
