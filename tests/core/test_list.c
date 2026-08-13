@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "list.h"
@@ -14,6 +15,25 @@ static SIN_LIST_t *make_int_list(size_t count) {
   SIN_LIST_t *list;
   if (count != 0 && !values) return NULL;
   for (size_t i = 0; i < count; ++i) values[i] = (VALUE_t){VALUE_int, {.i = (int64_t)i}};
+  list = sin_list_build_owned(values, count);
+  free(values);
+  return list;
+}
+
+static SIN_LIST_t *make_string_list(size_t count) {
+  VALUE_t *values = count == 0 ? NULL : calloc(count, sizeof(*values));
+  SIN_LIST_t *list;
+  if (count != 0 && !values) return NULL;
+  for (size_t i = 0; i < count; ++i) {
+    char text[32];
+    (void)snprintf(text, sizeof(text), "rhs-string-%zu", i);
+    values[i] = (VALUE_t){VALUE_str, {.s = strdup(text)}};
+    if (!values[i].s) {
+      for (size_t j = 0; j < i; ++j) value_free(&values[j]);
+      free(values);
+      return NULL;
+    }
+  }
   list = sin_list_build_owned(values, count);
   free(values);
   return list;
@@ -460,8 +480,11 @@ void test_list_concat_shares_rhs_leaves(void) {
       SIN_LIST_t *left = make_int_list(left_sizes[left_index]);
       SIN_LIST_t *right = make_int_list(right_sizes[right_index]);
       SIN_LIST_t *result;
+      bool observe_cursor = left_sizes[left_index] == 31u &&
+                            right_sizes[right_index] == 1025u;
       ASSERT_NOT_NULL(left);
       ASSERT_NOT_NULL(right);
+      if (observe_cursor) sin_list_test_reset_traversal_stats();
       result = sin_list_concat(left, right);
       ASSERT_NOT_NULL(result);
       ASSERT_EQ_INT((long long)(left_sizes[left_index] + right_sizes[right_index]),
@@ -473,6 +496,12 @@ void test_list_concat_shares_rhs_leaves(void) {
                       sin_list_get(result, left_sizes[left_index] + i)->i);
       if (left_sizes[left_index] % 32u == 0u)
         assert_rhs_root_leaves_shared(result, right);
+      if (observe_cursor) {
+        SIN_LIST_TRAVERSAL_STATS_t stats = sin_list_test_traversal_stats();
+        ASSERT_EQ_INT(33, stats.leaf_visits);
+        ASSERT_EQ_INT(1025, stats.values_yielded);
+        ASSERT_EQ_INT(1, stats.node_visits);
+      }
       if ((left_index + right_index) % 2u == 0u) {
         sin_list_release(result);
         sin_list_release(right);
@@ -509,6 +538,20 @@ void test_list_concat_shares_rhs_leaves(void) {
   sin_list_release(acc);
   sin_list_release(piece);
 
+  SIN_LIST_t *self_base = make_int_list(1024);
+  SIN_LIST_t *self_result;
+  ASSERT_NOT_NULL(self_base);
+  self_result = sin_list_concat(self_base, self_base);
+  ASSERT_NOT_NULL(self_result);
+  ASSERT_EQ_INT(2048, sin_list_count(self_result));
+  ASSERT_EQ_INT(0, sin_list_get(self_result, 0)->i);
+  ASSERT_EQ_INT(1023, sin_list_get(self_result, 1024u - 1u)->i);
+  ASSERT_EQ_INT(0, sin_list_get(self_result, 1024u)->i);
+  assert_rhs_root_leaves_shared(self_result, self_base);
+  sin_list_release(self_base);
+  ASSERT_EQ_INT(1023, sin_list_get(self_result, 1024u - 1u)->i);
+  sin_list_release(self_result);
+
   const size_t failure_left[] = {31u, 1024u};
   const size_t failure_right[] = {1025u, 1024u};
   for (size_t shape = 0; shape < 2u; ++shape) {
@@ -543,6 +586,58 @@ void test_list_concat_shares_rhs_leaves(void) {
     sin_list_release(left);
     sin_list_release(right);
   }
+
+  SIN_LIST_t *string_inner = make_int_list(2);
+  SIN_LIST_t *string_source = make_string_list(65);
+  VALUE_t nested_string_value = {
+    VALUE_list, {.list = sin_list_retain(string_inner)}
+  };
+  SIN_LIST_t *string_right = sin_list_set(string_source, 64,
+                                           &nested_string_value);
+  SIN_LIST_t *string_left = make_int_list(31);
+  bool string_saw_failure = false;
+  bool string_saw_success_after_failure = false;
+  ASSERT_NOT_NULL(string_inner);
+  ASSERT_NOT_NULL(string_source);
+  ASSERT_NOT_NULL(string_right);
+  ASSERT_NOT_NULL(string_left);
+  value_free(&nested_string_value);
+  sin_list_release(string_source);
+  for (long fail_at = 0; fail_at < 512; ++fail_at) {
+    SIN_LIST_t *result;
+    alloc_test_fail_after(fail_at);
+    result = sin_list_concat(string_left, string_right);
+    alloc_test_fail_after(-1);
+    if (result) {
+      if (string_saw_failure) string_saw_success_after_failure = true;
+      if (fail_at % 2 == 0) {
+        sin_list_release(string_left);
+        sin_list_release(result);
+      } else {
+        sin_list_release(result);
+        sin_list_release(string_left);
+      }
+      string_left = make_int_list(31);
+      ASSERT_NOT_NULL(string_left);
+    } else {
+      string_saw_failure = true;
+    }
+    ASSERT_EQ_INT(31, sin_list_count(string_left));
+    ASSERT_EQ_INT(65, sin_list_count(string_right));
+    for (size_t i = 0; i < 64u; ++i) {
+      char expected[32];
+      (void)snprintf(expected, sizeof(expected), "rhs-string-%zu", i);
+      ASSERT_EQ_INT(VALUE_str, sin_list_get(string_right, i)->type);
+      ASSERT_TRUE(strcmp(sin_list_get(string_right, i)->s, expected) == 0);
+    }
+    ASSERT_EQ_INT(VALUE_list, sin_list_get(string_right, 64)->type);
+    ASSERT_TRUE(sin_list_get(string_right, 64)->list == string_inner);
+  }
+  ASSERT_TRUE(string_saw_failure);
+  ASSERT_TRUE(string_saw_success_after_failure);
+  sin_list_release(string_left);
+  sin_list_release(string_right);
+  sin_list_release(string_inner);
 
   SIN_LIST_t *inner = make_int_list(2);
   VALUE_t left_values[2] = {

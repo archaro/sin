@@ -144,14 +144,42 @@ static SIN_LIST_NODE *leaf_clone_append(const SIN_LIST_NODE *old,
   return leaf;
 }
 
-/* Clone an existing tail and a borrowed source range into one leaf. */
-static SIN_LIST_NODE *leaf_clone_append_range(const SIN_LIST_NODE *old,
-                                              const SIN_LIST_t *source,
-                                              size_t start, size_t count) {
+typedef struct {
+  SIN_LIST_ITER_t iter;
+  const VALUE_t *values;
+  size_t span;
+  size_t offset;
+} LIST_VALUE_CURSOR_t;
+
+static bool value_cursor_init(LIST_VALUE_CURSOR_t *cursor,
+                              const SIN_LIST_t *source) {
+  if (!cursor || !source || !sin_list_iter_init(&cursor->iter, source))
+    return false;
+  cursor->values = NULL;
+  cursor->span = 0;
+  cursor->offset = 0;
+  return true;
+}
+
+static const VALUE_t *value_cursor_next(LIST_VALUE_CURSOR_t *cursor) {
+  if (!cursor) return NULL;
+  if (cursor->offset == cursor->span) {
+    const SIN_LIST_NODE *leaf = NULL;
+    if (!sin_list_iter_next(&cursor->iter, &cursor->values, &cursor->span,
+                            &leaf)) return NULL;
+    cursor->offset = 0;
+  }
+  return &cursor->values[cursor->offset++];
+}
+
+/* Clone an existing tail and a borrowed cursor range into one leaf. */
+static SIN_LIST_NODE *leaf_clone_append_cursor(const SIN_LIST_NODE *old,
+                                               LIST_VALUE_CURSOR_t *cursor,
+                                               size_t count) {
   SIN_LIST_NODE *leaf;
   size_t old_count = old ? old->slots : 0;
   if (count == 0 || old_count + count > LIST_BRANCH ||
-      (old && !old->leaf) || !source)
+      (old && !old->leaf) || !cursor)
     return NULL;
   leaf = alloc_calloc(1, sizeof(*leaf));
   if (!leaf) return NULL;
@@ -168,7 +196,7 @@ static SIN_LIST_NODE *leaf_clone_append_range(const SIN_LIST_NODE *old,
     leaf->depth = max_depth(leaf->depth, value_depth(&leaf->data.values[i]));
   }
   for (size_t i = 0; i < count; ++i) {
-    const VALUE_t *value = sin_list_get(source, start + i);
+    const VALUE_t *value = value_cursor_next(cursor);
     if (!value || !value_clone_fallible(value, &leaf->data.values[old_count + i])) {
       node_release(leaf);
       return NULL;
@@ -784,6 +812,8 @@ SIN_LIST_t *sin_list_concat(const SIN_LIST_t *left, const SIN_LIST_t *right) {
   }
 
   /* Unaligned inputs use the canonical value-batch fallback. */
+  LIST_VALUE_CURSOR_t cursor;
+  if (!value_cursor_init(&cursor, right)) return NULL;
   result = sin_list_retain((SIN_LIST_t *)left);
   if (!result) return NULL;
   for (size_t i = 0; i < right->count;) {
@@ -798,7 +828,7 @@ SIN_LIST_t *sin_list_concat(const SIN_LIST_t *left, const SIN_LIST_t *right) {
       batch = right->count - i;
       if (batch > LIST_BRANCH - result->tail_count)
         batch = LIST_BRANCH - result->tail_count;
-      tail = leaf_clone_append_range(result->tail, right, i, batch);
+      tail = leaf_clone_append_cursor(result->tail, &cursor, batch);
       if (!tail) {
         sin_list_release(result);
         return NULL;
@@ -818,7 +848,7 @@ SIN_LIST_t *sin_list_concat(const SIN_LIST_t *left, const SIN_LIST_t *right) {
         return NULL;
       }
       promoted = result->tail;
-      tail = leaf_clone_append_range(NULL, right, i, batch);
+      tail = leaf_clone_append_cursor(NULL, &cursor, batch);
       if (!tail) {
         node_release(promoted);
         sin_list_release(result);
