@@ -45,4 +45,3 @@ bool sin_list_iter_next(SIN_LIST_ITER_t *iter, const VALUE_t **values,
 /* Test-only observability; this header is not part of the runtime API. */
 void sin_list_test_reset_traversal_stats(void);
 SIN_LIST_TRAVERSAL_STATS_t sin_list_test_traversal_stats(void);
-

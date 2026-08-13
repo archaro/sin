@@ -91,14 +91,15 @@ void test_list_equality_iterator_fast_paths_and_early_exit(void) {
   sin_list_test_reset_traversal_stats();
   ASSERT_TRUE(!sin_list_equal(base, first));
   ASSERT_EQ_INT(1, sin_list_test_traversal_stats().value_comparisons);
+  ASSERT_EQ_INT(0, sin_list_test_traversal_stats().shared_leaf_skips);
   sin_list_test_reset_traversal_stats();
   ASSERT_TRUE(!sin_list_equal(base, middle));
   ASSERT_EQ_INT(1, sin_list_test_traversal_stats().value_comparisons);
-  ASSERT_TRUE(sin_list_test_traversal_stats().shared_leaf_skips > 0);
+  ASSERT_EQ_INT(16, sin_list_test_traversal_stats().shared_leaf_skips);
   sin_list_test_reset_traversal_stats();
   ASSERT_TRUE(!sin_list_equal(base, last));
-  ASSERT_EQ_INT(1, sin_list_test_traversal_stats().value_comparisons);
-  ASSERT_TRUE(sin_list_test_traversal_stats().shared_leaf_skips > 0);
+  ASSERT_EQ_INT(32, sin_list_test_traversal_stats().value_comparisons);
+  ASSERT_EQ_INT(32, sin_list_test_traversal_stats().shared_leaf_skips);
 
   inner_left = make_int_list(33);
   inner_right = make_int_list(33);
