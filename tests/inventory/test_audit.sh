@@ -8,15 +8,35 @@ if [ -z "$archive" ]; then
   archive=$(find "$repo_root/lib" -name libsinshared.a -print -quit)
 fi
 [ -n "$archive" ] && [ -f "$archive" ]
+case $archive in
+  /*) ;;
+  *) archive=$repo_root/$archive ;;
+esac
 
 PYTHONDONTWRITEBYTECODE=1 python3 "$audit" --archive "$archive" >/dev/null
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$repo_root/tests/inventory" python3 - <<'PY'
 import audit
 
-_, _, _, ir, _, _ = audit.source_entries(audit.ROOT)
+assert audit.grammar_tokens("%token TPLUS\n%left TPLUS\n") == ["TPLUS"]
+try:
+    audit.grammar_tokens("%left TPLUS\n%right TPLUS\n")
+except audit.AuditError as error:
+    assert "conflicting precedence" in str(error)
+else:
+    raise AssertionError("conflicting precedence declarations were accepted")
+tokens, _, _, ir, opcodes, libcalls = audit.source_entries(audit.ROOT)
+assert "TAND" in tokens
+assert "TNOT" in tokens
 assert "IR_OP_PUSH_INT" in ir
 assert "IR_OP_IR_OP_PUSH_INT" not in ir
-print("[inventory-audit] exact IR extraction passed")
+libcall_opcode = next(row for row in opcodes if row[0] == "LIBCALL")
+assert len(libcall_opcode) == 10
+assert libcall_opcode[6] == "VALIDATE_LIBCALL_PAIR"
+assert libcall_opcode[7] == "op_libcall"
+assert libcall_opcode[8] == "STACK_DYNAMIC(0,1,IR_STACK_LIBCALL)"
+assert libcall_opcode[9] == "IR_CONTROL_STRAIGHT"
+assert next(row for row in libcalls if row[:2] == ("sys", "backup"))[5] == "lc_sys_backup"
+print("[inventory-audit] exact grammar, IR, opcode, and libcall extraction passed")
 PY
 
 work=$(mktemp -d)
@@ -34,6 +54,32 @@ expect_failure() {
   grep -q 'inventory audit: ERROR:' "$output"
   grep -q "$expected" "$output"
 }
+
+expect_root_failure() {
+  local label=$1
+  local expected=$2
+  local output=$work/$label.out
+  if PYTHONDONTWRITEBYTECODE=1 python3 "$audit" --root "$work/root" \
+      --catalog-dir "$work/catalog" --archive "$archive" >"$output" 2>&1; then
+    printf 'audit negative self-test unexpectedly passed: %s\n' "$label" >&2
+    exit 1
+  fi
+  grep -q 'inventory audit: ERROR:' "$output"
+  grep -q "$expected" "$output"
+}
+
+# Precedence directives declare lexer tokens too; canonical drift must fail.
+mkdir -p "$work/root/src/compiler" "$work/root/src/bytecode" \
+  "$work/root/src/libcall" "$work/root/tests/baseline"
+cp "$repo_root/src/compiler/parser.y" "$work/root/src/compiler/parser.y"
+cp "$repo_root/src/compiler/absyn.h" "$work/root/src/compiler/absyn.h"
+cp "$repo_root/src/bytecode/bytecode_abi.h" "$work/root/src/bytecode/bytecode_abi.h"
+cp "$repo_root/src/bytecode/opcode_schema.def" "$work/root/src/bytecode/opcode_schema.def"
+cp "$repo_root/src/libcall/libcall_list.h" "$work/root/src/libcall/libcall_list.h"
+cp "$repo_root/tests/baseline/legacy_test_ledger.csv" \
+  "$work/root/tests/baseline/legacy_test_ledger.csv"
+sed -i 's/^%left TAND$/%left/' "$work/root/src/compiler/parser.y"
+expect_root_failure precedence_token 'language token inventory mismatch'
 
 # Duplicate contract IDs are rejected before any canonical comparison.
 sed -n '2p' "$work/catalog/contracts.csv" >>"$work/catalog/contracts.csv"
@@ -64,6 +110,43 @@ with tests_path.open("w", newline="", encoding="utf-8") as stream:
     writer.writerows(tests)
 PY
 expect_failure missing_opcode 'bytecode opcode inventory mismatch'
+cp -a "$repo_root/tests/inventory/." "$work/catalog"
+
+# Exact opcode metadata includes validator, runtime handler, nested stack
+# metadata, and control class, not only the encoded symbol.
+python3 - "$work/catalog/bytecode.csv" <<'PY'
+import csv
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+rows = list(csv.DictReader(path.open(newline="", encoding="utf-8")))
+row = next(row for row in rows if row["canonical_id"] == "opcode.LIBCALL")
+row["canonical_metadata"] = row["canonical_metadata"].replace(
+    "validator=VALIDATE_LIBCALL_PAIR", "validator=VALIDATE_NONE").replace(
+    "control_class=IR_CONTROL_STRAIGHT", "control_class=IR_CONTROL_CONDITIONAL")
+with path.open("w", newline="", encoding="utf-8") as stream:
+    writer = csv.DictWriter(stream, fieldnames=rows[0].keys(), lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+PY
+expect_failure opcode_metadata 'opcode LIBCALL has stale canonical metadata'
+cp -a "$repo_root/tests/inventory/." "$work/catalog"
+
+# Libcall handler symbols are part of the permanent dispatch ABI metadata.
+python3 - "$work/catalog/libcalls.csv" <<'PY'
+import csv
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+rows = list(csv.DictReader(path.open(newline="", encoding="utf-8")))
+row = next(row for row in rows if row["library"] == "sys" and row["call"] == "backup")
+row["handler"] = "lc_sys_save"
+with path.open("w", newline="", encoding="utf-8") as stream:
+    writer = csv.DictWriter(stream, fieldnames=rows[0].keys(), lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+PY
+expect_failure libcall_handler 'libcall sys.backup has stale handler metadata'
 cp -a "$repo_root/tests/inventory/." "$work/catalog"
 
 # Unknown test references are rejected even when the row shape is valid.

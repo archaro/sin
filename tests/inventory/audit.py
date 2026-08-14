@@ -73,12 +73,138 @@ def split_refs(value: str) -> list[str]:
     return [item for item in value.split(";") if item]
 
 
-def source_entries(root: Path) -> tuple[list[str], list[str], list[str], list[str], list[tuple[str, str]], list[tuple[str, str, int, int, int]]]:
-    parser = (root / "src/compiler/parser.y").read_text(encoding="utf-8")
+def grammar_tokens(parser: str) -> list[str]:
     tokens: list[str] = []
-    for line in parser.splitlines():
-        if line.startswith("%token"):
-            tokens.extend(re.findall(r"\bT[A-Z][A-Z0-9_]*\b", line))
+    declarations: dict[str, dict[str, int | str | None]] = {}
+    directive_re = re.compile(r"^%(token|left|right|nonassoc|precedence)\b(.*)$")
+    for line_number, line in enumerate(parser.splitlines(), start=1):
+        match = directive_re.match(line)
+        if not match:
+            continue
+        directive, body = match.groups()
+        for token in re.findall(r"\bT[A-Z][A-Z0-9_]*\b", body):
+            state = declarations.get(token)
+            if state is None:
+                state = {"token": None, "precedence": None, "precedence_line": None}
+                declarations[token] = state
+                tokens.append(token)
+            if directive == "token":
+                if state["token"] is not None:
+                    fail(f"canonical grammar repeats %token declaration for {token}")
+                state["token"] = line_number
+                continue
+            previous = state["precedence"]
+            if previous is not None:
+                if previous == directive:
+                    fail(f"canonical grammar repeats %{directive} declaration for {token}")
+                fail(f"canonical grammar gives {token} conflicting precedence declarations")
+            state["precedence"] = directive
+            state["precedence_line"] = line_number
+    return tokens
+
+
+def macro_invocations(text: str, macro: str) -> list[str]:
+    starts = re.finditer(rf"^[ \t]*{re.escape(macro)}\(", text, re.MULTILINE)
+    bodies: list[str] = []
+    for match in starts:
+        start = match.end()
+        depth = 1
+        quote: str | None = None
+        escaped = False
+        index = start
+        while index < len(text) and depth:
+            char = text[index]
+            if quote is not None:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+            elif char in ("'", '"'):
+                quote = char
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+            index += 1
+        if depth:
+            fail(f"unterminated canonical {macro}(...) invocation")
+        bodies.append(text[start:index - 1])
+    return bodies
+
+
+def split_top_level_fields(body: str) -> list[str]:
+    fields: list[str] = []
+    start = 0
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    for index, char in enumerate(body):
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in ("'", '"'):
+            quote = char
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            if not depth:
+                fail("unbalanced canonical macro field")
+            depth -= 1
+        elif char == "," and depth == 0:
+            fields.append(body[start:index].strip())
+            start = index + 1
+    if quote is not None or depth:
+        fail("unbalanced canonical macro field")
+    fields.append(body[start:].strip())
+    return fields
+
+
+def normalize_macro_field(field: str) -> str:
+    normalized: list[str] = []
+    quote: str | None = None
+    escaped = False
+    for char in field:
+        if quote is not None:
+            normalized.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+        elif char in ("'", '"'):
+            quote = char
+            normalized.append(char)
+        elif not char.isspace():
+            normalized.append(char)
+    if quote is not None:
+        fail("unterminated quoted canonical macro field")
+    return "".join(normalized)
+
+
+OPCODE_FIELD_NAMES = (
+    "name", "encoded_symbol", "contexts", "requires_runtime_handler",
+    "operand_kind", "size_policy", "validator", "runtime_handler",
+    "stack_metadata", "control_class",
+)
+
+
+def opcode_fingerprint(row: tuple[str, ...]) -> str:
+    if len(row) != len(OPCODE_FIELD_NAMES):
+        fail(f"canonical opcode schema row has {len(row)} fields, expected 10")
+    return "|".join(f"{name}={value}" for name, value in zip(OPCODE_FIELD_NAMES, row))
+
+
+def source_entries(root: Path) -> tuple[list[str], list[str], list[str], list[str], list[tuple[str, ...]], list[tuple[str, str, int, int, int, str]]]:
+    parser = (root / "src/compiler/parser.y").read_text(encoding="utf-8")
+    tokens = grammar_tokens(parser)
     productions = re.findall(r"^([a-z][a-z0-9_]*)\s*:", parser, re.MULTILINE)
     ast_text = (root / "src/compiler/absyn.h").read_text(encoding="utf-8")
     ast_block = "N_" + ast_text.split("typedef enum { N_", 1)[1].split("} ENUM_NODE", 1)[0]
@@ -87,23 +213,37 @@ def source_entries(root: Path) -> tuple[list[str], list[str], list[str], list[st
     ir_block = abi.split("typedef enum {", 1)[1].split("} IR_Op", 1)[0]
     ir = re.findall(r"\bIR_OP_[A-Z0-9_]+\b", ir_block)
     schema = (root / "src/bytecode/opcode_schema.def").read_text(encoding="utf-8")
-    opcodes = re.findall(r"^OP\(([^,]+),\s*'?(.*?)'?,", schema, re.MULTILINE)
-    # The second capture is intentionally retained as an ABI check, not just
-    # an inventory count.
-    opcode_rows = [(name.strip(), symbol.strip()) for name, symbol in opcodes]
+    opcode_rows: list[tuple[str, ...]] = []
+    for body in macro_invocations(schema, "OP"):
+        fields = tuple(normalize_macro_field(field)
+                       for field in split_top_level_fields(body))
+        if len(fields) != len(OPCODE_FIELD_NAMES):
+            fail(f"canonical opcode schema row has {len(fields)} fields, expected 10")
+        opcode_rows.append(fields)
     libcall_text = (root / "src/libcall/libcall_list.h").read_text(encoding="utf-8")
-    libcalls: list[tuple[str, str, int, int, int]] = []
-    pattern = re.compile(
-        r'^\s*X\("([^"]+)",\s*"([^"]+)",\s*(\d+),\s*(\d+),\s*(\d+),',
-        re.MULTILINE,
-    )
-    for library, call, lib_index, call_index, args in pattern.findall(libcall_text):
-        libcalls.append((library, call, int(lib_index), int(call_index), int(args)))
-    if len(tokens) != len(set(tokens)) or len(productions) != len(set(productions)):
-        fail("canonical grammar contains duplicate identifiers")
+    libcalls: list[tuple[str, str, int, int, int, str]] = []
+    for body in macro_invocations(libcall_text, "X"):
+        fields = split_top_level_fields(body)
+        if len(fields) != 6:
+            fail(f"canonical libcall row has {len(fields)} fields, expected 6")
+        library, call = fields[:2]
+        if not (library.startswith('"') and library.endswith('"') and
+                call.startswith('"') and call.endswith('"')):
+            fail("canonical libcall names must be quoted strings")
+        try:
+            lib_index, call_index, args = (int(value) for value in fields[2:5])
+        except ValueError:
+            fail("canonical libcall indices and arity must be integers")
+        handler = normalize_macro_field(fields[5])
+        if not ID_RE.fullmatch(handler):
+            fail(f"canonical libcall has malformed handler {handler!r}")
+        libcalls.append((library[1:-1], call[1:-1], lib_index, call_index,
+                         args, handler))
+    if len(productions) != len(set(productions)):
+        fail("canonical grammar contains duplicate productions")
     if len(ast) != len(set(ast)) or len(ir) != len(set(ir)):
         fail("canonical AST/IR definitions contain duplicate identifiers")
-    if len(opcode_rows) != len({name for name, _ in opcode_rows}):
+    if len(opcode_rows) != len({row[0] for row in opcode_rows}):
         fail("canonical opcode schema contains duplicate identifiers")
     if len(libcalls) != len({(row[0], row[1]) for row in libcalls}):
         fail("canonical libcall list contains duplicate identifiers")
@@ -181,9 +321,9 @@ def main() -> int:
         fields = {
             "contracts.csv": ("contract_id", "area", "facets", "test_ids", "description"),
             "language.csv": ("contract_id", "kind", "canonical_id", "facets", "test_ids", "description"),
-            "bytecode.csv": ("contract_id", "kind", "canonical_id", "facets", "test_ids", "description"),
+            "bytecode.csv": ("contract_id", "kind", "canonical_id", "canonical_metadata", "facets", "test_ids", "description"),
             "api.csv": ("contract_id", "module", "contract_name", "declaration", "normal_behavior", "invalid_input", "boundary_behavior", "ownership_cleanup", "failure_behavior", "test_ids"),
-            "libcalls.csv": ("contract_id", "library", "call", "lib_index", "call_index", "args", "metadata", "valid_behavior", "invalid_arguments", "ownership", "side_effects", "failure_behavior", "source_integration", "test_ids"),
+            "libcalls.csv": ("contract_id", "library", "call", "lib_index", "call_index", "args", "handler", "metadata", "valid_behavior", "invalid_arguments", "ownership", "side_effects", "failure_behavior", "source_integration", "test_ids"),
             "executables.csv": ("contract_id", "program", "facet", "contract", "test_ids"),
             "tests.csv": ("test_id", "contract_ids"),
             "archive_symbols.csv": ("symbol", "object", "module", "declaration", "api_contract_id"),
@@ -255,23 +395,39 @@ def main() -> int:
         bytecode_expected = {
             "ast": {f"ast.node.{value}" for value in ast},
             "ir": {f"ir.op.{value}" for value in ir},
-            "opcode": {f"opcode.{value}" for value, _ in opcode_rows},
+            "opcode": {f"opcode.{row[0]}" for row in opcode_rows},
         }
         bytecode = catalogs["bytecode.csv"]
         for kind, expected in bytecode_expected.items():
             actual = {row["canonical_id"] for row in bytecode if row["kind"] == kind}
             if actual != expected:
                 fail(f"bytecode {kind} inventory mismatch (missing={sorted(expected - actual)[:1]}, stale={sorted(actual - expected)[:1]})")
+        opcode_by_name = {row[0]: row for row in opcode_rows}
         for row in bytecode:
-            if row["kind"] == "opcode":
-                name = row["canonical_id"].removeprefix("opcode.")
-                expected_symbol = dict(opcode_rows)[name]
-                if row["description"].split(";", 1)[0] != expected_symbol:
-                    fail(f"opcode {name} has stale encoding metadata")
-        expected_libcalls = {(library, call, lib_index, call_index, args) for library, call, lib_index, call_index, args in libcalls}
-        actual_libcalls = {(row["library"], row["call"], int(row["lib_index"]), int(row["call_index"]), int(row["args"])) for row in catalogs["libcalls.csv"]}
-        if actual_libcalls != expected_libcalls:
+            if row["kind"] != "opcode":
+                if row["canonical_metadata"] != "not-applicable":
+                    fail(f"non-opcode {row['canonical_id']} has opcode metadata")
+                continue
+            name = row["canonical_id"].removeprefix("opcode.")
+            if row["canonical_metadata"] != opcode_fingerprint(opcode_by_name[name]):
+                fail(f"opcode {name} has stale canonical metadata")
+        expected_libcalls = {(library, call): (lib_index, call_index, args, handler)
+                             for library, call, lib_index, call_index, args, handler in libcalls}
+        libcall_rows = catalogs["libcalls.csv"]
+        actual_keys = {(row["library"], row["call"]) for row in libcall_rows}
+        if len(actual_keys) != len(libcall_rows):
+            fail("libcall inventory contains duplicate library/call rows")
+        if actual_keys != set(expected_libcalls):
             fail("libcall inventory does not match src/libcall/libcall_list.h")
+        for row in libcall_rows:
+            target = (row["library"], row["call"])
+            expected = expected_libcalls[target]
+            actual = (int(row["lib_index"]), int(row["call_index"]),
+                      int(row["args"]), row["handler"])
+            if actual != expected:
+                if actual[3] != expected[3]:
+                    fail(f"libcall {target[0]}.{target[1]} has stale handler metadata")
+                fail(f"libcall {target[0]}.{target[1]} has stale ABI metadata")
         if any(not all(row[field].strip() for field in ("metadata", "valid_behavior", "invalid_arguments", "ownership", "side_effects", "failure_behavior", "source_integration")) for row in catalogs["libcalls.csv"]):
             fail("libcall rows must state metadata, valid, invalid, ownership, side effects, failure, and source facets")
         generic_libcall_values = {

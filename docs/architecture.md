@@ -37,6 +37,9 @@ module, provenance, and grouped `api_contract_id`; `api.csv` contains the
 reviewed observable module contracts (including application entry points),
 not fabricated per-symbol prose for private implementation helpers.  The
 auditor fails closed on unknown archive objects or contract mappings.
+Grammar tokens include `%token` and precedence declarations; opcode inventory
+rows reconcile all ten `OP(...)` fields, and libcall rows reconcile the exact
+handler symbol in addition to their numeric ABI metadata.
 
 ## Module Boundaries
 

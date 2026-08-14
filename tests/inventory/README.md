@@ -9,6 +9,12 @@ symbol/object/module accountability map; `api.csv` contains grouped,
 observable module contracts that those symbols resolve to, rather than one
 prose row per private helper.
 
+Grammar token reconciliation includes both `%token` and Bison precedence
+directives. Opcode rows store an exact fingerprint of all ten canonical
+`OP(...)` fields, including nested stack metadata, and non-opcode bytecode rows
+mark that field `not-applicable`. Libcall rows store and reconcile the exact
+handler symbol as well as library/call indices and arity.
+
 Run the positive gate with:
 
 ```sh
