@@ -58,7 +58,10 @@ The representative list/item-reference matrix is opt-in: run `make
 test-benchmark` (or set `SIN_EXTENDED_BENCH=1 SIN_BENCH_REPORT=1` when running
 the optimized test binary). It reports representative medians: construct and
 clone/release at 0, 8, and 1024; random and sequential get, set, concat, and
-slice at 8 and 1024; append at 31→32, 32→33, 1055→1056, and 1056→1057;
+slice at 8 and 1024; explicit slice shapes for aligned leaf sharing (1056,
+32, 992), an aligned subtree (2080, 1024, 1056), an aligned short tail (65,
+64, 1), and an unaligned 31/32/33 boundary (1056, 31, 33); append at 31→32,
+32→33, 1055→1056, and 1056→1057;
 equal/early-unequal/late-unequal at 1024; a compiled source literal returning
 33 elements; itemstore v2 save/load; item-reference creation/resolution; and
 actual `sys.call` execution comparing an 8-element list with a zero-argument

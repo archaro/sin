@@ -224,16 +224,21 @@ static uint64_t bench_concat(SIN_LIST_t *left, SIN_LIST_t *right,
   return now_ns() - start;
 }
 
-static uint64_t bench_slice(SIN_LIST_t *list, size_t count, size_t iters,
-                            volatile uintptr_t *sink) {
-  uint64_t start = now_ns();
+static uint64_t bench_slice_range(SIN_LIST_t *list, size_t offset, size_t length,
+                                  size_t iters, volatile uintptr_t *sink) {
+  uint64_t begin = now_ns();
   for (size_t n = 0; n < iters; n++) {
-    SIN_LIST_t *next = sin_list_slice(list, count / 4u, count / 2u);
+    SIN_LIST_t *next = sin_list_slice(list, offset, length);
     ASSERT_NOT_NULL(next);
     *sink ^= sin_list_count(next);
     sin_list_release(next);
   }
-  return now_ns() - start;
+  return now_ns() - begin;
+}
+
+static uint64_t bench_slice(SIN_LIST_t *list, size_t count, size_t iters,
+                            volatile uintptr_t *sink) {
+  return bench_slice_range(list, count / 4u, count / 2u, iters, sink);
 }
 
 static uint64_t bench_equal(SIN_LIST_t *left, SIN_LIST_t *right, size_t iters,
@@ -393,6 +398,30 @@ static void run_extended_list_benchmarks(void) {
          (unsigned long long)literal_median,
          (unsigned long long)(literal_median / iters));
   itemstore_destroy(literal_store);
+  const struct {
+    size_t size;
+    size_t start;
+    size_t length;
+    const char *label;
+  } slice_shapes[] = {
+    {1056u, 32u, 992u, "slice_aligned_shared"},
+    {2080u, 1024u, 1056u, "slice_aligned_subtree"},
+    {65u, 64u, 1u, "slice_aligned_short_tail"},
+    {1056u, 31u, 33u, "slice_unaligned_boundary"},
+  };
+  for (size_t i = 0; i < sizeof(slice_shapes) / sizeof(slice_shapes[0]); ++i) {
+    SIN_LIST_t *list = bench_make_list(slice_shapes[i].size);
+    uint64_t slice_samples[samples];
+    for (size_t n = 0; n < samples; n++) {
+      slice_samples[n] = bench_slice_range(list, slice_shapes[i].start,
+                                           slice_shapes[i].length, iters,
+                                           &sink);
+    }
+    print_list_row(slice_shapes[i].label, slice_shapes[i].size,
+                   median_u64(slice_samples, samples), iters,
+                   "slice_invocation");
+    sin_list_release(list);
+  }
   printf("[bench][list] sink=%llu\n", (unsigned long long)sink);
 }
 

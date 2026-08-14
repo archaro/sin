@@ -461,6 +461,19 @@ void test_itemstore_v2_lists_and_itemrefs_roundtrip(void) {
   ASSERT_NOT_NULL(outer);
   ASSERT_NOT_NULL(test_item_set_value(root, "list",
                                       (VALUE_t){VALUE_list, {.list = outer}}));
+  VALUE_t *shared_values = calloc(96, sizeof(*shared_values));
+  ASSERT_NOT_NULL(shared_values);
+  for (size_t i = 0; i < 96; ++i)
+    shared_values[i] = (VALUE_t){VALUE_int, {.i = (int64_t)i}};
+  SIN_LIST_t *shared_source = sin_list_build_owned(shared_values, 96);
+  free(shared_values);
+  SIN_LIST_t *shared_slice = NULL;
+  ASSERT_NOT_NULL(shared_source);
+  shared_slice = sin_list_slice(shared_source, 32, 32);
+  ASSERT_NOT_NULL(shared_slice);
+  ASSERT_NOT_NULL(test_item_set_value(
+      root, "shared", (VALUE_t){VALUE_list, {.list = shared_slice}}));
+  sin_list_release(shared_source);
   SIN_ITEMREF_t *ref = sin_itemref_create("foo.bar");
   ASSERT_NOT_NULL(ref);
   ASSERT_NOT_NULL(test_item_set_value(
@@ -488,6 +501,11 @@ void test_itemstore_v2_lists_and_itemrefs_roundtrip(void) {
   ASSERT_EQ_INT(7, sin_list_get(sin_list_get(li->value.list, 1)->list, 0)->i);
   ASSERT_TRUE(sin_list_equal(sin_list_get(li->value.list, 0)->list,
                              sin_list_get(li->value.list, 1)->list));
+  ITEM_t *shared_item = find_item(root, "shared");
+  ASSERT_NOT_NULL(shared_item);
+  ASSERT_EQ_INT(32, sin_list_count(shared_item->value.list));
+  ASSERT_EQ_INT(32, sin_list_get(shared_item->value.list, 0)->i);
+  ASSERT_EQ_INT(63, sin_list_get(shared_item->value.list, 31)->i);
   ITEM_t *ri = find_item(root, "ref");
   ASSERT_NOT_NULL(ri);
   ASSERT_EQ_INT(VALUE_itemref, ri->value.type);

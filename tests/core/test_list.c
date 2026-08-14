@@ -668,6 +668,313 @@ void test_list_concat_shares_rhs_leaves(void) {
   sin_list_release(inner);
 }
 
+void test_list_slice_shares_aligned_leaves_and_boundaries(void) {
+  const size_t starts[] = {0u, 1u, 31u, 32u, 33u};
+  const size_t lengths[] = {0u, 1u, 31u, 32u, 33u};
+  SIN_LIST_t *source = make_int_list(1056);
+  SIN_LIST_t *empty = sin_list_build_owned(NULL, 0);
+  SIN_LIST_t *full;
+  SIN_LIST_t *aligned;
+  SIN_LIST_t *short_source;
+  SIN_LIST_t *short_slice;
+  SIN_LIST_t *subtree_source;
+  SIN_LIST_t *subtree_slice;
+  SIN_LIST_t *nested_source;
+  SIN_LIST_t *unaligned_nested;
+  SIN_LIST_t *nested_inner = make_int_list(2);
+  VALUE_t nested_value;
+  bool saw_failure = false;
+  bool saw_success_after_failure = false;
+  bool saw_fragment_failure = false;
+  bool saw_fragment_success_after_failure = false;
+  ASSERT_NOT_NULL(source);
+  ASSERT_NOT_NULL(empty);
+  ASSERT_NOT_NULL(nested_inner);
+
+  full = sin_list_slice(source, 0, sin_list_count(source));
+  ASSERT_TRUE(full == source);
+  sin_list_release(full);
+  alloc_test_fail_after(0);
+  full = sin_list_slice(source, 0, sin_list_count(source));
+  alloc_test_fail_after(-1);
+  ASSERT_TRUE(full == source);
+  sin_list_release(full);
+  full = sin_list_slice(empty, 0, 0);
+  ASSERT_TRUE(full == empty);
+  sin_list_release(full);
+  for (size_t i = 0; i < sizeof(starts) / sizeof(starts[0]); ++i) {
+    for (size_t j = 0; j < sizeof(lengths) / sizeof(lengths[0]); ++j) {
+      size_t start = starts[i];
+      size_t length = lengths[j];
+      SIN_LIST_t *slice;
+      if (start + length > sin_list_count(source)) continue;
+      slice = sin_list_slice(source, start, length);
+      ASSERT_NOT_NULL(slice);
+      ASSERT_EQ_INT((long long)length, sin_list_count(slice));
+      for (size_t k = 0; k < length; ++k)
+        ASSERT_EQ_INT((long long)(start + k), sin_list_get(slice, k)->i);
+      sin_list_release(slice);
+    }
+  }
+
+  aligned = sin_list_slice(source, 32u, 992u);
+  ASSERT_NOT_NULL(aligned);
+  {
+    SIN_LIST_ITER_t source_iter;
+    SIN_LIST_ITER_t slice_iter;
+    const VALUE_t *source_values = NULL;
+    const VALUE_t *slice_values = NULL;
+    const SIN_LIST_NODE *source_leaf = NULL;
+    const SIN_LIST_NODE *slice_leaf = NULL;
+    size_t source_span = 0;
+    size_t slice_span = 0;
+    ASSERT_TRUE(sin_list_iter_init(&source_iter, source));
+    ASSERT_TRUE(sin_list_iter_init(&slice_iter, aligned));
+    ASSERT_TRUE(sin_list_iter_next(&source_iter, &source_values,
+                                   &source_span, &source_leaf));
+    ASSERT_EQ_INT(32, source_span);
+    while (sin_list_iter_next(&slice_iter, &slice_values, &slice_span,
+                              &slice_leaf)) {
+      ASSERT_TRUE(sin_list_iter_next(&source_iter, &source_values,
+                                     &source_span, &source_leaf));
+      ASSERT_TRUE(slice_leaf == source_leaf);
+      ASSERT_EQ_INT((long long)source_span, slice_span);
+    }
+  }
+  for (size_t i = 0; i < 992u; ++i)
+    ASSERT_EQ_INT((long long)(32u + i), sin_list_get(aligned, i)->i);
+  sin_list_release(aligned);
+
+  sin_list_test_reset_traversal_stats();
+  aligned = sin_list_slice(source, 31u, 992u);
+  ASSERT_NOT_NULL(aligned);
+  ASSERT_EQ_INT(31, sin_list_get(aligned, 0)->i);
+  ASSERT_EQ_INT(1022, sin_list_get(aligned, 991u)->i);
+  ASSERT_EQ_INT(32, sin_list_test_traversal_stats().leaf_visits);
+  ASSERT_EQ_INT(1024, sin_list_test_traversal_stats().values_yielded);
+  ASSERT_EQ_INT(1, sin_list_test_traversal_stats().node_visits);
+  sin_list_release(aligned);
+  sin_list_test_reset_traversal_stats();
+
+  nested_value = (VALUE_t){VALUE_list, {.list = sin_list_retain(nested_inner)}};
+  nested_source = sin_list_set(source, 64u, &nested_value);
+  value_free(&nested_value);
+  ASSERT_NOT_NULL(nested_source);
+  unaligned_nested = sin_list_slice(nested_source, 63u, 4u);
+  ASSERT_NOT_NULL(unaligned_nested);
+  ASSERT_TRUE(sin_list_get(unaligned_nested, 1u)->list == nested_inner);
+  aligned = sin_list_slice(nested_source, 32u, 64u);
+  ASSERT_NOT_NULL(aligned);
+  ASSERT_TRUE(sin_list_get(aligned, 32u)->list == nested_inner);
+  sin_list_release(nested_source);
+  ASSERT_TRUE(sin_list_get(unaligned_nested, 1u)->list == nested_inner);
+  ASSERT_TRUE(sin_list_get(aligned, 32u)->list == nested_inner);
+  sin_list_release(unaligned_nested);
+  sin_list_release(aligned);
+  sin_list_release(nested_inner);
+
+  short_source = make_int_list(65);
+  ASSERT_NOT_NULL(short_source);
+  short_slice = sin_list_slice(short_source, 64u, 1u);
+  ASSERT_NOT_NULL(short_slice);
+  {
+    SIN_LIST_ITER_t source_iter;
+    SIN_LIST_ITER_t slice_iter;
+    const VALUE_t *values = NULL;
+    const SIN_LIST_NODE *source_leaf = NULL;
+    const SIN_LIST_NODE *slice_leaf = NULL;
+    size_t span = 0;
+    ASSERT_TRUE(sin_list_iter_init(&source_iter, short_source));
+    ASSERT_TRUE(sin_list_iter_init(&slice_iter, short_slice));
+    ASSERT_TRUE(sin_list_iter_next(&source_iter, &values, &span,
+                                   &source_leaf));
+    ASSERT_EQ_INT(32, span);
+    ASSERT_TRUE(sin_list_iter_next(&source_iter, &values, &span,
+                                   &source_leaf));
+    ASSERT_EQ_INT(32, span);
+    ASSERT_TRUE(sin_list_iter_next(&source_iter, &values, &span,
+                                   &source_leaf));
+    ASSERT_EQ_INT(1, span);
+    ASSERT_TRUE(sin_list_iter_next(&slice_iter, &values, &span,
+                                   &slice_leaf));
+    ASSERT_TRUE(source_leaf == slice_leaf);
+  }
+  sin_list_release(short_source);
+  ASSERT_EQ_INT(64, sin_list_get(short_slice, 0)->i);
+  sin_list_release(short_slice);
+
+  subtree_source = make_int_list(2080);
+  ASSERT_NOT_NULL(subtree_source);
+  subtree_slice = sin_list_slice(subtree_source, 1024u, 1056u);
+  ASSERT_NOT_NULL(subtree_slice);
+  ASSERT_TRUE(sin_list_test_root_shares_source_range(
+      subtree_slice, subtree_source, 1024u, 1024u));
+  ASSERT_EQ_INT(1024, sin_list_get(subtree_slice, 0)->i);
+  ASSERT_EQ_INT(2079, sin_list_get(subtree_slice, 1055u)->i);
+  sin_list_release(subtree_source);
+  ASSERT_EQ_INT(1024, sin_list_get(subtree_slice, 0)->i);
+  ASSERT_EQ_INT(2079, sin_list_get(subtree_slice, 1055u)->i);
+  sin_list_release(subtree_slice);
+  subtree_source = make_int_list(2080);
+  ASSERT_NOT_NULL(subtree_source);
+  {
+    bool saw_exact_failure = false;
+    bool saw_exact_success_after_failure = false;
+    for (long fail_at = 0; fail_at < 32; ++fail_at) {
+      SIN_LIST_t *slice;
+      alloc_test_fail_after(fail_at);
+      slice = sin_list_slice(subtree_source, 1024u, 1056u);
+      alloc_test_fail_after(-1);
+      if (slice) {
+        if (saw_exact_failure) saw_exact_success_after_failure = true;
+        sin_list_release(slice);
+      } else {
+        saw_exact_failure = true;
+      }
+    }
+    ASSERT_TRUE(saw_exact_failure);
+    ASSERT_TRUE(saw_exact_success_after_failure);
+  }
+  sin_list_release(subtree_source);
+
+  SIN_LIST_t *height_source = make_int_list(4096);
+  SIN_LIST_t *height_slice;
+  SIN_LIST_t *height_copy;
+  SIN_LIST_t *height_appended;
+  SIN_LIST_t *height_set;
+  SIN_LIST_t *height_piece = make_int_list(1);
+  SIN_LIST_t *height_concat;
+  VALUE_t height_replacement = {VALUE_int, {.i = -7}};
+  bool saw_height_failure = false;
+  bool saw_height_success_after_failure = false;
+  ASSERT_NOT_NULL(height_source);
+  ASSERT_NOT_NULL(height_piece);
+  height_slice = sin_list_slice(height_source, 32u, 1088u);
+  ASSERT_NOT_NULL(height_slice);
+  ASSERT_EQ_INT(1088, sin_list_count(height_slice));
+  for (size_t i = 0; i < 1088u; ++i)
+    ASSERT_EQ_INT((long long)(32u + i), sin_list_get(height_slice, i)->i);
+  height_copy = sin_list_slice(height_source, 32u, 1088u);
+  ASSERT_NOT_NULL(height_copy);
+  ASSERT_TRUE(sin_list_equal(height_slice, height_copy));
+  sin_list_release(height_copy);
+  height_appended = sin_list_append(height_slice, &height_replacement);
+  ASSERT_NOT_NULL(height_appended);
+  ASSERT_EQ_INT(1089, sin_list_count(height_appended));
+  ASSERT_EQ_INT(-7, sin_list_get(height_appended, 1088u)->i);
+  height_set = sin_list_set(height_slice, 100u, &height_replacement);
+  ASSERT_NOT_NULL(height_set);
+  ASSERT_EQ_INT(-7, sin_list_get(height_set, 100u)->i);
+  height_concat = sin_list_concat(height_slice, height_piece);
+  ASSERT_NOT_NULL(height_concat);
+  ASSERT_EQ_INT(1089, sin_list_count(height_concat));
+  ASSERT_EQ_INT(0, sin_list_get(height_concat, 1088u)->i);
+  {
+    SIN_LIST_ITER_t iter;
+    const VALUE_t *values = NULL;
+    const SIN_LIST_NODE *leaf = NULL;
+    size_t span = 0;
+    size_t seen = 0;
+    ASSERT_TRUE(sin_list_iter_init(&iter, height_slice));
+    while (sin_list_iter_next(&iter, &values, &span, &leaf)) seen += span;
+    ASSERT_EQ_INT(1088, seen);
+  }
+  for (long fail_at = 0; fail_at < 256; ++fail_at) {
+    SIN_LIST_t *slice;
+    alloc_test_fail_after(fail_at);
+    slice = sin_list_slice(height_source, 32u, 1088u);
+    alloc_test_fail_after(-1);
+    if (slice) {
+      if (saw_height_failure) saw_height_success_after_failure = true;
+      sin_list_release(slice);
+    } else {
+      saw_height_failure = true;
+    }
+  }
+  ASSERT_TRUE(saw_height_failure);
+  ASSERT_TRUE(saw_height_success_after_failure);
+  sin_list_release(height_concat);
+  sin_list_release(height_set);
+  sin_list_release(height_appended);
+  sin_list_release(height_piece);
+  sin_list_release(height_source);
+  ASSERT_EQ_INT(32, sin_list_get(height_slice, 0)->i);
+  ASSERT_EQ_INT(1119, sin_list_get(height_slice, 1087u)->i);
+  sin_list_release(height_slice);
+
+  SIN_LIST_t *group_source = make_int_list(32896);
+  SIN_LIST_t *group_slice;
+  SIN_LIST_t *group_appended;
+  ASSERT_NOT_NULL(group_source);
+  group_slice = sin_list_slice(group_source, 32u, 32832u);
+  ASSERT_NOT_NULL(group_slice);
+  ASSERT_EQ_INT(32832, sin_list_count(group_slice));
+  ASSERT_EQ_INT(32, sin_list_get(group_slice, 0)->i);
+  ASSERT_EQ_INT(32863, sin_list_get(group_slice, 32831u)->i);
+  group_appended = sin_list_append(group_slice, &height_replacement);
+  ASSERT_NOT_NULL(group_appended);
+  ASSERT_EQ_INT(32833, sin_list_count(group_appended));
+  {
+    SIN_LIST_ITER_t iter;
+    const VALUE_t *values = NULL;
+    const SIN_LIST_NODE *leaf = NULL;
+    size_t span = 0;
+    size_t seen = 0;
+    ASSERT_TRUE(sin_list_iter_init(&iter, group_slice));
+    while (sin_list_iter_next(&iter, &values, &span, &leaf)) seen += span;
+    ASSERT_EQ_INT(32832, seen);
+  }
+  sin_list_release(group_source);
+  ASSERT_EQ_INT(32, sin_list_get(group_slice, 0)->i);
+  ASSERT_EQ_INT(32863, sin_list_get(group_slice, 32831u)->i);
+  sin_list_release(group_appended);
+  sin_list_release(group_slice);
+
+  for (long fail_at = 0; fail_at < 256; ++fail_at) {
+    SIN_LIST_t *slice;
+    alloc_test_fail_after(fail_at);
+    slice = sin_list_slice(source, 32u, 992u);
+    alloc_test_fail_after(-1);
+    if (slice) {
+      if (saw_failure) saw_success_after_failure = true;
+      sin_list_release(slice);
+    } else {
+      saw_failure = true;
+    }
+    ASSERT_EQ_INT(1056, sin_list_count(source));
+    ASSERT_EQ_INT(0, sin_list_get(source, 0)->i);
+    ASSERT_EQ_INT(1055, sin_list_get(source, 1055)->i);
+  }
+  ASSERT_TRUE(saw_failure);
+  ASSERT_TRUE(saw_success_after_failure);
+  SIN_LIST_t *fragment_source = make_string_list(65);
+  ASSERT_NOT_NULL(fragment_source);
+  for (long fail_at = 0; fail_at < 128; ++fail_at) {
+    SIN_LIST_t *slice;
+    alloc_test_fail_after(fail_at);
+    slice = sin_list_slice(fragment_source, 1u, 33u);
+    alloc_test_fail_after(-1);
+    if (slice) {
+      if (saw_fragment_failure) saw_fragment_success_after_failure = true;
+      sin_list_release(slice);
+    } else {
+      saw_fragment_failure = true;
+    }
+    ASSERT_EQ_INT(65, sin_list_count(fragment_source));
+    ASSERT_TRUE(strcmp(sin_list_get(fragment_source, 1)->s,
+                       "rhs-string-1") == 0);
+  }
+  ASSERT_TRUE(saw_fragment_failure);
+  ASSERT_TRUE(saw_fragment_success_after_failure);
+  sin_list_release(fragment_source);
+  ASSERT_TRUE(sin_list_slice(source, 1057u, 0) == NULL);
+  ASSERT_TRUE(sin_list_slice(source, 1056u, 1) == NULL);
+  ASSERT_TRUE(sin_list_slice(source, 0, SIN_LIST_MAX_ELEMENTS + 1u) == NULL);
+  ASSERT_TRUE(sin_list_slice(NULL, 0, 0) == NULL);
+  sin_list_release(empty);
+  sin_list_release(source);
+}
+
 void test_list_limits_invalid_inputs_and_failures(void) {
   SIN_LIST_t *nested = sin_list_build_owned(NULL, 0);
   VALUE_t element;

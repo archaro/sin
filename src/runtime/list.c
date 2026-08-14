@@ -874,25 +874,255 @@ SIN_LIST_t *sin_list_concat(const SIN_LIST_t *left, const SIN_LIST_t *right) {
   return result;
 }
 
-SIN_LIST_t *sin_list_slice(const SIN_LIST_t *list, size_t start, size_t length) {
-  VALUE_t *values;
-  SIN_LIST_t *result;
-  if (!list || start > list->count || length > SIN_LIST_MAX_ELEMENTS ||
-      length > list->count - start) return NULL;
-  if (length == 0) return sin_list_build_owned(NULL, 0);
-  values = alloc_calloc(length, sizeof(*values));
-  if (!values) return NULL;
-  for (size_t i = 0; i < length; ++i) {
-    const VALUE_t *source = sin_list_get(list, start + i);
-    if (!source || !value_clone_fallible(source, &values[i])) {
-      for (size_t j = 0; j < i; ++j) value_free(&values[j]);
-      free(values);
+static SIN_LIST_NODE *leaf_clone_range(const SIN_LIST_NODE *old,
+                                       size_t start, size_t count) {
+  SIN_LIST_NODE *leaf;
+  if (!old || !old->leaf || count == 0 || count > LIST_BRANCH ||
+      start > old->slots || count > old->slots - start) return NULL;
+  leaf = alloc_calloc(1, sizeof(*leaf));
+  if (!leaf) return NULL;
+  leaf->refs = 1;
+  leaf->leaf = true;
+  leaf->slots = (unsigned)count;
+  leaf->count = count;
+  leaf->depth = 1;
+  for (size_t i = 0; i < count; ++i) {
+    if (!value_clone_fallible(&old->data.values[start + i],
+                              &leaf->data.values[i])) {
+      node_release(leaf);
+      return NULL;
+    }
+    leaf->depth = max_depth(leaf->depth,
+                            value_depth(&leaf->data.values[i]));
+  }
+  if (leaf->depth > SIN_LIST_MAX_DEPTH) {
+    node_release(leaf);
+    return NULL;
+  }
+  return leaf;
+}
+
+static unsigned tree_height_for_count(size_t count) {
+  unsigned height = 0;
+  while (count > max_tree_count(height)) ++height;
+  return height;
+}
+
+static const SIN_LIST_NODE *find_compatible_node(
+    const SIN_LIST_NODE *node, size_t start, size_t count, unsigned height) {
+  if (!node || start > node->count || count > node->count - start)
+    return NULL;
+  if (start == 0 && count == node->count && node->height == height)
+    return node;
+  if (node->leaf || count == 0) return NULL;
+  size_t offset = 0;
+  for (unsigned i = 0; i < node->slots; ++i) {
+    const SIN_LIST_NODE *child = node->data.children[i];
+    if (start < offset + child->count) {
+      if (start >= offset && count <= child->count - (start - offset))
+        return find_compatible_node(child, start - offset, count, height);
+      return NULL;
+    }
+    offset += child->count;
+  }
+  return NULL;
+}
+
+static SIN_LIST_NODE *slice_tree_range(const SIN_LIST_NODE *source,
+                                       size_t start, size_t count,
+                                       unsigned height) {
+  const SIN_LIST_NODE *compatible;
+  SIN_LIST_NODE *children[LIST_BRANCH] = {0};
+  SIN_LIST_NODE *result;
+  size_t child_capacity;
+  size_t remaining;
+  unsigned slots;
+
+  compatible = find_compatible_node(source, start, count, height);
+  if (compatible) {
+    if (!node_retain((SIN_LIST_NODE *)compatible)) return NULL;
+    return (SIN_LIST_NODE *)compatible;
+  }
+  if (height == 0 || !source) return NULL;
+  child_capacity = max_tree_count(height - 1u);
+  if (child_capacity == 0 || child_capacity == SIZE_MAX) return NULL;
+  slots = (unsigned)(count / child_capacity +
+                     (count % child_capacity != 0 ? 1u : 0u));
+  if (slots == 0 || slots > LIST_BRANCH) return NULL;
+  remaining = count;
+  for (unsigned i = 0; i < slots; ++i) {
+    size_t child_count = remaining > child_capacity
+        ? child_capacity : remaining;
+    unsigned child_height = height - 1u;
+    children[i] = slice_tree_range(source, start + i * child_capacity,
+                                   child_count, child_height);
+    if (!children[i]) {
+      for (unsigned j = 0; j < i; ++j) node_release(children[j]);
+      return NULL;
+    }
+    remaining -= child_count;
+  }
+  result = branch_from_owned(children, slots, height);
+  if (!result) {
+    for (unsigned i = 0; i < slots; ++i) node_release(children[i]);
+  }
+  return result;
+}
+
+static const SIN_LIST_NODE *find_leaf_at(const SIN_LIST_t *list,
+                                         size_t index) {
+  const SIN_LIST_NODE *node;
+  size_t offset;
+  if (!list || index >= list->count) return NULL;
+  if (!list->root || index >= list->root->count) return list->tail;
+  node = list->root;
+  offset = index;
+  while (!node->leaf) {
+    unsigned slot = 0;
+    while (slot + 1u < node->slots &&
+           offset >= node->data.children[slot]->count) {
+      offset -= node->data.children[slot]->count;
+      ++slot;
+    }
+    node = node->data.children[slot];
+  }
+  return node;
+}
+
+static SIN_LIST_t *slice_aligned(const SIN_LIST_t *list, size_t start,
+                                 size_t length) {
+  SIN_LIST_NODE *root = NULL;
+  SIN_LIST_NODE *tail = NULL;
+  const SIN_LIST_NODE *source_tail;
+  size_t tail_count = length <= LIST_BRANCH
+      ? length : ((length - 1u) % LIST_BRANCH) + 1u;
+  size_t full_count = length - tail_count;
+
+  if (full_count != 0) {
+    unsigned height = tree_height_for_count(full_count);
+    root = slice_tree_range(list->root, start, full_count, height);
+    if (!root) return NULL;
+  }
+  source_tail = find_leaf_at(list, start + full_count);
+  if (!source_tail || source_tail->slots < tail_count) {
+    node_release(root);
+    return NULL;
+  }
+  /* A short source tail is shareable when this range covers it completely. */
+  if (source_tail->slots == tail_count) {
+    if (!node_retain((SIN_LIST_NODE *)source_tail)) {
+      node_release(root);
+      return NULL;
+    }
+    tail = (SIN_LIST_NODE *)source_tail;
+  } else {
+    tail = leaf_clone_range(source_tail, 0, tail_count);
+    if (!tail) {
+      node_release(root);
       return NULL;
     }
   }
-  result = sin_list_build_owned(values, length);
-  free(values);
+  return list_new(length, tail_count, root, tail);
+}
+
+/*
+ * Unaligned ranges cannot preserve source leaf boundaries in the packed
+ * representation.  Clone them in canonical 32-value batches from the leaf
+ * cursor, without materializing a length-sized VALUE_t array.
+ */
+static SIN_LIST_t *slice_from_cursor(const SIN_LIST_t *list, size_t start,
+                                     size_t length) {
+  LIST_VALUE_CURSOR_t cursor;
+  SIN_LIST_t *result;
+  size_t skip = start;
+  size_t remaining = length;
+
+  if (!value_cursor_init(&cursor, list)) return NULL;
+  result = list_new(0, 0, NULL, NULL);
+  if (!result) return NULL;
+  while (skip != 0) {
+    if (!value_cursor_next(&cursor)) {
+      sin_list_release(result);
+      return NULL;
+    }
+    --skip;
+  }
+  while (remaining != 0) {
+    SIN_LIST_NODE *root = NULL;
+    SIN_LIST_NODE *tail = NULL;
+    SIN_LIST_NODE *promoted = NULL;
+    SIN_LIST_t *next;
+    size_t batch;
+    size_t new_tail_count;
+
+    if (result->tail_count < LIST_BRANCH) {
+      batch = remaining;
+      if (batch > LIST_BRANCH - result->tail_count)
+        batch = LIST_BRANCH - result->tail_count;
+      tail = leaf_clone_append_cursor(result->tail, &cursor, batch);
+      if (!tail) {
+        sin_list_release(result);
+        return NULL;
+      }
+      if (result->root && !node_retain(result->root)) {
+        node_release(tail);
+        sin_list_release(result);
+        return NULL;
+      }
+      root = result->root;
+      new_tail_count = result->tail_count + batch;
+    } else {
+      batch = remaining > LIST_BRANCH ? LIST_BRANCH : remaining;
+      if (!node_retain(result->tail)) {
+        sin_list_release(result);
+        return NULL;
+      }
+      promoted = result->tail;
+      tail = leaf_clone_append_cursor(NULL, &cursor, batch);
+      if (!tail) {
+        node_release(promoted);
+        sin_list_release(result);
+        return NULL;
+      }
+      root = append_tree(result->root, promoted);
+      if (!root) {
+        node_release(tail);
+        sin_list_release(result);
+        return NULL;
+      }
+      new_tail_count = batch;
+    }
+    next = list_new(result->count + batch, new_tail_count, root, tail);
+    if (!next) {
+      sin_list_release(result);
+      return NULL;
+    }
+    sin_list_release(result);
+    result = next;
+    remaining -= batch;
+  }
   return result;
+}
+
+SIN_LIST_t *sin_list_slice(const SIN_LIST_t *list, size_t start, size_t length) {
+  if (!list || start > list->count || length > SIN_LIST_MAX_ELEMENTS ||
+      length > list->count - start) return NULL;
+  if (start == 0 && length == list->count)
+    return sin_list_retain((SIN_LIST_t *)list);
+  if (length == 0) return sin_list_build_owned(NULL, 0);
+  if (start % LIST_BRANCH == 0) return slice_aligned(list, start, length);
+  return slice_from_cursor(list, start, length);
+}
+
+bool sin_list_test_root_shares_source_range(const SIN_LIST_t *result,
+                                            const SIN_LIST_t *source,
+                                            size_t start, size_t count) {
+  const SIN_LIST_NODE *source_node;
+  if (!result || !source || !result->root || !source->root ||
+      result->root->count != count) return false;
+  source_node = find_compatible_node(source->root, start, count,
+                                     result->root->height);
+  return source_node == result->root;
 }
 
 bool sin_list_equal(const SIN_LIST_t *left, const SIN_LIST_t *right) {
