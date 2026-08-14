@@ -288,6 +288,7 @@ void test_value_float_arithmetic_helpers(void);
 void test_value_float_arithmetic_interpreter_bytecode(void);
 void test_value_string_concat_helpers(void);
 void test_value_string_tracker_releases_through_value_free(void);
+void test_value_string_tracker_probe_counts_linear_scans(void);
 void test_value_string_tracker_releases_through_stack_discard(void);
 void test_value_string_tracker_forgets_before_reallocation(void);
 void test_value_plain_text_formats_nonowning(void);
@@ -557,6 +558,7 @@ static const test_case_t core_tests[] = {
     {"test_value_float_arithmetic_interpreter_bytecode", test_value_float_arithmetic_interpreter_bytecode},
     {"test_value_string_concat_helpers", test_value_string_concat_helpers},
     {"test_value_string_tracker_releases_through_value_free", test_value_string_tracker_releases_through_value_free},
+    {"test_value_string_tracker_probe_counts_linear_scans", test_value_string_tracker_probe_counts_linear_scans},
     {"test_value_string_tracker_releases_through_stack_discard", test_value_string_tracker_releases_through_stack_discard},
     {"test_value_string_tracker_forgets_before_reallocation", test_value_string_tracker_forgets_before_reallocation},
     {"test_value_plain_text_formats_nonowning", test_value_plain_text_formats_nonowning},

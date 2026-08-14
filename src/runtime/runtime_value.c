@@ -16,10 +16,13 @@ typedef struct strbuf_meta {
 } strbuf_meta_t;
 
 static strbuf_meta_t *strbuf_head = NULL;
+static strbuf_probe_t strbuf_probe;
 
 static strbuf_meta_t *strbuf_find(char *ptr) {
+  strbuf_probe.find_calls++;
   strbuf_meta_t *meta = strbuf_head;
   while (meta) {
+    strbuf_probe.find_nodes++;
     if (meta->ptr == ptr) return meta;
     meta = meta->next;
   }
@@ -27,8 +30,10 @@ static strbuf_meta_t *strbuf_find(char *ptr) {
 }
 
 static void strbuf_forget(char *ptr) {
+  strbuf_probe.forget_calls++;
   strbuf_meta_t **scan = &strbuf_head;
   while (*scan) {
+    strbuf_probe.forget_nodes++;
     if ((*scan)->ptr == ptr) {
       strbuf_meta_t *found = *scan;
       *scan = found->next;
@@ -57,6 +62,23 @@ size_t strbuf_tracked_count_for_tests(void) {
     count++;
   }
   return count;
+}
+
+size_t strbuf_capacity_for_tests(char *ptr) {
+  strbuf_meta_t *meta = strbuf_find(ptr);
+  return meta ? meta->cap : 0;
+}
+
+void strbuf_forget_for_tests(char *ptr) {
+  strbuf_forget(ptr);
+}
+
+strbuf_probe_t strbuf_probe_for_tests(void) {
+  return strbuf_probe;
+}
+
+void strbuf_probe_reset_for_tests(void) {
+  strbuf_probe = (strbuf_probe_t){0};
 }
 
 void free_runtime_string(char *s) {

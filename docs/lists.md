@@ -65,7 +65,10 @@ slice at 8 and 1024; explicit slice shapes for aligned leaf sharing (1056,
 equal/early-unequal/late-unequal at 1024; a compiled source literal returning
 33 elements; itemstore v2 save/load; item-reference creation/resolution; and
 actual `sys.call` execution comparing an 8-element list with a zero-argument
-control call. Results are machine-dependent; compare medians
+control call. It also measures the runtime string registry at 1, 32, 1024,
+and 4096 live buffers, separating lookup/removal scan work from reuse and
+growth concatenation copying, cleanup, and an interpreted concat workload.
+Results are machine-dependent; compare medians
 and ratios rather than absolute budgets. Investigate a repeatable regression of
 3% or more across repeated optimized runs. Normal `make test` does not run or
 enforce the matrix.

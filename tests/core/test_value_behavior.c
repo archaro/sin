@@ -692,6 +692,43 @@ void test_value_string_tracker_releases_through_value_free(void) {
   }
 }
 
+void test_value_string_tracker_probe_counts_linear_scans(void) {
+  enum { tracked_count = 32 };
+  size_t baseline = strbuf_tracked_count_for_tests();
+  VALUE_t values[tracked_count];
+
+  for (size_t i = 0; i < tracked_count; i++) {
+    values[i] = concat_two_strings(
+        (VALUE_t){VALUE_str, {.s = strdup("0123456789abcdef")}},
+        (VALUE_t){VALUE_str, {.s = strdup("")}});
+    values[i] = concat_two_strings(
+        values[i], (VALUE_t){VALUE_str, {.s = strdup("x")}});
+    ASSERT_EQ_INT(VALUE_str, values[i].type);
+  }
+  ASSERT_EQ_INT((long long)baseline + tracked_count,
+                (long long)strbuf_tracked_count_for_tests());
+
+  strbuf_probe_reset_for_tests();
+  ASSERT_EQ_INT(32, (long long)strbuf_capacity_for_tests(values[0].s));
+  strbuf_probe_t probe = strbuf_probe_for_tests();
+  ASSERT_EQ_INT(1, (long long)probe.find_calls);
+  ASSERT_EQ_INT(tracked_count, (long long)probe.find_nodes);
+  ASSERT_EQ_INT(0, (long long)probe.forget_calls);
+  ASSERT_EQ_INT(0, (long long)probe.forget_nodes);
+
+  strbuf_probe_reset_for_tests();
+  value_free(&values[0]);
+  probe = strbuf_probe_for_tests();
+  ASSERT_EQ_INT(0, (long long)probe.find_calls);
+  ASSERT_EQ_INT(0, (long long)probe.find_nodes);
+  ASSERT_EQ_INT(1, (long long)probe.forget_calls);
+  ASSERT_EQ_INT(tracked_count, (long long)probe.forget_nodes);
+
+  for (size_t i = 1; i < tracked_count; i++) value_free(&values[i]);
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+}
+
 void test_value_string_tracker_releases_through_stack_discard(void) {
   size_t baseline = strbuf_tracked_count_for_tests();
   STACK_t *stack = make_stack();

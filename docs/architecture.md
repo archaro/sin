@@ -200,7 +200,9 @@ This contract also covers the less visible state used by those APIs:
   destruction, and test reset must be serialized with users of the registry.
 - Runtime strings and values, including the process-local string tracking
   metadata used by runtime string helpers, must not be mutated or reclaimed
-  concurrently.
+  concurrently. The current tracker is a linked list; test-only counters in
+  `runtime_value.h` measure its find/forget scan work without making that
+  metadata part of the public `VALUE_t` API.
 - Process-global allocation-failure hooks, itemstore persistence and
   source-sidecar test hooks, and the `sys.backup` test timestamp hook must be
   installed, reset, and observed only while the process is quiescent. Tests

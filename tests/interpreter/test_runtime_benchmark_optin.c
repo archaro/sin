@@ -13,6 +13,7 @@
 #include "vm.h"
 #include "interpret.h"
 #include "runtime_context.h"
+#include "runtime_value.h"
 #include "compiler/compiler_pipeline.h"
 #include "error.h"
 #include "list.h"
@@ -608,6 +609,239 @@ static uint64_t bench_stack_ops(size_t iters, int strings) {
   return elapsed;
 }
 
+static VALUE_t bench_make_tracked_string(size_t length, size_t capacity) {
+  VALUE_t value = concat_two_strings(
+      (VALUE_t){.type = VALUE_str, .s = strdup("0123456789abcdef")},
+      (VALUE_t){.type = VALUE_str, .s = strdup("")});
+  ASSERT_EQ_INT(VALUE_str, value.type);
+  if (capacity == 32u) {
+    value = concat_two_strings(value,
+                               (VALUE_t){.type = VALUE_str, .s = strdup("x")});
+  } else {
+    ASSERT_EQ_INT(64, (long long)capacity);
+    char suffix[15];
+    memset(suffix, 'x', sizeof(suffix) - 1u);
+    suffix[sizeof(suffix) - 1u] = '\0';
+    value = concat_two_strings(value,
+                               (VALUE_t){.type = VALUE_str, .s = strdup(suffix)});
+    value = concat_two_strings(value,
+                               (VALUE_t){.type = VALUE_str, .s = strdup("x")});
+  }
+  ASSERT_EQ_INT(VALUE_str, value.type);
+  size_t have = strlen(value.s);
+  ASSERT_TRUE(have <= length);
+  if (have < length) {
+    size_t extra = length - have;
+    char *suffix = malloc(extra + 1u);
+    ASSERT_NOT_NULL(suffix);
+    memset(suffix, 'x', extra);
+    suffix[extra] = '\0';
+    value = concat_two_strings(value, (VALUE_t){.type = VALUE_str, .s = suffix});
+  }
+  ASSERT_EQ_INT((long long)length, (long long)strlen(value.s));
+  ASSERT_EQ_INT((long long)capacity,
+                (long long)strbuf_capacity_for_tests(value.s));
+  return value;
+}
+
+static VALUE_t *bench_make_tracked_population_shape(size_t count, size_t length) {
+  VALUE_t *values = calloc(count, sizeof(*values));
+  ASSERT_NOT_NULL(values);
+  for (size_t i = 0; i < count; i++) {
+    values[i] = bench_make_tracked_string(length, 32u);
+  }
+  return values;
+}
+
+static VALUE_t *bench_make_tracked_population(size_t count) {
+  return bench_make_tracked_population_shape(count, 17u);
+}
+
+static void bench_free_tracked_population(VALUE_t *values, size_t count) {
+  for (size_t i = 0; i < count; i++) value_free(&values[i]);
+  free(values);
+}
+
+static uint64_t bench_string_capacity_lookup(VALUE_t *values, size_t iters,
+                                             volatile uintptr_t *sink) {
+  uint64_t start = now_ns();
+  for (size_t i = 0; i < iters; i++) {
+    *sink ^= strbuf_capacity_for_tests(values[0].s);
+  }
+  return now_ns() - start;
+}
+
+static uint64_t bench_string_removal(VALUE_t *values, size_t count,
+                                     size_t iters, volatile uintptr_t *sink) {
+  ASSERT_TRUE(iters <= count);
+  uint64_t start = now_ns();
+  for (size_t i = 0; i < iters; i++) {
+    strbuf_forget_for_tests(values[i].s);
+    *sink ^= (uintptr_t)values[i].s[0];
+  }
+  uint64_t elapsed = now_ns() - start;
+  for (size_t i = 0; i < iters; i++) {
+    free(values[i].s);
+    values[i] = VALUE_NIL;
+  }
+  return elapsed;
+}
+
+static uint64_t bench_string_concat(VALUE_t *background, size_t population,
+                                    size_t iters, int growth,
+                                    volatile uintptr_t *sink,
+                                    strbuf_probe_t *probe) {
+  VALUE_t *right = calloc(iters, sizeof(*right));
+  ASSERT_NOT_NULL(right);
+  for (size_t i = 0; i < iters; i++) {
+    right[i] = (VALUE_t){.type = VALUE_str,
+                         .s = strdup(growth ? "0123456789abcdef" : "x")};
+    right[i] = concat_two_strings(right[i],
+                                  (VALUE_t){.type = VALUE_str, .s = strdup("")});
+  }
+  ASSERT_EQ_INT((long long)population + (long long)iters,
+                (long long)strbuf_tracked_count_for_tests());
+  strbuf_probe_reset_for_tests();
+  uint64_t start = now_ns();
+  for (size_t i = iters; i > 0; i--) {
+    size_t index = i - 1u;
+    background[index] = concat_two_strings(background[index], right[index]);
+    ASSERT_EQ_INT(VALUE_str, background[index].type);
+    *sink ^= (uintptr_t)background[index].s[0];
+  }
+  uint64_t elapsed = now_ns() - start;
+  *probe = strbuf_probe_for_tests();
+  free(right);
+  return elapsed;
+}
+
+static uint64_t bench_string_cleanup(VALUE_t *values, size_t count,
+                                     volatile uintptr_t *sink) {
+  uint64_t start = now_ns();
+  for (size_t i = 0; i < count; i++) {
+    *sink ^= (uintptr_t)values[i].s[0];
+    value_free(&values[i]);
+  }
+  return now_ns() - start;
+}
+
+static uint64_t bench_interpreter_string_workload(ITEMSTORE_t *store,
+                                                  ITEM_t *item, size_t iters,
+                                                  volatile uintptr_t *sink) {
+  VM_t *vm = make_vm();
+  ASSERT_NOT_NULL(vm);
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, vm);
+  ctx.itemstore = store;
+  uint64_t start = now_ns();
+  for (size_t i = 0; i < iters; i++) {
+    VALUE_t result = interpret(&ctx, item);
+    ASSERT_EQ_INT(VALUE_str, result.type);
+    *sink ^= (uintptr_t)result.s[0];
+    value_free(&result);
+  }
+  uint64_t elapsed = now_ns() - start;
+  runtime_destroy(&ctx);
+  destroy_vm(vm);
+  return elapsed;
+}
+
+static void print_string_registry_row(const char *operation, size_t population,
+                                      uint64_t median, size_t iters,
+                                      strbuf_probe_t probe) {
+  double scans = (double)(probe.find_nodes + probe.forget_nodes) /
+                 (double)iters;
+  printf("[bench][string_registry] op=%s live=%zu median_ns=%llu ns/op=%llu "
+         "scan_nodes/op=%.1f find_nodes=%zu forget_nodes=%zu\n",
+         operation, population, (unsigned long long)median,
+         (unsigned long long)(median / iters), scans, probe.find_nodes,
+         probe.forget_nodes);
+}
+
+static void run_extended_string_registry_benchmarks(void) {
+  const size_t populations[] = {1u, 32u, 1024u, 4096u};
+  const size_t samples = 5u;
+  const size_t iters = 80u;
+  const size_t baseline = strbuf_tracked_count_for_tests();
+  volatile uintptr_t sink = 0;
+  ITEMSTORE_t *store = itemstore_create("string-registry-bench");
+  ASSERT_NOT_NULL(store);
+  ITEM_t *item = bench_compile_item(store, "bench.string_workload",
+                                    "return \"0123456789abcdef\" + \"x\";",
+                                    NULL, 0);
+  for (size_t p = 0; p < sizeof(populations) / sizeof(populations[0]); p++) {
+    size_t population = populations[p];
+    uint64_t lookup_samples[samples], removal_samples[samples];
+    uint64_t reuse_samples[samples], growth_samples[samples], cleanup_samples[samples];
+    uint64_t interpreter_samples[samples];
+    strbuf_probe_t lookup_probe = {0}, removal_probe = {0}, reuse_probe = {0};
+    strbuf_probe_t growth_probe = {0}, cleanup_probe = {0}, interpreter_probe = {0};
+    for (size_t sample = 0; sample < samples; sample++) {
+      VALUE_t *values = bench_make_tracked_population(population);
+      strbuf_probe_reset_for_tests();
+      lookup_samples[sample] = bench_string_capacity_lookup(values, iters, &sink);
+      lookup_probe = strbuf_probe_for_tests();
+      bench_free_tracked_population(values, population);
+
+      values = bench_make_tracked_population(population);
+      strbuf_probe_reset_for_tests();
+      removal_samples[sample] = bench_string_removal(values, population,
+                                                      population < iters ? population : iters,
+                                                      &sink);
+      removal_probe = strbuf_probe_for_tests();
+      bench_free_tracked_population(values, population);
+
+      size_t concat_iters = population < iters ? population : iters;
+      values = bench_make_tracked_population(population);
+      reuse_samples[sample] = bench_string_concat(values, population, concat_iters,
+                                                  0, &sink, &reuse_probe);
+      bench_free_tracked_population(values, population);
+
+      values = bench_make_tracked_population_shape(population, 31u);
+      growth_samples[sample] = bench_string_concat(values, population, concat_iters,
+                                                   1, &sink, &growth_probe);
+      bench_free_tracked_population(values, population);
+
+      values = bench_make_tracked_population(population);
+      strbuf_probe_reset_for_tests();
+      cleanup_samples[sample] = bench_string_cleanup(values, population, &sink);
+      cleanup_probe = strbuf_probe_for_tests();
+      free(values);
+
+      values = bench_make_tracked_population(population);
+      strbuf_probe_reset_for_tests();
+      interpreter_samples[sample] = bench_interpreter_string_workload(store, item, iters, &sink);
+      interpreter_probe = strbuf_probe_for_tests();
+      bench_free_tracked_population(values, population);
+      ASSERT_EQ_INT((long long)baseline,
+                    (long long)strbuf_tracked_count_for_tests());
+    }
+    uint64_t lookup = median_u64(lookup_samples, samples);
+    uint64_t removal = median_u64(removal_samples, samples);
+    uint64_t reuse = median_u64(reuse_samples, samples);
+    uint64_t growth = median_u64(growth_samples, samples);
+    uint64_t cleanup = median_u64(cleanup_samples, samples);
+    uint64_t interpreter = median_u64(interpreter_samples, samples);
+    print_string_registry_row("capacity_lookup", population, lookup, iters, lookup_probe);
+    print_string_registry_row("removal", population, removal,
+                              population < iters ? population : iters, removal_probe);
+    size_t concat_iters = population < iters ? population : iters;
+    print_string_registry_row("reuse_concat", population, reuse, concat_iters, reuse_probe);
+    print_string_registry_row("growth_concat", population, growth, concat_iters, growth_probe);
+    print_string_registry_row("cleanup", population, cleanup, population, cleanup_probe);
+    print_string_registry_row("interpreter_concat", population, interpreter, iters, interpreter_probe);
+    printf("[bench][string_registry] live=%zu ratios removal/lookup=%.3f "
+           "growth/reuse=%.3f interpreter/lookup=%.3f\n", population,
+           per_op_ratio(removal, population < iters ? population : iters,
+                        lookup, iters),
+           per_op_ratio(growth, concat_iters, reuse, concat_iters),
+           per_op_ratio(interpreter, iters, lookup, iters));
+  }
+  itemstore_destroy(store);
+  ASSERT_EQ_INT((long long)baseline, (long long)strbuf_tracked_count_for_tests());
+  printf("[bench][string_registry] sink=%llu\n", (unsigned long long)sink);
+}
+
 static uint64_t bench_item_ops(size_t iters) {
   ITEMSTORE_t *store = itemstore_create("bench");
   ASSERT_NOT_NULL(store);
@@ -903,6 +1137,7 @@ void test_runtime_benchmark_optin(void) {
     run_extended_network_benchmarks();
     teardown_libcall_runtime();
     run_extended_list_benchmarks();
+    run_extended_string_registry_benchmarks();
     run_extended_itemstore_benchmarks();
     run_extended_itemref_and_syscall_benchmarks();
   } else {
