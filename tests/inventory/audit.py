@@ -13,6 +13,7 @@ import csv
 import re
 import subprocess
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 
@@ -73,8 +74,8 @@ def source_entries(root: Path) -> tuple[list[str], list[str], list[str], list[st
     ast_block = "N_" + ast_text.split("typedef enum { N_", 1)[1].split("} ENUM_NODE", 1)[0]
     ast = re.findall(r"\bN_[A-Z0-9_]+\b", ast_block)
     abi = (root / "src/bytecode/bytecode_abi.h").read_text(encoding="utf-8")
-    ir_block = abi.split("typedef enum {\n  IR_OP_", 1)[1].split("} IR_Op", 1)[0]
-    ir = [f"IR_OP_{item}" for item in re.findall(r"\b[A-Z][A-Z0-9_]+\b", ir_block)]
+    ir_block = abi.split("typedef enum {", 1)[1].split("} IR_Op", 1)[0]
+    ir = re.findall(r"\bIR_OP_[A-Z0-9_]+\b", ir_block)
     schema = (root / "src/bytecode/opcode_schema.def").read_text(encoding="utf-8")
     opcodes = re.findall(r"^OP\(([^,]+),\s*'?(.*?)'?,", schema, re.MULTILINE)
     # The second capture is intentionally retained as an ABI check, not just
@@ -99,7 +100,8 @@ def source_entries(root: Path) -> tuple[list[str], list[str], list[str], list[st
     return tokens, productions, ast, ir, opcode_rows, libcalls
 
 
-def archive_symbols(archive: Path) -> set[str]:
+def archive_symbol_objects(archive: Path) -> dict[str, str]:
+    """Return each defined symbol and the authored archive object owning it."""
     if not archive.is_file():
         fail(f"archive does not exist: {archive}")
     try:
@@ -111,14 +113,22 @@ def archive_symbols(archive: Path) -> set[str]:
         )
     except (OSError, subprocess.CalledProcessError) as error:
         fail(f"cannot inspect archive {archive}: {error}")
-    symbols: set[str] = set()
+    symbols: dict[str, str] = {}
+    object_name = "unknown.o"
     for line in result.stdout.splitlines():
+        if line.endswith(":") and not line.startswith(" "):
+            object_name = line[:-1]
+            continue
         fields = line.split()
         if len(fields) >= 3 and len(fields[-2]) == 1:
-            symbols.add(fields[-1])
+            symbols[fields[-1]] = object_name
     if not symbols:
         fail(f"archive has no global symbols: {archive}")
     return symbols
+
+
+def archive_symbols(archive: Path) -> set[str]:
+    return set(archive_symbol_objects(archive))
 
 
 def check_ids(rows: list[dict[str, str]], field: str, name: str) -> None:
@@ -202,6 +212,19 @@ def main() -> int:
                 if unknown:
                     fail(f"{name} contract {row['contract_id']} references unknown test ID {sorted(unknown)[0]}")
 
+        # The test catalog is a reciprocal index, not an independent claim:
+        # every edge in either direction must be present on the other side.
+        reverse: dict[str, set[str]] = defaultdict(set)
+        for name in ("contracts.csv", "language.csv", "bytecode.csv", "api.csv", "libcalls.csv", "executables.csv"):
+            for row in catalogs[name]:
+                for test_id in split_refs(row["test_ids"]):
+                    reverse[test_id].add(row["contract_id"])
+        for row in catalogs["tests.csv"]:
+            actual = set(split_refs(row["contract_ids"]))
+            expected = reverse.get(row["test_id"], set())
+            if actual != expected:
+                fail(f"test {row['test_id']} has one-sided contract edges (missing={sorted(expected - actual)[:1]}, stale={sorted(actual - expected)[:1]})")
+
         tokens, productions, ast, ir, opcode_rows, libcalls = source_entries(root)
         language_expected = {
             "token": {f"grammar.token.{value}" for value in tokens},
@@ -234,10 +257,31 @@ def main() -> int:
             fail("libcall inventory does not match src/libcall/libcall_list.h")
         if any("metadata=" not in row["metadata"] or "valid=" not in row["valid_behavior"] or "invalid=" not in row["invalid_arguments"] or "ownership=" not in row["ownership"] or "side_effects=" not in row["side_effects"] or "failure=" not in row["failure_behavior"] or "source=" not in row["source_integration"] for row in catalogs["libcalls.csv"]):
             fail("libcall rows must state metadata, valid, invalid, ownership, side effects, failure, and source facets")
+        generic_libcall_values = {
+            "valid=returns documented value or nil",
+            "invalid=type, arity, range, or missing item as applicable",
+            "ownership=returned values follow runtime ownership rules",
+            "side_effects=recorded by the library contract, or none",
+            "failure=diagnostic or nil according to handler",
+            "source=resolved through library.call syntax and LIBCALL opcode",
+        }
+        for row in catalogs["libcalls.csv"]:
+            target = f"{row['library']}.{row['call']}"
+            if any(row[field] in generic_libcall_values or target not in row[field] for field in ("valid_behavior", "invalid_arguments", "ownership", "side_effects", "failure_behavior", "source_integration")):
+                fail(f"libcall {target} retains generic or non-specific facet text")
         expected_programs = {"scomp", "sin", "sdiss", "sconv"}
-        executable_programs = {row["program"] for row in catalogs["executables.csv"]}
-        if executable_programs != expected_programs:
-            fail(f"executable inventory mismatch: {sorted(executable_programs)}")
+        expected_executable_facets = {"command-line", "input-output", "exit-status", "persistence", "errors"}
+        executable_groups: dict[str, list[dict[str, str]]] = defaultdict(list)
+        for row in catalogs["executables.csv"]:
+            executable_groups[row["program"]].append(row)
+            if row["contract"] == f"{row['facet']} contract for {row['program']}":
+                fail(f"executable {row['program']} retains placeholder contract text")
+        if set(executable_groups) != expected_programs:
+            fail(f"executable inventory mismatch: {sorted(executable_groups)}")
+        for program, rows in executable_groups.items():
+            facets = [row["facet"] for row in rows]
+            if set(facets) != expected_executable_facets or len(facets) != len(set(facets)):
+                fail(f"executable {program} must have exactly one row for each required facet")
 
         symbols = archive_symbols(archive)
         exclusions = {row["symbol"]: row["reason"] for row in catalogs["archive_exclusions.csv"]}
@@ -249,15 +293,25 @@ def main() -> int:
             if symbol not in symbols:
                 fail(f"archive exclusion is stale: {symbol}")
         maintained = symbols - set(exclusions)
-        api_symbols = {row["symbol"] for row in catalogs["api.csv"]}
+        api_rows = catalogs["api.csv"]
+        api_symbols = {row["symbol"] for row in api_rows if row["module"] != "application"}
         if api_symbols != maintained:
             fail(f"API archive symbol mismatch (missing={sorted(maintained - api_symbols)[:1]}, stale={sorted(api_symbols - maintained)[:1]})")
-        if any(not all(label in row["facets"] for label in ("normal=", "invalid=", "boundary=", "ownership=", "failure=")) for row in catalogs["api.csv"]):
+        modules = {row["module"] for row in api_rows}
+        required_modules = {"common", "compiler", "bytecode", "runtime", "itemstore", "libcall", "network", "application"}
+        if not required_modules.issubset(modules):
+            fail(f"API catalog omits architectural modules {sorted(required_modules - modules)}")
+        forbidden = ("module=archive", "normal=declared", "invalid=caller-contract", "boundary=limits", "ownership=module-defined", "failure=error-result", "Maintained global symbol")
+        if any(row["module"] == "archive" or any(value in row["facets"] or value in row["description"] for value in forbidden) for row in api_rows):
+            fail("API catalog retains placeholder ownership or facet vocabulary")
+        if {row["symbol"] for row in api_rows if row["module"] == "application"} != {"scomp.main", "sin.main", "sdiss.main", "sconv.main"}:
+            fail("API application entry-point set is incomplete or stale")
+        if any(not all(label in row["facets"] for label in ("normal=", "invalid=", "boundary=", "ownership=", "failure=")) for row in api_rows):
             fail("API rows must state normal, invalid, boundary, ownership, and failure facets")
-    except (AuditError, ValueError) as error:
+    except (AuditError, OSError, ValueError) as error:
         print(f"inventory audit: ERROR: {error}", file=sys.stderr)
         return 1
-    print(f"inventory audit: valid ({len(tokens)} tokens, {len(productions)} productions, {len(ast)} AST nodes, {len(ir)} IR/opcode rows, {len(libcalls)} libcalls, {len(maintained)} API symbols, {len(expected_tests)} tests)")
+    print(f"inventory audit: valid ({len(tokens)} tokens, {len(productions)} productions, {len(ast)} AST nodes, {len(ir)} IR rows, {len(opcode_rows)} opcode rows, {len(libcalls)} libcalls, {len(maintained)} API symbols, {len(expected_tests)} tests)")
     return 0
 
 
