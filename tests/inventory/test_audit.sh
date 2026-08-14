@@ -89,7 +89,8 @@ import sys
 from pathlib import Path
 path = Path(sys.argv[1])
 rows = list(csv.DictReader(path.open(newline="", encoding="utf-8")))
-rows[0]["contract_ids"] = ";".join(rows[0]["contract_ids"].split(";")[:-1])
+row = next(row for row in rows if len(row["contract_ids"].split(";")) > 1)
+row["contract_ids"] = ";".join(row["contract_ids"].split(";")[:-1])
 with path.open("w", newline="", encoding="utf-8") as stream:
     writer = csv.DictWriter(stream, fieldnames=rows[0].keys(), lineterminator="\n")
     writer.writeheader()

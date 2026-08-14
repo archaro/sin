@@ -238,6 +238,49 @@ void test_libcall_registry_roundtrip(void) {
   ASSERT_TRUE(!libcall_pair_arg_count(sparse.li, sparse.ci, &args));
   ASSERT_TRUE(!libcall_pair_arg_count(5, 255, &args));
 
+  /* The shutdown calls are part of the registry contract, but their
+   * observable state changes belong to the handler.  Exercise both paths
+   * here so registry-only coverage cannot hide a broken shutdown ABI. */
+  setup_libcall_runtime();
+  RuntimeContext *ctx = test_ctx();
+  uv_loop_t loop;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  uv_loop_t *saved_loop = ctx->loop;
+  bool *saved_safe_shutdown = ctx->safe_shutdown;
+  bool *saved_shutdown_requested = ctx->shutdown_requested;
+  bool saved_safe_shutdown_value = config.safe_shutdown;
+  bool saved_shutdown_requested_value = config.shutdown_requested;
+  ctx->loop = &loop;
+  ctx->shutdown_requested = &config.shutdown_requested;
+
+  config.safe_shutdown = true;
+  config.shutdown_requested = false;
+  (void)lc_sys_shutdown(ctx, NULL, itemstore_root(config.itemstore_ctx));
+  VALUE_t shutdown_result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, shutdown_result.type);
+  ASSERT_TRUE(config.safe_shutdown);
+  ASSERT_TRUE(config.shutdown_requested);
+  value_free(&shutdown_result);
+  (void)uv_run(&loop, UV_RUN_NOWAIT);
+
+  config.safe_shutdown = true;
+  config.shutdown_requested = false;
+  (void)lc_sys_abort(ctx, NULL, itemstore_root(config.itemstore_ctx));
+  VALUE_t abort_result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, abort_result.type);
+  ASSERT_TRUE(!config.safe_shutdown);
+  ASSERT_TRUE(config.shutdown_requested);
+  value_free(&abort_result);
+  (void)uv_run(&loop, UV_RUN_NOWAIT);
+
+  ctx->loop = saved_loop;
+  ctx->safe_shutdown = saved_safe_shutdown;
+  ctx->shutdown_requested = saved_shutdown_requested;
+  config.safe_shutdown = saved_safe_shutdown_value;
+  config.shutdown_requested = saved_shutdown_requested_value;
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
+  teardown_libcall_runtime();
+
 }
 
 void test_runtime_init_validates_libcalls_once(void) {
