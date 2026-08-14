@@ -189,7 +189,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
 
 .PHONY: all lib clean help debug release sanitize compiledb FORCE_BUILD
-.PHONY: test test-network test-chat-smoke test-output-contract test-build-switch test-strict test-benchmark test-release test-warnings test-asan test-lsan
+.PHONY: test inventory-audit inventory-audit-self-test test-network test-chat-smoke test-output-contract test-build-switch test-strict test-benchmark test-release test-warnings test-asan test-lsan
 .PHONY: _test _test-harness _test-network _test-chat-smoke _test-output-contract _test-build-switch _test-strict _test-benchmark
 .PHONY: _test-warnings _test-release _test-asan _test-lsan
 .PHONY: fuzz-build fuzz-corpora fuzz-smoke fuzz-smoke-run
@@ -242,6 +242,7 @@ help:
 		'Test targets:' \
 		'  Successful test targets print concise totals; failures replay captured diagnostics' \
 		'  test             Build debug artifacts and run network + combined core/compiler/runtime suite' \
+		'  inventory-audit  Validate checked-in language, bytecode, API, libcall, executable, and test catalogs' \
 		'  test-network     Build and run network tests only' \
 		'  test-chat-smoke  Run the real chat example through localhost' \
 		'  test-output-contract Verify concise success and diagnostic failure formatting' \
@@ -316,8 +317,14 @@ $(PARSER_DEPENDENT_OBJECTS): $(PARSER_H)
 # Include dependency files
 -include $(DEPS)
 
-test: $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) scomp sin sconv
+test: inventory-audit $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) scomp sin sconv
 	@$(MAKE) --no-print-directory _test
+
+inventory-audit: $(LIB)
+	@PYTHONDONTWRITEBYTECODE=1 python3 tests/inventory/audit.py --archive "$(LIB)" >/dev/null
+
+inventory-audit-self-test: inventory-audit
+	@bash tests/inventory/test_audit.sh "$(LIB)"
 
 _test:
 	@$(QUIET_RUNNER) aggregate test \

@@ -21,6 +21,18 @@ The main command entry points are:
 The shared implementation is built into `lib/libsinshared.a` and linked into
 those tools and the test harnesses.
 
+## Contract Inventory
+
+The checked-in catalogs under `tests/inventory/` are the completeness
+inventory for the language, compiler/bytecode pipeline, runtime APIs,
+libcalls, executable interfaces, and legacy test contracts.  Their canonical
+identifiers are reconciled against `parser.y`, `absyn.h`, `bytecode_abi.h`,
+`opcode_schema.def`, `libcall_list.h`, and the built shared archive.  Run
+`make inventory-audit` after `make lib` (or `make test`, which includes the
+audit) to detect missing, stale, duplicate, or unmapped entries.  The focused
+positive/negative checks are available with `make inventory-audit-self-test`;
+they mutate temporary copies only.
+
 ## Module Boundaries
 
 ### Common Support
