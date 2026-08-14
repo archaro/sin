@@ -18,6 +18,6 @@ Run focused drift checks, which mutate temporary copies only, with:
 make inventory-audit-self-test
 ```
 
-`seed_catalogs.py` is a maintainer utility for regenerating catalogs after an
-intentional canonical-definition change. Normal test commands never rewrite
-catalog files.
+Catalogs are reviewed source data. Normal test commands never rewrite catalog
+files; canonical-definition changes require an intentional catalog edit and a
+fresh audit.

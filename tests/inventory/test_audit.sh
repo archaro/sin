@@ -123,5 +123,34 @@ with tests_path.open("w", newline="", encoding="utf-8") as stream:
     writer.writerows(tests)
 PY
 expect_failure missing_api_symbol 'API archive symbol mismatch'
+cp -a "$repo_root/tests/inventory/." "$work/catalog"
+
+# Attempt-2 API template text is rejected even when archive symbols remain complete.
+python3 - "$work/catalog/api.csv" <<'PY'
+import csv
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+rows = list(csv.DictReader(path.open(newline="", encoding="utf-8")))
+rows[0]["normal_behavior"] = "normal=runtime symbol returns or mutates its declared object"
+with path.open("w", newline="", encoding="utf-8") as stream:
+    writer = csv.DictWriter(stream, fieldnames=rows[0].keys(), lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+PY
+expect_failure api_template 'API catalog retains placeholder'
+
+# Unknown archive object/module mappings fail directly without mutating files.
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$repo_root/tests/inventory" python3 - <<'PY'
+import audit
+
+try:
+    audit.validate_archive_object_modules({"invented.o": "new-module"})
+except audit.AuditError as error:
+    assert "unmapped object" in str(error)
+else:
+    raise SystemExit("unknown archive object unexpectedly accepted")
+print("[inventory-audit] unknown object mapping rejected")
+PY
 
 printf '[inventory-audit] positive and negative checks passed\n'
