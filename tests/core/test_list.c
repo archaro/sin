@@ -482,9 +482,12 @@ void test_list_concat_shares_rhs_leaves(void) {
       SIN_LIST_t *result;
       bool observe_cursor = left_sizes[left_index] == 31u &&
                             right_sizes[right_index] == 1025u;
+      bool observe_aligned = left_sizes[left_index] == 1024u &&
+                             right_sizes[right_index] == 1025u;
       ASSERT_NOT_NULL(left);
       ASSERT_NOT_NULL(right);
-      if (observe_cursor) sin_list_test_reset_traversal_stats();
+      if (observe_cursor || observe_aligned)
+        sin_list_test_reset_traversal_stats();
       result = sin_list_concat(left, right);
       ASSERT_NOT_NULL(result);
       ASSERT_EQ_INT((long long)(left_sizes[left_index] + right_sizes[right_index]),
@@ -501,6 +504,10 @@ void test_list_concat_shares_rhs_leaves(void) {
         ASSERT_EQ_INT(33, stats.leaf_visits);
         ASSERT_EQ_INT(1025, stats.values_yielded);
         ASSERT_EQ_INT(1, stats.node_visits);
+        ASSERT_EQ_INT(1025, stats.cursor_value_clones);
+      }
+      if (observe_aligned) {
+        ASSERT_EQ_INT(0, sin_list_test_traversal_stats().cursor_value_clones);
       }
       if ((left_index + right_index) % 2u == 0u) {
         sin_list_release(result);
@@ -674,7 +681,8 @@ void test_list_slice_shares_aligned_leaves_and_boundaries(void) {
   SIN_LIST_t *source = make_int_list(1056);
   SIN_LIST_t *empty = sin_list_build_owned(NULL, 0);
   SIN_LIST_t *full;
-  SIN_LIST_t *aligned;
+  SIN_LIST_t *aligned_slice;
+  SIN_LIST_t *unaligned_slice;
   SIN_LIST_t *short_source;
   SIN_LIST_t *short_slice;
   SIN_LIST_t *subtree_source;
@@ -717,8 +725,10 @@ void test_list_slice_shares_aligned_leaves_and_boundaries(void) {
     }
   }
 
-  aligned = sin_list_slice(source, 32u, 992u);
-  ASSERT_NOT_NULL(aligned);
+  sin_list_test_reset_traversal_stats();
+  aligned_slice = sin_list_slice(source, 32u, 992u);
+  ASSERT_NOT_NULL(aligned_slice);
+  ASSERT_EQ_INT(0, sin_list_test_traversal_stats().cursor_value_clones);
   {
     SIN_LIST_ITER_t source_iter;
     SIN_LIST_ITER_t slice_iter;
@@ -729,7 +739,7 @@ void test_list_slice_shares_aligned_leaves_and_boundaries(void) {
     size_t source_span = 0;
     size_t slice_span = 0;
     ASSERT_TRUE(sin_list_iter_init(&source_iter, source));
-    ASSERT_TRUE(sin_list_iter_init(&slice_iter, aligned));
+    ASSERT_TRUE(sin_list_iter_init(&slice_iter, aligned_slice));
     ASSERT_TRUE(sin_list_iter_next(&source_iter, &source_values,
                                    &source_span, &source_leaf));
     ASSERT_EQ_INT(32, source_span);
@@ -742,18 +752,19 @@ void test_list_slice_shares_aligned_leaves_and_boundaries(void) {
     }
   }
   for (size_t i = 0; i < 992u; ++i)
-    ASSERT_EQ_INT((long long)(32u + i), sin_list_get(aligned, i)->i);
-  sin_list_release(aligned);
+    ASSERT_EQ_INT((long long)(32u + i), sin_list_get(aligned_slice, i)->i);
+  sin_list_release(aligned_slice);
 
   sin_list_test_reset_traversal_stats();
-  aligned = sin_list_slice(source, 31u, 992u);
-  ASSERT_NOT_NULL(aligned);
-  ASSERT_EQ_INT(31, sin_list_get(aligned, 0)->i);
-  ASSERT_EQ_INT(1022, sin_list_get(aligned, 991u)->i);
+  unaligned_slice = sin_list_slice(source, 31u, 992u);
+  ASSERT_NOT_NULL(unaligned_slice);
+  ASSERT_EQ_INT(31, sin_list_get(unaligned_slice, 0)->i);
+  ASSERT_EQ_INT(1022, sin_list_get(unaligned_slice, 991u)->i);
   ASSERT_EQ_INT(32, sin_list_test_traversal_stats().leaf_visits);
   ASSERT_EQ_INT(1024, sin_list_test_traversal_stats().values_yielded);
   ASSERT_EQ_INT(1, sin_list_test_traversal_stats().node_visits);
-  sin_list_release(aligned);
+  ASSERT_EQ_INT(992, sin_list_test_traversal_stats().cursor_value_clones);
+  sin_list_release(unaligned_slice);
   sin_list_test_reset_traversal_stats();
 
   nested_value = (VALUE_t){VALUE_list, {.list = sin_list_retain(nested_inner)}};
@@ -763,14 +774,14 @@ void test_list_slice_shares_aligned_leaves_and_boundaries(void) {
   unaligned_nested = sin_list_slice(nested_source, 63u, 4u);
   ASSERT_NOT_NULL(unaligned_nested);
   ASSERT_TRUE(sin_list_get(unaligned_nested, 1u)->list == nested_inner);
-  aligned = sin_list_slice(nested_source, 32u, 64u);
-  ASSERT_NOT_NULL(aligned);
-  ASSERT_TRUE(sin_list_get(aligned, 32u)->list == nested_inner);
+  aligned_slice = sin_list_slice(nested_source, 32u, 64u);
+  ASSERT_NOT_NULL(aligned_slice);
+  ASSERT_TRUE(sin_list_get(aligned_slice, 32u)->list == nested_inner);
   sin_list_release(nested_source);
   ASSERT_TRUE(sin_list_get(unaligned_nested, 1u)->list == nested_inner);
-  ASSERT_TRUE(sin_list_get(aligned, 32u)->list == nested_inner);
+  ASSERT_TRUE(sin_list_get(aligned_slice, 32u)->list == nested_inner);
   sin_list_release(unaligned_nested);
-  sin_list_release(aligned);
+  sin_list_release(aligned_slice);
   sin_list_release(nested_inner);
 
   short_source = make_int_list(65);

@@ -201,6 +201,7 @@ static SIN_LIST_NODE *leaf_clone_append_cursor(const SIN_LIST_NODE *old,
       node_release(leaf);
       return NULL;
     }
+    traversal_stat_inc(&traversal_stats.cursor_value_clones);
     leaf->depth = max_depth(leaf->depth,
                             value_depth(&leaf->data.values[old_count + i]));
   }

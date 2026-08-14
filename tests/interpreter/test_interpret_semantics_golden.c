@@ -1,4 +1,5 @@
 #include "item.h"
+#include "item_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -19,6 +20,10 @@
 #include "list.h"
 #include "itemref.h"
 #include "memory.h"
+
+#undef destroy_item
+static void destroy_raw_runtime_item(ITEM_t *item) { destroy_item(item); }
+#define destroy_item test_destroy_item
 
 uint8_t *op_jump(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
@@ -602,6 +607,340 @@ void test_interpret_rejects_malformed_bytecode_before_execution(void) {
   destroy_vm(config.vm);
   destroy_item(itemstore_root(config.itemstore_ctx));
   memset(&config, 0, sizeof(config));
+}
+
+static ITEM_t *install_runtime_verify_test_code(const char *name,
+                                                const uint8_t *bytes,
+                                                size_t length) {
+  uint8_t *owned = malloc(length);
+  ASSERT_NOT_NULL(owned);
+  memcpy(owned, bytes, length);
+  ASSERT_TRUE(length <= UINT32_MAX);
+  ITEM_t *item = test_item_set_code(itemstore_root(config.itemstore_ctx), name,
+                                    (uint32_t)length, owned);
+  ASSERT_NOT_NULL(item);
+  return item;
+}
+
+static ITEM_t *install_runtime_verify_test_code_in_store(
+    ITEMSTORE_t *store, const char *name, const uint8_t *bytes, size_t length) {
+  uint8_t *owned = malloc(length);
+  ASSERT_NOT_NULL(owned);
+  memcpy(owned, bytes, length);
+  ASSERT_TRUE(length <= UINT32_MAX);
+  ITEM_t *item = item_set_code(itemstore_root(store), name,
+                               (uint32_t)length, owned).item;
+  ASSERT_NOT_NULL(item);
+  return item;
+}
+
+static VALUE_t run_runtime_verify_test(RuntimeContext *ctx, ITEM_t *item) {
+  ctx->itemstore = config.itemstore_ctx;
+  return interpret(ctx, item);
+}
+
+void test_runtime_verification_cache_reuses_fetch_transfer(void) {
+  static const uint8_t callee_bytes[] = {0, 0, 'h'};
+  static const uint8_t caller_bytes[] = {
+      0, 0, 'l', 6, 0, 'c', 'a', 'c', 'h', 'e', 'e', 'F', 0, 0, 'h'
+  };
+  setup_result_semantics_runtime();
+  ITEM_t *callee = install_runtime_verify_test_code("cachee", callee_bytes,
+                                                    sizeof(callee_bytes));
+  ITEM_t *caller = install_runtime_verify_test_code("caller", caller_bytes,
+                                                    sizeof(caller_bytes));
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+
+  VALUE_t first = run_runtime_verify_test(&ctx, caller);
+  ASSERT_EQ_INT(VALUE_nil, first.type);
+  value_free(&first);
+  ASSERT_EQ_INT(2, runtime_verify_invocations_for_tests(&ctx));
+  VALUE_t second = run_runtime_verify_test(&ctx, caller);
+  ASSERT_EQ_INT(VALUE_nil, second.type);
+  value_free(&second);
+  ASSERT_EQ_INT(2, runtime_verify_invocations_for_tests(&ctx));
+  ASSERT_TRUE(!item_is_in_use(caller));
+  ASSERT_TRUE(!item_is_in_use(callee));
+  runtime_destroy(&ctx);
+  teardown_result_semantics_runtime();
+}
+
+void test_runtime_verification_cache_revision_and_failure_contract(void) {
+  static const uint8_t valid_callee[] = {0, 0, 'h'};
+  static const uint8_t replacement_callee[] = {0, 0, 'p', 1, 0, 0, 0, 0, 0,
+                                               0, 0, 'h'};
+  static const uint8_t malformed_callee[] = {0, 0, 'l', 3, 0, 'a'};
+  static const uint8_t caller_bytes[] = {
+      0, 0, 'l', 6, 0, 'c', 'a', 'c', 'h', 'e', 'e', 'F', 0, 0, 'h'
+  };
+
+  setup_result_semantics_runtime();
+  ITEM_t *callee = install_runtime_verify_test_code("cachee", valid_callee,
+                                                    sizeof(valid_callee));
+  ITEM_t *caller = install_runtime_verify_test_code("caller", caller_bytes,
+                                                    sizeof(caller_bytes));
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  VALUE_t first = run_runtime_verify_test(&ctx, caller);
+  ASSERT_EQ_INT(VALUE_nil, first.type);
+  value_free(&first);
+  ASSERT_EQ_INT(2, runtime_verify_invocations_for_tests(&ctx));
+
+  uint8_t *replacement_owned = malloc(sizeof(replacement_callee));
+  ASSERT_NOT_NULL(replacement_owned);
+  memcpy(replacement_owned, replacement_callee, sizeof(replacement_callee));
+  callee = test_item_set_code(itemstore_root(config.itemstore_ctx), "cachee",
+                              sizeof(replacement_callee), replacement_owned);
+  ASSERT_NOT_NULL(callee);
+  VALUE_t replaced = run_runtime_verify_test(&ctx, caller);
+  ASSERT_EQ_INT(VALUE_nil, replaced.type);
+  value_free(&replaced);
+  ASSERT_EQ_INT(4, runtime_verify_invocations_for_tests(&ctx));
+
+  uint8_t *malformed_owned = malloc(sizeof(malformed_callee));
+  ASSERT_NOT_NULL(malformed_owned);
+  memcpy(malformed_owned, malformed_callee, sizeof(malformed_callee));
+  ASSERT_NOT_NULL(item_set_code(itemstore_root(config.itemstore_ctx),
+                                "cachee", sizeof(malformed_callee),
+                                malformed_owned).item);
+  VALUE_t failed = run_runtime_verify_test(&ctx, caller);
+  ASSERT_EQ_INT(VALUE_nil, failed.type);
+  value_free(&failed);
+  ITEM_t *msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_EQ_INT(VALUE_str, item_value(msg)->type);
+  char *first_message = strdup(item_value(msg)->s);
+  ASSERT_NOT_NULL(first_message);
+  ASSERT_EQ_INT(6, runtime_verify_invocations_for_tests(&ctx));
+  ASSERT_TRUE(!item_is_in_use(caller));
+  ASSERT_TRUE(!item_is_in_use(callee));
+
+  VALUE_t failed_again = run_runtime_verify_test(&ctx, caller);
+  ASSERT_EQ_INT(VALUE_nil, failed_again.type);
+  value_free(&failed_again);
+  msg = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
+  ASSERT_NOT_NULL(msg);
+  ASSERT_TRUE(strcmp(first_message, item_value(msg)->s) == 0);
+  /* set_error_item mutates the store and bumps payload revision after the
+   * first failure, so retrying conservatively re-verifies both caller and
+   * failed callee. */
+  ASSERT_EQ_INT(8, runtime_verify_invocations_for_tests(&ctx));
+  ASSERT_TRUE(!item_is_in_use(caller));
+  ASSERT_TRUE(!item_is_in_use(callee));
+  free(first_message);
+  runtime_destroy(&ctx);
+  teardown_result_semantics_runtime();
+}
+
+void test_runtime_verification_cache_revision_wrap_invalidates(void) {
+  static const uint8_t code_bytes[] = {0, 0, 'h'};
+  setup_result_semantics_runtime();
+  ITEM_t *code = install_runtime_verify_test_code("wrap", code_bytes,
+                                                 sizeof(code_bytes));
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  VALUE_t first = run_runtime_verify_test(&ctx, code);
+  ASSERT_EQ_INT(VALUE_nil, first.type);
+  value_free(&first);
+  ASSERT_EQ_INT(1, runtime_verify_invocations_for_tests(&ctx));
+
+  ITEMSTORE_t *store = config.itemstore_ctx;
+  store->context.payload_revision = UINT64_MAX;
+  store->context.payload_revision_epoch = 41u;
+  VALUE_t at_max = run_runtime_verify_test(&ctx, code);
+  ASSERT_EQ_INT(VALUE_nil, at_max.type);
+  value_free(&at_max);
+  ASSERT_EQ_INT(2, runtime_verify_invocations_for_tests(&ctx));
+
+  uint8_t *replacement = malloc(sizeof(code_bytes));
+  ASSERT_NOT_NULL(replacement);
+  memcpy(replacement, code_bytes, sizeof(code_bytes));
+  ASSERT_NOT_NULL(item_set_code(itemstore_root(store), "wrap",
+                                sizeof(code_bytes), replacement).item);
+  ASSERT_EQ_INT(0, store->context.payload_revision);
+  ASSERT_EQ_INT(42, store->context.payload_revision_epoch);
+  VALUE_t wrapped = run_runtime_verify_test(&ctx, code);
+  ASSERT_EQ_INT(VALUE_nil, wrapped.type);
+  value_free(&wrapped);
+  ASSERT_EQ_INT(3, runtime_verify_invocations_for_tests(&ctx));
+  runtime_destroy(&ctx);
+  teardown_result_semantics_runtime();
+}
+
+void test_runtime_verification_cache_revision_token_saturation_bypasses(void) {
+  static const uint8_t code_bytes[] = {0, 0, 'h'};
+  setup_result_semantics_runtime();
+  ITEM_t *code = install_runtime_verify_test_code("saturated", code_bytes,
+                                                 sizeof(code_bytes));
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  VALUE_t first = run_runtime_verify_test(&ctx, code);
+  ASSERT_EQ_INT(VALUE_nil, first.type);
+  value_free(&first);
+  ASSERT_EQ_INT(1, runtime_verify_invocations_for_tests(&ctx));
+
+  ITEMSTORE_t *store = config.itemstore_ctx;
+  store->context.payload_revision = UINT64_MAX;
+  store->context.payload_revision_epoch = UINT64_MAX;
+  store->context.payload_revision_token_exhausted = false;
+  uint8_t *replacement = malloc(sizeof(code_bytes));
+  ASSERT_NOT_NULL(replacement);
+  memcpy(replacement, code_bytes, sizeof(code_bytes));
+  ASSERT_NOT_NULL(item_set_code(itemstore_root(store), "saturated",
+                                sizeof(code_bytes), replacement).item);
+  ASSERT_TRUE(itemstore_payload_revision_token_exhausted(store));
+  ASSERT_EQ_INT(UINT64_MAX, itemstore_payload_revision(store));
+
+  VALUE_t exhausted_first = run_runtime_verify_test(&ctx, code);
+  ASSERT_EQ_INT(VALUE_nil, exhausted_first.type);
+  value_free(&exhausted_first);
+  VALUE_t exhausted_second = run_runtime_verify_test(&ctx, code);
+  ASSERT_EQ_INT(VALUE_nil, exhausted_second.type);
+  value_free(&exhausted_second);
+  ASSERT_EQ_INT(3, runtime_verify_invocations_for_tests(&ctx));
+  runtime_destroy(&ctx);
+  teardown_result_semantics_runtime();
+}
+
+void test_runtime_verification_cache_topology_token_wrap_and_saturation(void) {
+  static const uint8_t code_bytes[] = {0, 0, 'h'};
+  setup_result_semantics_runtime();
+  ITEM_t *code = install_runtime_verify_test_code("topology_code", code_bytes,
+                                                 sizeof(code_bytes));
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  VALUE_t first = run_runtime_verify_test(&ctx, code);
+  ASSERT_EQ_INT(VALUE_nil, first.type);
+  value_free(&first);
+  ASSERT_EQ_INT(1, runtime_verify_invocations_for_tests(&ctx));
+
+  ITEMSTORE_t *store = config.itemstore_ctx;
+  uint64_t payload_before = itemstore_payload_revision(store);
+  store->context.topology_revision = UINT64_MAX;
+  store->context.topology_revision_epoch = 57u;
+  store->context.topology_revision_token_exhausted = false;
+  ASSERT_NOT_NULL(item_set_value(itemstore_root(store), "topology.wrap",
+                                 (VALUE_t){.type = VALUE_int, .i = 1}).item);
+  ASSERT_EQ_INT(0, store->context.topology_revision);
+  ASSERT_EQ_INT(58, store->context.topology_revision_epoch);
+  ASSERT_EQ_INT(payload_before, itemstore_payload_revision(store));
+  VALUE_t wrapped = run_runtime_verify_test(&ctx, code);
+  ASSERT_EQ_INT(VALUE_nil, wrapped.type);
+  value_free(&wrapped);
+  ASSERT_EQ_INT(2, runtime_verify_invocations_for_tests(&ctx));
+
+  store->context.topology_revision = UINT64_MAX;
+  store->context.topology_revision_epoch = UINT64_MAX;
+  store->context.topology_revision_token_exhausted = false;
+  ASSERT_NOT_NULL(item_set_value(itemstore_root(store), "topology.saturate",
+                                 (VALUE_t){.type = VALUE_int, .i = 2}).item);
+  ASSERT_TRUE(itemstore_topology_revision_token_exhausted(store));
+  ASSERT_EQ_INT(payload_before, itemstore_payload_revision(store));
+  VALUE_t exhausted_first = run_runtime_verify_test(&ctx, code);
+  ASSERT_EQ_INT(VALUE_nil, exhausted_first.type);
+  value_free(&exhausted_first);
+  VALUE_t exhausted_second = run_runtime_verify_test(&ctx, code);
+  ASSERT_EQ_INT(VALUE_nil, exhausted_second.type);
+  value_free(&exhausted_second);
+  ASSERT_EQ_INT(4, runtime_verify_invocations_for_tests(&ctx));
+  runtime_destroy(&ctx);
+  teardown_result_semantics_runtime();
+}
+
+void test_runtime_verification_cache_ownerless_items_bypass(void) {
+  static const uint8_t code_bytes[] = {0, 0, 'h'};
+  uint8_t *owned = malloc(sizeof(code_bytes));
+  ASSERT_NOT_NULL(owned);
+  memcpy(owned, code_bytes, sizeof(code_bytes));
+  ITEM_t *raw = make_item("raw", NULL, ITEM_code, VALUE_NIL, owned,
+                          (int)sizeof(code_bytes));
+  ASSERT_NOT_NULL(raw);
+  setup_result_semantics_runtime();
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  VALUE_t first = run_runtime_verify_test(&ctx, raw);
+  ASSERT_EQ_INT(VALUE_nil, first.type);
+  value_free(&first);
+  VALUE_t second = run_runtime_verify_test(&ctx, raw);
+  ASSERT_EQ_INT(VALUE_nil, second.type);
+  value_free(&second);
+  ASSERT_EQ_INT(2, runtime_verify_invocations_for_tests(&ctx));
+  runtime_destroy(&ctx);
+  teardown_result_semantics_runtime();
+  destroy_raw_runtime_item(raw);
+}
+
+void test_runtime_verification_cache_isolates_live_itemstores(void) {
+  static const uint8_t code_bytes[] = {0, 0, 'h'};
+  ITEMSTORE_t *first_store = itemstore_create("cache-first");
+  ITEMSTORE_t *second_store = itemstore_create("cache-second");
+  ASSERT_NOT_NULL(first_store);
+  ASSERT_NOT_NULL(second_store);
+  ITEM_t *first_code = install_runtime_verify_test_code_in_store(
+      first_store, "code", code_bytes, sizeof(code_bytes));
+  ITEM_t *second_code = install_runtime_verify_test_code_in_store(
+      second_store, "code", code_bytes, sizeof(code_bytes));
+  VM_t *vm = make_vm();
+  ASSERT_NOT_NULL(vm);
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, vm);
+
+  ctx.itemstore = first_store;
+  VALUE_t first = interpret(&ctx, first_code);
+  ASSERT_EQ_INT(VALUE_nil, first.type);
+  value_free(&first);
+  ASSERT_EQ_INT(1, runtime_verify_invocations_for_tests(&ctx));
+  ASSERT_TRUE(!item_is_in_use(first_code));
+
+  ctx.itemstore = second_store;
+  VALUE_t second = interpret(&ctx, second_code);
+  ASSERT_EQ_INT(VALUE_nil, second.type);
+  value_free(&second);
+  ASSERT_EQ_INT(2, runtime_verify_invocations_for_tests(&ctx));
+  ASSERT_TRUE(!item_is_in_use(second_code));
+
+  ctx.itemstore = first_store;
+  VALUE_t first_again = interpret(&ctx, first_code);
+  ASSERT_EQ_INT(VALUE_nil, first_again.type);
+  value_free(&first_again);
+  ASSERT_EQ_INT(3, runtime_verify_invocations_for_tests(&ctx));
+  ASSERT_TRUE(!item_is_in_use(first_code));
+  ASSERT_TRUE(!item_is_in_use(second_code));
+
+  runtime_destroy(&ctx);
+  destroy_vm(vm);
+  itemstore_destroy(second_store);
+  itemstore_destroy(first_store);
+}
+
+void test_runtime_verification_cache_eviction_is_bounded(void) {
+  static const uint8_t code_bytes[] = {0, 0, 'h'};
+  ITEM_t *items[RUNTIME_VERIFY_CACHE_SIZE + 2u];
+  char name[32];
+  setup_result_semantics_runtime();
+  for (size_t i = 0u; i < sizeof(items) / sizeof(items[0]); i++) {
+    int written = snprintf(name, sizeof(name), "cache.%zu", i);
+    ASSERT_TRUE(written > 0 && (size_t)written < sizeof(name));
+    items[i] = install_runtime_verify_test_code(name, code_bytes,
+                                                sizeof(code_bytes));
+  }
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  for (size_t i = 0u; i < sizeof(items) / sizeof(items[0]); i++) {
+    VALUE_t result = run_runtime_verify_test(&ctx, items[i]);
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    value_free(&result);
+  }
+  ASSERT_EQ_INT((int)(sizeof(items) / sizeof(items[0])),
+                runtime_verify_invocations_for_tests(&ctx));
+  VALUE_t evicted = run_runtime_verify_test(&ctx, items[0]);
+  ASSERT_EQ_INT(VALUE_nil, evicted.type);
+  value_free(&evicted);
+  ASSERT_EQ_INT((int)(sizeof(items) / sizeof(items[0]) + 1u),
+                runtime_verify_invocations_for_tests(&ctx));
+  runtime_destroy(&ctx);
+  teardown_result_semantics_runtime();
 }
 
 void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void) {

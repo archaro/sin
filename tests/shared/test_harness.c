@@ -398,6 +398,14 @@ void test_interpret_result_semantics(void);
 void test_runtime_build_list_allocation_failure_consumes_inputs(void);
 void test_interpreter_string_literal_allocation_failure_aborts_frame(void);
 void test_interpret_rejects_malformed_bytecode_before_execution(void);
+void test_runtime_verification_cache_reuses_fetch_transfer(void);
+void test_runtime_verification_cache_revision_and_failure_contract(void);
+void test_runtime_verification_cache_revision_wrap_invalidates(void);
+void test_runtime_verification_cache_revision_token_saturation_bypasses(void);
+void test_runtime_verification_cache_topology_token_wrap_and_saturation(void);
+void test_runtime_verification_cache_ownerless_items_bypass(void);
+void test_runtime_verification_cache_isolates_live_itemstores(void);
+void test_runtime_verification_cache_eviction_is_bounded(void);
 void test_interpret_baseline_bytecode_safety_in_default_and_strict_modes(void);
 void test_interpret_stress(void);
 void test_runtime_benchmark_optin(void);
@@ -710,6 +718,14 @@ static const test_case_t runtime_tests[] = {
     {"test_runtime_build_list_allocation_failure_consumes_inputs", test_runtime_build_list_allocation_failure_consumes_inputs},
     {"test_interpreter_string_literal_allocation_failure_aborts_frame", test_interpreter_string_literal_allocation_failure_aborts_frame},
     {"test_interpret_rejects_malformed_bytecode_before_execution", test_interpret_rejects_malformed_bytecode_before_execution},
+    {"test_runtime_verification_cache_reuses_fetch_transfer", test_runtime_verification_cache_reuses_fetch_transfer},
+    {"test_runtime_verification_cache_revision_and_failure_contract", test_runtime_verification_cache_revision_and_failure_contract},
+    {"test_runtime_verification_cache_revision_wrap_invalidates", test_runtime_verification_cache_revision_wrap_invalidates},
+    {"test_runtime_verification_cache_revision_token_saturation_bypasses", test_runtime_verification_cache_revision_token_saturation_bypasses},
+    {"test_runtime_verification_cache_topology_token_wrap_and_saturation", test_runtime_verification_cache_topology_token_wrap_and_saturation},
+    {"test_runtime_verification_cache_ownerless_items_bypass", test_runtime_verification_cache_ownerless_items_bypass},
+    {"test_runtime_verification_cache_isolates_live_itemstores", test_runtime_verification_cache_isolates_live_itemstores},
+    {"test_runtime_verification_cache_eviction_is_bounded", test_runtime_verification_cache_eviction_is_bounded},
     {"test_interpret_baseline_bytecode_safety_in_default_and_strict_modes", test_interpret_baseline_bytecode_safety_in_default_and_strict_modes},
     {"test_interpret_stress", test_interpret_stress},
     {"test_libcall_registry_roundtrip", test_libcall_registry_roundtrip},

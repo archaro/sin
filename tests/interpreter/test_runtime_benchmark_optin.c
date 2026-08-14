@@ -499,6 +499,138 @@ static uint64_t bench_syscall(ITEMSTORE_t *store, ITEM_t *caller,
   return elapsed;
 }
 
+typedef enum {
+  RUNTIME_VERIFY_BENCH_REPEATED,
+  RUNTIME_VERIFY_BENCH_ALTERNATING,
+  RUNTIME_VERIFY_BENCH_REPLACEMENT,
+  RUNTIME_VERIFY_BENCH_COLD
+} RuntimeVerifyBenchMode;
+
+typedef struct {
+  ITEMSTORE_t *store;
+  VM_t *vm;
+  RuntimeContext ctx;
+  ITEM_t *callee_a;
+  ITEM_t *callee_b;
+  ITEM_t *caller_a;
+  ITEM_t *caller_b;
+} RuntimeVerifyBenchFixture;
+
+static ITEM_t *runtime_verify_bench_set_code(ITEMSTORE_t *store,
+                                             const char *name,
+                                             const uint8_t *bytes,
+                                             size_t length) {
+  uint8_t *owned = malloc(length);
+  ASSERT_NOT_NULL(owned);
+  memcpy(owned, bytes, length);
+  ASSERT_TRUE(length <= UINT32_MAX);
+  ITEM_t *item = item_set_code(itemstore_root(store), name,
+                               (uint32_t)length, owned).item;
+  ASSERT_NOT_NULL(item);
+  return item;
+}
+
+static void runtime_verify_bench_fixture_init(
+    RuntimeVerifyBenchFixture *fixture) {
+  static const uint8_t callee_bytes[] = {0, 0, 'h'};
+  static const uint8_t caller_a_bytes[] = {
+      0, 0, 'l', 1, 0, 'a', 'F', 0, 0, 'h'
+  };
+  static const uint8_t caller_b_bytes[] = {
+      0, 0, 'l', 1, 0, 'b', 'F', 0, 0, 'h'
+  };
+  fixture->store = itemstore_create("runtime-verify-bench");
+  ASSERT_NOT_NULL(fixture->store);
+  fixture->callee_a = runtime_verify_bench_set_code(
+      fixture->store, "a", callee_bytes, sizeof(callee_bytes));
+  fixture->callee_b = runtime_verify_bench_set_code(
+      fixture->store, "b", callee_bytes, sizeof(callee_bytes));
+  fixture->caller_a = runtime_verify_bench_set_code(
+      fixture->store, "caller.a", caller_a_bytes, sizeof(caller_a_bytes));
+  fixture->caller_b = runtime_verify_bench_set_code(
+      fixture->store, "caller.b", caller_b_bytes, sizeof(caller_b_bytes));
+  fixture->vm = make_vm();
+  ASSERT_NOT_NULL(fixture->vm);
+  runtime_context_init(&fixture->ctx, fixture->vm);
+  fixture->ctx.itemstore = fixture->store;
+}
+
+static void runtime_verify_bench_fixture_destroy(
+    RuntimeVerifyBenchFixture *fixture) {
+  runtime_destroy(&fixture->ctx);
+  destroy_vm(fixture->vm);
+  itemstore_destroy(fixture->store);
+}
+
+static uint64_t runtime_verify_bench_sample(RuntimeVerifyBenchMode mode,
+                                            size_t iters,
+                                            uint64_t *verifications) {
+  static const uint8_t replacement_bytes[] = {0, 0, 'h'};
+  RuntimeVerifyBenchFixture fixture = {0};
+  runtime_verify_bench_fixture_init(&fixture);
+  uint64_t start = now_ns();
+  for (size_t i = 0u; i < iters; i++) {
+    if (mode == RUNTIME_VERIFY_BENCH_REPLACEMENT) {
+      ITEM_t *replacement = runtime_verify_bench_set_code(
+          fixture.store, "a", replacement_bytes, sizeof(replacement_bytes));
+      ASSERT_TRUE(replacement == fixture.callee_a);
+    }
+    if (mode == RUNTIME_VERIFY_BENCH_COLD) {
+      runtime_verify_cache_clear_for_tests(&fixture.ctx);
+    }
+    ITEM_t *caller = fixture.caller_a;
+    if (mode == RUNTIME_VERIFY_BENCH_ALTERNATING && (i & 1u) != 0u) {
+      caller = fixture.caller_b;
+    }
+    VALUE_t result = interpret(&fixture.ctx, caller);
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    value_free(&result);
+  }
+  uint64_t elapsed = now_ns() - start;
+  *verifications = runtime_verify_invocations_for_tests(&fixture.ctx);
+  runtime_verify_bench_fixture_destroy(&fixture);
+  return elapsed;
+}
+
+static void run_runtime_verification_cache_benchmarks(void) {
+  const size_t sample_count = 5u;
+  const size_t iters = 400u;
+  uint64_t repeated_times[5];
+  uint64_t alternating_times[5];
+  uint64_t replacement_times[5];
+  uint64_t cold_times[5];
+  for (size_t i = 0u; i < sample_count; i++) {
+    uint64_t repeated_verifications = 0u;
+    uint64_t alternating_verifications = 0u;
+    uint64_t replacement_verifications = 0u;
+    uint64_t cold_verifications = 0u;
+    repeated_times[i] = runtime_verify_bench_sample(
+        RUNTIME_VERIFY_BENCH_REPEATED, iters, &repeated_verifications);
+    alternating_times[i] = runtime_verify_bench_sample(
+        RUNTIME_VERIFY_BENCH_ALTERNATING, iters, &alternating_verifications);
+    replacement_times[i] = runtime_verify_bench_sample(
+        RUNTIME_VERIFY_BENCH_REPLACEMENT, iters, &replacement_verifications);
+    cold_times[i] = runtime_verify_bench_sample(
+        RUNTIME_VERIFY_BENCH_COLD, iters, &cold_verifications);
+    ASSERT_EQ_INT(2, repeated_verifications);
+    ASSERT_EQ_INT(4, alternating_verifications);
+    ASSERT_EQ_INT((int)(iters * 2u), replacement_verifications);
+    ASSERT_EQ_INT((int)(iters * 2u), cold_verifications);
+  }
+  uint64_t repeated_median = median_u64(repeated_times, sample_count);
+  uint64_t alternating_median = median_u64(alternating_times, sample_count);
+  uint64_t replacement_median = median_u64(replacement_times, sample_count);
+  uint64_t cold_median = median_u64(cold_times, sample_count);
+  printf("[bench][runtime_verify] five-sample median ns/op repeated=%llu "
+         "alternating=%llu replacement=%llu cold_same_path=%llu "
+         "cold/repeated_ratio=%.3f\n",
+         (unsigned long long)(repeated_median / iters),
+         (unsigned long long)(alternating_median / iters),
+         (unsigned long long)(replacement_median / iters),
+         (unsigned long long)(cold_median / iters),
+         per_op_ratio(cold_median, iters, repeated_median, iters));
+}
+
 static void run_extended_itemref_and_syscall_benchmarks(void) {
   volatile uintptr_t sink = 0;
   uint64_t create_samples[3];
@@ -1140,6 +1272,7 @@ void test_runtime_benchmark_optin(void) {
     run_extended_string_registry_benchmarks();
     run_extended_itemstore_benchmarks();
     run_extended_itemref_and_syscall_benchmarks();
+    run_runtime_verification_cache_benchmarks();
   } else {
     printf("[bench] extended matrix disabled (set SIN_EXTENDED_BENCH=1)\n");
   }

@@ -20,7 +20,11 @@ ITEMSTORE_t *itemstore_create(const char *name) {
   ITEMSTORE_t *store = calloc(1, sizeof(*store));
   if (!store) return NULL;
   store->context.topology_revision = 1;
+  store->context.topology_revision_epoch = 0;
+  store->context.topology_revision_token_exhausted = false;
   store->context.payload_revision = 1;
+  store->context.payload_revision_epoch = 0;
+  store->context.payload_revision_token_exhausted = false;
   store->context.sync_hook = itemstore_default_sync_hook;
   store->root = make_root_item(name);
   if (!store->root) { free(store); return NULL; }
@@ -41,7 +45,11 @@ ITEMSTORE_t *itemstore_create_boot(const char *name, uint8_t *bytecode,
     memcpy(owned_bytecode, bytecode, bytecode_len);
   }
   store->context.topology_revision = 1;
+  store->context.topology_revision_epoch = 0;
+  store->context.topology_revision_token_exhausted = false;
   store->context.payload_revision = 1;
+  store->context.payload_revision_epoch = 0;
+  store->context.payload_revision_token_exhausted = false;
   store->context.sync_hook = itemstore_default_sync_hook;
   store->root = make_item(name, NULL, ITEM_code, VALUE_NIL, owned_bytecode,
                           (int)bytecode_len);
@@ -68,7 +76,11 @@ ITEMSTORE_t *itemstore_load_with_options(const char *filename, bool strict_valid
   ITEMSTORE_t *store = calloc(1, sizeof(*store));
   if (!store) { destroy_item(root); return NULL; }
   store->context.topology_revision = 1;
+  store->context.topology_revision_epoch = 0;
+  store->context.topology_revision_token_exhausted = false;
   store->context.payload_revision = 1;
+  store->context.payload_revision_epoch = 0;
+  store->context.payload_revision_token_exhausted = false;
   store->context.sync_hook = itemstore_default_sync_hook;
   store->root = root;
   assign_store(root, store);
@@ -81,7 +93,11 @@ ITEMSTORE_t *itemstore_load(const char *filename) {
   ITEMSTORE_t *store = calloc(1, sizeof(*store));
   if (!store) { destroy_item(root); return NULL; }
   store->context.topology_revision = 1;
+  store->context.topology_revision_epoch = 0;
+  store->context.topology_revision_token_exhausted = false;
   store->context.payload_revision = 1;
+  store->context.payload_revision_epoch = 0;
+  store->context.payload_revision_token_exhausted = false;
   store->context.sync_hook = itemstore_default_sync_hook;
   store->root = root;
   assign_store(root, store);
@@ -143,14 +159,39 @@ static ITEMSTORE_CONTEXT_t *context_for_root(const ITEM_t *root) {
 void itemstore_bump_topology_revision_for(const ITEM_t *item) {
   ITEMSTORE_CONTEXT_t *ctx = context_for_root(item);
   if (!ctx) return;
-  ctx->topology_revision++;
+  if (ctx->topology_revision_token_exhausted) {
+    memset(ctx->fetchitem_cache, 0, sizeof(ctx->fetchitem_cache));
+    return;
+  }
+  if (ctx->topology_revision == UINT64_MAX) {
+    if (ctx->topology_revision_epoch != UINT64_MAX) {
+      ctx->topology_revision = 0u;
+      ctx->topology_revision_epoch++;
+    } else {
+      ctx->topology_revision = UINT64_MAX;
+      ctx->topology_revision_token_exhausted = true;
+    }
+  } else {
+    ctx->topology_revision++;
+  }
   memset(ctx->fetchitem_cache, 0, sizeof(ctx->fetchitem_cache));
 }
 
 void itemstore_bump_payload_revision_for(const ITEM_t *item) {
   ITEMSTORE_CONTEXT_t *ctx = context_for_root(item);
   if (!ctx) return;
-  ctx->payload_revision++;
+  if (ctx->payload_revision_token_exhausted) return;
+  if (ctx->payload_revision == UINT64_MAX) {
+    ctx->payload_revision = 0u;
+    if (ctx->payload_revision_epoch != UINT64_MAX) {
+      ctx->payload_revision_epoch++;
+    } else {
+      ctx->payload_revision = UINT64_MAX;
+      ctx->payload_revision_token_exhausted = true;
+    }
+  } else {
+    ctx->payload_revision++;
+  }
 }
 
 void itemstore_invalidate_cache_for(const ITEM_t *item) {
@@ -160,8 +201,20 @@ void itemstore_invalidate_cache_for(const ITEM_t *item) {
 uint64_t itemstore_topology_revision(const ITEMSTORE_t *store) {
   return store ? store->context.topology_revision : 0;
 }
+uint64_t itemstore_topology_revision_epoch(const ITEMSTORE_t *store) {
+  return store ? store->context.topology_revision_epoch : 0;
+}
+bool itemstore_topology_revision_token_exhausted(const ITEMSTORE_t *store) {
+  return store && store->context.topology_revision_token_exhausted;
+}
 uint64_t itemstore_payload_revision(const ITEMSTORE_t *store) {
   return store ? store->context.payload_revision : 0;
+}
+uint64_t itemstore_payload_revision_epoch(const ITEMSTORE_t *store) {
+  return store ? store->context.payload_revision_epoch : 0;
+}
+bool itemstore_payload_revision_token_exhausted(const ITEMSTORE_t *store) {
+  return store && store->context.payload_revision_token_exhausted;
 }
 uint64_t itemstore_cache_hits(const ITEMSTORE_t *store) {
   return store ? store->context.fetchitem_cache_hits : 0;

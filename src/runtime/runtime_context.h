@@ -18,6 +18,22 @@
 
 typedef struct RuntimeContext RuntimeContext;
 
+/* Runtime bytecode verification is a small per-context cache. Entries hold
+ * borrowed pointers and are valid only for their owner and store revisions. */
+#define RUNTIME_VERIFY_CACHE_SIZE 8u
+#define RUNTIME_VERIFY_POLICY_ID 1u
+
+typedef struct {
+  bool valid;
+  const uint8_t *bytecode;
+  uint32_t bytecode_length;
+  ITEMSTORE_t *owner;
+  uint64_t topology_revision_epoch;
+  uint64_t payload_revision;
+  uint64_t payload_revision_epoch;
+  uint32_t policy_id;
+} RuntimeVerifyCacheEntry;
+
 // Opcode functions have this form. The runtime context owns the VM and
 // per-invocation interpreter state that handlers need while executing. A
 // context, its VM, and its itemstore are confined to their owning event-loop
@@ -67,8 +83,21 @@ struct RuntimeContext {
   // Zero when the context is not inside a task callback, otherwise the
   // positive integer id of the timer-backed task whose callback is active.
   uint64_t current_task_id;
+  RuntimeVerifyCacheEntry runtime_verify_cache[RUNTIME_VERIFY_CACHE_SIZE];
+  size_t runtime_verify_cache_next;
+  ITEMSTORE_t *runtime_verify_cache_owner;
+  uint64_t runtime_verify_cache_topology_revision;
+  uint64_t runtime_verify_cache_topology_epoch;
+  uint64_t runtime_verify_cache_revision;
+  uint64_t runtime_verify_cache_revision_epoch;
+  bool runtime_verify_cache_revision_valid;
+  /* Test-only diagnostic: number of actual verifier invocations. */
+  uint64_t verifier_invocations_for_tests;
 };
 
 bool runtime_init(RuntimeContext *ctx, VM_t *vm);
 void runtime_destroy(RuntimeContext *ctx);
 void runtime_context_init(RuntimeContext *ctx, VM_t *vm);
+uint64_t runtime_verify_invocations_for_tests(const RuntimeContext *ctx);
+void runtime_verify_invocations_reset_for_tests(RuntimeContext *ctx);
+void runtime_verify_cache_clear_for_tests(RuntimeContext *ctx);

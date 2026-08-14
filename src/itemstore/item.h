@@ -78,7 +78,13 @@ ITEMSTORE_SAVE_RESULT_e itemstore_save_no_replace(
     const char *filename, ITEMSTORE_t *store,
     ITEMSTORE_DURABILITY_e durability);
 uint64_t itemstore_topology_revision(const ITEMSTORE_t *store);
+uint64_t itemstore_topology_revision_epoch(const ITEMSTORE_t *store);
+bool itemstore_topology_revision_token_exhausted(const ITEMSTORE_t *store);
 uint64_t itemstore_payload_revision(const ITEMSTORE_t *store);
+/* Increments only when payload_revision wraps, so the pair is a
+ * non-repeating mutation token for practical store lifetimes. */
+uint64_t itemstore_payload_revision_epoch(const ITEMSTORE_t *store);
+bool itemstore_payload_revision_token_exhausted(const ITEMSTORE_t *store);
 uint64_t itemstore_cache_hits(const ITEMSTORE_t *store);
 uint64_t itemstore_cache_misses(const ITEMSTORE_t *store);
 ITEMSTORE_t *itemstore_owner(const ITEM_t *item);

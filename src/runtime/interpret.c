@@ -33,6 +33,8 @@
 
 #define VM ctx->vm
 
+static void runtime_verify_cache_clear(RuntimeContext *ctx);
+
 static bool runtime_code_header(ITEM_t *item, BC_FormatHeader *header) {
   return item && bc_decode_header(item_bytecode(item), item_bytecode_length(item), header) == BC_FORMAT_OK;
 }
@@ -87,6 +89,7 @@ bool runtime_init(RuntimeContext *ctx, VM_t *vm) {
   if (!ctx) return false;
   if (vm) ctx->vm = vm;
   if (ctx->initialized) return true;
+  runtime_verify_cache_clear(ctx);
   if (!ctx->libcalls) {
     ctx->libcalls = calloc(1, sizeof(*ctx->libcalls));
     if (!ctx->libcalls) return false;
@@ -110,6 +113,7 @@ bool runtime_init(RuntimeContext *ctx, VM_t *vm) {
 
 void runtime_destroy(RuntimeContext *ctx) {
   if (!ctx) return;
+  runtime_verify_cache_clear(ctx);
   if (ctx->libcalls) {
     runtime_registry_untrack(ctx->libcalls);
     libcall_registry_destroy(ctx->libcalls);
@@ -181,6 +185,80 @@ static void report_strict_runtime_contract(RuntimeContext *ctx, const char *deta
                          ctx->current_item);
 }
 
+static void runtime_verify_cache_clear(RuntimeContext *ctx) {
+  if (!ctx) return;
+  memset(ctx->runtime_verify_cache, 0, sizeof(ctx->runtime_verify_cache));
+  ctx->runtime_verify_cache_next = 0u;
+  ctx->runtime_verify_cache_owner = NULL;
+  ctx->runtime_verify_cache_topology_revision = 0u;
+  ctx->runtime_verify_cache_topology_epoch = 0u;
+  ctx->runtime_verify_cache_revision = 0u;
+  ctx->runtime_verify_cache_revision_epoch = 0u;
+  ctx->runtime_verify_cache_revision_valid = false;
+}
+
+static void runtime_verify_cache_sync(RuntimeContext *ctx,
+                                      ITEMSTORE_t *owner,
+                                      uint64_t topology_revision,
+                                      uint64_t topology_epoch,
+                                      uint64_t revision_epoch,
+                                      uint64_t revision) {
+  if (!ctx) return;
+  if (!ctx->runtime_verify_cache_revision_valid ||
+      ctx->runtime_verify_cache_owner != owner ||
+      ctx->runtime_verify_cache_topology_revision != topology_revision ||
+      ctx->runtime_verify_cache_topology_epoch != topology_epoch ||
+      ctx->runtime_verify_cache_revision_epoch != revision_epoch ||
+      ctx->runtime_verify_cache_revision != revision) {
+    runtime_verify_cache_clear(ctx);
+    ctx->runtime_verify_cache_owner = owner;
+    ctx->runtime_verify_cache_topology_revision = topology_revision;
+    ctx->runtime_verify_cache_topology_epoch = topology_epoch;
+    ctx->runtime_verify_cache_revision_epoch = revision_epoch;
+    ctx->runtime_verify_cache_revision = revision;
+    ctx->runtime_verify_cache_revision_valid = true;
+  }
+}
+
+static bool runtime_verify_cache_matches(const RuntimeVerifyCacheEntry *entry,
+                                         const uint8_t *bytecode,
+                                         uint32_t bytecode_length,
+                                         ITEMSTORE_t *owner,
+                                         uint64_t topology_epoch,
+                                         uint64_t revision_epoch,
+                                         uint64_t revision) {
+  return entry && entry->valid && entry->bytecode == bytecode &&
+      entry->bytecode_length == bytecode_length && entry->owner == owner &&
+      entry->topology_revision_epoch == topology_epoch &&
+      entry->payload_revision_epoch == revision_epoch &&
+      entry->payload_revision == revision &&
+      entry->policy_id == RUNTIME_VERIFY_POLICY_ID;
+}
+
+static void runtime_verify_cache_insert(RuntimeContext *ctx,
+                                        const uint8_t *bytecode,
+                                        uint32_t bytecode_length,
+                                        ITEMSTORE_t *owner,
+                                        uint64_t topology_epoch,
+                                        uint64_t revision_epoch,
+                                        uint64_t revision) {
+  if (!ctx || !owner) return;
+  RuntimeVerifyCacheEntry *entry =
+      &ctx->runtime_verify_cache[ctx->runtime_verify_cache_next];
+  *entry = (RuntimeVerifyCacheEntry){
+      .valid = true,
+      .bytecode = bytecode,
+      .bytecode_length = bytecode_length,
+      .owner = owner,
+      .topology_revision_epoch = topology_epoch,
+      .payload_revision_epoch = revision_epoch,
+      .payload_revision = revision,
+      .policy_id = RUNTIME_VERIFY_POLICY_ID,
+  };
+  ctx->runtime_verify_cache_next =
+      (ctx->runtime_verify_cache_next + 1u) % RUNTIME_VERIFY_CACHE_SIZE;
+}
+
 static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
   char item_name[MAX_ITEM_NAME] = {0};
   const char *label = runtime_item_label(item, item_name, sizeof(item_name));
@@ -192,13 +270,62 @@ static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
     set_runtime_bytecode_error(ctx, label, 0, "null bytecode pointer");
     return false;
   }
+  ITEMSTORE_t *owner = itemstore_owner(item);
+  uint64_t topology_revision = owner ? itemstore_topology_revision(owner) : 0u;
+  uint64_t topology_epoch = owner ? itemstore_topology_revision_epoch(owner) : 0u;
+  uint64_t revision_epoch = owner ? itemstore_payload_revision_epoch(owner) : 0u;
+  uint64_t revision = owner ? itemstore_payload_revision(owner) : 0u;
+  bool token_exhausted = owner &&
+      (itemstore_payload_revision_token_exhausted(owner) ||
+       itemstore_topology_revision_token_exhausted(owner));
+  if (owner && ctx) {
+    if (token_exhausted) {
+      runtime_verify_cache_clear(ctx);
+    } else {
+      runtime_verify_cache_sync(ctx, owner, topology_revision, topology_epoch,
+                                revision_epoch, revision);
+      for (size_t i = 0u; i < RUNTIME_VERIFY_CACHE_SIZE; i++) {
+        if (runtime_verify_cache_matches(&ctx->runtime_verify_cache[i],
+                                         item_bytecode(item),
+                                         item_bytecode_length(item), owner,
+                                         topology_epoch,
+                                         revision_epoch,
+                                         revision)) {
+          return true;
+        }
+      }
+    }
+  }
+  if (ctx && ctx->verifier_invocations_for_tests != UINT64_MAX) {
+    ctx->verifier_invocations_for_tests++;
+  }
   BC_VerifyResult result = bc_verify_executable_bytecode(
       item_bytecode(item), item_bytecode_length(item), label);
-  if (result.status != BC_VERIFY_ERROR) return true;
+  if (result.status != BC_VERIFY_ERROR) {
+    if (owner && !token_exhausted) {
+      runtime_verify_cache_insert(ctx, item_bytecode(item),
+                                  item_bytecode_length(item), owner,
+                                  topology_epoch,
+                                  revision_epoch, revision);
+    }
+    return true;
+  }
 
   set_runtime_bytecode_error(ctx, label, result.diagnostic.offset,
                              result.diagnostic.message);
   return false;
+}
+
+uint64_t runtime_verify_invocations_for_tests(const RuntimeContext *ctx) {
+  return ctx ? ctx->verifier_invocations_for_tests : 0u;
+}
+
+void runtime_verify_cache_clear_for_tests(RuntimeContext *ctx) {
+  runtime_verify_cache_clear(ctx);
+}
+
+void runtime_verify_invocations_reset_for_tests(RuntimeContext *ctx) {
+  if (ctx) ctx->verifier_invocations_for_tests = 0u;
 }
 
 static bool consume_runtime_interrupt(RuntimeContext *ctx) {

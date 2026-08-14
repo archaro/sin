@@ -41,7 +41,11 @@ _Static_assert((FETCHITEM_CACHE_SIZE & (FETCHITEM_CACHE_SIZE - 1u)) == 0,
 
 typedef struct ItemstoreContext {
   uint64_t topology_revision;
+  uint64_t topology_revision_epoch;
+  bool topology_revision_token_exhausted;
   uint64_t payload_revision;
+  uint64_t payload_revision_epoch;
+  bool payload_revision_token_exhausted;
   FETCHITEM_CACHE_ENTRY_t fetchitem_cache[FETCHITEM_CACHE_SIZE];
   uint64_t fetchitem_cache_hits;
   uint64_t fetchitem_cache_misses;

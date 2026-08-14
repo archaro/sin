@@ -10,6 +10,16 @@ nested rendering, escaping, explicit failure statuses, and debug truncation.
 leaf-span traversal at representation boundaries through the maximum list
 height. `test_list_equality_iterator_fast_paths_and_early_exit` covers recursive
 equality, shared-leaf skipping, and first/middle/last mismatch short-circuiting.
+`test_list_concat_shares_rhs_leaves` covers packed concat alignment, including
+zero cursor-value clones for a large aligned concat and exactly 1,025 cursor
+clones for representative 31 + 1,025 repacking. Its boundary matrix also
+covers complete-leaf sharing, self-concat, ownership order, and injected
+allocation failures. `test_list_slice_shares_aligned_leaves_and_boundaries`
+covers full-range retention, aligned leaf/subtree sharing, partial-tail
+cloning, and the deterministic zero-clone guard for 32/992 slices; its
+unaligned 31/992 case asserts exactly 992 cursor-value clones (while iterator
+yielding includes the skipped leading span). These guards encode the packed
+canonical layout rather than an impossible boundary-only cloning claim.
 This document maps major subsystems to concrete test entry points so reviewers
 can quickly verify what is covered and what remains intentionally out of scope.
 
@@ -40,10 +50,10 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 | Suite     | Tests | Source files (selected) |
 |-----------|-------|-------------------------|
-| core      |   157 | `tests/core/`           |
+| core      |   173 | `tests/core/`           |
 | compiler  |    57 | `tests/compiler/`       |
-| runtime   |   112 | `tests/core/`, `tests/interpreter/` |
-| **Total** |**326**|                         |
+| runtime   |   121 | `tests/core/`, `tests/interpreter/` |
+| **Total** |**351**|                         |
 
 ## core
 
@@ -74,7 +84,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
     - `run_suite(...)`
     - Per-test and per-suite elapsed-time reporting
     - Assertion-failure suite/test context via `tests/test_assert.h`
-    - Core suite registration (`core_tests[]` with 150 entries)
+    - Core suite registration (`core_tests[]` with 173 entries)
     - Suite registration validation rejects null/duplicate test entries
       before execution.
 - **sin startup source-root validation**
@@ -260,7 +270,7 @@ The unified test harness (`tests/shared/test_harness.c`) builds a single
 
 ## runtime
 
-The runtime suite contains 112 tests registered in `runtime_tests[]`.
+The runtime suite contains 121 tests registered in `runtime_tests[]`.
 Twenty-three registered tests are defined in
 `tests/core/test_value_behavior.c`: 15 exercise the decoder, interpreter
 contracts, and mandatory runtime bytecode safety directly, while eight cover
@@ -311,6 +321,24 @@ an opt-in performance guard.
         checkpoint
     - `test_runtime_build_list_allocation_failure_consumes_inputs`
     - `test_interpret_rejects_malformed_bytecode_before_execution`
+    - `test_runtime_verification_cache_reuses_fetch_transfer`
+      verifies one verifier call across fetch/transfer and reuse on later calls
+    - `test_runtime_verification_cache_revision_and_failure_contract`
+      verifies payload replacement invalidation and that failures are not cached
+    - `test_runtime_verification_cache_revision_wrap_invalidates` verifies the
+      explicit payload-revision epoch token across uint64 wraparound
+    - `test_runtime_verification_cache_revision_token_saturation_bypasses`
+      verifies permanent cache bypass after mutation-token exhaustion
+    - `test_runtime_verification_cache_topology_token_wrap_and_saturation`
+      verifies topology-only epoch wrap and permanent bypass without changing
+      payload revision
+    - `test_runtime_verification_cache_ownerless_items_bypass` verifies raw
+      ownerless items are re-verified on every call
+    - `test_runtime_verification_cache_isolates_live_itemstores` verifies one
+      context isolates two simultaneously live stores and re-verifies when
+      returning to the first owner
+    - `test_runtime_verification_cache_eviction_is_bounded`
+      verifies deterministic fixed-capacity eviction
     - `test_interpret_baseline_bytecode_safety_in_default_and_strict_modes`
 - **Interpreter stress / determinism under repeated runs**
   - `tests/interpreter/test_interpret_stress.c`
@@ -486,6 +514,10 @@ an opt-in performance guard.
       interpreter control workload
     - existing end-to-end interpreter workloads remain covered by
       `test_interpret_stress`
+    - with `SIN_EXTENDED_BENCH=1`, uses actual fetch/transfer callers to report
+      five-sample medians and deterministic invocation counts for repeated and
+      alternating callees, callee replacement, and a forced-cold same-path
+      comparison
     - strict thresholds enabled with `SIN_STRICT_BENCH=1`; normal runs never
       enforce machine-dependent benchmark budgets
     - extended list/itemstore/itemref/sys.call matrix enabled with

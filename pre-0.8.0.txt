@@ -1,0 +1,307 @@
+# Pre-0.8.0 performance work plan
+
+Performance work must preserve the safety, ownership, diagnostic, and resource
+limits already established for 0.8.0. Optimize only against release-build
+measurements. Prefer deterministic operation/probe counters for regression
+tests and use elapsed time only for the opt-in benchmark matrix.
+
+## Review of the original recommendations
+
+Two recommendations are already complete and need no further implementation:
+
+- Dense verifier instruction metadata was implemented by `836f500` and is
+  covered by verifier memory-budget, allocation-failure, and control-flow tests.
+- Binary-search legacy relocation lookup was implemented by `41bb466` and is
+  covered by deterministic lookup-probe and scaling tests.
+
+Four recommendations remain:
+
+- Network input extraction still allocates a replacement buffer and copies all
+  remaining bytes after every line (`src/net/network.c:get_input`). Draining
+  many short lines from one buffer is quadratic in bytes copied.
+- Runtime callees can be verified once in `op_fetchitem` and again immediately
+  after frame transfer in `interpret`. Repeated calls also redo verification.
+- Persistent-list concat, slice, and equality repeatedly perform indexed tree
+  lookup. Concat and slice clone values that could be shared structurally.
+- Runtime string-capacity metadata is a process-global linked list; lookup and
+  removal are linear in the number of live tracked strings. Its practical cost
+  has not yet been measured.
+
+## Task 1: Add network input-drain performance coverage
+
+Scope:
+
+- Add an optimized-build benchmark that fills one input buffer with many short
+  newline-terminated records and drains it through the same path used by
+  `network_runtime_poll`/`get_input`.
+- Add test-only counters for bytes moved during buffer maintenance and input
+  buffer allocations. Do not count the caller-owned returned-line allocation.
+- Cover representative batches near 16 KiB and 64 KiB, plus mixed partial and
+  complete lines.
+
+Acceptance criteria:
+
+- The benchmark reports records, input bytes, maintenance bytes copied, buffer
+  allocations, and median elapsed time.
+- A deterministic regression test exposes the current superlinear maintenance
+  copy count without enforcing a machine-specific timing limit.
+- Existing line-length, aggregate-buffer, disconnect, fairness, and allocation-
+  failure behavior remains unchanged.
+
+Validation: `make test-network`, `make test-warnings`, and a release benchmark
+run. This task changes observability/tests only.
+
+## Task 2: Replace per-line input-buffer rebuilding with a read cursor
+
+Design:
+
+- Add an unread-start offset to each `LINE_t`. Treat the bytes between that
+  offset and the write end as the unread region.
+- Scan for newlines from the unread start, allocate only the returned line, and
+  advance the cursor after extraction.
+- Reset both offsets when the buffer becomes empty. Compact unread bytes only
+  when append needs contiguous tail capacity (or after a documented threshold),
+  then grow with the existing bounded policy if compaction is insufficient.
+- Keep the current 64 KiB aggregate and 4 KiB per-line limits. A ring buffer is
+  unnecessary unless measurements show cursor compaction is still material.
+
+Acceptance criteria:
+
+- Draining N bytes copies O(N) maintenance bytes in the deterministic counter;
+  it never copies the entire suffix once per line.
+- `get_input` still returns an independently owned NUL-terminated string and
+  preserves empty-line, partial-line, multi-line, status, polling-fairness, and
+  disconnect semantics.
+- Buffer compaction/growth failures disconnect safely without leaking or losing
+  ownership; line destruction/reuse resets every offset.
+- The Task 1 release benchmark shows a repeatable improvement for short-line
+  batches without regressing long/partial lines by more than 3% across repeated
+  median runs.
+
+Validation: focused network tests, `make test`, `make test-warnings`,
+`make test-asan`, `make test-lsan`, and the network/chat smoke tests.
+
+## Task 3: Add a revision-aware runtime bytecode verification cache
+
+Design:
+
+- First add a test-only verifier invocation counter and benchmarks for repeated
+  calls to one callee, alternating callees, and code replacement.
+- Add a small bounded cache owned by `RuntimeContext`; do not add process-global
+  mutable state. Cache successful executable-verification results only.
+- Key entries by bytecode pointer, bytecode length, owning itemstore identity,
+  itemstore payload revision, and an explicit verification-policy identifier.
+  Do not cache ownerless/raw test items unless an equally strong mutation token
+  exists.
+- Route initial entry, fetched calls, and transferred frames through one cached
+  verification helper. An `op_fetchitem` success must make the immediately
+  following transfer verification a cache hit.
+- Clear the cache in runtime initialization/destruction. Store-wide payload
+  revision changes may conservatively invalidate unrelated entries.
+
+Acceptance criteria:
+
+- An unchanged ordinary callee is verified once across the fetch/transfer
+  boundary and is reused on subsequent calls under the same policy/revision.
+- Replacing any code payload prevents reuse of all entries carrying the old
+  payload revision; the replacement is verified before execution.
+- Failed verification is never cached and continues to produce the same error
+  item, offset, message, unwind, pin, and stack behavior on every attempt.
+- Cache collision/eviction and revision wrap handling are deterministic and
+  safe; memory is bounded independently of call count.
+- Benchmarks show fewer verifier invocations and a repeatable repeated-call
+  improvement without changing emitted bytecode or runtime results.
+
+Validation: focused interpreter/frame/error tests, `make test`,
+`make test-release`, `make test-warnings`, sanitizers, and seeded object fuzzing.
+
+## Task 4: Add a zero-allocation persistent-list leaf iterator
+
+Design:
+
+- Introduce an internal iterator that traverses root leaves and the tail in
+  logical order without calling `sin_list_get` for every element.
+- The iterator should yield borrowed contiguous leaf spans (pointer plus count)
+  and use fixed bounded traversal state derived from the maximum tree height.
+- Convert sequential internal walkers to the iterator where ownership is
+  unchanged: equality first, then persistence/preflight/value formatting when
+  doing so keeps module boundaries clean.
+- Equality should immediately accept identical list pointers and skip identical
+  shared leaf pointers before comparing individual values.
+
+Acceptance criteria:
+
+- Iteration visits each value exactly once across sizes 0, 1, 31, 32, 33,
+  1024, 1056, and the maximum supported height, including nested lists.
+- No allocation occurs during iterator setup or advancement.
+- Equality preserves recursive value semantics and early-exit behavior for
+  first, middle, and last differences.
+- Deterministic traversal counters demonstrate linear node/leaf visitation,
+  rather than one root-to-leaf lookup per element.
+
+Validation: list/value/persistence tests, allocation-failure tests,
+`make test-benchmark`, standard/release/warnings, and sanitizers.
+
+## Task 5: Structurally share complete leaves during list concatenation
+
+Design:
+
+- Rework concat around the Task 4 leaf iterator and existing node reference
+  counts. Preserve the canonical packed layout: the root contains complete
+  32-value logical leaves and the separate tail contains one to 32 values.
+  When the left count is aligned, retain and attach complete immutable
+  right-hand leaves without per-value clones. When it is unaligned, the
+  destination offset shifts every subsequent logical leaf boundary, so source
+  leaves cannot be retained; clone each right-hand value once through the
+  cursor, plus the incomplete left boundary values required to form the
+  result.
+- Rebuild only affected tree spines. Preserve the root-plus-tail invariant,
+  cached count/depth, 32-way branching, and maximum element/depth limits.
+- Keep the empty-left/right constant-time retain paths.
+
+Acceptance criteria:
+
+- Aligned large concatenations share complete right-hand leaves and perform no
+  right-hand per-value clones. Unaligned concatenations clone every shifted
+  right-hand value exactly once through the cursor, plus only the incomplete
+  left boundary already required by the representation.
+- All failure paths release newly retained nodes exactly once and leave both
+  inputs unchanged.
+- Nested-list/string ownership, alias safety, depth accounting, and immutable
+  results match existing behavior.
+- Tests cover 31/32/33 and 1023/1024/1025 boundaries, self-concat, shared inputs,
+  allocation failure at every construction stage, and release in either order.
+- Release benchmarks show improved concat scaling and no regression above 3%
+  for append, set, or clone/release medians.
+
+Validation: focused list/libcall/interpreter tests, standard/release/warnings,
+ASan/LSan, and the list benchmark matrix.
+
+## Task 6: Structurally share complete leaves during list slicing
+
+Design:
+
+- Build slices from leaf ranges rather than a temporary `VALUE_t` array and
+  repeated `sin_list_get` calls.
+- Retain fully covered immutable leaves/subtrees only when source and
+  destination leaf boundaries are aligned; clone a partial tail boundary when
+  needed. A non-multiple-of-32 start shifts every subsequent logical leaf
+  boundary, so an unaligned slice must clone its selected values into
+  canonical output leaves rather than retain source leaves.
+- Preserve canonical empty-list behavior and all count/depth limits.
+
+Acceptance criteria:
+
+- Full-range slicing is constant time via retain, and aligned interior ranges
+  share all complete covered leaves.
+- Work and allocation for large aligned slices scale with covered leaf/subtree
+  retention plus rebuilt tree spines and boundary fragments. Unaligned slices
+  intentionally clone each selected value once through the cursor; deterministic
+  cursor-clone counters guard these two complexity classes.
+- Tests cover empty/full slices, every 31/32/33 boundary orientation, nested
+  values, shared source lifetime, invalid ranges, and injected failures.
+- Slice, concat, equality, random access, and persistence round trips remain
+  semantically identical; release benchmarks show a repeatable slice gain with
+  no greater-than-3% regression in unrelated list operations.
+
+Validation: same gates as Task 5 plus itemstore v2 save/load coverage because
+shared lists cross the persistence walker.
+
+## Task 7: Measure runtime string-registry scaling and choose a stopping point
+
+Scope:
+
+- Extend the release benchmark matrix with tracked-string populations such as
+  1, 32, 1024, and 4096 live buffers.
+- Measure/record probes for capacity lookup, removal, reuse concat, growth
+  concat, and cleanup. Include a representative interpreter string workload.
+- Add deterministic test-only probe counters; do not expose registry internals
+  through the public runtime API.
+
+Decision gate:
+
+- Stop after this task if lookup/removal cost is immaterial in representative
+  workloads and document the evidence.
+- Proceed to Task 8 if deterministic probes grow linearly at meaningful live
+  populations and release timings show a repeatable material cost. The expected
+  current linked-list behavior makes Task 8 likely, but measurement is required.
+
+Acceptance criteria:
+
+- Benchmarks clean up every tracked string and finish at the original tracked
+  count.
+- Results distinguish registry cost from string copying cost and are reported
+  as medians/ratios rather than portable absolute timing claims.
+
+Validation: focused value tests, `make test-benchmark`, release, warnings, and
+LSan.
+
+## Task 8: Replace the linked-list string registry if Task 7 justifies it
+
+Preferred design:
+
+- Replace the process-global linked list with a private pointer-keyed open-
+  addressing hash table storing capacity metadata. Preserve the documented
+  single-thread confinement contract; do not add misleading synchronization.
+- Use checked growth, bounded load factors, tombstone cleanup, and graceful
+  degradation: inability to record reuse metadata may reduce optimization but
+  must not corrupt or leak the owned string.
+- Do not prepend hidden headers to arbitrary strings: runtime values also own
+  plain `strdup` allocations, and `free_runtime_string` must remain safe for
+  both tracked and untracked pointers.
+
+Acceptance criteria:
+
+- Lookup/removal probe growth is approximately constant across Task 7 sizes and
+  substantially lower than the linked-list baseline at large live counts.
+- Pointer reuse, collisions, table growth/shrink/reset, untracked strings,
+  concat reuse/growth, item-name cleanup, and allocation failures preserve
+  ownership exactly.
+- Registry storage returns to its empty baseline after all tracked strings are
+  freed; no stale entry may match a later allocator-reused address.
+- Public `VALUE_t`, string limits, concat results, and error behavior are
+  unchanged.
+
+Validation: focused value/stack/interpreter tests, standard/release/warnings,
+ASan/LSan, and Task 7 benchmarks.
+
+## Task 9: Final performance integration and regression policy
+
+Scope:
+
+- Run the full optimized benchmark matrix repeatedly on one quiet machine and
+  record before/after medians and ratios for each changed subsystem.
+- Add deterministic complexity guards (copy/probe/verification/allocation
+  counts) to normal tests. Keep elapsed-time thresholds opt-in and conservative.
+- Update `docs/lists.md`, `docs/runtime.md`, networking documentation,
+  `tests/TEST_COVERAGE.md`, and `docs/architecture.md` only where contracts or
+  representation responsibilities changed.
+- Remove superseded performance bullets from release notes and record any
+  deliberately deferred optimization with measurement evidence.
+
+Acceptance criteria:
+
+- `make test`, `make test-warnings`, `make test-release`, `make test-asan`, and
+  unrestricted `make test-lsan` pass.
+- `./ci/gate_sanitizers_fuzz.sh`, network tests, and chat smoke pass.
+- `make test-benchmark` demonstrates the intended gains with no repeatable
+  greater-than-3% regression in unrelated benchmark medians.
+- Each implementation task remains a focused commit; benchmark-only groundwork
+  may be separate, and the conditional string replacement is omitted if Task 7
+  does not justify it.
+
+Completion/evidence reference: the final exact-tree benchmark results and
+regression policy are recorded in [`docs/performance-0.8.0.md`](docs/performance-0.8.0.md).
+
+## Recommended execution order
+
+1. Tasks 1-2: remove the known quadratic network copy path.
+2. Task 3: cache successful runtime verification with revision-safe invalidation.
+3. Tasks 4-6: establish list iteration, then concat and slice sharing separately.
+4. Tasks 7-8: measure the string registry and replace it only if justified.
+5. Task 9: integrate, document, and establish durable complexity guards.
+
+Tasks 2, 3, 5, 6, and 8 are separate implementation changes and should each
+land in their own commit. Do not combine the network, verifier, list, and string
+optimizations: their ownership rules, regression surfaces, and rollback paths
+are independent.

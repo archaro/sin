@@ -221,3 +221,24 @@ positive and negative lookup-cache entries; payload revisions advance on
 successful value/code replacement and leave cached pointers valid to observe
 the new payload. Destroying one store invalidates only that store's borrowed
 items and cache entries; other stores remain usable.
+
+## Runtime bytecode verification cache
+
+Each `RuntimeContext` owns a small fixed-size cache of successful executable
+bytecode verification results. An entry is keyed by bytecode pointer and
+length, itemstore identity, payload revision, and the verification-policy
+identifier. This lets a fetched callee cross the pending-transfer boundary
+without being verified twice, while keeping verification isolated between
+runtime contexts. Ownerless/raw items are deliberately never cached.
+
+Payload replacement changes the itemstore payload revision. The itemstore also
+advances payload and topology epochs whenever their counters wrap; each
+revision/epoch pair is a mutation token. The runtime conservatively clears its
+verification entries when it observes a different store, topology revision, or
+payload revision (including revision wraparound), so deleted or old payloads
+cannot be reused. If either token is exhausted, the itemstore marks that token
+permanently exhausted and runtime verification caching remains disabled for
+that store. Failed verification is never
+cached and retains the normal diagnostic,
+unwind, pin, and stack behavior on each attempt. Cache capacity and eviction
+are deterministic and independent of call count.

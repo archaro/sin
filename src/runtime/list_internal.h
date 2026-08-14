@@ -33,6 +33,7 @@ typedef struct {
   size_t node_visits;
   size_t leaf_visits;
   size_t values_yielded;
+  size_t cursor_value_clones;
   size_t shared_leaf_skips;
   size_t value_comparisons;
 } SIN_LIST_TRAVERSAL_STATS_t;

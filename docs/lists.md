@@ -37,6 +37,26 @@ The public list API, argument validation, and failure behavior are documented
 in [`libcalls.md`](libcalls.md). Indices are zero-based and update calls return
 new lists; there is no mutable push/pop/insert/remove syntax.
 
+### Packed layout and structural sharing
+
+The persistent vector keeps complete 32-value logical leaves in its root and
+one to 32 values in a separate tail. A concatenation whose left count is
+32-aligned can retain complete right-hand leaves without cloning their values.
+When that offset is unaligned, every subsequent destination leaf boundary is
+shifted, so retaining a source leaf would violate the packed invariant; the
+right-hand values are cloned once through the internal leaf cursor, in
+canonical batches, in addition to cloning any incomplete left boundary needed
+to form the result.
+
+A full-range slice retains the source list. An aligned slice retains covered
+complete leaves/subtrees and clones only a partial tail boundary. An unaligned
+slice clones its selected values into canonical output leaves because its
+source and destination leaf boundaries differ. Focused tests use deterministic
+cursor-clone counters as complexity guards: aligned 32/992 slicing and large
+aligned concatenation clone zero cursor values, while 31 + 1025 concatenation
+and start=31,length=992 slicing clone exactly the values that must be
+repacked.
+
 ## Iteration
 
 `FOREACH @local IN expression DO ... ENDFOR` is a statement that visits each
