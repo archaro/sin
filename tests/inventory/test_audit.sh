@@ -98,31 +98,38 @@ PY
 expect_failure reciprocal_edge 'one-sided contract edges'
 cp -a "$repo_root/tests/inventory/." "$work/catalog"
 
-# Removing a maintained symbol proves archive/API reconciliation.
-python3 - "$work/catalog/api.csv" <<'PY'
+# Removing a maintained symbol proves archive accountability reconciliation.
+python3 - "$work/catalog/archive_symbols.csv" <<'PY'
 import csv
 import sys
 from pathlib import Path
 path = Path(sys.argv[1])
 rows = list(csv.DictReader(path.open(newline="", encoding="utf-8")))
 removed_index = next(index for index, row in enumerate(rows) if row["module"] != "application")
-removed = rows[removed_index]["contract_id"]
 rows.pop(removed_index)
 with path.open("w", newline="", encoding="utf-8") as stream:
     writer = csv.DictWriter(stream, fieldnames=rows[0].keys(), lineterminator="\n")
     writer.writeheader()
     writer.writerows(rows)
 
-tests_path = path.with_name("tests.csv")
-tests = list(csv.DictReader(tests_path.open(newline="", encoding="utf-8")))
-for row in tests:
-    row["contract_ids"] = ";".join(item for item in row["contract_ids"].split(";") if item != removed)
-with tests_path.open("w", newline="", encoding="utf-8") as stream:
-    writer = csv.DictWriter(stream, fieldnames=tests[0].keys(), lineterminator="\n")
-    writer.writeheader()
-    writer.writerows(tests)
 PY
-expect_failure missing_api_symbol 'API archive symbol mismatch'
+expect_failure missing_archive_symbol 'archive symbol catalog mismatch'
+cp -a "$repo_root/tests/inventory/." "$work/catalog"
+
+# An archive symbol may not resolve to an unknown grouped API contract.
+python3 - "$work/catalog/archive_symbols.csv" <<'PY'
+import csv
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+rows = list(csv.DictReader(path.open(newline="", encoding="utf-8")))
+rows[0]["api_contract_id"] = "api.unknown.contract"
+with path.open("w", newline="", encoding="utf-8") as stream:
+    writer = csv.DictWriter(stream, fieldnames=rows[0].keys(), lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+PY
+expect_failure unknown_api_contract 'maps to unknown API contract'
 cp -a "$repo_root/tests/inventory/." "$work/catalog"
 
 # Attempt-2 API template text is rejected even when archive symbols remain complete.

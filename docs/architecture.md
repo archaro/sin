@@ -31,7 +31,12 @@ identifiers are reconciled against `parser.y`, `absyn.h`, `bytecode_abi.h`,
 `make inventory-audit` after `make lib` (or `make test`, which includes the
 audit) to detect missing, stale, duplicate, or unmapped entries.  The focused
 positive/negative checks are available with `make inventory-audit-self-test`;
-they mutate temporary copies only.
+they mutate temporary copies only.  `tests/inventory/archive_symbols.csv`
+accounts for every maintained archive global with its object, architectural
+module, provenance, and grouped `api_contract_id`; `api.csv` contains the
+reviewed observable module contracts (including application entry points),
+not fabricated per-symbol prose for private implementation helpers.  The
+auditor fails closed on unknown archive objects or contract mappings.
 
 ## Module Boundaries
 

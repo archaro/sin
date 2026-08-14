@@ -26,6 +26,7 @@ CATALOG_FILES = (
     "libcalls.csv",
     "executables.csv",
     "tests.csv",
+    "archive_symbols.csv",
     "archive_exclusions.csv",
 )
 ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -181,10 +182,11 @@ def main() -> int:
             "contracts.csv": ("contract_id", "area", "facets", "test_ids", "description"),
             "language.csv": ("contract_id", "kind", "canonical_id", "facets", "test_ids", "description"),
             "bytecode.csv": ("contract_id", "kind", "canonical_id", "facets", "test_ids", "description"),
-            "api.csv": ("contract_id", "module", "object", "symbol", "declaration", "normal_behavior", "invalid_input", "boundary_behavior", "ownership_cleanup", "failure_behavior", "test_ids"),
+            "api.csv": ("contract_id", "module", "contract_name", "declaration", "normal_behavior", "invalid_input", "boundary_behavior", "ownership_cleanup", "failure_behavior", "test_ids"),
             "libcalls.csv": ("contract_id", "library", "call", "lib_index", "call_index", "args", "metadata", "valid_behavior", "invalid_arguments", "ownership", "side_effects", "failure_behavior", "source_integration", "test_ids"),
             "executables.csv": ("contract_id", "program", "facet", "contract", "test_ids"),
             "tests.csv": ("test_id", "contract_ids"),
+            "archive_symbols.csv": ("symbol", "object", "module", "declaration", "api_contract_id"),
             "archive_exclusions.csv": ("symbol", "reason"),
         }
         catalogs = {name: read_csv(catalog_dir / name, fields[name]) for name in CATALOG_FILES}
@@ -310,18 +312,30 @@ def main() -> int:
             if symbol not in symbols:
                 fail(f"archive exclusion is stale: {symbol}")
         maintained = symbols - set(exclusions)
+        archive_rows = catalogs["archive_symbols.csv"]
+        if len({row["symbol"] for row in archive_rows}) != len(archive_rows):
+            fail("duplicate archive symbol accountability row")
+        archive_by_symbol = {row["symbol"]: row for row in archive_rows}
+        if set(archive_by_symbol) != maintained:
+            fail(f"archive symbol catalog mismatch (missing={sorted(maintained - set(archive_by_symbol))[:1]}, stale={sorted(set(archive_by_symbol) - maintained)[:1]})")
         api_rows = catalogs["api.csv"]
-        for row in api_rows:
-            if row["module"] == "application":
-                continue
+        api_by_id = {row["contract_id"]: row for row in api_rows}
+        for row in archive_rows:
             symbol = row["symbol"]
             if row["object"] != symbol_objects.get(symbol):
-                fail(f"API declaration provenance mismatch for {symbol}")
-            if row["module"] != ARCHIVE_OBJECT_MODULES[row["object"]]:
-                fail(f"API module ownership mismatch for {symbol}")
-        api_symbols = {row["symbol"] for row in api_rows if row["module"] != "application"}
-        if api_symbols != maintained:
-            fail(f"API archive symbol mismatch (missing={sorted(maintained - api_symbols)[:1]}, stale={sorted(api_symbols - maintained)[:1]})")
+                fail(f"archive declaration provenance mismatch for {symbol}")
+            if row["module"] != ARCHIVE_OBJECT_MODULES.get(row["object"]):
+                fail(f"archive module ownership mismatch for {symbol}")
+            if not row["declaration"].startswith("src/") or symbol not in row["declaration"]:
+                fail(f"archive declaration provenance is incomplete for {symbol}")
+            contract = api_by_id.get(row["api_contract_id"])
+            if contract is None:
+                fail(f"archive symbol {symbol} maps to unknown API contract {row['api_contract_id']}")
+            if contract["module"] != row["module"]:
+                fail(f"archive symbol {symbol} maps across API modules")
+        archive_contracts = {row["api_contract_id"] for row in archive_rows}
+        if any(row["module"] != "application" and row["contract_id"] not in archive_contracts for row in api_rows):
+            fail("API contract has no archive symbol mapping")
         modules = {row["module"] for row in api_rows}
         required_modules = {"common", "compiler", "bytecode", "runtime", "itemstore", "libcall", "network", "application"}
         if not required_modules.issubset(modules):
@@ -338,17 +352,22 @@ def main() -> int:
             "performs the declared allocation, growth, or overflow-check operation",
             "checks semantic state or records the diagnostic fields named by its compiler declaration",
             "constructs, traverses, names, or releases the AST/value structure named by its declaration",
+            "exposes the module operation represented by",
+            "malformed arguments or state before publishing a result",
+            "preserves the limits and wire/state boundaries exercised by its registered witness tests",
+            "retains resources it owns, transfers successful results to callers",
+            "returns its documented failure status or diagnostic while preserving prior observable state",
         )
         if any(any(value in " ".join(row[field] for field in ("declaration", "normal_behavior", "invalid_input", "boundary_behavior", "ownership_cleanup", "failure_behavior")) for value in forbidden) for row in api_rows):
             fail("API catalog retains placeholder ownership or facet vocabulary")
-        if {row["symbol"] for row in api_rows if row["module"] == "application"} != {"scomp.main", "sin.main", "sdiss.main", "sconv.main"}:
+        if {row["contract_id"] for row in api_rows if row["module"] == "application"} != {"api.entrypoint.scomp", "api.entrypoint.sin", "api.entrypoint.sdiss", "api.entrypoint.sconv"}:
             fail("API application entry-point set is incomplete or stale")
-        if any(not all(row[field].strip() for field in ("declaration", "normal_behavior", "invalid_input", "boundary_behavior", "ownership_cleanup", "failure_behavior")) for row in api_rows):
+        if any(not all(row[field].strip() for field in ("contract_name", "declaration", "normal_behavior", "invalid_input", "boundary_behavior", "ownership_cleanup", "failure_behavior")) for row in api_rows):
             fail("API rows must state declaration, normal, invalid, boundary, ownership, and failure facets")
-    except (AuditError, OSError, ValueError) as error:
+    except (AuditError, OSError, ValueError, KeyError) as error:
         print(f"inventory audit: ERROR: {error}", file=sys.stderr)
         return 1
-    print(f"inventory audit: valid ({len(tokens)} tokens, {len(productions)} productions, {len(ast)} AST nodes, {len(ir)} IR rows, {len(opcode_rows)} opcode rows, {len(libcalls)} libcalls, {len(maintained)} API symbols, {len(expected_tests)} tests)")
+    print(f"inventory audit: valid ({len(tokens)} tokens, {len(productions)} productions, {len(ast)} AST nodes, {len(ir)} IR rows, {len(opcode_rows)} opcode rows, {len(libcalls)} libcalls, {len(maintained)} archive symbols, {len(api_rows)} API contracts, {len(expected_tests)} tests)")
     return 0
 
 
