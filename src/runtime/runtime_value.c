@@ -9,77 +9,169 @@
 #include "runtime_value.h"
 #include "string_limits.h"
 
-typedef struct strbuf_meta {
+typedef struct {
   char *ptr;
   size_t cap;
-  struct strbuf_meta *next;
 } strbuf_meta_t;
 
-static strbuf_meta_t *strbuf_head = NULL;
+enum { strbuf_initial_capacity = 16 };
+
+static strbuf_meta_t *strbuf_table = NULL;
+static size_t strbuf_table_capacity = 0;
+static size_t strbuf_table_count = 0;
+static size_t strbuf_table_tombstones = 0;
 static strbuf_probe_t strbuf_probe;
+static int strbuf_fail_metadata_alloc_for_tests = 0;
+static char strbuf_tombstone_marker;
+
+#define STRBUF_TOMBSTONE (&strbuf_tombstone_marker)
+
+static size_t strbuf_hash(char *ptr) {
+  uintptr_t bits = (uintptr_t)ptr;
+#if UINTPTR_MAX > UINT32_MAX
+  bits ^= bits >> 33;
+  bits *= UINT64_C(0xff51afd7ed558ccd);
+  bits ^= bits >> 33;
+  bits *= UINT64_C(0xc4ceb9fe1a85ec53);
+  bits ^= bits >> 33;
+#else
+  bits ^= bits >> 16;
+  bits *= UINT32_C(0x85ebca6b);
+  bits ^= bits >> 13;
+  bits *= UINT32_C(0xc2b2ae35);
+  bits ^= bits >> 16;
+#endif
+  return (size_t)bits;
+}
+
+static int strbuf_allocate_table(size_t capacity, strbuf_meta_t **out) {
+  if (capacity > SIZE_MAX / sizeof(**out) ||
+      strbuf_fail_metadata_alloc_for_tests) return 0;
+  *out = calloc(capacity, sizeof(**out));
+  return *out != NULL;
+}
 
 static strbuf_meta_t *strbuf_find(char *ptr) {
   strbuf_probe.find_calls++;
-  strbuf_meta_t *meta = strbuf_head;
-  while (meta) {
+  if (!strbuf_table) return NULL;
+  size_t mask = strbuf_table_capacity - 1u;
+  size_t index = strbuf_hash(ptr) & mask;
+  for (;;) {
+    strbuf_meta_t *entry = &strbuf_table[index];
     strbuf_probe.find_nodes++;
-    if (meta->ptr == ptr) return meta;
-    meta = meta->next;
+    if (!entry->ptr) return NULL;
+    if (entry->ptr == ptr) return entry;
+    index = (index + 1u) & mask;
   }
-  return NULL;
+}
+
+static int strbuf_rehash(size_t capacity) {
+  strbuf_meta_t *replacement;
+  if (!strbuf_allocate_table(capacity, &replacement)) return 0;
+  for (size_t i = 0; i < strbuf_table_capacity; i++) {
+    strbuf_meta_t entry = strbuf_table[i];
+    if (!entry.ptr || entry.ptr == STRBUF_TOMBSTONE) continue;
+    size_t index = strbuf_hash(entry.ptr) & (capacity - 1u);
+    while (replacement[index].ptr) index = (index + 1u) & (capacity - 1u);
+    replacement[index] = entry;
+  }
+  free(strbuf_table);
+  strbuf_table = replacement;
+  strbuf_table_capacity = capacity;
+  strbuf_table_tombstones = 0;
+  return 1;
+}
+
+static int strbuf_prepare_insert(void) {
+  if (!strbuf_table) return strbuf_rehash(strbuf_initial_capacity);
+  size_t used = strbuf_table_count + strbuf_table_tombstones + 1u;
+  if (used < strbuf_table_capacity - strbuf_table_capacity / 4u) return 1;
+  if (strbuf_table_capacity <= SIZE_MAX / 2u &&
+      strbuf_rehash(strbuf_table_capacity * 2u)) return 1;
+  /* A same-size rebuild can reclaim tombstones if growing failed. */
+  return strbuf_table_tombstones && strbuf_rehash(strbuf_table_capacity);
 }
 
 static void strbuf_forget(char *ptr) {
   strbuf_probe.forget_calls++;
-  strbuf_meta_t **scan = &strbuf_head;
-  while (*scan) {
+  if (!strbuf_table) return;
+  size_t mask = strbuf_table_capacity - 1u;
+  size_t index = strbuf_hash(ptr) & mask;
+  for (;;) {
+    strbuf_meta_t *entry = &strbuf_table[index];
     strbuf_probe.forget_nodes++;
-    if ((*scan)->ptr == ptr) {
-      strbuf_meta_t *found = *scan;
-      *scan = found->next;
-      free(found);
+    if (!entry->ptr) return;
+    if (entry->ptr == ptr) {
+      entry->ptr = STRBUF_TOMBSTONE;
+      entry->cap = 0;
+      strbuf_table_count--;
+      strbuf_table_tombstones++;
+      if (!strbuf_table_count) {
+        free(strbuf_table);
+        strbuf_table = NULL;
+        strbuf_table_capacity = 0;
+        strbuf_table_tombstones = 0;
+      } else if (strbuf_table_capacity > strbuf_initial_capacity &&
+                 strbuf_table_count * 8u <= strbuf_table_capacity) {
+        (void)strbuf_rehash(strbuf_table_capacity / 2u);
+      } else if (strbuf_table_tombstones * 4u >= strbuf_table_capacity) {
+        (void)strbuf_rehash(strbuf_table_capacity);
+      }
       return;
     }
-    scan = &((*scan)->next);
+    index = (index + 1u) & mask;
   }
 }
 
 static void strbuf_track(char *ptr, size_t cap) {
   strbuf_meta_t *meta = strbuf_find(ptr);
-  if (!meta) {
-    meta = malloc(sizeof(strbuf_meta_t));
-    if (!meta) return;
-    meta->next = strbuf_head;
-    strbuf_head = meta;
+  if (meta) {
+    meta->cap = cap;
+    return;
   }
-  meta->ptr = ptr;
-  meta->cap = cap;
+  if (!strbuf_prepare_insert()) return;
+  size_t mask = strbuf_table_capacity - 1u;
+  size_t index = strbuf_hash(ptr) & mask;
+  size_t tombstone = SIZE_MAX;
+  for (;;) {
+    strbuf_meta_t *entry = &strbuf_table[index];
+    if (!entry->ptr) {
+      if (tombstone != SIZE_MAX) entry = &strbuf_table[tombstone];
+      entry->ptr = ptr;
+      entry->cap = cap;
+      strbuf_table_count++;
+      if (tombstone != SIZE_MAX) strbuf_table_tombstones--;
+      return;
+    }
+    if (entry->ptr == STRBUF_TOMBSTONE && tombstone == SIZE_MAX) tombstone = index;
+    index = (index + 1u) & mask;
+  }
 }
 
-size_t strbuf_tracked_count_for_tests(void) {
-  size_t count = 0;
-  for (strbuf_meta_t *meta = strbuf_head; meta; meta = meta->next) {
-    count++;
-  }
-  return count;
-}
+size_t strbuf_tracked_count_for_tests(void) { return strbuf_table_count; }
+
+size_t strbuf_registry_capacity_for_tests(void) { return strbuf_table_capacity; }
 
 size_t strbuf_capacity_for_tests(char *ptr) {
   strbuf_meta_t *meta = strbuf_find(ptr);
   return meta ? meta->cap : 0;
 }
 
-void strbuf_forget_for_tests(char *ptr) {
-  strbuf_forget(ptr);
+size_t strbuf_bucket_for_tests(char *ptr, size_t capacity) {
+  return capacity ? strbuf_hash(ptr) & (capacity - 1u) : 0;
 }
 
-strbuf_probe_t strbuf_probe_for_tests(void) {
-  return strbuf_probe;
+void strbuf_forget_for_tests(char *ptr) { strbuf_forget(ptr); }
+
+void strbuf_track_for_tests(char *ptr, size_t cap) { strbuf_track(ptr, cap); }
+
+void strbuf_fail_metadata_allocations_for_tests(int fail) {
+  strbuf_fail_metadata_alloc_for_tests = fail;
 }
 
-void strbuf_probe_reset_for_tests(void) {
-  strbuf_probe = (strbuf_probe_t){0};
-}
+strbuf_probe_t strbuf_probe_for_tests(void) { return strbuf_probe; }
+
+void strbuf_probe_reset_for_tests(void) { strbuf_probe = (strbuf_probe_t){0}; }
 
 void free_runtime_string(char *s) {
   if (!s) return;
@@ -116,9 +208,7 @@ VALUE_t concat_two_strings(VALUE_t left, VALUE_t right) {
     out_cap = left_meta->cap;
     free_runtime_string(right.s);
   } else {
-    if (left_meta) {
-      out_cap = strbuf_growth_capacity(needed);
-    }
+    if (left_meta) out_cap = strbuf_growth_capacity(needed);
     out = malloc(out_cap);
     if (!out) {
       free_runtime_string(left.s);

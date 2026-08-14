@@ -492,9 +492,10 @@ an opt-in performance guard.
       `SIN_EXTENDED_BENCH=1`; `SIN_BENCH_REPORT=1` replays captured benchmark
       output on passing tests, and `make test-benchmark` runs it in `BUILD=release`
     - runtime-string registry populations of 1, 32, 1024, and 4096 report
-      five-sample medians and probe scan counts for capacity lookup, removal,
+      five-sample medians and probe counts for capacity lookup, removal,
       reuse/growth concatenation, cleanup, and an interpreted concat workload;
-      these distinguish linked-list registry work from copying and enforce
+      these preserve the Task 7 linked-list baseline for before/after
+      comparison, distinguish hash-registry work from copying, and enforce
       cleanup back to the starting tracked-buffer count
     - the extended matrix also runs the real `network_runtime_poll` /
       `get_input` path for repeatable short-record batches near 16 KiB and

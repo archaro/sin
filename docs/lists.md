@@ -66,8 +66,11 @@ equal/early-unequal/late-unequal at 1024; a compiled source literal returning
 33 elements; itemstore v2 save/load; item-reference creation/resolution; and
 actual `sys.call` execution comparing an 8-element list with a zero-argument
 control call. It also measures the runtime string registry at 1, 32, 1024,
-and 4096 live buffers, separating lookup/removal scan work from reuse and
-growth concatenation copying, cleanup, and an interpreted concat workload.
+and 4096 live buffers, separating lookup/removal hash-probe work from reuse
+and growth concatenation copying, cleanup, and an interpreted concat workload.
+The Task 7 linked-list rows are retained as the before baseline; the current
+pointer-keyed open-addressing registry should keep probe growth approximately
+constant across those populations.
 Results are machine-dependent; compare medians
 and ratios rather than absolute budgets. Investigate a repeatable regression of
 3% or more across repeated optimized runs. Normal `make test` does not run or

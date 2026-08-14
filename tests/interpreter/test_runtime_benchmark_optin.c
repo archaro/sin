@@ -749,12 +749,12 @@ static uint64_t bench_interpreter_string_workload(ITEMSTORE_t *store,
 static void print_string_registry_row(const char *operation, size_t population,
                                       uint64_t median, size_t iters,
                                       strbuf_probe_t probe) {
-  double scans = (double)(probe.find_nodes + probe.forget_nodes) /
-                 (double)iters;
+  double probes = (double)(probe.find_nodes + probe.forget_nodes) /
+                  (double)iters;
   printf("[bench][string_registry] op=%s live=%zu median_ns=%llu ns/op=%llu "
-         "scan_nodes/op=%.1f find_nodes=%zu forget_nodes=%zu\n",
+         "probe_nodes/op=%.1f find_nodes=%zu forget_nodes=%zu\n",
          operation, population, (unsigned long long)median,
-         (unsigned long long)(median / iters), scans, probe.find_nodes,
+         (unsigned long long)(median / iters), probes, probe.find_nodes,
          probe.forget_nodes);
 }
 

@@ -693,7 +693,7 @@ void test_value_string_tracker_releases_through_value_free(void) {
 }
 
 void test_value_string_tracker_probe_counts_linear_scans(void) {
-  enum { tracked_count = 32 };
+  enum { tracked_count = 64 };
   size_t baseline = strbuf_tracked_count_for_tests();
   VALUE_t values[tracked_count];
 
@@ -707,26 +707,148 @@ void test_value_string_tracker_probe_counts_linear_scans(void) {
   }
   ASSERT_EQ_INT((long long)baseline + tracked_count,
                 (long long)strbuf_tracked_count_for_tests());
+  ASSERT_TRUE(strbuf_registry_capacity_for_tests() >= 128);
+
+  size_t shortest = SIZE_MAX;
+  size_t chosen = 0;
+  for (size_t i = 0; i < tracked_count; i++) {
+    strbuf_probe_reset_for_tests();
+    ASSERT_EQ_INT(32, (long long)strbuf_capacity_for_tests(values[i].s));
+    strbuf_probe_t candidate_probe = strbuf_probe_for_tests();
+    ASSERT_EQ_INT(1, (long long)candidate_probe.find_calls);
+    ASSERT_EQ_INT(0, (long long)candidate_probe.forget_calls);
+    if (candidate_probe.find_nodes < shortest) {
+      shortest = candidate_probe.find_nodes;
+      chosen = i;
+    }
+  }
+  /* Keep the selected real key's observed lookup cost so removal can prove
+   * that it follows the same probe path even when tombstones displaced it. */
+  ASSERT_TRUE(shortest > 0 && shortest != SIZE_MAX);
 
   strbuf_probe_reset_for_tests();
-  ASSERT_EQ_INT(32, (long long)strbuf_capacity_for_tests(values[0].s));
+  value_free(&values[chosen]);
   strbuf_probe_t probe = strbuf_probe_for_tests();
-  ASSERT_EQ_INT(1, (long long)probe.find_calls);
-  ASSERT_EQ_INT(tracked_count, (long long)probe.find_nodes);
-  ASSERT_EQ_INT(0, (long long)probe.forget_calls);
-  ASSERT_EQ_INT(0, (long long)probe.forget_nodes);
-
-  strbuf_probe_reset_for_tests();
-  value_free(&values[0]);
-  probe = strbuf_probe_for_tests();
   ASSERT_EQ_INT(0, (long long)probe.find_calls);
   ASSERT_EQ_INT(0, (long long)probe.find_nodes);
   ASSERT_EQ_INT(1, (long long)probe.forget_calls);
-  ASSERT_EQ_INT(tracked_count, (long long)probe.forget_nodes);
+  ASSERT_EQ_INT((long long)shortest, (long long)probe.forget_nodes);
 
-  for (size_t i = 1; i < tracked_count; i++) value_free(&values[i]);
+  for (size_t i = 0; i < tracked_count; i++) {
+    if (i != chosen) value_free(&values[i]);
+  }
+  ASSERT_TRUE(strbuf_registry_capacity_for_tests() < 128);
   ASSERT_EQ_INT((long long)baseline,
                 (long long)strbuf_tracked_count_for_tests());
+  ASSERT_EQ_INT(0, (long long)strbuf_registry_capacity_for_tests());
+}
+
+void test_value_string_tracker_metadata_failures_and_untracked_ownership(void) {
+  size_t baseline = strbuf_tracked_count_for_tests();
+  char *plain = strdup("plain");
+  ASSERT_NOT_NULL(plain);
+  free_runtime_string(plain);
+
+  strbuf_fail_metadata_allocations_for_tests(1);
+  VALUE_t result = concat_two_strings(
+      (VALUE_t){VALUE_str, {.s = strdup("left")}},
+      (VALUE_t){VALUE_str, {.s = strdup(" right")}});
+  strbuf_fail_metadata_allocations_for_tests(0);
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, "left right") == 0);
+  ASSERT_EQ_INT(0, (long long)strbuf_capacity_for_tests(result.s));
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+  value_free(&result);
+
+  VALUE_t population[11];
+  for (size_t i = 0; i < sizeof(population) / sizeof(population[0]); i++) {
+    population[i] = concat_two_strings(
+        (VALUE_t){VALUE_str, {.s = strdup("left")}},
+        (VALUE_t){VALUE_str, {.s = strdup(" right")}});
+  }
+  ASSERT_EQ_INT((long long)baseline + 11,
+                (long long)strbuf_tracked_count_for_tests());
+  strbuf_fail_metadata_allocations_for_tests(1);
+  result = concat_two_strings(
+      (VALUE_t){VALUE_str, {.s = strdup("growth")}},
+      (VALUE_t){VALUE_str, {.s = strdup(" failure")}});
+  strbuf_fail_metadata_allocations_for_tests(0);
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_EQ_INT(0, (long long)strbuf_capacity_for_tests(result.s));
+  value_free(&result);
+  for (size_t i = 0; i < sizeof(population) / sizeof(population[0]); i++) {
+    value_free(&population[i]);
+  }
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+
+  VALUE_t tracked = concat_two_strings(
+      (VALUE_t){VALUE_str, {.s = strdup("0123456789abcdef")}},
+      (VALUE_t){VALUE_str, {.s = strdup("")}});
+  ASSERT_EQ_INT(17, (long long)strbuf_capacity_for_tests(tracked.s));
+  uintptr_t old_address = (uintptr_t)tracked.s;
+  value_free(&tracked);
+  ASSERT_EQ_INT(0, (long long)strbuf_registry_capacity_for_tests());
+  /* A later allocation at the same address cannot inherit stale metadata. */
+  char *reused = malloc(16);
+  ASSERT_NOT_NULL(reused);
+  memcpy(reused, "0123456789abcde", 16);
+  if ((uintptr_t)reused == old_address) {
+    ASSERT_EQ_INT(0, (long long)strbuf_capacity_for_tests(reused));
+  }
+  free_runtime_string(reused);
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+}
+
+void test_value_string_tracker_collision_tombstones_and_growth(void) {
+  enum { tracked_count = 48 };
+  size_t baseline = strbuf_tracked_count_for_tests();
+  VALUE_t values[tracked_count];
+  char *candidates[17];
+  for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+    candidates[i] = strdup("collision");
+    ASSERT_NOT_NULL(candidates[i]);
+  }
+  char *first = NULL;
+  char *second = NULL;
+  for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+    for (size_t j = i + 1u; j < sizeof(candidates) / sizeof(candidates[0]); j++) {
+      if (strbuf_bucket_for_tests(candidates[i], 16) ==
+          strbuf_bucket_for_tests(candidates[j], 16)) {
+        first = candidates[i];
+        second = candidates[j];
+        break;
+      }
+    }
+    if (second) break;
+  }
+  ASSERT_NOT_NULL(first);
+  ASSERT_NOT_NULL(second);
+  strbuf_track_for_tests(first, 16);
+  strbuf_track_for_tests(second, 16);
+  strbuf_probe_reset_for_tests();
+  ASSERT_EQ_INT(16, (long long)strbuf_capacity_for_tests(second));
+  ASSERT_TRUE(strbuf_probe_for_tests().find_nodes >= 2);
+  strbuf_forget_for_tests(first);
+  strbuf_forget_for_tests(second);
+  for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+    free(candidates[i]);
+  }
+  for (size_t i = 0; i < tracked_count; i++) {
+    values[i] = concat_two_strings(
+        (VALUE_t){VALUE_str, {.s = strdup("0123456789abcdef")}},
+        (VALUE_t){VALUE_str, {.s = strdup("")}});
+  }
+  ASSERT_TRUE(strbuf_registry_capacity_for_tests() >= 64);
+  /* The table handles collisions through probing; this also exercises removals
+   * through a populated table, leaving tombstones to be reclaimed. */
+  for (size_t i = 0; i < tracked_count; i += 2) value_free(&values[i]);
+  for (size_t i = 1; i < tracked_count; i += 2) value_free(&values[i]);
+  ASSERT_EQ_INT((long long)baseline,
+                (long long)strbuf_tracked_count_for_tests());
+  ASSERT_EQ_INT(0, (long long)strbuf_registry_capacity_for_tests());
 }
 
 void test_value_string_tracker_releases_through_stack_discard(void) {
