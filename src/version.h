@@ -1,1 +1,1 @@
-#define SINVERSION "0.7.5"
+#define SINVERSION "0.7.6"
