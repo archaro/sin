@@ -73,7 +73,55 @@ def split_refs(value: str) -> list[str]:
     return [item for item in value.split(";") if item]
 
 
+def strip_c_comments(source: str) -> str:
+    output: list[str] = []
+    index = 0
+    quote: str | None = None
+    while index < len(source):
+        char = source[index]
+        following = source[index + 1] if index + 1 < len(source) else ""
+        if quote is not None:
+            output.append(char)
+            if char == "\\" and following:
+                output.append(following)
+                index += 2
+                continue
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in ('"', "'"):
+            quote = char
+            output.append(char)
+            index += 1
+            continue
+        if char == "/" and following == "/":
+            output.extend("  ")
+            index += 2
+            while index < len(source) and source[index] != "\n":
+                output.append(" ")
+                index += 1
+            continue
+        if char == "/" and following == "*":
+            output.extend("  ")
+            index += 2
+            while index < len(source):
+                if source[index:index + 2] == "*/":
+                    output.extend("  ")
+                    index += 2
+                    break
+                output.append("\n" if source[index] == "\n" else " ")
+                index += 1
+            else:
+                fail("unterminated C block comment")
+            continue
+        output.append(char)
+        index += 1
+    return "".join(output)
+
+
 def conformance_descriptor_ids(source: str) -> set[str]:
+    source = strip_c_comments(source)
     marker = "static const TF_TestDescriptor tests[] = {"
     if source.count(marker) != 1:
         fail("conformance descriptor array is missing or ambiguous")

@@ -22,6 +22,9 @@ descriptor_source = r'''
 /* {"conformance.comment-spoof", ignored, "conformance", 1, "x"}, */
 static const char *unrelated = "{\\\"conformance.string-spoof\\\",";
 static const TF_TestDescriptor tests[] = {
+  /*
+  {"conformance.in-array-comment-spoof", ignored, "conformance", 1, "x"},
+  */
   {"conformance.real", real_test, "conformance", 5000, "contract.real"},
 };
 '''
