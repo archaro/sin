@@ -1,5 +1,13 @@
 # Test Coverage Map
 
+The [auditable pre-rewrite baseline entry point](baseline/README.md) links the
+legacy test ledger and GCC coverage snapshot, validated by
+`python3 tests/baseline/audit_baseline.py`. The ledger accounts for every
+legacy registration and output-contract check; parity requires each row to
+have a replacement or an explicit consolidation explanation. The existing
+`make test` composition remains authoritative until the replacement harness
+cutover.
+
 Value behavior coverage includes opaque item-reference lifecycle, ownership,
 canonical-path equality, truthiness, and formatting contracts.
 Immutable list coverage is in `tests/core/test_list.c`, including owned-element

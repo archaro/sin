@@ -1,0 +1,54 @@
+module,owner,status,lines_covered,lines_total,lines_percent,branches_covered,branches_total,branches_percent,functions_covered,functions_total,functions_percent,notes
+src/bytecode/bytecode_abi.c,bytecode,measured,40,41,97.56,28,42,66.67,4,4,100.00,GCC gcov JSON from full make test
+src/bytecode/bytecode_convert.c,bytecode,measured,271,325,83.38,167,227,73.57,15,15,100.00,GCC gcov JSON from full make test
+src/bytecode/bytecode_format.c,bytecode,measured,42,42,100.00,17,20,85.00,2,2,100.00,GCC gcov JSON from full make test
+src/bytecode/bytecode_verify.c,bytecode,measured,597,640,93.28,369,468,78.85,34,37,91.89,GCC gcov JSON from full make test
+src/bytecode/bytecode_wire.c,bytecode,measured,37,37,100.00,14,14,100.00,12,12,100.00,GCC gcov JSON from full make test
+src/bytecode/sdiss_core.c,bytecode,measured,108,132,81.82,53,89,59.55,8,8,100.00,GCC gcov JSON from full make test
+src/common/cli_io.c,common,measured,73,122,59.84,40,86,46.51,8,8,100.00,GCC gcov JSON from full make test
+src/common/error.c,common,measured,22,22,100.00,0,0,n/a,1,1,100.00,GCC gcov JSON from full make test
+src/common/floatconv.c,common,measured,118,126,93.65,76,110,69.09,10,10,100.00,GCC gcov JSON from full make test
+src/common/log.c,common,measured,37,40,92.50,8,12,66.67,7,8,87.50,GCC gcov JSON from full make test
+src/common/memory.c,common,measured,45,48,93.75,36,50,72.00,9,9,100.00,GCC gcov JSON from full make test
+src/common/util.c,common,measured,8,14,57.14,7,10,70.00,1,1,100.00,GCC gcov JSON from full make test
+src/compiler/absyn.c,compiler,measured,168,344,48.84,145,242,59.92,13,19,68.42,GCC gcov JSON from full make test
+src/compiler/compdiag.c,compiler,measured,131,138,94.93,49,86,56.98,18,18,100.00,GCC gcov JSON from full make test
+src/compiler/compiler_context.c,compiler,measured,36,40,90.00,19,24,79.17,4,4,100.00,GCC gcov JSON from full make test
+src/compiler/compiler_pipeline.c,compiler,measured,113,125,90.40,80,108,74.07,11,11,100.00,GCC gcov JSON from full make test
+src/compiler/emitbc.c,compiler,measured,233,310,75.16,154,312,49.36,12,12,100.00,GCC gcov JSON from full make test
+src/compiler/ir.c,compiler,measured,222,265,83.77,161,228,70.61,15,17,88.24,GCC gcov JSON from full make test
+src/compiler/lower.c,compiler,measured,512,612,83.66,323,524,61.64,26,27,96.30,GCC gcov JSON from full make test
+src/compiler/semant.c,compiler,measured,256,271,94.46,159,235,67.66,21,21,100.00,GCC gcov JSON from full make test
+src/itemstore/item_error.c,itemstore,measured,180,193,93.26,146,178,82.02,15,15,100.00,GCC gcov JSON from full make test
+src/itemstore/item_hash.c,itemstore,measured,187,194,96.39,88,122,72.13,20,20,100.00,GCC gcov JSON from full make test
+src/itemstore/item_persist.c,itemstore,measured,461,592,77.87,275,389,70.69,44,45,97.78,GCC gcov JSON from full make test
+src/itemstore/item_persist_v1.c,itemstore,measured,125,186,67.20,82,133,61.65,3,3,100.00,GCC gcov JSON from full make test
+src/itemstore/item_persist_v2.c,itemstore,measured,261,295,88.47,186,251,74.10,4,4,100.00,GCC gcov JSON from full make test
+src/itemstore/item_registry.c,itemstore,measured,204,206,99.03,110,150,73.33,38,38,100.00,GCC gcov JSON from full make test
+src/itemstore/item_source_persist.c,itemstore,measured,132,189,69.84,85,164,51.83,6,6,100.00,GCC gcov JSON from full make test
+src/itemstore/item_tree.c,itemstore,measured,316,341,92.67,231,280,82.50,28,29,96.55,GCC gcov JSON from full make test
+src/libcall/libcall_list.c,libcall,measured,104,104,100.00,49,70,70.00,9,9,100.00,GCC gcov JSON from full make test
+src/libcall/libcall_net.c,libcall,measured,123,123,100.00,62,72,86.11,10,10,100.00,GCC gcov JSON from full make test
+src/libcall/libcall_registry.c,libcall,measured,238,256,92.97,142,182,78.02,22,23,95.65,GCC gcov JSON from full make test
+src/libcall/libcall_str.c,libcall,measured,314,339,92.63,149,162,91.98,27,27,100.00,GCC gcov JSON from full make test
+src/libcall/libcall_sys.c,libcall,measured,455,521,87.33,309,449,68.82,46,47,97.87,GCC gcov JSON from full make test
+src/libcall/libcall_table.c,libcall,no_instrumentable_code,0,0,n/a,0,0,n/a,0,0,n/a,translation unit contains no executable statements
+src/libcall/libcall_task.c,libcall,measured,105,127,82.68,53,86,61.63,7,7,100.00,GCC gcov JSON from full make test
+src/net/libtelnet.c,net,measured,149,733,20.33,61,338,18.05,13,37,35.14,GCC gcov JSON; union of production object and standalone network harness observations
+src/net/network.c,net,measured,712,889,80.09,433,703,61.59,61,61,100.00,GCC gcov JSON; union of production object and standalone network harness observations
+src/runtime/interpret.c,runtime,measured,721,896,80.47,335,575,58.26,58,68,85.29,GCC gcov JSON from full make test
+src/runtime/itemref.c,runtime,measured,28,30,93.33,21,32,65.62,6,6,100.00,GCC gcov JSON from full make test
+src/runtime/list.c,runtime,measured,728,805,90.43,515,702,73.36,48,48,100.00,GCC gcov JSON from full make test
+src/runtime/runtime_decode.c,runtime,measured,52,52,100.00,14,24,58.33,11,11,100.00,GCC gcov JSON from full make test
+src/runtime/runtime_frame.c,runtime,measured,171,185,92.43,100,174,57.47,14,14,100.00,GCC gcov JSON from full make test
+src/runtime/runtime_item_ops.c,runtime,measured,102,117,87.18,65,112,58.04,7,7,100.00,GCC gcov JSON from full make test
+src/runtime/runtime_opcode.c,runtime,measured,12,12,100.00,4,6,66.67,2,2,100.00,GCC gcov JSON from full make test
+src/runtime/runtime_value.c,runtime,measured,136,145,93.79,69,82,84.15,19,19,100.00,GCC gcov JSON from full make test
+src/runtime/stack.c,runtime,measured,43,49,87.76,9,14,64.29,9,9,100.00,GCC gcov JSON from full make test
+src/runtime/task.c,runtime,measured,120,143,83.92,51,84,60.71,14,15,93.33,GCC gcov JSON from full make test
+src/runtime/value.c,runtime,measured,433,493,87.83,342,484,70.66,52,52,100.00,GCC gcov JSON from full make test
+src/runtime/vm.c,runtime,measured,23,25,92.00,7,12,58.33,5,5,100.00,GCC gcov JSON from full make test
+src/scomp.c,executable,measured,125,139,89.93,73,115,63.48,8,8,100.00,GCC gcov JSON from full make test
+src/sconv.c,executable,measured,53,54,98.15,36,41,87.80,4,4,100.00,GCC gcov JSON from full make test
+src/sdiss.c,executable,measured,72,87,82.76,25,34,73.53,4,4,100.00,GCC gcov JSON from full make test
+src/sin.c,executable,measured,403,515,78.25,183,285,64.21,22,22,100.00,GCC gcov JSON from full make test
