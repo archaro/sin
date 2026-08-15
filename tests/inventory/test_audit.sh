@@ -18,6 +18,14 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$repo_root/tests/inventory" python3 - <<'P
 import audit
 
 assert audit.grammar_tokens("%token TPLUS\n%left TPLUS\n") == ["TPLUS"]
+descriptor_source = r'''
+/* {"conformance.comment-spoof", ignored, "conformance", 1, "x"}, */
+static const char *unrelated = "{\\\"conformance.string-spoof\\\",";
+static const TF_TestDescriptor tests[] = {
+  {"conformance.real", real_test, "conformance", 5000, "contract.real"},
+};
+'''
+assert audit.conformance_descriptor_ids(descriptor_source) == {"conformance.real"}
 try:
     audit.grammar_tokens("%left TPLUS\n%right TPLUS\n")
 except audit.AuditError as error:
@@ -70,7 +78,8 @@ expect_root_failure() {
 
 # Precedence directives declare lexer tokens too; canonical drift must fail.
 mkdir -p "$work/root/src/compiler" "$work/root/src/bytecode" \
-  "$work/root/src/libcall" "$work/root/tests/baseline"
+  "$work/root/src/libcall" "$work/root/tests/baseline" \
+  "$work/root/tests/conformance"
 cp "$repo_root/src/compiler/parser.y" "$work/root/src/compiler/parser.y"
 cp "$repo_root/src/compiler/absyn.h" "$work/root/src/compiler/absyn.h"
 cp "$repo_root/src/bytecode/bytecode_abi.h" "$work/root/src/bytecode/bytecode_abi.h"
@@ -78,6 +87,8 @@ cp "$repo_root/src/bytecode/opcode_schema.def" "$work/root/src/bytecode/opcode_s
 cp "$repo_root/src/libcall/libcall_list.h" "$work/root/src/libcall/libcall_list.h"
 cp "$repo_root/tests/baseline/legacy_test_ledger.csv" \
   "$work/root/tests/baseline/legacy_test_ledger.csv"
+cp "$repo_root/tests/conformance/test_conformance.c" \
+  "$work/root/tests/conformance/test_conformance.c"
 sed -i 's/^%left TAND$/%left/' "$work/root/src/compiler/parser.y"
 expect_root_failure precedence_token 'language token inventory mismatch'
 

@@ -12,6 +12,7 @@
 #define MAX_MANIFEST_LINE 16384u
 
 static char *read_text(const char *path);
+static char *expectation_block(const char *text, const char *name);
 
 typedef struct {
   char *id;
@@ -189,6 +190,18 @@ static int parse_status(const char *text, int *status) {
   return 0;
 }
 
+static int parse_expected_status(const char *text, int *status) {
+  char *end = NULL;
+  long value;
+  if (!text || !status) return -1;
+  errno = 0;
+  value = strtol(text, &end, 10);
+  if (errno != 0 || end == text || *end != '\0' || value < 0 || value > 255)
+    return -1;
+  *status = (int)value;
+  return 0;
+}
+
 static bool field_match_valid(const char *text) {
   return strcmp(text, "exact") == 0 || strcmp(text, "contains") == 0 ||
          strcmp(text, "skip") == 0;
@@ -254,7 +267,8 @@ static int add_case(Manifest *manifest, char **fields, size_t count) {
   if (strcmp(fields[2], "positive") == 0) {
     if (item.compile_status != 0 || item.disassembly_status != 0 ||
         strcmp(fields[8], "skip") == 0 || item.runtime_status < 0 ||
-        strcmp(fields[12], "skip") == 0) return -1;
+        strcmp(fields[12], "skip") == 0 || is_empty_ref(fields[10]) ||
+        is_empty_ref(fields[16])) return -1;
   } else if (item.compile_status == 0 || item.disassembly_status != -1 ||
              item.runtime_status != -1 || strcmp(fields[12], "skip") != 0 ||
              strcmp(fields[17], "skip") != 0) return -1;
@@ -467,69 +481,113 @@ static bool case_contracts_valid(const char *root, const char *contracts) {
 
 static bool source_witness_has_contract(const char *root, const char *contract,
                                        const char *relative) {
-  static const struct { const char *suffix; const char *marker; } markers[] = {
-    {"token.tinteger", "1"}, {"token.tfloat", "."},
-    {"token.tstringlit", "\""}, {"token.tlocal", "@"},
-    {"token.tlayer", "."}, {"token.tlibname", "."},
-    {"token.tcodebody", "code"}, {"token.tunknownchar", "^"},
-    {"token.ttrue", "true"}, {"token.tfalse", "false"},
-    {"token.tnil", "nil"}, {"token.tliststart", "#["},
-    {"token.titemref", "&"}, {"token.tbreak", "break"},
-    {"token.tcontinue", "continue"}, {"token.twhile", "while"},
-    {"token.tdo", "DO"}, {"token.tendwhile", "endwhile"},
-    {"token.tif", "if"}, {"token.tthen", "then"},
-    {"token.telse", "else"}, {"token.telsif", "elsif"},
-    {"token.tendif", "endif"}, {"token.treturn", "return"},
-    {"token.tforeach", "foreach"}, {"token.tin", " in "},
-    {"token.tendfor", "endfor"}, {"token.tassign", "="},
-    {"token.tinc", "++"}, {"token.tdec", "--"},
-    {"token.tlayersep", "."}, {"token.tderefstart", "&"},
-    {"token.tcode", "code"}, {"token.tderefend", "]"},
-    {"token.tlparen", "("}, {"token.trparen", ")"},
-    {"token.tlbrace", "{"}, {"token.trbrace", "}"},
-    {"token.tcomma", ","}, {"token.tor", " or "},
-    {"token.tand", " and "}, {"token.tequal", "=="},
-    {"token.tnotequal", "!="}, {"token.tlt", "<"},
-    {"token.tgt", ">"}, {"token.tlteq", "<="},
-    {"token.tgteq", ">="}, {"token.tplus", "+"},
-    {"token.tminus", "-"}, {"token.tmult", "*"},
-    {"token.tdiv", "/"}, {"token.tmod", "%"},
-    {"token.tnot", "!"}, {"statement.assignment", "="},
-    {"statement.return", "return"}, {"statement.while", "while"},
-    {"statement.do-while", "DO"}, {"statement.if", "if"},
-    {"statement.foreach", "foreach"}, {"statement.break", "break"},
-    {"statement.continue", "continue"}, {"item-syntax.relative-layer", "."},
-    {"item-syntax.dereference", "&"}, {"item-syntax.layer-chain", "."},
-    {"item-syntax.item-save", "sys.save"},
-    {"semantic-rule.local-before-definition", "@x"},
-    {"semantic-rule.break-context", "break"},
-    {"semantic-rule.continue-context", "continue"},
-    {"semantic-rule.libcall-resolution", "."},
-    {"semantic-rule.item-name", "itemname"},
-    {"semantic-rule.loop-variable", "foreach"},
-    {"diagnostic.lexer-error", "^"},
-    {"diagnostic.parser-error", ",]"},
-    {"diagnostic.semantic-error", "break"},
-    {"diagnostic.overflow", "9223372036854775808"},
-    {"diagnostic.unknown-libcall", "sys.unknown"},
+  static const struct { const char *contract; const char *marker; } markers[] = {
+    {"language.token.tinteger", "1"}, {"language.token.tfloat", "1.5"},
+    {"language.token.tstringlit", "\""}, {"language.token.tlocal", "@"},
+    {"language.token.tlayer", ".relative"}, {"language.token.tlibname", "sys."},
+    {"language.token.tcodebody", "code"}, {"language.token.tunknownchar", "^"},
+    {"language.token.ttrue", "true"}, {"language.token.tfalse", "false"},
+    {"language.token.tnil", "nil"}, {"language.token.tliststart", "#["},
+    {"language.token.titemref", "&missing"}, {"language.token.tbreak", "break"},
+    {"language.token.tcontinue", "continue"}, {"language.token.tsemi", ";"},
+    {"language.token.twhile", "while"}, {"language.token.tdo", "DO"},
+    {"language.token.tendwhile", "endwhile"}, {"language.token.tif", "if"},
+    {"language.token.tthen", "then"}, {"language.token.telse", "else"},
+    {"language.token.telsif", "elsif"}, {"language.token.tendif", "endif"},
+    {"language.token.treturn", "return"}, {"language.token.tforeach", "foreach"},
+    {"language.token.tin", " in "}, {"language.token.tendfor", "endfor"},
+    {"language.token.tassign", " = "}, {"language.token.tinc", "++"},
+    {"language.token.tdec", "--"}, {"language.token.tlayersep", "foo.12"},
+    {"language.token.tderefstart", "&missing"}, {"language.token.tcode", "code"},
+    {"language.token.tderefend", "]"}, {"language.token.tlparen", "("},
+    {"language.token.trparen", ")"}, {"language.token.tlbrace", "{"},
+    {"language.token.trbrace", "}"}, {"language.token.tcomma", ","},
+    {"language.token.tor", " or "}, {"language.token.tand", " and "},
+    {"language.token.tequal", "=="}, {"language.token.tnotequal", "!="},
+    {"language.token.tlt", " < "}, {"language.token.tgt", " > "},
+    {"language.token.tlteq", "<="}, {"language.token.tgteq", ">="},
+    {"language.token.tplus", " + "}, {"language.token.tminus", " - "},
+    {"language.token.tmult", " * "}, {"language.token.tdiv", " / "},
+    {"language.token.tmod", " % "}, {"language.token.tnot", "!"},
+    {"language.production.input", "sys."}, {"language.production.stmtlist", ";\n"},
+    {"language.production.stmtsemi", ";"}, {"language.production.stmt", " = "},
+    {"language.production.expr", "1"}, {"language.production.libcall", "sys."},
+    {"language.production.elsif_else_opt", "elsif"},
+    {"language.production.params", "code {"},
+    {"language.production.param_list", "code {@a, @b}"},
+    {"language.production.param_local", "code {"},
+    {"language.production.args", "{"},
+    {"language.production.arg_list", "pair{1, 2}"},
+    {"language.production.item_assignment", "conformance_assignment ="},
+    {"language.production.list", "#["}, {"language.production.list_elems", "#[1, 2]"},
+    {"language.production.itemref", "&missing"},
+    {"language.production.item", "conformance_assignment"},
+    {"language.production.first_layer", ".relative"},
+    {"language.production.subsequent_layers", "foo.12"},
+    {"language.production.layer", "foo.12"},
+    {"language.production.dereference", "&missing"},
+    {"language.production.deref_content", "&missing"},
+    {"language.operator.add", " + "}, {"language.operator.subtract", " - "},
+    {"language.operator.multiply", " * "}, {"language.operator.divide", " / "},
+    {"language.operator.modulo", " % "}, {"language.operator.comparison", " == "},
+    {"language.operator.boolean", " and "}, {"language.literal.integer", "1"},
+    {"language.literal.float", "1.5"}, {"language.literal.string", "\""},
+    {"language.literal.boolean", "true"}, {"language.literal.nil", "nil"},
+    {"language.statement.assignment", " = "},
+    {"language.statement.expression", "sys."},
+    {"language.statement.return", "return"}, {"language.statement.while", "while"},
+    {"language.statement.do-while", "DO"}, {"language.statement.if", "if"},
+    {"language.statement.foreach", "foreach"}, {"language.statement.break", "break"},
+    {"language.statement.continue", "continue"},
+    {"language.expression.binary", " + "}, {"language.expression.unary", "!"},
+    {"language.expression.local", "@"}, {"language.expression.call", "pair{1, 2}"},
+    {"language.expression.libcall", "sys.itemname{"},
+    {"language.expression.item", "conformance_assignment"},
+    {"language.expression.item-reference", "&missing"},
+    {"language.expression.list", "#["},
+    {"language.item-syntax.absolute-layer", "foo.12"},
+    {"language.item-syntax.relative-layer", ".relative"},
+    {"language.item-syntax.dereference", "&missing"},
+    {"language.item-syntax.layer-chain", "foo.12"},
+    {"language.item-syntax.item-save", "sys.save"},
+    {"language.semantic-rule.local-definition", "@conformance_local ="},
+    {"language.semantic-rule.local-before-definition", "@x"},
+    {"language.semantic-rule.break-context", "break"},
+    {"language.semantic-rule.continue-context", "continue"},
+    {"language.semantic-rule.call-arity", "pair{1, 2}"},
+    {"language.semantic-rule.libcall-resolution", "sys.itemname{"},
+    {"language.semantic-rule.item-name", "sys.itemname{"},
+    {"language.semantic-rule.loop-variable", "foreach @element"},
+    {"language.diagnostic.lexer-error", "^"},
+    {"language.diagnostic.parser-error", ",]"},
+    {"language.diagnostic.semantic-error", "break"},
+    {"language.diagnostic.compiler-error", "continue;"},
+    {"language.diagnostic.source-span", "continue;"},
+    {"language.diagnostic.overflow", "9223372036854775808"},
+    {"language.diagnostic.unknown-libcall", "sys.unknown"},
   };
   char path[PATH_MAX];
   char *source;
+  char libcall_marker[128];
+  const char *marker = NULL;
   if (join_path(path, sizeof path, root, relative) < 0) return false;
   source = read_text(path);
   if (!source) return false;
   for (size_t i = 0; i < sizeof markers / sizeof markers[0]; i++) {
-    size_t contract_length = strlen(contract);
-    size_t suffix_length = strlen(markers[i].suffix);
-    if (contract_length >= suffix_length &&
-        strcmp(contract + contract_length - suffix_length, markers[i].suffix) == 0) {
-      bool found = strstr(source, markers[i].marker) != NULL;
-      free(source);
-      return found;
+    if (strcmp(contract, markers[i].contract) == 0) marker = markers[i].marker;
+  }
+  if (!marker && strncmp(contract, "libcall.", 8u) == 0) {
+    const char *library = contract + 8u;
+    const char *separator = strchr(library, '.');
+    if (separator) {
+      int written = snprintf(libcall_marker, sizeof libcall_marker, "%.*s.%s",
+                             (int)(separator - library), library, separator + 1u);
+      if (written > 0 && (size_t)written < sizeof libcall_marker) marker = libcall_marker;
     }
   }
+  bool found = marker && strstr(source, marker) != NULL;
   free(source);
-  return true;
+  return found;
 }
 
 static const ConformanceCase *case_with_intent(const Manifest *manifest,
@@ -717,6 +775,30 @@ static int validate_manifest(const char *root, const Manifest *manifest) {
           validation_error("missing reference %s for case %s", refs[j], item->id);
           return -1;
         }
+      }
+    }
+    if (item->runtime_status >= 0) {
+      char *expectation = NULL;
+      char *exit_block = NULL;
+      int expected_status;
+      if (join_path(path, sizeof path, root, item->runtime_expectation) < 0 ||
+          !(expectation = read_text(path)) ||
+          !(exit_block = expectation_block(expectation, "exit"))) {
+        free(expectation);
+        validation_error("invalid runtime expectation for case %s", item->id);
+        return -1;
+      }
+      if (parse_expected_status(exit_block, &expected_status) < 0) {
+        free(exit_block);
+        free(expectation);
+        validation_error("invalid runtime exit for case %s", item->id);
+        return -1;
+      }
+      free(exit_block);
+      free(expectation);
+      if (expected_status != item->runtime_status) {
+        validation_error("runtime status mismatch for case %s", item->id);
+        return -1;
       }
     }
   }
@@ -992,12 +1074,16 @@ static void run_case(const char *case_id) {
       char *expected_stdout = expectation_block(expectation, block_name);
       char *expected_stderr = expectation_block(expectation, "stderr");
       char *expected_exit = expectation_block(expectation, "exit");
+      int exit_status;
       TF_ProcessResult result;
       char *args[] = {interpreter, "--loadonly", "--strict-validation",
                       "-i", "items.dat", "-s", "srcroot", "-o", object, NULL};
       TF_ASSERT_TRUE(expected_stdout && expected_stderr && expected_exit);
+      TF_ASSERT_TRUE(parse_expected_status(expected_exit, &exit_status) == 0);
+      TF_ASSERT_I64(item->runtime_status, exit_status);
       TF_ASSERT_TRUE(tf_process_run(args, 15000, &result) == 0);
-      assert_phase(item->id, "runtime", &result, atoi(expected_exit), expected_stdout, expected_stderr, item->runtime_match);
+      assert_phase(item->id, "runtime", &result, item->runtime_status,
+                   expected_stdout, expected_stderr, item->runtime_match);
       free(expected_stdout); free(expected_stderr); free(expected_exit); tf_process_result_destroy(&result);
     }
     free(expectation);
@@ -1072,12 +1158,26 @@ static void malformed_manifest_fails_closed(void) {
                            "case|bad-mode|positive|tests/fixtures/conformance/positive-core.src|conformance.framework.pipeline|0|-|-|exact|0|-|-|signature|invalid|1|0|tests/fixtures/conformance/positive-core.runtime.expected.txt|exact|bad\n");
   expect_manifest_body_rejected(&fixture, "bad-match.manifest",
                            "case|bad-match|positive|tests/fixtures/conformance/positive-core.src|conformance.framework.pipeline|0|-|-|invalid|0|-|-|signature|loadonly|1|0|tests/fixtures/conformance/positive-core.runtime.expected.txt|exact|bad\n");
+  expect_manifest_body_rejected(&fixture, "missing-disassembly-reference.manifest",
+                           "case|missing-disassembly-reference|positive|tests/fixtures/conformance/positive-core.src|conformance.framework.pipeline|0|-|-|exact|0|-|-|signature|loadonly|1|0|tests/fixtures/conformance/positive-core.runtime.expected.txt|exact|bad\n");
+  expect_manifest_body_rejected(&fixture, "missing-runtime-reference.manifest",
+                           "case|missing-runtime-reference|positive|tests/fixtures/conformance/positive-core.src|conformance.framework.pipeline|0|-|-|exact|0|tests/fixtures/conformance/positive-core.disassembly.expected.txt|-|signature|loadonly|1|0|-|exact|bad\n");
+  {
+    int status;
+    TF_ASSERT_TRUE(parse_expected_status("0junk", &status) < 0);
+    TF_ASSERT_TRUE(parse_expected_status("", &status) < 0);
+  }
 
   TF_ASSERT_TRUE(getcwd(root, sizeof root) != NULL);
   TF_ASSERT_TRUE(read_manifest(MANIFEST_PATH, &manifest) == 0);
   free(manifest.cases[0].source);
   manifest.cases[0].source = copy_text("tests/fixtures/conformance/missing.src");
   TF_ASSERT_TRUE(manifest.cases[0].source != NULL);
+  TF_ASSERT_TRUE(validate_manifest(root, &manifest) < 0);
+  free_manifest(&manifest);
+
+  TF_ASSERT_TRUE(read_manifest(MANIFEST_PATH, &manifest) == 0);
+  manifest.cases[0].runtime_status = 1;
   TF_ASSERT_TRUE(validate_manifest(root, &manifest) < 0);
   free_manifest(&manifest);
   TF_ASSERT_TRUE(read_manifest(MANIFEST_PATH, &manifest) == 0);
@@ -1108,6 +1208,22 @@ static void malformed_manifest_fails_closed(void) {
   free(manifest.coverage[0].contract);
   manifest.coverage[0].contract = copy_text("language.unknown-conformance-contract");
   TF_ASSERT_TRUE(manifest.coverage[0].contract != NULL);
+  TF_ASSERT_TRUE(validate_inventory(&manifest, root) < 0);
+  free_manifest(&manifest);
+
+  TF_ASSERT_TRUE(read_manifest(MANIFEST_PATH, &manifest) == 0);
+  for (size_t i = 0; i < manifest.coverage_count; i++) {
+    if (strcmp(manifest.coverage[i].contract, "language.expression.call") == 0) {
+      free(manifest.coverage[i].negative_case);
+      free(manifest.coverage[i].negative_witness);
+      manifest.coverage[i].negative_case = copy_text("negative-parser-unknown");
+      manifest.coverage[i].negative_witness =
+        copy_text("tests/fixtures/conformance/negative/parser-unknown-character.src");
+      TF_ASSERT_TRUE(manifest.coverage[i].negative_case != NULL);
+      TF_ASSERT_TRUE(manifest.coverage[i].negative_witness != NULL);
+      break;
+    }
+  }
   TF_ASSERT_TRUE(validate_inventory(&manifest, root) < 0);
   free_manifest(&manifest);
 

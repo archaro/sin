@@ -73,6 +73,22 @@ def split_refs(value: str) -> list[str]:
     return [item for item in value.split(";") if item]
 
 
+def conformance_descriptor_ids(source: str) -> set[str]:
+    marker = "static const TF_TestDescriptor tests[] = {"
+    if source.count(marker) != 1:
+        fail("conformance descriptor array is missing or ambiguous")
+    remainder = source.split(marker, 1)[1]
+    if "\n};" not in remainder:
+        fail("conformance descriptor array is unterminated")
+    body = remainder.split("\n};", 1)[0]
+    descriptors = set(re.findall(
+        r'^\s*\{"(conformance\.[A-Za-z0-9_.-]+)",', body, re.MULTILINE))
+    initializer_rows = re.findall(r"^\s*\{", body, re.MULTILINE)
+    if not descriptors or len(descriptors) != len(initializer_rows):
+        fail("conformance descriptor array contains an unparseable row")
+    return descriptors
+
+
 def grammar_tokens(parser: str) -> list[str]:
     tokens: list[str] = []
     declarations: dict[str, dict[str, int | str | None]] = {}
@@ -350,8 +366,8 @@ def main() -> int:
         known_tests = expected_tests | extra
         conformance_source = root / "tests/conformance/test_conformance.c"
         try:
-            descriptor_ids = set(re.findall(r'\{"(conformance\.[A-Za-z0-9_.-]+)"',
-                                            conformance_source.read_text(encoding="utf-8")))
+            descriptor_ids = conformance_descriptor_ids(
+                conformance_source.read_text(encoding="utf-8"))
         except OSError as error:
             fail(f"cannot read conformance descriptors: {error}")
         catalog_descriptor_ids = {test_id for test_id in tests if test_id.startswith("conformance.")}

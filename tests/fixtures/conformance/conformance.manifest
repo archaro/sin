@@ -112,10 +112,10 @@ coverage|language.production.layer|positive-structures|tests/fixtures/conformanc
 coverage|language.production.dereference|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.production.deref_content|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.operator.add|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
-coverage|language.operator.subtract|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.operator.subtract|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.operator.multiply|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.operator.divide|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
-coverage|language.operator.modulo|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.operator.modulo|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.operator.comparison|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.operator.boolean|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.literal.integer|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
@@ -171,7 +171,7 @@ coverage|libcall.sys.itemtype|libcall-sys|tests/fixtures/conformance/libcall-sys
 coverage|libcall.sys.childcount|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
 coverage|libcall.sys.rootcount|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
 coverage|libcall.sys.version|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
-coverage|libcall.sys.calleritem|persistence-list-itemref|tests/fixtures/interpret/list-itemref-persist.src|native|-|yes
+coverage|libcall.sys.calleritem|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
 coverage|libcall.sys.paramcount|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
 coverage|libcall.sys.source|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
 coverage|libcall.sys.itemref|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes

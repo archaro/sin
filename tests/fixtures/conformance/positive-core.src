@@ -1,4 +1,8 @@
 sys.log{"CONF-precedence"};
+@conformance_local = 1;
+conformance_assignment = @conformance_local;
+pair = code {@a, @b} ( return @a + @b; );
+pair{1, 2};
 sys.log{#[1 + 2 * 3 == 7, (1 + 2) * 3 == 9]};
 sys.log{"CONF-short-circuit"};
 seen = 0;
