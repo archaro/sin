@@ -44,18 +44,6 @@ static void free_entries(Entry *entries, size_t count) {
   free(entries);
 }
 
-static bool has_tag(const char *tags, const char *wanted) {
-  const char *p = tags;
-  size_t wanted_length = strlen(wanted);
-  while (p && *p) {
-    const char *end = strchr(p, ',');
-    size_t length = end ? (size_t)(end - p) : strlen(p);
-    if (length == wanted_length && strncmp(p, wanted, length) == 0) return true;
-    p = end ? end + 1 : NULL;
-  }
-  return false;
-}
-
 static int parse_listing(const char *binary, const char *text, Entry **entries,
                          size_t *count, char ***all_ids, size_t *all_count) {
   const char *line = text;
@@ -115,11 +103,7 @@ static int parse_listing(const char *binary, const char *text, Entry **entries,
         free(record); return -1;
       }
       (*all_count)++;
-      if (has_tag(entry->tags, "helper")) {
-        free(entry->binary); free(entry->id); free(entry->tags); free(entry->contracts);
-      } else {
-        (*count)++;
-      }
+      (*count)++;
       free(record);
     }
     line = end ? end + 1 : NULL;

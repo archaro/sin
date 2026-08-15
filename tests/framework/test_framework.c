@@ -205,6 +205,10 @@ static int tf_collect(pid_t pid, int out_fd, int err_fd, uint64_t deadline,
     if (tf_wait_blocking(pid, &status) == 0) reaped = true;
   }
   if (!reaped && tf_wait_blocking(pid, &status) < 0) wait_failed = true;
+  /* A direct child may have exited while descendants closed or redirected
+   * both capture descriptors. Reap status first, then terminate the child's
+   * process group so no descendant survives a successful run. */
+  if (!group_killed) { (void)kill(-pid, SIGKILL); group_killed = true; }
   if (!wait_failed && reaped && WIFEXITED(status)) { result->exited = true; result->exit_status = WEXITSTATUS(status); }
   if (!wait_failed && reaped && WIFSIGNALED(status)) { result->signaled = true; result->signal_number = WTERMSIG(status); }
   return wait_failed || result->capture_failed ? -1 : 0;
@@ -337,7 +341,10 @@ static int tf_source_write(const char *source, FILE *file) {
   if (g_io_write_failure) return -1;
   return fputs(source, file) == EOF ? -1 : 0;
 }
-static int tf_source_close(FILE *file) { return g_io_close_failure ? -1 : fclose(file); }
+static int tf_source_close(FILE *file) {
+  int result = fclose(file);
+  return g_io_close_failure ? -1 : result;
+}
 static bool tf_sync(FILE *file, const char *path) {
   (void)file; (void)path;
   return !g_io_sync_failure;
@@ -490,7 +497,7 @@ int tf_main(int argc, char **argv, const TF_TestDescriptor *tests,
     if (!test) { (void)fprintf(stderr, "TF|ERROR|unknown ID|%s\n", argv[2]); return 2; }
     pass = tf_run_one(test) == 0;
     (void)snprintf(duration, sizeof duration, "%llu", (unsigned long long)(tf_now_ms() - start));
-    tf_write_record("RESULT", test->id, pass ? "PASS" : "FAIL", duration, "");
+    tf_write_record("RESULT", test->id, pass ? "PASS" : "FAIL", duration, test->tags);
     tf_write_record("TOTAL", "selected", "1", pass ? "1" : "0", pass ? "0" : "1");
     return pass ? 0 : 1;
   }

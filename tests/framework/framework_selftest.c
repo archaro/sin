@@ -12,52 +12,6 @@
 #include "item.h"
 #include "memory.h"
 
-static void assert_fail_bool(void) { TF_ASSERT_TRUE(false); }
-static void assert_fail_i64(void) { TF_ASSERT_I64(1, 2); }
-static void assert_fail_u64(void) { TF_ASSERT_U64(1, 2); }
-static void assert_fail_str(void) { TF_ASSERT_STR("expected", "actual"); }
-static void assert_fail_bytes(void) {
-  const unsigned char a[] = {1, 2}; const unsigned char b[] = {1, 3};
-  TF_ASSERT_BYTES(a, sizeof a, b, sizeof b);
-}
-static void assert_fail_float(void) { TF_ASSERT_FLOAT_BITS(UINT64_C(1), UINT64_C(2)); }
-static void assert_fail_diag(void) { TF_ASSERT_DIAGNOSTIC("needle", "hay"); }
-static void crash_test(void) { raise(SIGABRT); }
-static void hang_test(void) { for (;;) pause(); }
-static void output_helper(void) { (void)printf("visible stdout\n"); (void)fprintf(stderr, "visible stderr\n"); }
-static void fixture_failure_helper(void) {
-  const char *marker = getenv("TF_FIXTURE_MARKER");
-  TF_Fixture fixture;
-  tf_fixture_init(&fixture);
-  if (marker) {
-    FILE *file = fopen(marker, "w");
-    if (file) { (void)fprintf(file, "%s", tf_fixture_path(&fixture)); (void)fclose(file); }
-  }
-  TF_ASSERT_TRUE(false);
-}
-static void fixture_implicit_helper(void) {
-  const char *marker = getenv("TF_FIXTURE_MARKER");
-  TF_Fixture fixture;
-  tf_fixture_init(&fixture);
-  if (marker) {
-    FILE *file = fopen(marker, "w");
-    if (file) { (void)fprintf(file, "%s", tf_fixture_path(&fixture)); (void)fclose(file); }
-  }
-}
-static void fixture_multiple_helper(void) {
-  const char *marker = getenv("TF_FIXTURE_MARKER");
-  TF_Fixture first, second;
-  tf_fixture_init(&first); tf_fixture_init(&second);
-  if (marker) {
-    FILE *file = fopen(marker, "w");
-    if (file) { (void)fprintf(file, "%s\n%s", tf_fixture_path(&first), tf_fixture_path(&second)); (void)fclose(file); }
-  }
-}
-static void assert_process_capture_failure(void) {
-  TF_ProcessResult result = {.exited = true, .exit_status = 0, .capture_failed = true};
-  TF_ASSERT_PROCESS(&result, 0);
-}
-
 static void assertion_equal(void) {
   const unsigned char bytes[] = {0, 1, 2};
   TF_ASSERT_TRUE(true); TF_ASSERT_FALSE(false);
@@ -68,7 +22,8 @@ static void assertion_equal(void) {
 }
 
 static void assertion_diagnostics(void) {
-  const char *program = tf_program_path();
+  const char *program = getenv("TF_FRAMEWORK_NEGATIVE");
+  TF_ASSERT_TRUE(program != NULL && program[0] != '\0');
   const char *ids[] = {"assert_fail_bool", "assert_fail_i64", "assert_fail_u64",
                        "assert_fail_str", "assert_fail_bytes", "assert_fail_float",
                        "assert_fail_diag", "assert_process_capture_failure"};
@@ -156,6 +111,34 @@ static void exited_descendant_cleanup(void) {
   tf_fixture_cleanup(&fixture);
 }
 
+static void normal_group_cleanup(void) {
+  TF_Fixture fixture;
+  char marker[4096], command[8192];
+  char *args[4];
+  TF_ProcessResult result;
+  tf_fixture_init(&fixture);
+  TF_ASSERT_TRUE(tf_fixture_file(&fixture, "pid", marker, sizeof marker) == 0);
+  (void)snprintf(command, sizeof command, "sleep 30 >/dev/null 2>/dev/null & echo $! > '%s'; exit 0", marker);
+  args[0] = "/bin/sh"; args[1] = "-c"; args[2] = command; args[3] = NULL;
+  TF_ASSERT_TRUE(tf_process_run(args, 1000, &result) == 0);
+  TF_ASSERT_PROCESS(&result, 0);
+  tf_process_result_destroy(&result);
+  FILE *pid_file = fopen(marker, "r");
+  long descendant = -1;
+  if (pid_file) { (void)fscanf(pid_file, "%ld", &descendant); (void)fclose(pid_file); }
+  if (descendant > 0) {
+    struct timespec pause_time = {0, 10000000L};
+    bool gone = false;
+    for (int attempt = 0; attempt < 20; attempt++) {
+      errno = 0;
+      if (kill((pid_t)descendant, 0) < 0 && errno == ESRCH) { gone = true; break; }
+      (void)nanosleep(&pause_time, NULL);
+    }
+    TF_ASSERT_TRUE(gone);
+  }
+  tf_fixture_cleanup(&fixture);
+}
+
 static void crash_isolation(void) {
   char *args[] = {"/bin/sh", "-c", "kill -ABRT $$", NULL};
   TF_ProcessResult result;
@@ -182,7 +165,7 @@ static void fixture_cleanup(void) {
 static void fixture_failure_cleanup(void) {
   TF_Fixture fixture;
   char marker[4096], child_path[4096];
-  char *args[] = {(char *)tf_program_path(), "--run", "fixture_failure_helper", NULL};
+  char *args[] = {(char *)getenv("TF_FRAMEWORK_NEGATIVE"), "--run", "fixture_failure_helper", NULL};
   TF_ProcessResult result;
   FILE *file;
   tf_fixture_init(&fixture);
@@ -204,8 +187,8 @@ static void fixture_failure_cleanup(void) {
 static void fixture_implicit_and_multiple_cleanup(void) {
   TF_Fixture fixture;
   char marker[4096], paths[8192];
-  char *implicit_args[] = {(char *)tf_program_path(), "--run", "fixture_implicit_helper", NULL};
-  char *multiple_args[] = {(char *)tf_program_path(), "--run", "fixture_multiple_helper", NULL};
+  char *implicit_args[] = {(char *)getenv("TF_FRAMEWORK_NEGATIVE"), "--run", "fixture_implicit_helper", NULL};
+  char *multiple_args[] = {(char *)getenv("TF_FRAMEWORK_NEGATIVE"), "--run", "fixture_multiple_helper", NULL};
   TF_ProcessResult result;
   FILE *file;
   tf_fixture_init(&fixture);
@@ -243,7 +226,7 @@ static void fixture_path_validation(void) {
 }
 
 static void output_replay(void) {
-  char *args[] = {(char *)tf_program_path(), "--run", "output_helper", NULL};
+  char *args[] = {(char *)getenv("TF_FRAMEWORK_NEGATIVE"), "--run", "output_helper", NULL};
   TF_ProcessResult result;
   TF_ASSERT_TRUE(tf_process_run(args, 1000, &result) == 0);
   TF_ASSERT_TRUE(result.exited && result.exit_status == 0);
@@ -267,12 +250,37 @@ static void malformed_metadata(void) {
   static const TF_TestDescriptor null_tag[] = {{"valid", assertion_equal, NULL, 100, "contract"}};
   static const TF_TestDescriptor empty_contract[] = {{"valid", assertion_equal, "", 100, ""}};
   static const TF_TestDescriptor null_fn[] = {{"valid", NULL, "", 100, "contract"}};
+  static const TF_TestDescriptor bad_id[] = {{"bad id", assertion_equal, "", 100, "contract"}};
+  static const TF_TestDescriptor null_id[] = {{NULL, assertion_equal, "", 100, "contract"}};
+  static const TF_TestDescriptor bad_contract[] = {{"valid", assertion_equal, "", 100, "bad contract"}};
+  static const TF_TestDescriptor null_contract[] = {{"valid", assertion_equal, "", 100, NULL}};
+  static const TF_TestDescriptor comma_tags[] = {{"valid", assertion_equal, ",tag", 100, "contract"}};
+  static const TF_TestDescriptor trailing_tags[] = {{"valid", assertion_equal, "tag,", 100, "contract"}};
+  static const TF_TestDescriptor doubled_tags[] = {{"valid", assertion_equal, "tag,,tag", 100, "contract"}};
+  static const TF_TestDescriptor comma_contracts[] = {{"valid", assertion_equal, "", 100, ",contract"}};
+  static const TF_TestDescriptor trailing_contracts[] = {{"valid", assertion_equal, "", 100, "contract,"}};
+  static const TF_TestDescriptor doubled_contracts[] = {{"valid", assertion_equal, "", 100, "a,,b"}};
+#define ASSERT_BAD(metadata) do { memset(detail, 0, sizeof detail); TF_ASSERT_TRUE(tf_validate_descriptors((metadata), 1, detail, sizeof detail) != 0); TF_ASSERT_TRUE(detail[0] != '\0'); } while (0)
   TF_ASSERT_TRUE(tf_validate_descriptors(duplicate, 2, detail, sizeof detail) != 0);
   TF_ASSERT_TRUE(tf_validate_descriptors(empty_id, 1, detail, sizeof detail) != 0);
   TF_ASSERT_TRUE(tf_validate_descriptors(empty_tag, 1, detail, sizeof detail) != 0);
   TF_ASSERT_TRUE(tf_validate_descriptors(null_tag, 1, detail, sizeof detail) != 0);
   TF_ASSERT_TRUE(tf_validate_descriptors(empty_contract, 1, detail, sizeof detail) != 0);
   TF_ASSERT_TRUE(tf_validate_descriptors(null_fn, 1, detail, sizeof detail) != 0);
+  ASSERT_BAD(bad_id); ASSERT_BAD(null_id); ASSERT_BAD(bad_contract); ASSERT_BAD(null_contract);
+  ASSERT_BAD(comma_tags); ASSERT_BAD(trailing_tags); ASSERT_BAD(doubled_tags);
+  ASSERT_BAD(comma_contracts); ASSERT_BAD(trailing_contracts); ASSERT_BAD(doubled_contracts);
+#undef ASSERT_BAD
+}
+
+static void tagged_result_record(void) {
+  char *args[] = {(char *)tf_program_path(), "--run", "serial_exclusive", NULL};
+  TF_ProcessResult result;
+  TF_ASSERT_TRUE(tf_process_run(args, 1000, &result) == 0);
+  TF_ASSERT_PROCESS(&result, 0);
+  TF_ASSERT_DIAGNOSTIC("TF|RESULT|serial_exclusive|PASS", result.stdout_data);
+  TF_ASSERT_DIAGNOSTIC("|exclusive", result.stdout_data);
+  tf_process_result_destroy(&result);
 }
 
 static void hooks_reset(void) {
@@ -305,7 +313,9 @@ static void hooks_io_behavior(void) {
   tf_reset_hooks();
   TF_ASSERT_TRUE(save_itemsource_in_srcroot(mutation.item, "source", source_root));
   tf_io_failures(false, true, false);
-  TF_ASSERT_FALSE(save_itemsource_in_srcroot(mutation.item, "source", source_root));
+  for (int attempt = 0; attempt < 256; attempt++) {
+    TF_ASSERT_FALSE(save_itemsource_in_srcroot(mutation.item, "source", source_root));
+  }
   tf_reset_hooks();
   TF_ASSERT_TRUE(save_itemsource_in_srcroot(mutation.item, "source", source_root));
   tf_io_failures(false, false, true);
@@ -322,7 +332,7 @@ static void runner_discovery_and_jobs(void) {
   TF_Fixture fixture;
   char log_path[4096], lock_path[4096], log[8192];
   FILE *log_file;
-  if (!runner || !runner[0]) return;
+  if (!runner || !runner[0] || getenv("TF_RUNNER_NESTED")) return;
   {
     tf_fixture_init(&fixture);
     TF_ASSERT_TRUE(tf_fixture_file(&fixture, "schedule.log", log_path, sizeof log_path) == 0);
@@ -331,11 +341,13 @@ static void runner_discovery_and_jobs(void) {
     TF_ASSERT_TRUE(setenv("TF_SCHEDULE_LOCK", lock_path, 1) == 0);
     char *runner_args[] = {(char *)runner, "--jobs", "2", (char *)tf_program_path(), NULL};
     (void)setenv("TEST_JOBS", "2", 1);
+    (void)setenv("TF_RUNNER_NESTED", "1", 1);
     TF_ASSERT_TRUE(tf_process_run(runner_args, 10000, &result) == 0);
+    (void)unsetenv("TF_RUNNER_NESTED");
     (void)unsetenv("TF_SCHEDULE_LOG"); (void)unsetenv("TF_SCHEDULE_LOCK");
   }
   TF_ASSERT_PROCESS(&result, 0);
-  TF_ASSERT_DIAGNOSTIC("TF|TOTAL|all|19|19|0", result.stdout_data);
+  TF_ASSERT_DIAGNOSTIC("TF|TOTAL|all|22|22|0", result.stdout_data);
   tf_process_result_destroy(&result);
   log_file = fopen(log_path, "r");
   TF_ASSERT_TRUE(log_file != NULL);
@@ -373,6 +385,7 @@ static const TF_TestDescriptor tests[] = {
   {"process_capture", process_capture, "", 2000, "framework.process"},
   {"timeout_group_cleanup", timeout_and_group_cleanup, "exclusive", 3000, "framework.process"},
   {"exited_descendant_cleanup", exited_descendant_cleanup, "exclusive", 3000, "framework.process"},
+  {"normal_group_cleanup", normal_group_cleanup, "exclusive", 3000, "framework.process"},
   {"crash_isolation", crash_isolation, "", 2000, "framework.process"},
   {"fixture_cleanup", fixture_cleanup, "", 2000, "framework.fixtures"},
   {"fixture_failure_cleanup", fixture_failure_cleanup, "", 3000, "framework.fixtures"},
@@ -382,26 +395,13 @@ static const TF_TestDescriptor tests[] = {
   {"malformed_metadata", malformed_metadata, "", 2000, "framework.metadata"},
   {"hooks_reset", hooks_reset, "exclusive", 2000, "framework.hooks"},
   {"hooks_io_behavior", hooks_io_behavior, "exclusive", 5000, "framework.hooks"},
-  {"runner_discovery_and_jobs", runner_discovery_and_jobs, "helper", 12000, "framework.runner"},
+  {"runner_discovery_and_jobs", runner_discovery_and_jobs, "", 12000, "framework.runner"},
+  {"tagged_result_record", tagged_result_record, "", 3000, "framework.output"},
   {"parallel_delay_a", schedule_probe, "", 2000, "framework.runner"},
   {"parallel_delay_b", schedule_probe, "", 2000, "framework.runner"},
   {"serial_exclusive", schedule_probe, "exclusive", 2000, "framework.runner"},
   {"serial_network", schedule_probe, "network", 2000, "framework.runner"},
   {"serial_benchmark", schedule_probe, "benchmark", 2000, "framework.runner"},
-  {"assert_fail_bool", assert_fail_bool, "helper", 500, "framework.assertions"},
-  {"assert_fail_i64", assert_fail_i64, "helper", 500, "framework.assertions"},
-  {"assert_fail_u64", assert_fail_u64, "helper", 500, "framework.assertions"},
-  {"assert_fail_str", assert_fail_str, "helper", 500, "framework.assertions"},
-  {"assert_fail_bytes", assert_fail_bytes, "helper", 500, "framework.assertions"},
-  {"assert_fail_float", assert_fail_float, "helper", 500, "framework.assertions"},
-  {"assert_fail_diag", assert_fail_diag, "helper", 500, "framework.assertions"},
-  {"crash", crash_test, "helper", 500, "framework.process"},
-  {"output_helper", output_helper, "helper", 500, "framework.output"},
-  {"fixture_failure_helper", fixture_failure_helper, "helper", 1000, "framework.fixtures"},
-  {"fixture_implicit_helper", fixture_implicit_helper, "helper", 1000, "framework.fixtures"},
-  {"fixture_multiple_helper", fixture_multiple_helper, "helper", 1000, "framework.fixtures"},
-  {"assert_process_capture_failure", assert_process_capture_failure, "helper", 500, "framework.process"},
-  {"hang", hang_test, "helper", 500, "framework.process"}
 };
 
 int main(int argc, char **argv) {

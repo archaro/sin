@@ -80,11 +80,13 @@ FRAMEWORK_DIR := $(TEST_DIR)/framework
 FRAMEWORK_SELF_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-selftest
 FRAMEWORK_RUNNER_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-runner
 FRAMEWORK_DUP_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-duplicate-fixture
+FRAMEWORK_NEG_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-negative-fixture
 FRAMEWORK_SOURCES := $(FRAMEWORK_DIR)/test_framework.c $(FRAMEWORK_DIR)/framework_config.c
 FRAMEWORK_SELF_SOURCES := $(FRAMEWORK_DIR)/framework_selftest.c
 FRAMEWORK_RUNNER_SOURCES := $(FRAMEWORK_DIR)/test_runner.c
 FRAMEWORK_DUP_SOURCES := $(FRAMEWORK_DIR)/framework_duplicate_fixture.c
-FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN)
+FRAMEWORK_NEG_SOURCES := $(FRAMEWORK_DIR)/framework_negative_fixture.c
+FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN)
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -331,8 +333,8 @@ test: inventory-audit $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) scomp si
 	@$(MAKE) --no-print-directory _test
 
 test-framework: $(FRAMEWORK_BINS)
-	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN)
-	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" ./$(FRAMEWORK_SELF_BIN) --run runner_discovery_and_jobs
+	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN)
+	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" ./$(FRAMEWORK_SELF_BIN) --run runner_discovery_and_jobs
 	@tmp_file="$$(mktemp)"; trap 'rm -f "$$tmp_file"' EXIT; \
 		if ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(FRAMEWORK_DUP_BIN) >"$$tmp_file" 2>&1; then \
 			cat "$$tmp_file"; printf '%s\n' 'duplicate discovery unexpectedly succeeded' >&2; exit 1; \
@@ -447,6 +449,10 @@ $(FRAMEWORK_RUNNER_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_RUNNER_SOURCES) $(FRAM
 $(FRAMEWORK_DUP_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_DUP_SOURCES) $(FRAMEWORK_DIR)/test_framework.h $(SRC_DIR)/config.h $(SRC_DIR)/itemstore/item.h $(SRC_DIR)/itemstore/item_internal.h $(SRC_DIR)/common/memory.h $(LIB)
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -o $@ $(FRAMEWORK_SOURCES) $(FRAMEWORK_DUP_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
+
+$(FRAMEWORK_NEG_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_NEG_SOURCES) $(FRAMEWORK_DIR)/test_framework.h $(SRC_DIR)/config.h $(SRC_DIR)/itemstore/item.h $(SRC_DIR)/itemstore/item_internal.h $(SRC_DIR)/common/memory.h $(LIB)
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -o $@ $(FRAMEWORK_SOURCES) $(FRAMEWORK_NEG_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)

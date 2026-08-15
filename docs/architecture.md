@@ -70,6 +70,11 @@ errors. The runner similarly returns 0 for an all-pass aggregate, 1 for any
 selected failure, and 2 for invalid options, invalid `TEST_JOBS`, discovery,
 or record errors. Captured output is replayed only for failures unless
 `TF_VERBOSE=1` is set.
+The normal self-test translation unit contains only expected-to-pass
+descriptors. Deliberately failing/crashing/hanging fixtures live in the
+separate `framework-negative-fixture` translation unit and are addressed by
+ID through `TF_FRAMEWORK_NEGATIVE`; it is listed and run directly for focused
+checks, but is not included in the ordinary all-pass aggregate.
 
 ## Module Boundaries
 
