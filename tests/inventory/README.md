@@ -29,4 +29,6 @@ make inventory-audit-self-test
 
 Catalogs are reviewed source data. Normal test commands never rewrite catalog
 files; canonical-definition changes require an intentional catalog edit and a
-fresh audit.
+fresh audit. During the conformance migration, the audit permits only
+`conformance.*` descriptor test IDs in addition to the legacy ledger IDs; those
+edges remain fully reciprocal and unknown namespaces are rejected.

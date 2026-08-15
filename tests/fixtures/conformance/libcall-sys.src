@@ -1,0 +1,19 @@
+sys.log{"CONF-libcall-sys"};
+sys.log{#[
+  sys.exists{"missing"} == false,
+  sys.delete{"missing"} == nil,
+  sys.nthname{"missing", 0} == nil,
+  sys.rootname{0} != nil,
+  sys.thisitem != nil,
+  sys.parentitem == nil,
+  sys.itemtype{"missing"} == nil,
+  sys.childcount{"missing"} == nil,
+  sys.itemref{"missing"} != nil,
+  sys.itemname{&missing} == "missing",
+  sys.fetch{&missing} == nil,
+  sys.source{"missing"} == nil,
+  sys.rootcount >= 0,
+  sys.version != "",
+  sys.calleritem == nil,
+  sys.paramcount{"missing"} == nil
+]};

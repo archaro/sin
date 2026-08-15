@@ -6,6 +6,13 @@ Reference-derived conformance fixtures live under `conformance/`; their
 traceability map is documented in
 [`conformance/README.md`](conformance/README.md).
 
+The conformance manifest is read-only test input. `make test-conformance` and
+`make test-framework` validate its schema, inventory coverage, checked-in source
+witnesses, and expectation references before driving `scomp`, `sdiss`, and
+`sin`. They never regenerate or rewrite fixture files. Use the deliberate
+manual regeneration procedure in `conformance/README.md` when a language or
+runtime contract intentionally changes.
+
 ## Golden fixture classes
 
 1. **Source fixtures** (`*.src`)

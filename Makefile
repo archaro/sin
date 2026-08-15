@@ -81,12 +81,16 @@ FRAMEWORK_SELF_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-selftest
 FRAMEWORK_RUNNER_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-runner
 FRAMEWORK_DUP_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-duplicate-fixture
 FRAMEWORK_NEG_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-negative-fixture
+CONFORMANCE_DIR := $(TEST_DIR)/conformance
+CONFORMANCE_BIN := $(OBJ_DIR)/$(CONFORMANCE_DIR)/test-conformance
+CONFORMANCE_MANIFEST := $(TEST_DIR)/fixtures/conformance/conformance.manifest
+CONFORMANCE_FIXTURES := $(CONFORMANCE_MANIFEST) $(wildcard $(TEST_DIR)/fixtures/conformance/*.src $(TEST_DIR)/fixtures/conformance/*.txt $(TEST_DIR)/fixtures/conformance/negative/*.src $(TEST_DIR)/fixtures/conformance/negative/*.txt)
 FRAMEWORK_SOURCES := $(FRAMEWORK_DIR)/test_framework.c $(FRAMEWORK_DIR)/framework_config.c
 FRAMEWORK_SELF_SOURCES := $(FRAMEWORK_DIR)/framework_selftest.c
 FRAMEWORK_RUNNER_SOURCES := $(FRAMEWORK_DIR)/test_runner.c
 FRAMEWORK_DUP_SOURCES := $(FRAMEWORK_DIR)/framework_duplicate_fixture.c
 FRAMEWORK_NEG_SOURCES := $(FRAMEWORK_DIR)/framework_negative_fixture.c
-FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN)
+FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN) $(CONFORMANCE_BIN)
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -200,7 +204,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
 
 .PHONY: all lib clean help debug release sanitize compiledb FORCE_BUILD
-.PHONY: test test-framework framework-list inventory-audit inventory-audit-self-test test-network test-chat-smoke test-output-contract test-build-switch test-strict test-benchmark test-release test-warnings test-asan test-lsan
+.PHONY: test test-framework test-conformance framework-list inventory-audit inventory-audit-self-test test-network test-chat-smoke test-output-contract test-build-switch test-strict test-benchmark test-release test-warnings test-asan test-lsan
 .PHONY: _test _test-harness _test-network _test-chat-smoke _test-output-contract _test-build-switch _test-strict _test-benchmark
 .PHONY: _test-warnings _test-release _test-asan _test-lsan
 .PHONY: fuzz-build fuzz-corpora fuzz-smoke fuzz-smoke-run
@@ -254,6 +258,7 @@ help:
 		'  Successful test targets print concise totals; failures replay captured diagnostics' \
 		'  test             Build debug artifacts and run network + combined core/compiler/runtime suite' \
 		'  test-framework   Build and run the self-contained C17 framework tests' \
+		'  test-conformance  Run fixture-driven source-to-runtime conformance cases' \
 		'  inventory-audit  Validate checked-in language, bytecode, API, libcall, executable, and test catalogs' \
 		'  test-network     Build and run network tests only' \
 		'  test-chat-smoke  Run the real chat example through localhost' \
@@ -333,12 +338,15 @@ test: inventory-audit $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) scomp si
 	@$(MAKE) --no-print-directory _test
 
 test-framework: $(FRAMEWORK_BINS)
-	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN)
+	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(CONFORMANCE_BIN)
 	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" ./$(FRAMEWORK_SELF_BIN) --run runner_discovery_and_jobs
 	@tmp_file="$$(mktemp)"; trap 'rm -f "$$tmp_file"' EXIT; \
 		if ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(FRAMEWORK_DUP_BIN) >"$$tmp_file" 2>&1; then \
 			cat "$$tmp_file"; printf '%s\n' 'duplicate discovery unexpectedly succeeded' >&2; exit 1; \
 		fi; grep -F 'TF|ERROR|discovery' "$$tmp_file" >/dev/null
+
+test-conformance: $(CONFORMANCE_BIN) $(FRAMEWORK_RUNNER_BIN) scomp sdiss sin
+	@./$(FRAMEWORK_RUNNER_BIN) ./$(CONFORMANCE_BIN)
 
 framework-list: $(FRAMEWORK_BINS)
 	@./$(FRAMEWORK_SELF_BIN) --list
@@ -453,6 +461,10 @@ $(FRAMEWORK_DUP_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_DUP_SOURCES) $(FRAMEWORK_
 $(FRAMEWORK_NEG_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_NEG_SOURCES) $(FRAMEWORK_DIR)/test_framework.h $(SRC_DIR)/config.h $(SRC_DIR)/itemstore/item.h $(SRC_DIR)/itemstore/item_internal.h $(SRC_DIR)/common/memory.h $(LIB)
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -o $@ $(FRAMEWORK_SOURCES) $(FRAMEWORK_NEG_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
+
+$(CONFORMANCE_BIN): $(FRAMEWORK_SOURCES) $(CONFORMANCE_DIR)/test_conformance.c $(FRAMEWORK_DIR)/test_framework.h $(CONFORMANCE_FIXTURES) $(TEST_DIR)/fixtures/interpret/list-itemref-persist.src $(TEST_DIR)/inventory/language.csv $(TEST_DIR)/inventory/libcalls.csv $(TEST_DIR)/inventory/contracts.csv $(TEST_DIR)/inventory/tests.csv $(LIB) scomp sdiss sin
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -o $@ $(FRAMEWORK_SOURCES) $(CONFORMANCE_DIR)/test_conformance.c $(LIB) $(LDFLAGS) $(LIBS)
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)

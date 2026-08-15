@@ -1,0 +1,207 @@
+SINISTRA-CONFORMANCE|1|case-v1|coverage-v1|exclude-v1
+# case|id|intent|source|contract-tags|compile-status|compile-stdout|compile-stderr|compile-match|disassembly-status|disassembly-stdout|disassembly-stderr|disassembly-match|runtime-mode|runtime-runs|runtime-status|runtime-expectation|runtime-match|notes
+case|positive-core|positive|tests/fixtures/conformance/positive-core.src|conformance.framework.pipeline|0|-|-|exact|0|tests/fixtures/conformance/positive-core.disassembly.expected.txt|-|signature|loadonly|1|0|tests/fixtures/conformance/positive-core.runtime.expected.txt|contains|full source-to-runtime language witness
+case|positive-structures|positive|tests/fixtures/conformance/positive-structures.src|conformance.framework.pipeline|0|-|-|exact|0|tests/fixtures/conformance/positive-structures.disassembly.expected.txt|-|signature|loadonly|1|0|tests/fixtures/conformance/positive-structures.expected.txt|contains|control-flow,boundary,and item-syntax source witness
+case|libcall-sys|positive|tests/fixtures/conformance/libcall-sys.src|conformance.framework.libcall|0|-|-|exact|0|tests/fixtures/conformance/libcall-sys.disassembly.expected.txt|-|signature|loadonly|1|0|tests/fixtures/conformance/libcall-sys.expected.txt|contains|deterministic sys introspection libcalls
+case|libcall-list|positive|tests/fixtures/conformance/libcall-list.src|conformance.framework.libcall|0|-|-|exact|0|tests/fixtures/conformance/libcall-list.disassembly.expected.txt|-|signature|loadonly|1|0|tests/fixtures/conformance/libcall-list.expected.txt|contains|deterministic list transformation libcalls
+case|libcall-str|positive|tests/fixtures/conformance/libcall-str.src|conformance.framework.libcall|0|-|-|exact|0|tests/fixtures/conformance/libcall-str.disassembly.expected.txt|-|signature|loadonly|1|0|tests/fixtures/conformance/libcall-str.expected.txt|contains|deterministic string libcalls
+case|libcall-task|positive|tests/fixtures/conformance/libcall-task.src|conformance.framework.libcall|0|-|-|exact|0|tests/fixtures/conformance/libcall-task.disassembly.expected.txt|-|signature|loadonly|1|0|tests/fixtures/conformance/libcall-task.expected.txt|contains|load-only task introspection libcalls
+case|persistence-list-itemref|positive|tests/fixtures/interpret/list-itemref-persist.src|conformance.framework.persistence|0|-|-|exact|0|tests/fixtures/conformance/persistence-list-itemref.disassembly.expected.txt|-|signature|loadonly|2|0|tests/fixtures/conformance/persistence.runtime.expected.txt|contains|two load-only runs share one itemstore
+case|negative-parser-unknown|negative|tests/fixtures/conformance/negative/parser-unknown-character.src|conformance.framework.negative|1|-|tests/fixtures/conformance/negative-parser.diag.txt|contains|skip|-|-|skip|skip|0|skip|-|skip|lexer rejection
+case|negative-parser-nul|negative|tests/fixtures/conformance/negative/parser-nul-escape.src|conformance.framework.negative|1|-|tests/fixtures/conformance/negative-parser.diag.txt|contains|skip|-|-|skip|skip|0|skip|-|skip|lexer rejection
+case|negative-parser-trailing-comma|negative|tests/fixtures/conformance/negative/parser-trailing-comma.src|conformance.framework.negative|1|-|tests/fixtures/conformance/negative-parser.diag.txt|contains|skip|-|-|skip|skip|0|skip|-|skip|parser rejection
+case|negative-parser-overflow|negative|tests/fixtures/conformance/negative/parser-integer-overflow.src|conformance.framework.negative|1|-|tests/fixtures/conformance/negative-parser.diag.txt|contains|skip|-|-|skip|skip|0|skip|-|skip|literal boundary rejection
+case|negative-parser-foreach|negative|tests/fixtures/conformance/negative/parser-foreach-nonlocal-iterator.src|conformance.framework.negative|1|-|tests/fixtures/conformance/negative-parser.diag.txt|contains|skip|-|-|skip|skip|0|skip|-|skip|iterator syntax rejection
+case|negative-semantic-break|negative|tests/fixtures/conformance/negative/semantic-break-outside-loop.src|conformance.framework.negative|1|-|tests/fixtures/conformance/negative-semantic.diag.txt|contains|skip|-|-|skip|skip|0|skip|-|skip|semantic context rejection
+case|negative-semantic-local|negative|tests/fixtures/conformance/negative/semantic-local-before-definition.src|conformance.framework.negative|1|-|tests/fixtures/conformance/negative-semantic.diag.txt|contains|skip|-|-|skip|skip|0|skip|-|skip|semantic definition-order rejection
+case|negative-unknown-libcall|negative|tests/fixtures/conformance/negative-unknown-libcall.src|conformance.framework.negative|1|-|tests/fixtures/conformance/negative-unknown-libcall.diag.txt|contains|skip|-|-|skip|skip|0|skip|-|skip|unknown libcall rejection
+case|negative-language-bundle|negative|tests/fixtures/conformance/negative-language-bundle.src|conformance.framework.negative|1|-|tests/fixtures/conformance/negative-language-bundle.diag.txt|contains|skip|-|-|skip|skip|0|skip|-|skip|negative control and syntax witness
+exclude|language.diagnostic.allocation-error|allocation failures remain covered by native failure-path tests
+exclude|libcall.sys.backup|writes itemstore backups; exercised by native persistence tests
+exclude|libcall.sys.shutdown|stops the runtime event loop; unsafe in load-only conformance
+exclude|libcall.sys.abort|aborts runtime shutdown state; unsafe in load-only conformance
+exclude|libcall.net.input|requires network input transport; covered by native network tests
+exclude|libcall.net.write|requires network transport; covered by native network tests
+exclude|libcall.net.ditch|requires network transport; covered by native network tests
+exclude|libcall.net.flush|requires network transport; covered by native network tests
+exclude|libcall.net.echo|requires network transport; covered by native network tests
+exclude|libcall.net.maxlines|requires network transport; covered by native network tests
+exclude|libcall.net.connected|requires network transport; covered by native network tests
+exclude|libcall.net.address|requires network transport; covered by native network tests
+exclude|libcall.task.newgametask|schedules an external timer task; covered by native runtime tests
+exclude|libcall.task.killtask|mutates task scheduling state; covered by native runtime tests
+exclude|libcall.sys.now|wall-clock output is nondeterministic; covered by native runtime tests
+exclude|libcall.sys.monotime|monotonic-clock output is nondeterministic; covered by native runtime tests
+exclude|libcall.sys.compile|nested-compile source currently fails mandatory strict verifier stack-flow validation; covered by legacy.unified.runtime.test_sys_compile_libcall_runtime and interpreter source-integration tests
+coverage|libcall.sys.save|persistence-list-itemref|tests/fixtures/interpret/list-itemref-persist.src|native|-|yes
+coverage|libcall.sys.call|persistence-list-itemref|tests/fixtures/interpret/list-itemref-persist.src|native|-|yes
+coverage|language.token.tinteger|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tfloat|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tstringlit|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tlocal|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tlayer|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tlibname|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tcodebody|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tunknownchar|negative-parser-unknown|tests/fixtures/conformance/negative/parser-unknown-character.src|negative-parser-unknown|tests/fixtures/conformance/negative/parser-unknown-character.src|no
+coverage|language.token.ttrue|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tfalse|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tnil|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tliststart|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.titemref|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tbreak|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tcontinue|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tsemi|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.twhile|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tdo|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tendwhile|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tif|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tthen|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.telse|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.telsif|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tendif|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.treturn|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tforeach|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tin|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tendfor|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tassign|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tinc|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tdec|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tlayersep|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tderefstart|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tcode|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tderefend|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tlparen|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.trparen|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tlbrace|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.trbrace|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tcomma|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tor|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tand|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tequal|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tnotequal|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tlt|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tgt|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tlteq|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tgteq|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tplus|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tminus|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tmult|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tdiv|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tmod|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tnot|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.input|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.stmtlist|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.stmtsemi|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.stmt|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.expr|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.libcall|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.elsif_else_opt|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.params|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.param_list|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.param_local|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.args|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.arg_list|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.item_assignment|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.list|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.list_elems|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.itemref|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.item|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.first_layer|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.subsequent_layers|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.layer|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.dereference|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.deref_content|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.operator.add|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.operator.subtract|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.operator.multiply|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.operator.divide|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.operator.modulo|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.operator.comparison|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.operator.boolean|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.literal.integer|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.literal.float|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.literal.string|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.literal.boolean|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.literal.nil|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.statement.assignment|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.statement.expression|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.statement.return|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.statement.while|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.statement.do-while|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.statement.if|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.statement.foreach|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.statement.break|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.statement.continue|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.expression.binary|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.expression.unary|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.expression.local|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.expression.call|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.expression.libcall|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.expression.item|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.expression.item-reference|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.expression.list|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.item-syntax.absolute-layer|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.item-syntax.relative-layer|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.item-syntax.dereference|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.item-syntax.layer-chain|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.item-syntax.item-save|persistence-list-itemref|tests/fixtures/interpret/list-itemref-persist.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.semantic-rule.local-definition|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.semantic-rule.local-before-definition|negative-semantic-local|tests/fixtures/conformance/negative/semantic-local-before-definition.src|negative-semantic-local|tests/fixtures/conformance/negative/semantic-local-before-definition.src|no
+coverage|language.semantic-rule.break-context|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-semantic-break|tests/fixtures/conformance/negative/semantic-break-outside-loop.src|yes
+coverage|language.semantic-rule.continue-context|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.semantic-rule.call-arity|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.semantic-rule.libcall-resolution|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.semantic-rule.item-name|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.semantic-rule.loop-variable|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.diagnostic.lexer-error|negative-parser-unknown|tests/fixtures/conformance/negative/parser-unknown-character.src|negative-parser-unknown|tests/fixtures/conformance/negative/parser-unknown-character.src|no
+coverage|language.diagnostic.parser-error|negative-parser-trailing-comma|tests/fixtures/conformance/negative/parser-trailing-comma.src|negative-parser-trailing-comma|tests/fixtures/conformance/negative/parser-trailing-comma.src|no
+coverage|language.diagnostic.semantic-error|negative-semantic-break|tests/fixtures/conformance/negative/semantic-break-outside-loop.src|negative-semantic-break|tests/fixtures/conformance/negative/semantic-break-outside-loop.src|no
+coverage|language.diagnostic.compiler-error|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|no
+coverage|language.diagnostic.source-span|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|no
+coverage|language.diagnostic.overflow|negative-parser-overflow|tests/fixtures/conformance/negative/parser-integer-overflow.src|negative-parser-overflow|tests/fixtures/conformance/negative/parser-integer-overflow.src|no
+coverage|language.diagnostic.unknown-libcall|negative-unknown-libcall|tests/fixtures/conformance/negative-unknown-libcall.src|negative-unknown-libcall|tests/fixtures/conformance/negative-unknown-libcall.src|no
+coverage|libcall.sys.log|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.exists|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.delete|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.nthname|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.rootname|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.thisitem|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.parentitem|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.itemtype|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.childcount|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.rootcount|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.version|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.calleritem|persistence-list-itemref|tests/fixtures/interpret/list-itemref-persist.src|native|-|yes
+coverage|libcall.sys.paramcount|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.source|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.itemref|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.itemname|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.sys.fetch|libcall-sys|tests/fixtures/conformance/libcall-sys.src|native|-|yes
+coverage|libcall.list.length|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
+coverage|libcall.list.get|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
+coverage|libcall.list.append|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
+coverage|libcall.list.set|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
+coverage|libcall.list.concat|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
+coverage|libcall.list.slice|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
+coverage|libcall.list.islist|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
+coverage|libcall.str.capitalise|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.upper|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.lower|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.len|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.trim|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.ltrim|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.rtrim|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.substr|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.find|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.contains|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.startswith|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.endswith|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.eqcasei|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.valtostr|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.replace|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.repeat|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.padleft|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.str.padright|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
+coverage|libcall.task.thisid|libcall-task|tests/fixtures/conformance/libcall-task.src|native|-|yes
+coverage|libcall.task.exists|libcall-task|tests/fixtures/conformance/libcall-task.src|native|-|yes
+coverage|libcall.task.count|libcall-task|tests/fixtures/conformance/libcall-task.src|native|-|yes

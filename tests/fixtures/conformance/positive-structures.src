@@ -1,0 +1,44 @@
+@i = 0;
+while @i < 2 do
+  @i++;
+endwhile;
+DO @i--; WHILE @i > 0;
+if 1 < 2 then
+  @i = @i + 1;
+elsif 2 < 1 then
+  @i = @i + 2;
+else
+  @i = @i + 3;
+endif;
+@j = 0;
+while @j < 1 do
+  @j++;
+  if true then continue; endif;
+endwhile;
+@saw_element = false;
+@k = 0;
+while true do
+  @k++;
+  break;
+endwhile;
+foreach @element in #[1] do
+  @saw_element = true;
+  if @element == 1 then continue; endif;
+endfor;
+@comparisons = (1 == 1) and (1 != 2) and (1 <= 1) and (2 >= 1);
+@difference = 2 - 1;
+@modulus = 5 % 2;
+@ref = &missing;
+.relative;
+foo.12;
+sys.log{"CONF-structures"};
+sys.log{#[
+  @i == 1,
+  @j == 1,
+  @k == 1,
+  @saw_element,
+  @comparisons,
+  @difference == 1,
+  @modulus == 1
+]};
+sys.log{sys.itemname{@ref} == "missing"};

@@ -378,3 +378,13 @@ legacy.unified.runtime.test_task_repeating_execution_and_explicit_kill,api.libca
 legacy.unified.runtime.test_task_setup_failures_unwind,baseline.legacy.unified.runtime.test_task_setup_failures_unwind
 legacy.unified.runtime.test_task_thisid_in_callback_survives_self_close,baseline.legacy.unified.runtime.test_task_thisid_in_callback_survives_self_close
 legacy.unified.runtime.test_value_item_fetch_discards_arguments_and_reports_strict_contract,baseline.legacy.unified.runtime.test_value_item_fetch_discards_arguments_and_reports_strict_contract
+conformance.manifest,conformance.framework.manifest
+conformance.malformed-manifest,conformance.framework.manifest
+conformance.positive-core,conformance.framework.pipeline
+conformance.positive-structures,conformance.framework.pipeline
+conformance.libcall-sys,conformance.framework.libcall
+conformance.libcall-list,conformance.framework.libcall
+conformance.libcall-str,conformance.framework.libcall
+conformance.libcall-task,conformance.framework.libcall
+conformance.persistence,conformance.framework.persistence
+conformance.negative,conformance.framework.negative

@@ -343,14 +343,25 @@ def main() -> int:
         ledger = read_csv(ledger_path, ("legacy_id", "category", "suite", "owner", "source_location", "behavioral_purpose", "planned_replacement_id", "parity_notes"))
         expected_tests = {row["legacy_id"] for row in ledger}
         tests = {row["test_id"] for row in catalogs["tests.csv"]}
-        if tests != expected_tests:
-            missing, extra = sorted(expected_tests - tests), sorted(tests - expected_tests)
-            fail(f"test inventory mismatch (missing={missing[:1]}, unknown={extra[:1]})")
+        missing = expected_tests - tests
+        extra = tests - expected_tests
+        if missing or any(not test_id.startswith("conformance.") for test_id in extra):
+            fail(f"test inventory mismatch (missing={sorted(missing)[:1]}, unknown={sorted(extra)[:1]})")
+        known_tests = expected_tests | extra
+        conformance_source = root / "tests/conformance/test_conformance.c"
+        try:
+            descriptor_ids = set(re.findall(r'\{"(conformance\.[A-Za-z0-9_.-]+)"',
+                                            conformance_source.read_text(encoding="utf-8")))
+        except OSError as error:
+            fail(f"cannot read conformance descriptors: {error}")
+        catalog_descriptor_ids = {test_id for test_id in tests if test_id.startswith("conformance.")}
+        if catalog_descriptor_ids != descriptor_ids:
+            fail(f"conformance descriptor inventory mismatch (missing={sorted(descriptor_ids - catalog_descriptor_ids)[:1]}, unknown={sorted(catalog_descriptor_ids - descriptor_ids)[:1]})")
         for row in catalogs["contracts.csv"]:
             refs = split_refs(row["test_ids"])
             if not refs:
                 fail(f"contract {row['contract_id']} has no registered tests")
-            unknown = set(refs) - expected_tests
+            unknown = set(refs) - known_tests
             if unknown:
                 fail(f"contract {row['contract_id']} references unknown test ID {sorted(unknown)[0]}")
         for row in catalogs["tests.csv"]:
@@ -363,7 +374,7 @@ def main() -> int:
         for name in ("language.csv", "bytecode.csv", "api.csv", "libcalls.csv", "executables.csv"):
             for row in catalogs[name]:
                 refs = split_refs(row["test_ids"])
-                unknown = set(refs) - expected_tests
+                unknown = set(refs) - known_tests
                 if not refs:
                     fail(f"{name} contract {row['contract_id']} has no registered tests")
                 if unknown:

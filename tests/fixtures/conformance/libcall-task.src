@@ -1,0 +1,6 @@
+sys.log{"CONF-libcall-task"};
+sys.log{#[
+  task.thisid == nil,
+  task.exists{0} == false,
+  task.count >= 0
+]};

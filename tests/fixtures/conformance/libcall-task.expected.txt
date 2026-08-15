@@ -1,0 +1,7 @@
+===stdout===
+CONF-libcall-task#[true, true, true]
+
+===stderr===
+
+===exit===
+0

@@ -1,0 +1,10 @@
+sys.log{"CONF-libcall-list"};
+sys.log{#[
+  list.length{#[1, 2]} == 2,
+  list.get{#[1, 2], 0} == 1,
+  list.append{#[1], 2} == #[1, 2],
+  list.set{#[1, 2], 0, 9} == #[9, 2],
+  list.concat{#[1], #[2]} == #[1, 2],
+  list.slice{#[1, 2], 0, 1} == #[1],
+  list.islist{#[]}
+]};

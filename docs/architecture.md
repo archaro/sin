@@ -76,6 +76,28 @@ separate `framework-negative-fixture` translation unit and are addressed by
 ID through `TF_FRAMEWORK_NEGATIVE`; it is listed and run directly for focused
 checks, but is not included in the ordinary all-pass aggregate.
 
+The fixture-driven conformance executable is
+`tests/conformance/test_conformance.c`, built under the active variant's
+`obj/<build>-<compiler>/tests/conformance/` directory. It consumes the strict,
+pipe-delimited `tests/fixtures/conformance/conformance.manifest`, validates
+source and expectation references against the language/libcall inventories,
+and drives the real `scomp`, `sdiss`, and `sin` executables through
+`tf_process_run`. Positive cases therefore cover parse, semantic analysis,
+lowering, emission, bytecode verification, persistence/loading, and execution;
+negative cases assert compiler rejection and stop before later phases. Runtime
+cases use isolated framework fixtures, strict bytecode validation, and explicit
+repeat counts for persistence checks. `make test-conformance` is the focused
+target; `make test-framework` discovers it alongside the framework self-tests,
+while the legacy `make test` harness remains authoritative during migration.
+
+Manifest coverage rows must classify every language and libcall inventory entry
+with a checked-in source witness. Explicit exclusion rows document network,
+shutdown/abort, clock, persistence, nested compilation, and task-scheduling
+facilities that are unsafe or nondeterministic in load-only mode. The validator
+also rejects undeclared conformance fixture drift. Normal test execution is
+read-only; expectation regeneration is a deliberate manual workflow documented
+in `tests/fixtures/conformance/README.md`.
+
 ## Module Boundaries
 
 ### Common Support

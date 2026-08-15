@@ -1,0 +1,5 @@
+STRINGLIT:
+LIBCALL 1,1
+CALL
+HALT
+Summary: instructions=

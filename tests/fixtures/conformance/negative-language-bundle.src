@@ -1,0 +1,24 @@
+@i = 0;
+@text = "negative";
+@number = 1.5;
+@nothing = nil;
+@values = #[1, 2];
+@reference = &missing;
+@logic = !false and true or false;
+@math = 1 + 2 - 3 * 4 / 2 % 2;
+@comparison = (1 == 1) and (1 != 2) and (1 <= 1) and (2 >= 1);
+@body = code {@value} ( return @value; );
+while @i < 2 do
+  @i++;
+  if @i == 1 then continue; else break; endif;
+endwhile;
+DO @i--; WHILE @i > 0;
+if 1 < 2 then @i = @i + 1; elsif 2 < 1 then @i = @i + 2; else @i = @i + 3; endif;
+.relative;
+foo.12;
+foreach @element in @values do
+  @nothing = @element;
+endfor;
+sys.save;
+sys.itemname{&missing};
+continue;

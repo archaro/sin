@@ -1,0 +1,10 @@
+===stdout===
+initialized#[]#[7, #[2, 3], &target, &missing.target]#[7, #[2, 3], &target, &missing.target, 4]#[7, #[8, 9], &target, &missing.target, 4]#[7, #[2, 3], &target, &missing.target, 5, 6]#[#[2, 3], &target, &missing.target]1142true
+
+===stdout_run2===
+reloaded#[]#[7, #[2, 3], &target, &missing.target]#[7, #[2, 3], &target, &missing.target, 4]#[7, #[8, 9], &target, &missing.target, 4]#[7, #[2, 3], &target, &missing.target, 5, 6]#[#[2, 3], &target, &missing.target]1142true
+
+===stderr===
+
+===exit===
+0

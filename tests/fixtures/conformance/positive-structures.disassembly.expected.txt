@@ -1,0 +1,5 @@
+INTEGER
+INCREMENT LOCAL
+DECREMENT LOCAL
+HALT
+Summary: instructions=

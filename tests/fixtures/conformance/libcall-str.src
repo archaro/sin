@@ -1,0 +1,21 @@
+sys.log{"CONF-libcall-str"};
+sys.log{#[
+  str.capitalise{"hello"} == "Hello",
+  str.upper{"hello"} == "HELLO",
+  str.lower{"HELLO"} == "hello",
+  str.len{"hello"} == 5,
+  str.trim{" hello "} == "hello",
+  str.ltrim{" hello"} == "hello",
+  str.rtrim{"hello "} == "hello",
+  str.substr{"hello", 1, 2} == "el",
+  str.find{"hello", "ell"} == 1,
+  str.contains{"hello", "ell"},
+  str.startswith{"hello", "he"},
+  str.endswith{"hello", "lo"},
+  str.eqcasei{"Hello", "hello"},
+  str.valtostr{42} == "42",
+  str.replace{"hello", "ell", "ipp"} == "hippo",
+  str.repeat{"x", 2} == "xx",
+  str.padleft{"x", 2} == " x",
+  str.padright{"x", 2} == "x "
+]};
