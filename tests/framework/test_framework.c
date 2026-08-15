@@ -20,7 +20,7 @@ static bool g_io_write_failure;
 static bool g_io_close_failure;
 static bool g_io_sync_failure;
 #define TF_MAX_FIXTURES 128u
-static TF_Fixture *g_fixtures[TF_MAX_FIXTURES];
+static char g_fixture_paths[TF_MAX_FIXTURES][sizeof(((TF_Fixture *)0)->path)];
 static size_t g_fixture_count;
 
 static void tf_detail(char *detail, size_t size, const char *format,
@@ -133,7 +133,7 @@ static int tf_collect(pid_t pid, int out_fd, int err_fd, uint64_t deadline,
                       TF_ProcessResult *result) {
   int status = 0;
   bool out_open = out_fd >= 0, err_open = err_fd >= 0, reaped = false;
-  bool wait_failed = false;
+  bool wait_failed = false, group_killed = false;
   while (out_open || err_open || !reaped) {
     struct pollfd pollfds[2];
     int nfds = 0;
@@ -148,6 +148,7 @@ static int tf_collect(pid_t pid, int out_fd, int err_fd, uint64_t deadline,
     if (tf_now_ms() >= deadline) {
       result->timed_out = true;
       (void)kill(-pid, SIGKILL);
+      group_killed = true;
       if (!reaped && tf_wait_blocking(pid, &status) == 0) reaped = true;
       tf_close_fd(&out_fd); tf_close_fd(&err_fd);
       out_open = false; err_open = false;
@@ -159,6 +160,7 @@ static int tf_collect(pid_t pid, int out_fd, int err_fd, uint64_t deadline,
     if (poll_timeout > 25) poll_timeout = 25;
     if (nfds && poll(pollfds, (nfds_t)nfds, poll_timeout) < 0 && errno != EINTR) {
       result->capture_failed = true;
+      if (!group_killed) { (void)kill(-pid, SIGKILL); group_killed = true; }
       tf_close_fd(&out_fd); tf_close_fd(&err_fd);
       out_open = false; err_open = false;
       continue;
@@ -167,31 +169,44 @@ static int tf_collect(pid_t pid, int out_fd, int err_fd, uint64_t deadline,
     ssize_t got;
     if (out_open) {
       while ((got = read(out_fd, buffer, sizeof buffer)) > 0) {
-        if (!tf_append(&result->stdout_data, &result->stdout_len, buffer, (size_t)got)) result->capture_failed = true;
+        if (!tf_append(&result->stdout_data, &result->stdout_len, buffer, (size_t)got)) {
+          result->capture_failed = true;
+          if (!group_killed) { (void)kill(-pid, SIGKILL); group_killed = true; }
+        }
       }
       if (got == 0) { tf_close_fd(&out_fd); out_open = false; }
       else if (got < 0 && errno != EAGAIN && errno != EINTR) {
-        result->capture_failed = true; tf_close_fd(&out_fd); out_open = false;
+        result->capture_failed = true;
+        if (!group_killed) { (void)kill(-pid, SIGKILL); group_killed = true; }
+        tf_close_fd(&out_fd); out_open = false;
       }
     }
     if (err_open) {
       while ((got = read(err_fd, buffer, sizeof buffer)) > 0) {
-        if (!tf_append(&result->stderr_data, &result->stderr_len, buffer, (size_t)got)) result->capture_failed = true;
+        if (!tf_append(&result->stderr_data, &result->stderr_len, buffer, (size_t)got)) {
+          result->capture_failed = true;
+          if (!group_killed) { (void)kill(-pid, SIGKILL); group_killed = true; }
+        }
       }
       if (got == 0) { tf_close_fd(&err_fd); err_open = false; }
       else if (got < 0 && errno != EAGAIN && errno != EINTR) {
-        result->capture_failed = true; tf_close_fd(&err_fd); err_open = false;
+        result->capture_failed = true;
+        if (!group_killed) { (void)kill(-pid, SIGKILL); group_killed = true; }
+        tf_close_fd(&err_fd); err_open = false;
       }
     }
   }
   tf_close_fd(&out_fd); tf_close_fd(&err_fd);
+  if (result->capture_failed && !group_killed) {
+    (void)kill(-pid, SIGKILL); group_killed = true;
+  }
   if (wait_failed) {
-    (void)kill(-pid, SIGKILL);
+    if (!group_killed) (void)kill(-pid, SIGKILL);
     if (tf_wait_blocking(pid, &status) == 0) reaped = true;
   }
   if (!reaped && tf_wait_blocking(pid, &status) < 0) wait_failed = true;
-  if (WIFEXITED(status)) { result->exited = true; result->exit_status = WEXITSTATUS(status); }
-  if (WIFSIGNALED(status)) { result->signaled = true; result->signal_number = WTERMSIG(status); }
+  if (!wait_failed && reaped && WIFEXITED(status)) { result->exited = true; result->exit_status = WEXITSTATUS(status); }
+  if (!wait_failed && reaped && WIFSIGNALED(status)) { result->signaled = true; result->signal_number = WTERMSIG(status); }
   return wait_failed || result->capture_failed ? -1 : 0;
 }
 
@@ -254,13 +269,27 @@ static int tf_remove_tree(const char *path) {
   return rmdir(path);
 }
 
+static bool tf_valid_fixture_name(const char *name) {
+  const char *component = name;
+  if (!name || name[0] == '\0' || name[0] == '/') return false;
+  while (*component) {
+    const char *end = strchr(component, '/');
+    size_t length = end ? (size_t)(end - component) : strlen(component);
+    if (length == 0 || (length == 1 && component[0] == '.') ||
+        (length == 2 && component[0] == '.' && component[1] == '.')) return false;
+    if (end && end[1] == '\0') return false;
+    component = end ? end + 1 : component + length;
+  }
+  return true;
+}
+
 void tf_fixture_init(TF_Fixture *fixture) {
   if (!fixture) return;
   memset(fixture, 0, sizeof *fixture);
   (void)snprintf(fixture->path, sizeof fixture->path, "/tmp/sin-test-XXXXXX");
   fixture->active = mkdtemp(fixture->path) != NULL;
   if (fixture->active && g_fixture_count < TF_MAX_FIXTURES) {
-    g_fixtures[g_fixture_count++] = fixture;
+    (void)snprintf(g_fixture_paths[g_fixture_count++], sizeof g_fixture_paths[0], "%s", fixture->path);
   } else if (fixture->active) {
     (void)tf_remove_tree(fixture->path);
     fixture->active = false;
@@ -274,27 +303,34 @@ const char *tf_fixture_path(const TF_Fixture *fixture) {
 int tf_fixture_file(const TF_Fixture *fixture, const char *name, char *path,
                     size_t path_size) {
   int n;
-  if (!fixture || !fixture->active || !name || !path || path_size == 0) return -1;
+  if (!fixture || !fixture->active || !tf_valid_fixture_name(name) || !path || path_size == 0) return -1;
   n = snprintf(path, path_size, "%s/%s", fixture->path, name);
   return n < 0 || (size_t)n >= path_size ? -1 : 0;
 }
 
 void tf_fixture_cleanup(TF_Fixture *fixture) {
   size_t i;
+  char old_path[sizeof fixture->path];
   if (!fixture || !fixture->active) return;
+  (void)snprintf(old_path, sizeof old_path, "%s", fixture->path);
   (void)tf_remove_tree(fixture->path);
   fixture->active = false;
   fixture->path[0] = '\0';
   for (i = 0; i < g_fixture_count; i++) {
-    if (g_fixtures[i] == fixture) {
-      g_fixtures[i] = g_fixtures[--g_fixture_count];
+    if (strcmp(g_fixture_paths[i], old_path) == 0) {
+      size_t last = --g_fixture_count;
+      if (i != last) memmove(g_fixture_paths[i], g_fixture_paths[last], sizeof g_fixture_paths[0]);
+      g_fixture_paths[g_fixture_count][0] = '\0';
       break;
     }
   }
 }
 
 static void tf_fixture_cleanup_all(void) {
-  while (g_fixture_count != 0) tf_fixture_cleanup(g_fixtures[g_fixture_count - 1]);
+  while (g_fixture_count != 0) {
+    (void)tf_remove_tree(g_fixture_paths[g_fixture_count - 1]);
+    g_fixture_paths[--g_fixture_count][0] = '\0';
+  }
 }
 
 static int tf_source_write(const char *source, FILE *file) {
@@ -364,9 +400,11 @@ void tf_fail(const char *file, int line, const char *expression,
 void tf_assert_process(const char *file, int line, const char *expression,
                        const TF_ProcessResult *result, int expected_status) {
   char expected[64], actual[128];
-  if (result && result->exited && !result->timed_out && result->exit_status == expected_status) return;
+  if (result && result->exited && !result->timed_out && !result->signaled &&
+      !result->capture_failed && result->exit_status == expected_status) return;
   (void)snprintf(expected, sizeof expected, "exit status %d", expected_status);
   if (!result) (void)snprintf(actual, sizeof actual, "(null result)");
+  else if (result->capture_failed) (void)snprintf(actual, sizeof actual, "capture failure");
   else if (result->timed_out) (void)snprintf(actual, sizeof actual, "timeout");
   else if (result->signaled) (void)snprintf(actual, sizeof actual, "signal %d", result->signal_number);
   else (void)snprintf(actual, sizeof actual, "exit status %d", result->exit_status);

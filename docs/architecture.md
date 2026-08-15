@@ -57,6 +57,20 @@ variant's `obj/<build>-<compiler>/tests/framework/` directory.
 Successful captured output is suppressed by default; setting `TF_VERBOSE=1`
 replays it for diagnostics.
 
+Framework records use pipe-delimited UTF-8-safe tokens with this fixed schema:
+`TF|LIST|id|tags|timeout_ms|contracts` describes one validated descriptor;
+`TF|RESULT|id|status|duration_or_reason|tags` reports one selected test; and
+`TF|TOTAL|scope|selected_or_ran|passed|failed` reports an aggregate. IDs, tags,
+and contract IDs contain only ASCII letters, digits, `_`, `-`, `.`, and `:`;
+comma-separated tags/contracts may not contain empty components. Empty tags
+are valid, while every descriptor has at least one contract. Executables return
+0 only when all selected tests pass, 1 for test failures (including crashes,
+timeouts, and assertion failures), and 2 for usage, discovery, or metadata
+errors. The runner similarly returns 0 for an all-pass aggregate, 1 for any
+selected failure, and 2 for invalid options, invalid `TEST_JOBS`, discovery,
+or record errors. Captured output is replayed only for failures unless
+`TF_VERBOSE=1` is set.
+
 ## Module Boundaries
 
 ### Common Support

@@ -57,7 +57,7 @@ static bool has_tag(const char *tags, const char *wanted) {
 }
 
 static int parse_listing(const char *binary, const char *text, Entry **entries,
-                         size_t *count) {
+                         size_t *count, char ***all_ids, size_t *all_count) {
   const char *line = text;
   while (line && *line) {
     const char *end = strchr(line, '\n');
@@ -81,6 +81,7 @@ static int parse_listing(const char *binary, const char *text, Entry **entries,
       char *tail = NULL;
       unsigned long timeout = strtoul(fields[4], &tail, 10);
       if (!tail || *tail || timeout > 3600000ul) { free(record); return -1; }
+      if (*count > (SIZE_MAX / sizeof **entries) - 1u) { free(record); return -1; }
       Entry *grown = realloc(*entries, (*count + 1) * sizeof **entries);
       if (!grown) { free(record); return -1; }
       *entries = grown;
@@ -92,12 +93,28 @@ static int parse_listing(const char *binary, const char *text, Entry **entries,
         free(entry->binary); free(entry->id); free(entry->tags); free(entry->contracts);
         free(record); return -1;
       }
-      for (size_t prior = 0; prior < *count; prior++) {
-        if (strcmp((*entries)[prior].id, entry->id) == 0) {
+      for (size_t prior = 0; prior < *all_count; prior++) {
+        if (strcmp((*all_ids)[prior], entry->id) == 0) {
           free(entry->binary); free(entry->id); free(entry->tags); free(entry->contracts);
           free(record); return -2;
         }
       }
+      if (*all_count > (SIZE_MAX / sizeof **all_ids) - 1u) {
+        free(entry->binary); free(entry->id); free(entry->tags); free(entry->contracts);
+        free(record); return -1;
+      }
+      char **grown_ids = realloc(*all_ids, (*all_count + 1) * sizeof **all_ids);
+      if (!grown_ids) {
+        free(entry->binary); free(entry->id); free(entry->tags); free(entry->contracts);
+        free(record); return -1;
+      }
+      *all_ids = grown_ids;
+      (*all_ids)[*all_count] = strdup(entry->id);
+      if (!(*all_ids)[*all_count]) {
+        free(entry->binary); free(entry->id); free(entry->tags); free(entry->contracts);
+        free(record); return -1;
+      }
+      (*all_count)++;
       if (has_tag(entry->tags, "helper")) {
         free(entry->binary); free(entry->id); free(entry->tags); free(entry->contracts);
       } else {
@@ -179,7 +196,9 @@ static void run_batch(Entry *entries, size_t first, size_t count,
 
 int main(int argc, char **argv) {
   Entry *entries = NULL;
+  char **all_ids = NULL;
   size_t count = 0, passed = 0, failed = 0;
+  size_t all_count = 0;
   unsigned jobs = 1;
   const char *jobs_text = getenv("TEST_JOBS");
   int first_binary = 1;
@@ -202,11 +221,13 @@ int main(int argc, char **argv) {
     char *args[] = {argv[i], "--list", NULL};
     TF_ProcessResult result;
     int listing_rc = tf_process_run(args, 10000, &result);
-    int parse_rc = parse_listing(argv[i], result.stdout_data ? result.stdout_data : "", &entries, &count);
+    int parse_rc = parse_listing(argv[i], result.stdout_data ? result.stdout_data : "", &entries, &count, &all_ids, &all_count);
     if (listing_rc < 0 || !result.exited || result.exit_status != 0 || parse_rc < 0) {
       if (parse_rc == -2) (void)fprintf(stderr, "TF|ERROR|duplicate ID across executables\n");
       (void)fprintf(stderr, "TF|ERROR|discovery|%s\n", argv[i]);
-      tf_process_result_destroy(&result); free_entries(entries, count); return 2;
+      tf_process_result_destroy(&result); free_entries(entries, count);
+      for (size_t id = 0; id < all_count; id++) free(all_ids[id]);
+      free(all_ids); return 2;
     }
     tf_process_result_destroy(&result);
   }
@@ -226,5 +247,7 @@ int main(int argc, char **argv) {
   }
   (void)printf("TF|TOTAL|all|%zu|%zu|%zu\n", count, passed, failed);
   free_entries(entries, count);
+  for (size_t id = 0; id < all_count; id++) free(all_ids[id]);
+  free(all_ids);
   return failed == 0 ? 0 : 1;
 }

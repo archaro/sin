@@ -9,6 +9,9 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "item.h"
+#include "memory.h"
+
 static void assert_fail_bool(void) { TF_ASSERT_TRUE(false); }
 static void assert_fail_i64(void) { TF_ASSERT_I64(1, 2); }
 static void assert_fail_u64(void) { TF_ASSERT_U64(1, 2); }
@@ -32,6 +35,28 @@ static void fixture_failure_helper(void) {
   }
   TF_ASSERT_TRUE(false);
 }
+static void fixture_implicit_helper(void) {
+  const char *marker = getenv("TF_FIXTURE_MARKER");
+  TF_Fixture fixture;
+  tf_fixture_init(&fixture);
+  if (marker) {
+    FILE *file = fopen(marker, "w");
+    if (file) { (void)fprintf(file, "%s", tf_fixture_path(&fixture)); (void)fclose(file); }
+  }
+}
+static void fixture_multiple_helper(void) {
+  const char *marker = getenv("TF_FIXTURE_MARKER");
+  TF_Fixture first, second;
+  tf_fixture_init(&first); tf_fixture_init(&second);
+  if (marker) {
+    FILE *file = fopen(marker, "w");
+    if (file) { (void)fprintf(file, "%s\n%s", tf_fixture_path(&first), tf_fixture_path(&second)); (void)fclose(file); }
+  }
+}
+static void assert_process_capture_failure(void) {
+  TF_ProcessResult result = {.exited = true, .exit_status = 0, .capture_failed = true};
+  TF_ASSERT_PROCESS(&result, 0);
+}
 
 static void assertion_equal(void) {
   const unsigned char bytes[] = {0, 1, 2};
@@ -46,7 +71,7 @@ static void assertion_diagnostics(void) {
   const char *program = tf_program_path();
   const char *ids[] = {"assert_fail_bool", "assert_fail_i64", "assert_fail_u64",
                        "assert_fail_str", "assert_fail_bytes", "assert_fail_float",
-                       "assert_fail_diag"};
+                       "assert_fail_diag", "assert_process_capture_failure"};
   for (size_t i = 0; i < sizeof ids / sizeof ids[0]; i++) {
     char *args[] = {(char *)program, "--run", (char *)ids[i], NULL};
     TF_ProcessResult result;
@@ -176,6 +201,47 @@ static void fixture_failure_cleanup(void) {
   tf_fixture_cleanup(&fixture);
 }
 
+static void fixture_implicit_and_multiple_cleanup(void) {
+  TF_Fixture fixture;
+  char marker[4096], paths[8192];
+  char *implicit_args[] = {(char *)tf_program_path(), "--run", "fixture_implicit_helper", NULL};
+  char *multiple_args[] = {(char *)tf_program_path(), "--run", "fixture_multiple_helper", NULL};
+  TF_ProcessResult result;
+  FILE *file;
+  tf_fixture_init(&fixture);
+  TF_ASSERT_TRUE(tf_fixture_file(&fixture, "marker", marker, sizeof marker) == 0);
+  TF_ASSERT_TRUE(setenv("TF_FIXTURE_MARKER", marker, 1) == 0);
+  TF_ASSERT_TRUE(tf_process_run(implicit_args, 1000, &result) == 0);
+  TF_ASSERT_PROCESS(&result, 0); tf_process_result_destroy(&result);
+  file = fopen(marker, "r"); TF_ASSERT_TRUE(file != NULL);
+  TF_ASSERT_TRUE(fgets(paths, sizeof paths, file) != NULL); (void)fclose(file);
+  paths[strcspn(paths, "\n")] = '\0';
+  TF_ASSERT_TRUE(access(paths, F_OK) != 0);
+  TF_ASSERT_TRUE(tf_process_run(multiple_args, 1000, &result) == 0);
+  TF_ASSERT_PROCESS(&result, 0); tf_process_result_destroy(&result);
+  file = fopen(marker, "r"); TF_ASSERT_TRUE(file != NULL);
+  size_t length = fread(paths, 1, sizeof paths - 1, file); paths[length] = '\0'; (void)fclose(file);
+  char *second = strchr(paths, '\n'); TF_ASSERT_TRUE(second != NULL); *second++ = '\0';
+  TF_ASSERT_TRUE(access(paths, F_OK) != 0); TF_ASSERT_TRUE(access(second, F_OK) != 0);
+  (void)unsetenv("TF_FIXTURE_MARKER");
+  tf_fixture_cleanup(&fixture);
+}
+
+static void fixture_path_validation(void) {
+  TF_Fixture fixture;
+  char path[4096];
+  tf_fixture_init(&fixture);
+  TF_ASSERT_TRUE(tf_fixture_file(&fixture, "", path, sizeof path) != 0);
+  TF_ASSERT_TRUE(tf_fixture_file(&fixture, "/tmp", path, sizeof path) != 0);
+  TF_ASSERT_TRUE(tf_fixture_file(&fixture, ".", path, sizeof path) != 0);
+  TF_ASSERT_TRUE(tf_fixture_file(&fixture, "..", path, sizeof path) != 0);
+  TF_ASSERT_TRUE(tf_fixture_file(&fixture, "../escape", path, sizeof path) != 0);
+  TF_ASSERT_TRUE(tf_fixture_file(&fixture, "nested/../escape", path, sizeof path) != 0);
+  TF_ASSERT_TRUE(tf_fixture_file(&fixture, "nested//escape", path, sizeof path) != 0);
+  TF_ASSERT_TRUE(tf_fixture_file(&fixture, "nested/file", path, sizeof path) == 0);
+  tf_fixture_cleanup(&fixture);
+}
+
 static void output_replay(void) {
   char *args[] = {(char *)tf_program_path(), "--run", "output_helper", NULL};
   TF_ProcessResult result;
@@ -210,11 +276,44 @@ static void malformed_metadata(void) {
 }
 
 static void hooks_reset(void) {
+  void *allocation;
   tf_alloc_fail_after(1);
-  TF_ASSERT_TRUE(malloc(1) != NULL); /* libc allocation is intentionally independent. */
+  allocation = alloc_malloc(8); TF_ASSERT_TRUE(allocation == NULL);
+  allocation = alloc_calloc(1, 8); TF_ASSERT_TRUE(allocation == NULL);
   tf_reset_hooks();
-  tf_io_failures(false, false, false);
+  allocation = alloc_malloc(8); TF_ASSERT_TRUE(allocation != NULL); free(allocation);
+  allocation = alloc_calloc(1, 8); TF_ASSERT_TRUE(allocation != NULL); free(allocation);
   tf_reset_hooks();
+}
+
+static void hooks_io_behavior(void) {
+  TF_Fixture fixture;
+  ITEMSTORE_t *store;
+  ITEM_MUTATION_RESULT_t mutation;
+  uint8_t *bytecode = malloc(1);
+  char source_root[4096], save_path[4096];
+  TF_ASSERT_TRUE(bytecode != NULL);
+  bytecode[0] = 0;
+  tf_fixture_init(&fixture);
+  TF_ASSERT_TRUE(tf_fixture_file(&fixture, "src", source_root, sizeof source_root) == 0);
+  TF_ASSERT_TRUE(tf_fixture_file(&fixture, "store.item", save_path, sizeof save_path) == 0);
+  store = itemstore_create("root"); TF_ASSERT_TRUE(store != NULL);
+  mutation = item_set_code(itemstore_root(store), "code", 1, bytecode);
+  TF_ASSERT_TRUE(item_mutation_succeeded(mutation));
+  tf_io_failures(true, false, false);
+  TF_ASSERT_FALSE(save_itemsource_in_srcroot(mutation.item, "source", source_root));
+  tf_reset_hooks();
+  TF_ASSERT_TRUE(save_itemsource_in_srcroot(mutation.item, "source", source_root));
+  tf_io_failures(false, true, false);
+  TF_ASSERT_FALSE(save_itemsource_in_srcroot(mutation.item, "source", source_root));
+  tf_reset_hooks();
+  TF_ASSERT_TRUE(save_itemsource_in_srcroot(mutation.item, "source", source_root));
+  tf_io_failures(false, false, true);
+  TF_ASSERT_FALSE(itemstore_save_with_options(save_path, store, ITEMSTORE_DURABLE_FULL));
+  tf_reset_hooks();
+  TF_ASSERT_TRUE(itemstore_save_with_options(save_path, store, ITEMSTORE_DURABLE_FULL));
+  itemstore_destroy(store);
+  tf_fixture_cleanup(&fixture);
 }
 
 static void runner_discovery_and_jobs(void) {
@@ -236,7 +335,7 @@ static void runner_discovery_and_jobs(void) {
     (void)unsetenv("TF_SCHEDULE_LOG"); (void)unsetenv("TF_SCHEDULE_LOCK");
   }
   TF_ASSERT_PROCESS(&result, 0);
-  TF_ASSERT_DIAGNOSTIC("TF|TOTAL|all|16|16|0", result.stdout_data);
+  TF_ASSERT_DIAGNOSTIC("TF|TOTAL|all|19|19|0", result.stdout_data);
   tf_process_result_destroy(&result);
   log_file = fopen(log_path, "r");
   TF_ASSERT_TRUE(log_file != NULL);
@@ -277,9 +376,12 @@ static const TF_TestDescriptor tests[] = {
   {"crash_isolation", crash_isolation, "", 2000, "framework.process"},
   {"fixture_cleanup", fixture_cleanup, "", 2000, "framework.fixtures"},
   {"fixture_failure_cleanup", fixture_failure_cleanup, "", 3000, "framework.fixtures"},
+  {"fixture_implicit_and_multiple_cleanup", fixture_implicit_and_multiple_cleanup, "", 4000, "framework.fixtures"},
+  {"fixture_path_validation", fixture_path_validation, "", 2000, "framework.fixtures"},
   {"output_replay", output_replay, "", 3000, "framework.output"},
   {"malformed_metadata", malformed_metadata, "", 2000, "framework.metadata"},
   {"hooks_reset", hooks_reset, "exclusive", 2000, "framework.hooks"},
+  {"hooks_io_behavior", hooks_io_behavior, "exclusive", 5000, "framework.hooks"},
   {"runner_discovery_and_jobs", runner_discovery_and_jobs, "helper", 12000, "framework.runner"},
   {"parallel_delay_a", schedule_probe, "", 2000, "framework.runner"},
   {"parallel_delay_b", schedule_probe, "", 2000, "framework.runner"},
@@ -296,6 +398,9 @@ static const TF_TestDescriptor tests[] = {
   {"crash", crash_test, "helper", 500, "framework.process"},
   {"output_helper", output_helper, "helper", 500, "framework.output"},
   {"fixture_failure_helper", fixture_failure_helper, "helper", 1000, "framework.fixtures"},
+  {"fixture_implicit_helper", fixture_implicit_helper, "helper", 1000, "framework.fixtures"},
+  {"fixture_multiple_helper", fixture_multiple_helper, "helper", 1000, "framework.fixtures"},
+  {"assert_process_capture_failure", assert_process_capture_failure, "helper", 500, "framework.process"},
   {"hang", hang_test, "helper", 500, "framework.process"}
 };
 
