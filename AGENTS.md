@@ -33,6 +33,9 @@ For every native implementation, correction, or review agent:
 - Run tests with a low-capability, read-only agent. Return the results to the
   orchestrator; include errors verbatim. That agent executes and reports only;
   it never edits files or diagnoses failures.
+- Do not repeat tests unnecessarily: if an agent runs a test suite successfully
+  to completion and the root agent does not make further changes, it is not
+  necessary for the root agent to repeat the same tests.
 
 For every implementation, correction, or review handoff:
 
@@ -49,7 +52,9 @@ For every implementation, correction, or review handoff:
 
 ### Implementation and escalation
 
-For non-trivial code changes:
+Consider first the model-specific guidance (for example, in CODEX.md), but if
+this does not provide sufficient direction then use the following pattern for
+non-trivial code changes:
 
 1. Inspect enough of the repository to define a bounded task, explicit
    acceptance criteria, affected subsystems, constraints, and tests.

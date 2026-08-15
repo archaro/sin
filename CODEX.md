@@ -3,6 +3,19 @@
 Platform-specific guidance for OpenAI coding agents working on Sinistra.
 Read this file alongside the repository-root `AGENTS.md`.
 
+## Escalation pattern
+Use an orchestration pattern for implementation, with Sol (Medium) as the
+root agent.
+
+Use Luna (High) for the first five iterations of an implementation. If the
+implementation is still not correct after the fifth iteration, switch to
+Sol (Medium) for two further attempts.  If necessary, complete the
+implementation using Sol (High).
+
+Use Luna (Low) to run tests.  Do not attempt to fix any errors or warnings
+thereby uncovered, but return the comprehensive test results to the root agent
+for a decision about the best way to implement a fix.
+
 ## Special instructions for OpenAI models
 
 In Code Mode, within each bounded stage:
