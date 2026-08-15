@@ -54,6 +54,8 @@ executable's `--list` output and invokes them through `--run ID`; it runs
 serially by default and uses positive `TEST_JOBS` values for non-exclusive
 batches. Build artifacts for `make test-framework` remain in the active
 variant's `obj/<build>-<compiler>/tests/framework/` directory.
+Successful captured output is suppressed by default; setting `TF_VERBOSE=1`
+replays it for diagnostics.
 
 ## Module Boundaries
 

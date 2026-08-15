@@ -30,6 +30,7 @@ typedef struct {
   bool signaled;
   int signal_number;
   bool timed_out;
+  bool capture_failed;
 } TF_ProcessResult;
 
 typedef struct {
@@ -60,6 +61,9 @@ void tf_io_failures(bool write_failure, bool close_failure,
 
 void tf_fail(const char *file, int line, const char *expression,
              const char *expected, const char *actual, const char *detail);
+void tf_assert_bytes(const char *file, int line, const char *expression,
+                     const void *expected, size_t expected_len,
+                     const void *actual, size_t actual_len);
 void tf_assert_process(const char *file, int line, const char *expression,
                        const TF_ProcessResult *result, int expected_status);
 
@@ -92,10 +96,8 @@ void tf_assert_process(const char *file, int line, const char *expression,
             tf_a__ ? tf_a__ : "(null)", NULL); \
 } while (0)
 #define TF_ASSERT_BYTES(expected, expected_len, actual, actual_len) do { \
-  const uint8_t *tf_e__ = (const uint8_t *)(expected), *tf_a__ = (const uint8_t *)(actual); \
-  size_t tf_el__ = (expected_len), tf_al__ = (actual_len); \
-  if (tf_el__ != tf_al__ || (tf_el__ != 0 && (!tf_e__ || !tf_a__ || memcmp(tf_e__, tf_a__, tf_el__) != 0))) \
-    tf_fail(__FILE__, __LINE__, #actual, "byte buffers equal", "byte buffers differ", NULL); \
+  tf_assert_bytes(__FILE__, __LINE__, #actual, (expected), (expected_len), \
+                  (actual), (actual_len)); \
 } while (0)
 #define TF_ASSERT_FLOAT_BITS(expected, actual) \
   TF_ASSERT_U64((uint64_t)(expected), (uint64_t)(actual))

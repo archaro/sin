@@ -14,6 +14,22 @@ typedef struct {
   unsigned timeout_ms;
 } Entry;
 
+static bool valid_tokens(const char *text, bool comma_separated, bool allow_empty) {
+  bool have = false, previous_comma = true;
+  if (!text) return false;
+  for (const unsigned char *p = (const unsigned char *)text; *p; p++) {
+    if (*p == ',') {
+      if (!comma_separated || previous_comma) return false;
+      previous_comma = true;
+    } else if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+               (*p >= '0' && *p <= '9') || *p == '_' || *p == '-' ||
+               *p == '.' || *p == ':') {
+      have = true; previous_comma = false;
+    } else return false;
+  }
+  return have ? !previous_comma : allow_empty;
+}
+
 static char *copy_text(const char *start, size_t length) {
   char *copy = malloc(length + 1);
   if (!copy) return NULL;
@@ -58,7 +74,8 @@ static int parse_listing(const char *binary, const char *text, Entry **entries,
         if (cursor) { *cursor = '\0'; cursor++; }
       }
       if (field_count != 6 || strcmp(fields[0], "TF") != 0 || strcmp(fields[1], "LIST") != 0 ||
-          !fields[2][0] || !fields[4][0] || !fields[5][0]) {
+          !valid_tokens(fields[2], false, false) || !valid_tokens(fields[3], true, true) ||
+          !valid_tokens(fields[5], true, false) || !fields[4][0]) {
         free(record); return -1;
       }
       char *tail = NULL;
@@ -71,7 +88,16 @@ static int parse_listing(const char *binary, const char *text, Entry **entries,
       entry->binary = strdup(binary); entry->id = strdup(fields[2]);
       entry->tags = strdup(fields[3]); entry->contracts = strdup(fields[5]);
       entry->timeout_ms = (unsigned)timeout;
-      if (!entry->binary || !entry->id || !entry->tags || !entry->contracts) { free(record); return -1; }
+      if (!entry->binary || !entry->id || !entry->tags || !entry->contracts) {
+        free(entry->binary); free(entry->id); free(entry->tags); free(entry->contracts);
+        free(record); return -1;
+      }
+      for (size_t prior = 0; prior < *count; prior++) {
+        if (strcmp((*entries)[prior].id, entry->id) == 0) {
+          free(entry->binary); free(entry->id); free(entry->tags); free(entry->contracts);
+          free(record); return -2;
+        }
+      }
       if (has_tag(entry->tags, "helper")) {
         free(entry->binary); free(entry->id); free(entry->tags); free(entry->contracts);
       } else {
@@ -101,9 +127,14 @@ static int run_entry(const Entry *entry) {
   char *args[] = {entry->binary, "--run", entry->id, NULL};
   TF_ProcessResult result;
   int failed;
-  if (tf_process_run(args, entry->timeout_ms, &result) < 0) return -1;
-  failed = !(result.exited && result.exit_status == 0 && !result.timed_out);
-  if (failed) {
+  (void)setenv("TF_TEST_ID", entry->id, 1);
+  if (tf_process_run(args, entry->timeout_ms, &result) < 0 && !result.exited && !result.signaled && !result.timed_out) {
+    (void)unsetenv("TF_TEST_ID");
+    return -1;
+  }
+  (void)unsetenv("TF_TEST_ID");
+  failed = !(result.exited && result.exit_status == 0 && !result.timed_out && !result.capture_failed);
+  if (failed || (getenv("TF_VERBOSE") && strcmp(getenv("TF_VERBOSE"), "0") != 0)) {
     if (result.stdout_data) (void)fwrite(result.stdout_data, 1, result.stdout_len, stderr);
     if (result.stderr_data) (void)fwrite(result.stderr_data, 1, result.stderr_len, stderr);
   }
@@ -123,6 +154,7 @@ static void run_batch(Entry *entries, size_t first, size_t count,
     char name[] = "/tmp/sin-runner-XXXXXX";
     files[i] = mkstemp(name);
     (void)unlink(name);
+    if (files[i] < 0) { workers[i] = -1; continue; }
     workers[i] = fork();
     if (workers[i] == 0) {
       int rc;
@@ -130,13 +162,14 @@ static void run_batch(Entry *entries, size_t first, size_t count,
       rc = run_entry(&entries[first + i]);
       _exit(rc == 0 ? 0 : 1);
     }
+    if (workers[i] < 0) { (void)close(files[i]); files[i] = -1; }
   }
   for (size_t i = 0; i < count; i++) {
     int status = 1;
     char buffer[4096];
     ssize_t got;
-    (void)waitpid(workers[i], &status, 0);
-    (void)lseek(files[i], 0, SEEK_SET);
+    if (workers[i] < 0 || files[i] < 0 || waitpid(workers[i], &status, 0) < 0) { (*failed)++; continue; }
+    if (lseek(files[i], 0, SEEK_SET) < 0) { (void)close(files[i]); (*failed)++; continue; }
     while ((got = read(files[i], buffer, sizeof buffer)) > 0) (void)fwrite(buffer, 1, (size_t)got, stdout);
     (void)close(files[i]);
     if (WIFEXITED(status) && WEXITSTATUS(status) == 0) (*passed)++; else (*failed)++;
@@ -152,7 +185,10 @@ int main(int argc, char **argv) {
   int first_binary = 1;
   if (jobs_text && jobs_text[0]) {
     char *tail = NULL; unsigned long parsed = strtoul(jobs_text, &tail, 10);
-    if (tail && *tail == '\0' && parsed > 0 && parsed <= 256) jobs = (unsigned)parsed;
+    if (!tail || *tail != '\0' || parsed == 0 || parsed > 256) {
+      (void)fprintf(stderr, "invalid TEST_JOBS value\n"); return 2;
+    }
+    jobs = (unsigned)parsed;
   }
   if (argc > 1 && strcmp(argv[1], "--jobs") == 0) {
     char *tail = NULL; unsigned long parsed;
@@ -165,8 +201,10 @@ int main(int argc, char **argv) {
   for (int i = first_binary; i < argc; i++) {
     char *args[] = {argv[i], "--list", NULL};
     TF_ProcessResult result;
-    if (tf_process_run(args, 10000, &result) < 0 || !result.exited || result.exit_status != 0 ||
-        parse_listing(argv[i], result.stdout_data ? result.stdout_data : "", &entries, &count) < 0) {
+    int listing_rc = tf_process_run(args, 10000, &result);
+    int parse_rc = parse_listing(argv[i], result.stdout_data ? result.stdout_data : "", &entries, &count);
+    if (listing_rc < 0 || !result.exited || result.exit_status != 0 || parse_rc < 0) {
+      if (parse_rc == -2) (void)fprintf(stderr, "TF|ERROR|duplicate ID across executables\n");
       (void)fprintf(stderr, "TF|ERROR|discovery|%s\n", argv[i]);
       tf_process_result_destroy(&result); free_entries(entries, count); return 2;
     }

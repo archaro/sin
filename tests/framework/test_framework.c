@@ -19,6 +19,9 @@ static const char *g_program_path;
 static bool g_io_write_failure;
 static bool g_io_close_failure;
 static bool g_io_sync_failure;
+#define TF_MAX_FIXTURES 128u
+static TF_Fixture *g_fixtures[TF_MAX_FIXTURES];
+static size_t g_fixture_count;
 
 static void tf_detail(char *detail, size_t size, const char *format,
                       const char *value) {
@@ -96,14 +99,16 @@ static uint64_t tf_now_ms(void) {
   return (uint64_t)ts.tv_sec * UINT64_C(1000) + (uint64_t)ts.tv_nsec / UINT64_C(1000000);
 }
 
-static void tf_append(char **data, size_t *length, const char *buffer,
+static bool tf_append(char **data, size_t *length, const char *buffer,
                       size_t count) {
+  if (count > SIZE_MAX - *length - 1u) return false;
   char *grown = realloc(*data, *length + count + 1);
-  if (!grown) return;
+  if (!grown) return false;
   memcpy(grown + *length, buffer, count);
   *length += count;
   grown[*length] = '\0';
   *data = grown;
+  return true;
 }
 
 static int tf_set_nonblock(int fd) {
@@ -111,69 +116,118 @@ static int tf_set_nonblock(int fd) {
   return flags < 0 ? -1 : fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
+static void tf_close_fd(int *fd) {
+  if (*fd >= 0) { (void)close(*fd); *fd = -1; }
+}
+
+static int tf_wait_blocking(pid_t pid, int *status) {
+  int result;
+  do { result = waitpid(pid, status, 0); } while (result < 0 && errno == EINTR);
+  return result == pid ? 0 : -1;
+}
+
+/* Drain both capture streams until the child and all inherited descriptors
+ * close, or until the deadline. The latter matters for a child that exits
+ * while a descendant retains a pipe descriptor. */
+static int tf_collect(pid_t pid, int out_fd, int err_fd, uint64_t deadline,
+                      TF_ProcessResult *result) {
+  int status = 0;
+  bool out_open = out_fd >= 0, err_open = err_fd >= 0, reaped = false;
+  bool wait_failed = false;
+  while (out_open || err_open || !reaped) {
+    struct pollfd pollfds[2];
+    int nfds = 0;
+    int poll_timeout;
+    int wait_result;
+    if (!reaped) {
+      do { wait_result = waitpid(pid, &status, WNOHANG); }
+      while (wait_result < 0 && errno == EINTR);
+      if (wait_result == pid) reaped = true;
+      else if (wait_result < 0 && errno != EINTR) { wait_failed = true; break; }
+    }
+    if (tf_now_ms() >= deadline) {
+      result->timed_out = true;
+      (void)kill(-pid, SIGKILL);
+      if (!reaped && tf_wait_blocking(pid, &status) == 0) reaped = true;
+      tf_close_fd(&out_fd); tf_close_fd(&err_fd);
+      out_open = false; err_open = false;
+      break;
+    }
+    if (out_open) { pollfds[nfds].fd = out_fd; pollfds[nfds].events = POLLIN; nfds++; }
+    if (err_open) { pollfds[nfds].fd = err_fd; pollfds[nfds].events = POLLIN; nfds++; }
+    poll_timeout = (int)(deadline - tf_now_ms());
+    if (poll_timeout > 25) poll_timeout = 25;
+    if (nfds && poll(pollfds, (nfds_t)nfds, poll_timeout) < 0 && errno != EINTR) {
+      result->capture_failed = true;
+      tf_close_fd(&out_fd); tf_close_fd(&err_fd);
+      out_open = false; err_open = false;
+      continue;
+    }
+    char buffer[4096];
+    ssize_t got;
+    if (out_open) {
+      while ((got = read(out_fd, buffer, sizeof buffer)) > 0) {
+        if (!tf_append(&result->stdout_data, &result->stdout_len, buffer, (size_t)got)) result->capture_failed = true;
+      }
+      if (got == 0) { tf_close_fd(&out_fd); out_open = false; }
+      else if (got < 0 && errno != EAGAIN && errno != EINTR) {
+        result->capture_failed = true; tf_close_fd(&out_fd); out_open = false;
+      }
+    }
+    if (err_open) {
+      while ((got = read(err_fd, buffer, sizeof buffer)) > 0) {
+        if (!tf_append(&result->stderr_data, &result->stderr_len, buffer, (size_t)got)) result->capture_failed = true;
+      }
+      if (got == 0) { tf_close_fd(&err_fd); err_open = false; }
+      else if (got < 0 && errno != EAGAIN && errno != EINTR) {
+        result->capture_failed = true; tf_close_fd(&err_fd); err_open = false;
+      }
+    }
+  }
+  tf_close_fd(&out_fd); tf_close_fd(&err_fd);
+  if (wait_failed) {
+    (void)kill(-pid, SIGKILL);
+    if (tf_wait_blocking(pid, &status) == 0) reaped = true;
+  }
+  if (!reaped && tf_wait_blocking(pid, &status) < 0) wait_failed = true;
+  if (WIFEXITED(status)) { result->exited = true; result->exit_status = WEXITSTATUS(status); }
+  if (WIFSIGNALED(status)) { result->signaled = true; result->signal_number = WTERMSIG(status); }
+  return wait_failed || result->capture_failed ? -1 : 0;
+}
+
 int tf_process_run(char *const argv[], unsigned timeout_ms,
                    TF_ProcessResult *result) {
-  int out_pipe[2], err_pipe[2];
+  int out_pipe[2] = {-1, -1}, err_pipe[2] = {-1, -1};
   pid_t pid;
-  int status = 0;
-  bool out_open = true, err_open = true, child_reaped = false;
   uint64_t deadline;
+  int rc;
   if (!argv || !argv[0] || !result) return -1;
   memset(result, 0, sizeof *result);
-  out_pipe[0] = out_pipe[1] = err_pipe[0] = err_pipe[1] = -1;
-  if (pipe(out_pipe) < 0 || pipe(err_pipe) < 0) {
-    if (out_pipe[0] >= 0) { (void)close(out_pipe[0]); (void)close(out_pipe[1]); }
-    if (err_pipe[0] >= 0) { (void)close(err_pipe[0]); (void)close(err_pipe[1]); }
-    return -1;
-  }
+  if (pipe(out_pipe) < 0 || pipe(err_pipe) < 0) goto setup_failure;
   pid = fork();
-  if (pid < 0) return -1;
+  if (pid < 0) goto setup_failure;
   if (pid == 0) {
     (void)setpgid(0, 0);
-    (void)dup2(out_pipe[1], STDOUT_FILENO);
-    (void)dup2(err_pipe[1], STDERR_FILENO);
-    (void)close(out_pipe[0]); (void)close(out_pipe[1]);
-    (void)close(err_pipe[0]); (void)close(err_pipe[1]);
+    if (dup2(out_pipe[1], STDOUT_FILENO) < 0 || dup2(err_pipe[1], STDERR_FILENO) < 0) _exit(126);
+    tf_close_fd(&out_pipe[0]); tf_close_fd(&out_pipe[1]);
+    tf_close_fd(&err_pipe[0]); tf_close_fd(&err_pipe[1]);
     execvp(argv[0], argv);
     dprintf(STDERR_FILENO, "exec %s: %s\n", argv[0], strerror(errno));
     _exit(127);
   }
   (void)setpgid(pid, pid);
-  (void)close(out_pipe[1]); (void)close(err_pipe[1]);
-  (void)tf_set_nonblock(out_pipe[0]); (void)tf_set_nonblock(err_pipe[0]);
-  deadline = tf_now_ms() + (timeout_ms ? timeout_ms : 30000u);
-  while (out_open || err_open || !child_reaped) {
-    struct pollfd pollfds[2];
-    int nfds = 0;
-    int wait_result;
-    if (out_open) { pollfds[nfds].fd = out_pipe[0]; pollfds[nfds].events = POLLIN; nfds++; }
-    if (err_open) { pollfds[nfds].fd = err_pipe[0]; pollfds[nfds].events = POLLIN; nfds++; }
-    if (nfds) {
-      int timeout = (int)((deadline > tf_now_ms()) ? deadline - tf_now_ms() : 0);
-      (void)poll(pollfds, (nfds_t)nfds, timeout > 50 ? 50 : timeout);
-      char buffer[4096];
-      ssize_t got;
-      if (out_open) {
-        while ((got = read(out_pipe[0], buffer, sizeof buffer)) > 0) tf_append(&result->stdout_data, &result->stdout_len, buffer, (size_t)got);
-        if (got == 0) { (void)close(out_pipe[0]); out_open = false; }
-      }
-      if (err_open) {
-        while ((got = read(err_pipe[0], buffer, sizeof buffer)) > 0) tf_append(&result->stderr_data, &result->stderr_len, buffer, (size_t)got);
-        if (got == 0) { (void)close(err_pipe[0]); err_open = false; }
-      }
-    }
-    wait_result = waitpid(pid, &status, WNOHANG);
-    if (wait_result == pid) child_reaped = true;
-    if (!child_reaped && tf_now_ms() >= deadline) {
-      result->timed_out = true;
-      (void)kill(-pid, SIGKILL);
-      (void)waitpid(pid, &status, 0);
-      child_reaped = true;
-    }
+  tf_close_fd(&out_pipe[1]); tf_close_fd(&err_pipe[1]);
+  if (tf_set_nonblock(out_pipe[0]) < 0 || tf_set_nonblock(err_pipe[0]) < 0) {
+    (void)kill(-pid, SIGKILL); (void)tf_wait_blocking(pid, &(int){0});
+    tf_close_fd(&out_pipe[0]); tf_close_fd(&err_pipe[0]); return -1;
   }
-  if (WIFEXITED(status)) { result->exited = true; result->exit_status = WEXITSTATUS(status); }
-  if (WIFSIGNALED(status)) { result->signaled = true; result->signal_number = WTERMSIG(status); }
-  return 0;
+  deadline = tf_now_ms() + (timeout_ms ? timeout_ms : 30000u);
+  rc = tf_collect(pid, out_pipe[0], err_pipe[0], deadline, result);
+  return rc;
+setup_failure:
+  tf_close_fd(&out_pipe[0]); tf_close_fd(&out_pipe[1]);
+  tf_close_fd(&err_pipe[0]); tf_close_fd(&err_pipe[1]);
+  return -1;
 }
 
 void tf_process_result_destroy(TF_ProcessResult *result) {
@@ -205,6 +259,12 @@ void tf_fixture_init(TF_Fixture *fixture) {
   memset(fixture, 0, sizeof *fixture);
   (void)snprintf(fixture->path, sizeof fixture->path, "/tmp/sin-test-XXXXXX");
   fixture->active = mkdtemp(fixture->path) != NULL;
+  if (fixture->active && g_fixture_count < TF_MAX_FIXTURES) {
+    g_fixtures[g_fixture_count++] = fixture;
+  } else if (fixture->active) {
+    (void)tf_remove_tree(fixture->path);
+    fixture->active = false;
+  }
 }
 
 const char *tf_fixture_path(const TF_Fixture *fixture) {
@@ -220,10 +280,21 @@ int tf_fixture_file(const TF_Fixture *fixture, const char *name, char *path,
 }
 
 void tf_fixture_cleanup(TF_Fixture *fixture) {
+  size_t i;
   if (!fixture || !fixture->active) return;
   (void)tf_remove_tree(fixture->path);
   fixture->active = false;
   fixture->path[0] = '\0';
+  for (i = 0; i < g_fixture_count; i++) {
+    if (g_fixtures[i] == fixture) {
+      g_fixtures[i] = g_fixtures[--g_fixture_count];
+      break;
+    }
+  }
+}
+
+static void tf_fixture_cleanup_all(void) {
+  while (g_fixture_count != 0) tf_fixture_cleanup(g_fixtures[g_fixture_count - 1]);
 }
 
 static int tf_source_write(const char *source, FILE *file) {
@@ -257,12 +328,36 @@ void tf_io_failures(bool write_failure, bool close_failure, bool sync_failure) {
   itemstore_set_sync_hook_for_tests(tf_sync);
 }
 
+void tf_assert_bytes(const char *file, int line, const char *expression,
+                     const void *expected, size_t expected_len,
+                     const void *actual, size_t actual_len) {
+  const uint8_t *expected_bytes = expected;
+  const uint8_t *actual_bytes = actual;
+  size_t mismatch = 0;
+  char expected_text[192], actual_text[192], detail[128];
+  size_t expected_offset = mismatch, actual_offset = mismatch;
+  if (expected_len == actual_len &&
+      (expected_len == 0 || (expected_bytes && actual_bytes &&
+                             memcmp(expected_bytes, actual_bytes, expected_len) == 0))) return;
+  while (mismatch < expected_len && mismatch < actual_len && expected_bytes && actual_bytes &&
+         expected_bytes[mismatch] == actual_bytes[mismatch]) mismatch++;
+  expected_offset = mismatch; actual_offset = mismatch;
+  (void)snprintf(detail, sizeof detail, "lengths: expected=%zu actual=%zu; mismatch offset=%zu",
+                 expected_len, actual_len, mismatch);
+  (void)snprintf(expected_text, sizeof expected_text, "bytes at offset %zu: %02x",
+                 expected_offset, expected_bytes && mismatch < expected_len ? expected_bytes[mismatch] : 0u);
+  (void)snprintf(actual_text, sizeof actual_text, "bytes at offset %zu: %02x",
+                 actual_offset, actual_bytes && mismatch < actual_len ? actual_bytes[mismatch] : 0u);
+  tf_fail(file, line, expression, expected_text, actual_text, detail);
+}
+
 void tf_fail(const char *file, int line, const char *expression,
              const char *expected, const char *actual, const char *detail) {
   (void)fprintf(stderr, "assertion failed at %s:%d: %s\n  expected: %s\n  actual:   %s\n",
                 file, line, expression, expected, actual);
   if (detail) (void)fprintf(stderr, "  detail:   %s\n", detail);
   tf_reset_hooks();
+  tf_fixture_cleanup_all();
   _exit(1);
 }
 
@@ -288,52 +383,49 @@ static int tf_run_one(const TF_TestDescriptor *test) {
   int out_pipe[2], err_pipe[2];
   pid_t pid;
   int status = 0;
-  bool out_open = true, err_open = true, reaped = false, timed_out = false;
-  char *out = NULL, *err = NULL;
-  size_t out_len = 0, err_len = 0;
+  bool timed_out = false;
+  TF_ProcessResult result;
   uint64_t deadline = tf_now_ms() + (test->timeout_ms ? test->timeout_ms : 30000u);
-  if (pipe(out_pipe) < 0 || pipe(err_pipe) < 0) return -1;
+  memset(&result, 0, sizeof result);
+  out_pipe[0] = out_pipe[1] = err_pipe[0] = err_pipe[1] = -1;
+  if (pipe(out_pipe) < 0 || pipe(err_pipe) < 0) goto run_failure;
   pid = fork();
-  if (pid < 0) return -1;
+  if (pid < 0) goto run_failure;
   if (pid == 0) {
     (void)setpgid(0, 0);
     (void)close(out_pipe[0]); (void)close(err_pipe[0]);
-    (void)dup2(out_pipe[1], STDOUT_FILENO); (void)dup2(err_pipe[1], STDERR_FILENO);
+    if (dup2(out_pipe[1], STDOUT_FILENO) < 0 || dup2(err_pipe[1], STDERR_FILENO) < 0) _exit(126);
     (void)close(out_pipe[1]); (void)close(err_pipe[1]);
     tf_reset_hooks();
     test->fn();
+    (void)fflush(NULL);
+    tf_fixture_cleanup_all();
     _exit(0);
   }
   (void)setpgid(pid, pid);
-  (void)close(out_pipe[1]); (void)close(err_pipe[1]);
-  (void)tf_set_nonblock(out_pipe[0]); (void)tf_set_nonblock(err_pipe[0]);
-  while (out_open || err_open || !reaped) {
-    struct pollfd fds[2];
-    int nfds = 0;
-    if (out_open) { fds[nfds].fd = out_pipe[0]; fds[nfds].events = POLLIN; nfds++; }
-    if (err_open) { fds[nfds].fd = err_pipe[0]; fds[nfds].events = POLLIN; nfds++; }
-    if (nfds) (void)poll(fds, (nfds_t)nfds, 25);
-    char buf[4096];
-    ssize_t n;
-    if (out_open) {
-      while ((n = read(out_pipe[0], buf, sizeof buf)) > 0) tf_append(&out, &out_len, buf, (size_t)n);
-      if (n == 0) { (void)close(out_pipe[0]); out_open = false; }
-    }
-    if (err_open) {
-      while ((n = read(err_pipe[0], buf, sizeof buf)) > 0) tf_append(&err, &err_len, buf, (size_t)n);
-      if (n == 0) { (void)close(err_pipe[0]); err_open = false; }
-    }
-    if (!reaped && waitpid(pid, &status, WNOHANG) == pid) reaped = true;
-    if (!reaped && tf_now_ms() >= deadline) {
-      timed_out = true; (void)kill(-pid, SIGKILL); (void)waitpid(pid, &status, 0); reaped = true;
-    }
+  tf_close_fd(&out_pipe[1]); tf_close_fd(&err_pipe[1]);
+  if (tf_set_nonblock(out_pipe[0]) < 0 || tf_set_nonblock(err_pipe[0]) < 0) {
+    (void)kill(-pid, SIGKILL); (void)tf_wait_blocking(pid, &status); goto run_failure;
   }
-  if (out && out_len != 0) (void)fwrite(out, 1, out_len, stderr);
-  if (err && err_len != 0) (void)fwrite(err, 1, err_len, stderr);
-  free(out); free(err);
-  if (!timed_out && WIFEXITED(status) && WEXITSTATUS(status) == 0) return 0;
+  (void)tf_collect(pid, out_pipe[0], err_pipe[0], deadline, &result);
+  timed_out = result.timed_out;
+  if (result.exited && result.exit_status == 0 && !timed_out && !result.capture_failed) {
+    if (getenv("TF_VERBOSE") && strcmp(getenv("TF_VERBOSE"), "0") != 0) {
+      if (result.stdout_data) (void)fwrite(result.stdout_data, 1, result.stdout_len, stderr);
+      if (result.stderr_data) (void)fwrite(result.stderr_data, 1, result.stderr_len, stderr);
+    }
+    tf_process_result_destroy(&result);
+    return 0;
+  }
+  if (result.stdout_data) (void)fwrite(result.stdout_data, 1, result.stdout_len, stderr);
+  if (result.stderr_data) (void)fwrite(result.stderr_data, 1, result.stderr_len, stderr);
   if (timed_out) (void)fprintf(stderr, "test %s timed out\n", test->id);
-  if (WIFSIGNALED(status)) (void)fprintf(stderr, "test %s terminated by signal %d\n", test->id, WTERMSIG(status));
+  if (result.signaled) (void)fprintf(stderr, "test %s terminated by signal %d\n", test->id, result.signal_number);
+  tf_process_result_destroy(&result);
+  return -1;
+run_failure:
+  tf_close_fd(&out_pipe[0]); tf_close_fd(&out_pipe[1]);
+  tf_close_fd(&err_pipe[0]); tf_close_fd(&err_pipe[1]);
   return -1;
 }
 

@@ -79,10 +79,12 @@ QUIET_OUTPUT_TEST := $(TEST_DIR)/test_quiet_output.sh
 FRAMEWORK_DIR := $(TEST_DIR)/framework
 FRAMEWORK_SELF_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-selftest
 FRAMEWORK_RUNNER_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-runner
+FRAMEWORK_DUP_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-duplicate-fixture
 FRAMEWORK_SOURCES := $(FRAMEWORK_DIR)/test_framework.c $(FRAMEWORK_DIR)/framework_config.c
 FRAMEWORK_SELF_SOURCES := $(FRAMEWORK_DIR)/framework_selftest.c
 FRAMEWORK_RUNNER_SOURCES := $(FRAMEWORK_DIR)/test_runner.c
-FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN)
+FRAMEWORK_DUP_SOURCES := $(FRAMEWORK_DIR)/framework_duplicate_fixture.c
+FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN)
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -331,6 +333,10 @@ test: inventory-audit $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) scomp si
 test-framework: $(FRAMEWORK_BINS)
 	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN)
 	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" ./$(FRAMEWORK_SELF_BIN) --run runner_discovery_and_jobs
+	@tmp_file="$$(mktemp)"; trap 'rm -f "$$tmp_file"' EXIT; \
+		if ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(FRAMEWORK_DUP_BIN) >"$$tmp_file" 2>&1; then \
+			cat "$$tmp_file"; printf '%s\n' 'duplicate discovery unexpectedly succeeded' >&2; exit 1; \
+		fi; grep -F 'TF|ERROR|discovery' "$$tmp_file" >/dev/null
 
 framework-list: $(FRAMEWORK_BINS)
 	@./$(FRAMEWORK_SELF_BIN) --list
@@ -430,13 +436,17 @@ $(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/net/network.c
 $(CHAT_SMOKE_BIN): $(TEST_DIR)/network/test_chat_smoke.c scomp sin FORCE_BUILD
 	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_DIR)/network/test_chat_smoke.c
 
-$(FRAMEWORK_SELF_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_SELF_SOURCES) $(LIB) FORCE_BUILD
+$(FRAMEWORK_SELF_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_SELF_SOURCES) $(FRAMEWORK_DIR)/test_framework.h $(SRC_DIR)/config.h $(SRC_DIR)/itemstore/item.h $(SRC_DIR)/itemstore/item_internal.h $(SRC_DIR)/common/memory.h $(LIB)
 	@mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -pthread -o $@ $(FRAMEWORK_SOURCES) $(FRAMEWORK_SELF_SOURCES) $(LIB) $(LDFLAGS) $(LIBS) -pthread
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -o $@ $(FRAMEWORK_SOURCES) $(FRAMEWORK_SELF_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
-$(FRAMEWORK_RUNNER_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_RUNNER_SOURCES) $(LIB) FORCE_BUILD
+$(FRAMEWORK_RUNNER_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_RUNNER_SOURCES) $(FRAMEWORK_DIR)/test_framework.h $(SRC_DIR)/config.h $(SRC_DIR)/itemstore/item.h $(SRC_DIR)/itemstore/item_internal.h $(SRC_DIR)/common/memory.h $(LIB)
 	@mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -pthread -o $@ $(FRAMEWORK_SOURCES) $(FRAMEWORK_RUNNER_SOURCES) $(LIB) $(LDFLAGS) $(LIBS) -pthread
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -o $@ $(FRAMEWORK_SOURCES) $(FRAMEWORK_RUNNER_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
+
+$(FRAMEWORK_DUP_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_DUP_SOURCES) $(FRAMEWORK_DIR)/test_framework.h $(SRC_DIR)/config.h $(SRC_DIR)/itemstore/item.h $(SRC_DIR)/itemstore/item_internal.h $(SRC_DIR)/common/memory.h $(LIB)
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -o $@ $(FRAMEWORK_SOURCES) $(FRAMEWORK_DUP_SOURCES) $(LIB) $(LDFLAGS) $(LIBS)
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)
