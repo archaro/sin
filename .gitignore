@@ -2,6 +2,9 @@
 /boot.src
 /items.dat
 
+# Python compilation artifacts
+__pycache__
+
 # clangd tooling: machine-specific absolute paths, regenerated from the build.
 /compile_commands.json
 /.clangd
