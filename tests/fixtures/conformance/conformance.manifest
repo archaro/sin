@@ -67,9 +67,9 @@ coverage|language.token.tassign|positive-core|tests/fixtures/conformance/positiv
 coverage|language.token.tinc|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.token.tdec|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.token.tlayersep|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
-coverage|language.token.tderefstart|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tderefstart|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.token.tcode|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
-coverage|language.token.tderefend|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.token.tderefend|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.token.tlparen|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.token.trparen|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.token.tlbrace|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
@@ -109,8 +109,8 @@ coverage|language.production.item|positive-core|tests/fixtures/conformance/posit
 coverage|language.production.first_layer|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.production.subsequent_layers|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.production.layer|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
-coverage|language.production.dereference|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
-coverage|language.production.deref_content|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.dereference|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.production.deref_content|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.operator.add|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.operator.subtract|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.operator.multiply|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
@@ -151,7 +151,7 @@ coverage|language.semantic-rule.break-context|positive-structures|tests/fixtures
 coverage|language.semantic-rule.continue-context|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.semantic-rule.call-arity|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.semantic-rule.libcall-resolution|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
-coverage|language.semantic-rule.item-name|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
+coverage|language.semantic-rule.item-name|positive-structures|tests/fixtures/conformance/positive-structures.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.semantic-rule.loop-variable|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes
 coverage|language.diagnostic.lexer-error|negative-parser-unknown|tests/fixtures/conformance/negative/parser-unknown-character.src|negative-parser-unknown|tests/fixtures/conformance/negative/parser-unknown-character.src|no
 coverage|language.diagnostic.parser-error|negative-parser-trailing-comma|tests/fixtures/conformance/negative/parser-trailing-comma.src|negative-parser-trailing-comma|tests/fixtures/conformance/negative/parser-trailing-comma.src|no

@@ -287,7 +287,7 @@ void test_list_libcall_invalid_types_and_ranges(void) {
   sin_list_release(failure_left);
   sin_list_release(failure_right);
 
-  ITEM_t *context_root = make_root_item("list-context");
+  ITEM_t *context_root = make_root_item("list_context");
   ASSERT_NOT_NULL(context_root);
   ITEM_t *caller = test_item_set_value(
       context_root, "caller", (VALUE_t){VALUE_int, {.i = 1}});

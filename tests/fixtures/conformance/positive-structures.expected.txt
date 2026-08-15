@@ -1,5 +1,5 @@
 ===stdout===
-CONF-structures#[true, true, true, true, true, true, true]true
+CONF-structures#[true, true, true, true, true, true, true, true, true, true]true
 
 ===stderr===
 

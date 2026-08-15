@@ -1662,7 +1662,7 @@ void test_itemstore_item_name_contract_boundaries_roundtrip(void) {
   FILE *file = new_fixture(path);
   ASSERT_EQ_INT(0, fclose(file));
 
-  ITEM_t *root = make_root_item("root/name");
+  ITEM_t *root = make_root_item("root_name");
   ASSERT_NOT_NULL(root);
   ASSERT_NOT_NULL(test_item_set_value(root, "a",
                               (VALUE_t){.type = VALUE_int, .i = 1}));
@@ -2229,32 +2229,30 @@ void test_itemsource_paths_are_validated_and_contained(void) {
                                          sizeof detail) == NULL);
   ASSERT_TRUE(strcmp("source item is not a code item", detail) == 0);
 
-  ITEM_t *punctuation_root = make_item("context-root", NULL, ITEM_code,
-                                       VALUE_NIL, NULL, 0);
-  ASSERT_NOT_NULL(punctuation_root);
-  char *punctuation_file = get_itemfilename_in_srcroot(punctuation_root,
-                                                        srcroot);
-  ASSERT_NOT_NULL(punctuation_file);
-  char expected_punctuation_file[sizeof srcroot
-                                 + sizeof "/context-root/source.sin"];
-  ASSERT_TRUE(snprintf(expected_punctuation_file,
-                       sizeof expected_punctuation_file,
-                       "%s/context-root/source.sin", srcroot) > 0);
-  ASSERT_TRUE(strcmp(expected_punctuation_file, punctuation_file) == 0);
-  ASSERT_TRUE(save_itemsource_in_srcroot(punctuation_root,
-                                         "punctuation source\n", srcroot));
-  char *punctuation_source = read_itemsource_in_srcroot(
-      punctuation_root, srcroot, detail, sizeof detail);
-  ASSERT_NOT_NULL(punctuation_source);
-  ASSERT_TRUE(strcmp("punctuation source\n", punctuation_source) == 0);
-  free(punctuation_source);
-  ASSERT_EQ_INT(0, unlink(punctuation_file));
-  char punctuation_dir[sizeof srcroot + sizeof "/context-root"];
-  ASSERT_TRUE(snprintf(punctuation_dir, sizeof punctuation_dir,
-                       "%s/context-root", srcroot) > 0);
-  ASSERT_EQ_INT(0, rmdir(punctuation_dir));
-  free(punctuation_file);
-  detach_item_and_destroy(punctuation_root);
+  ITEM_t *context_root = make_item("context_root", NULL, ITEM_code,
+                                   VALUE_NIL, NULL, 0);
+  ASSERT_NOT_NULL(context_root);
+  char *context_file = get_itemfilename_in_srcroot(context_root, srcroot);
+  ASSERT_NOT_NULL(context_file);
+  char expected_context_file[sizeof srcroot
+                             + sizeof "/context_root/source.sin"];
+  ASSERT_TRUE(snprintf(expected_context_file, sizeof expected_context_file,
+                       "%s/context_root/source.sin", srcroot) > 0);
+  ASSERT_TRUE(strcmp(expected_context_file, context_file) == 0);
+  ASSERT_TRUE(save_itemsource_in_srcroot(context_root,
+                                         "context source\n", srcroot));
+  char *context_source = read_itemsource_in_srcroot(
+      context_root, srcroot, detail, sizeof detail);
+  ASSERT_NOT_NULL(context_source);
+  ASSERT_TRUE(strcmp("context source\n", context_source) == 0);
+  free(context_source);
+  ASSERT_EQ_INT(0, unlink(context_file));
+  char context_dir[sizeof srcroot + sizeof "/context_root"];
+  ASSERT_TRUE(snprintf(context_dir, sizeof context_dir,
+                       "%s/context_root", srcroot) > 0);
+  ASSERT_EQ_INT(0, rmdir(context_dir));
+  free(context_file);
+  detach_item_and_destroy(context_root);
 
   ASSERT_TRUE(get_itemfilename_in_srcroot(NULL, srcroot) == NULL);
   ASSERT_TRUE(get_itemfilename_in_srcroot(root, NULL) == NULL);

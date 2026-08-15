@@ -29,6 +29,16 @@ endfor;
 @comparisons = (1 == 1) and (1 != 2) and (1 <= 1) and (2 >= 1);
 @difference = 2 - 1;
 @modulus = 5 % 2;
+foo = "foo_layer";
+bar = "bar_layer";
+@b = 2;
+foo.bar = 2;
+foo.23 = 3;
+foo.23.baz.6 = 4;
+23foo.baz.43bar43.2 = 5;
+[foo] = 6;
+foo.[bar] = 7;
+foo.[bar].[@b] = 8;
 @ref = &missing;
 .relative;
 foo.12;
@@ -40,6 +50,9 @@ sys.log{#[
   @saw_element,
   @comparisons,
   @difference == 1,
-  @modulus == 1
+  @modulus == 1,
+  [foo] == 6,
+  foo.[bar] == 7,
+  foo.[bar].[@b] == 8
 ]};
 sys.log{sys.itemname{@ref} == "missing"};

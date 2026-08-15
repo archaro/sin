@@ -873,8 +873,8 @@ void test_runtime_verification_cache_ownerless_items_bypass(void) {
 
 void test_runtime_verification_cache_isolates_live_itemstores(void) {
   static const uint8_t code_bytes[] = {0, 0, 'h'};
-  ITEMSTORE_t *first_store = itemstore_create("cache-first");
-  ITEMSTORE_t *second_store = itemstore_create("cache-second");
+  ITEMSTORE_t *first_store = itemstore_create("cache_first");
+  ITEMSTORE_t *second_store = itemstore_create("cache_second");
   ASSERT_NOT_NULL(first_store);
   ASSERT_NOT_NULL(second_store);
   ITEM_t *first_code = install_runtime_verify_test_code_in_store(

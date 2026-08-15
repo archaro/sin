@@ -382,7 +382,7 @@ static void run_extended_list_benchmarks(void) {
   sin_list_release(late);
   sin_list_release(equal_left);
   sin_list_release(equal_right);
-  ITEMSTORE_t *literal_store = itemstore_create("compiled-list-bench");
+  ITEMSTORE_t *literal_store = itemstore_create("compiled_list_bench");
   ASSERT_NOT_NULL(literal_store);
   char literal_source[256];
   bench_list_literal_source(literal_source, sizeof(literal_source), 33);
@@ -428,7 +428,7 @@ static void run_extended_list_benchmarks(void) {
 
 static void run_extended_itemstore_benchmarks(void) {
   char path[] = "/tmp/sin-list-bench-XXXXXX";
-  ITEMSTORE_t *store = itemstore_create("list-bench");
+  ITEMSTORE_t *store = itemstore_create("list_bench");
   ASSERT_NOT_NULL(store);
   SIN_LIST_t *list = bench_make_list(33);
   VALUE_t stored = {.type = VALUE_list, .list = list};
@@ -539,7 +539,7 @@ static void runtime_verify_bench_fixture_init(
   static const uint8_t caller_b_bytes[] = {
       0, 0, 'l', 1, 0, 'b', 'F', 0, 0, 'h'
   };
-  fixture->store = itemstore_create("runtime-verify-bench");
+  fixture->store = itemstore_create("runtime_verify_bench");
   ASSERT_NOT_NULL(fixture->store);
   fixture->callee_a = runtime_verify_bench_set_code(
       fixture->store, "a", callee_bytes, sizeof(callee_bytes));
@@ -635,7 +635,7 @@ static void run_extended_itemref_and_syscall_benchmarks(void) {
   volatile uintptr_t sink = 0;
   uint64_t create_samples[3];
   uint64_t resolve_samples[3];
-  ITEMSTORE_t *store = itemstore_create("itemref-bench");
+  ITEMSTORE_t *store = itemstore_create("itemref_bench");
   ASSERT_NOT_NULL(store);
   VALUE_t target_value = {.type = VALUE_int, .i = 3};
   ASSERT_NOT_NULL(item_set_value(itemstore_root(store), "players.3",
@@ -666,7 +666,7 @@ static void run_extended_itemref_and_syscall_benchmarks(void) {
          (unsigned long long)(median_u64(resolve_samples, 3) / 1000u));
   sin_itemref_release(prepared);
   itemstore_destroy(store);
-  ITEMSTORE_t *call_store = itemstore_create("sys-call-bench");
+  ITEMSTORE_t *call_store = itemstore_create("sys_call_bench");
   ASSERT_NOT_NULL(call_store);
   const char *target_params[] = {
       "@arg0", "@arg1", "@arg2", "@arg3",
@@ -896,7 +896,7 @@ static void run_extended_string_registry_benchmarks(void) {
   const size_t iters = 80u;
   const size_t baseline = strbuf_tracked_count_for_tests();
   volatile uintptr_t sink = 0;
-  ITEMSTORE_t *store = itemstore_create("string-registry-bench");
+  ITEMSTORE_t *store = itemstore_create("string_registry_bench");
   ASSERT_NOT_NULL(store);
   ITEM_t *item = bench_compile_item(store, "bench.string_workload",
                                     "return \"0123456789abcdef\" + \"x\";",
@@ -1023,7 +1023,7 @@ static void prepare_interpreter_benchmark(InterpreterBenchmark_t *benchmark,
   static const uint8_t control_caller[] = {
       0, 0, 'l', 7, 0, 'c', 'o', 'n', 't', 'r', 'o', 'l', 'F', 0, 0, 'Q', 'h'};
 
-  benchmark->store = itemstore_create("interp-bench");
+  benchmark->store = itemstore_create("interp_bench");
   benchmark->vm = make_vm();
   ASSERT_NOT_NULL(benchmark->store);
   ASSERT_NOT_NULL(benchmark->vm);

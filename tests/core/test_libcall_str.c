@@ -93,7 +93,7 @@ static void assert_float_string_libcall_returns_invalidargs_nil(
 static void assert_float_string_libcall_uses_context_itemroot(
     uint8_t *(*func)(RuntimeContext *, uint8_t *, ITEM_t *),
     const char *expected) {
-  ITEM_t *context_root = make_root_item("context-root");
+  ITEM_t *context_root = make_root_item("context_root");
   ASSERT_NOT_NULL(context_root);
 
   RuntimeContext ctx;
@@ -669,7 +669,7 @@ void test_str_libcall_invalidargs_uses_context_itemroot(void) {
   assert_float_string_libcall_uses_context_itemroot(lc_str_rtrim,
       "str.rtrim");
 
-  ITEM_t *context_root = make_root_item("context-root");
+  ITEM_t *context_root = make_root_item("context_root");
   ASSERT_NOT_NULL(context_root);
 
   RuntimeContext ctx;

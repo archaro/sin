@@ -20,6 +20,9 @@ DO @i--; WHILE @i > 0;
 if 1 < 2 then @i = @i + 1; elsif 2 < 1 then @i = @i + 2; else @i = @i + 3; endif;
 .relative;
 foo.12;
+foo = "deref_layer";
+[foo] = 1;
+23foo.baz.43bar43.2;
 foreach @element in @values do
   @nothing = @element;
 endfor;

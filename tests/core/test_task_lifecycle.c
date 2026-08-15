@@ -87,7 +87,7 @@ void test_task_setup_failures_unwind(void) {
   TASK_t *task;
 
   setup_task_loop(&loop);
-  task = make_task("runtime-failure", 1);
+  task = make_task("runtime_failure", 1);
   ASSERT_NOT_NULL(task);
   runtime_context_init(&task->runtime_context, task->vm);
   alloc_test_fail_after(0);
@@ -95,12 +95,12 @@ void test_task_setup_failures_unwind(void) {
   alloc_test_fail_after(-1);
   destroy_task(task);
 
-  task = make_task("timer-init-failure", 1);
+  task = make_task("timer_init_failure", 1);
   ASSERT_NOT_NULL(task);
   ASSERT_TRUE(!start_task_timer(task, NULL, count_timer_cb, 0));
   destroy_task(task);
 
-  task = make_task("timer-start-failure", 1);
+  task = make_task("timer_start_failure", 1);
   ASSERT_NOT_NULL(task);
   ASSERT_TRUE(!start_task_timer(task, &loop, NULL, 0));
   ASSERT_TRUE(find_task_by_id(task->id) == NULL);
