@@ -3,6 +3,17 @@
 This page summarizes the ownership contracts between the interpreter runtime,
 the itemstore, and native library-call handlers.
 
+## Flow of Operations ##
+
+When the runtime engine starts up, it first loads and executes the bootstrap code (which is separately compiled).  The engine is event-driven and this code sets things up ready for the game to run, including setting up the main game tasks. Tasks are attached to the runloop and are called as necessary. There are three kinds:
+- Network tasks: the listener, and any player connections created by it.  These tasks run outside the game and interact in limited ways with *Sinistra* code, and their purpose is to manage input from and output to connected players.
+- Timer tasks: these are managed by *Sinistra* code (for example, the bootstrap code).  Each time the timer expires, the specified code is run.
+- Input task: this is the most important task. `sin` invokes the configured
+  input item from a repeating libuv timer with a nominal 10ms interval. The
+  callback runs on the event-loop thread, so it is serialized with network and
+  other timer callbacks; a busy loop can delay it. The input item should call
+  `net.input` to process network activity.
+
 ## Runtime context and interpreter
 
 `RuntimeContext` is the execution context passed to opcode and libcall handlers.

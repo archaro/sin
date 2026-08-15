@@ -1,8 +1,8 @@
 # Documentation Improvement Roadmap
 
 This roadmap lists remaining documentation work for making Sinistra easier to
-learn. The canonical 0.7.3 language reference is now present; compatibility is
-explicitly not frozen until 0.8.0. The documentation index, tools reference,
+learn. The canonical pre-0.8.0 language reference is now present; compatibility
+is explicitly not frozen until 0.8.0. The documentation index, tools reference,
 and source-of-truth maintenance guidance are also present. Items below are
 follow-up work, not descriptions of missing current syntax documentation.
 
@@ -22,12 +22,14 @@ Break `docs/concepts.md` into smaller pages with stable responsibilities:
 This would make the existing material easier to review and create natural homes
 for future examples and formal reference links.
 
+This work has already begun.
+
 ### Add an examples guide
 
 Create a guide that walks through the files in `examples/` and explains the
 runtime behaviour they demonstrate. Start with the existing echo and chat server
 examples, then add small single-purpose examples for language features as they
-stabilise.
+stabilise. Alternatively, move examples to a subdirectory under docs/guide/.
 
 ## Medium-term tasks
 
@@ -68,4 +70,4 @@ for syntax, bytecode, library calls, and itemstore/runtime behaviour.
 1. Split `docs/concepts.md` into focused concept pages without changing content
    semantics.
 2. Add examples and coverage notes for the canonical language reference as
-   later 0.7.3 stages document values, calls, ownership, and limits.
+   later pre-0.8.0 stages document values, calls, ownership, and limits.

@@ -1,9 +1,6 @@
 # Sinistra Bytecode Reference
 
-This document is the canonical human-readable reference for Sinistra bytecode.
-The bytecode ABI opcode metadata in `src/bytecode/opcode_schema.def` is the source of
-truth for opcode symbols, operand kinds, size policies, validators, and runtime
-handler requirements.
+This document is the canonical human-readable reference for Sinistra bytecode.  The bytecode ABI opcode metadata in `src/bytecode/opcode_schema.def` is the source of truth for opcode symbols, operand kinds, size policies, validators, and runtime handler requirements.
 
 Newly compiled code uses bytecode format v1. Bytecode v1 and later versions are
 retained as the compatibility contract. The unversioned 0.7.1 little-endian
@@ -12,11 +9,7 @@ ongoing compatibility promise.
 
 ## v1 compatibility contract
 
-The v1 opcode ABI is frozen. Encoded bytes, operand layouts, context validity,
-stack effects, and control/termination classes are immutable. Bytes not assigned
-by the frozen manifest are reserved and invalid; removing an operation leaves
-its byte reserved forever. Any new or changed instruction requires a newer
-bytecode version rather than editing the v1 manifest.
+The v1 opcode ABI is frozen as of pre-release 0.5.0. Encoded bytes, operand layouts, context validity, stack effects, and control/termination classes are immutable. Bytes not assigned by the frozen manifest are reserved and invalid; removing an operation leaves its byte reserved forever. Any new or changed instruction requires a newer bytecode version rather than editing the v1 manifest.
 
 ## Code block layout
 
@@ -161,7 +154,7 @@ error. Malformed or truncated encodings are verifier errors.
 | `F` | `IR_OP_ITEM_DEREF`, `IR_OP_CALL` | `u16 argument_count` | Fetch item contents or call a code item; see below. |
 | `I` | `IR_OP_ITEM_BEGIN` | item layers until `E` | Begin absolute item-name assembly. |
 | `L` | `IR_OP_ITEM_PUSH_LAYER` | `u8 length`, bytes | Inside item assembly, append a literal layer name. |
-| `M` | `IR_OP_LIBCALL` | `u8 library, u8 call` | Dispatch a permanent library-call pair. |
+| `M` | `IR_OP_LIBCALL` | `u8 library, u8 call` | Dispatch a permanent library-call pair. This opcode is followed by two bytes: library index, then call index. The pair is permanent and is resolved through the libcall registry; unknown pairs are invalid bytecode.|
 | `N` | `IR_OP_PUSH_NIL` | none | Push the canonical nil value. |
 | `R` | `IR_OP_ITEM_BEGIN_REL` | item layers until `E` | Begin relative item-name assembly using the current item as context. |
 | `V` | `IR_OP_ITEM_PUSH_DEREF_LOCAL` | `u8 local_index` | Inside a `D` dereference payload, turn the addressed local value into a layer name. |
@@ -259,8 +252,3 @@ change set:
 5. Treat v1 bytecode as portable; legacy unversioned input remains a
    pre-v1 little-endian migration format.
 
-## Libcall opcode ABI
-
-Opcode `M` is followed by two bytes: library index, then call index. The pair
-is permanent and is resolved through the libcall registry; unknown pairs are
-invalid bytecode.

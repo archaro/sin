@@ -343,7 +343,7 @@ make test
 ```
 
 For module-boundary, compiler, runtime, or build-system changes, also run the
-relevant checks documented in [`CONTRIBUTING.md`](../CONTRIBUTING.md). The
+relevant checks documented in [`CONTRIBUTING.md`](../../CONTRIBUTING.md). The
 hosted workflow keeps the warning, release, leak-sanitizer, and fuzz checks in
 separate parallel jobs; the combined local entry point is:
 

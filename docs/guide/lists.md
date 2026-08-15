@@ -1,7 +1,7 @@
 # Lists and item references
 
 Observable list and item-reference semantics are normative in the
-[language reference](language-reference.md#lists-and-item-references). This
+[language reference](../reference/language.md#lists-and-item-references). This
 page records implementation/API notes only.
 
 List literals and item-reference syntax compile and execute.
@@ -34,7 +34,7 @@ above. `value_debug_string` renders source-like list text, with truncation and
 error markers where required.
 
 The public list API, argument validation, and failure behavior are documented
-in [`libcalls.md`](libcalls.md). Indices are zero-based and update calls return
+in [`libcalls.md`](../reference/libcalls.md). Indices are zero-based and update calls return
 new lists; there is no mutable push/pop/insert/remove syntax.
 
 ### Packed layout and structural sharing

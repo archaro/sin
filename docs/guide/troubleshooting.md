@@ -1,7 +1,7 @@
 # Troubleshooting
 
 This guide covers the diagnostics and generated local state used by the command
-line tools. See [`tools.md`](tools.md) for the complete option reference.
+line tools. See [`tools.md`](../reference/tools.md) for the complete option reference.
 
 ## Compiler diagnostics
 
@@ -34,7 +34,7 @@ location, and source text. Ordinary runtime errors mainly use `error`,
 `error.msg`, and `error.item`, and clear the compiler-only fields.
 
 Do not assume that success clears an earlier error: that behavior is specific to
-each call's contract. Check the relevant entry in [`libcalls.md`](libcalls.md)
+each call's contract. Check the relevant entry in [`libcalls.md`](../reference/libcalls.md)
 when code needs to clear or preserve a diagnostic deliberately.
 
 ## Logging

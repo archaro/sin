@@ -1,0 +1,38 @@
+# Libraries and Libcalls
+
+## Invalid argument policy
+
+Most libcalls that receive an argument with an invalid type, range, or value
+consume the argument values, set `error` to `ERR_RUNTIME_INVALIDARGS`, set
+`error.msg` to a libcall-specific diagnostic, and return that libcall's
+documented invalid-argument value. Current invalid-argument return shapes are
+`false` for `sys.compile{source}`, `sys.exists{name}`, `str.contains`,
+`str.startswith`, `str.endswith`, and `str.eqcasei`; `nil` for other sys,
+task, network, and string libcalls.
+Failures that are not invalid arguments keep their own contract; for example a
+missing task item sets the no-such-item error, an unknown task id returns
+`false` without changing `error`, `net.write` to an inactive line returns `nil`
+without changing `error`, `net.flush` or `net.ditch` on an inactive line returns
+`false` with `ERR_NETWORK_ERROR`, and `str.substr{text, start, len}` with
+`len < 1` returns `nil` without changing `error`.
+
+Examples:
+
+* `task.newgametask{"heartbeat", -1, 10};` returns `nil`, sets `error` to
+  `ERR_RUNTIME_INVALIDARGS`, and writes an interval-range diagnostic to
+  `error.msg`.
+* `str.upper{42};` returns `nil`, sets `ERR_RUNTIME_INVALIDARGS`, and reports
+  that the string argument is invalid.
+* `task.killtask{999999};` returns `false` without changing `error` because an
+  unknown task id is a domain miss, not an invalid argument.
+* `task.thisid` returns the id of the currently executing timer task, or `nil`
+  outside a timer-task callback.
+
+## Registered libraries
+
+- [sys](libcalls-sys.md) - essential system calls (compile, backup, etc)
+- [str](libcalls-str.md) - string manipulation
+- [net](libcalls-net.md) - network operations
+- [list](libcalls-list.md) - list comprehension
+- [task](libcalls-task.md) - task handling
+

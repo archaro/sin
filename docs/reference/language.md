@@ -1,14 +1,8 @@
-# Sinistra language reference (0.7.3)
+# Sinistra language reference
 
-This is the canonical reference for the implemented 0.7.2 Sinistra source
-language as shipped with the 0.7.3 documentation. “Canonical” means that this
-page is the normative description when other prose differs; it does not freeze
-compatibility before 0.8.0. The reference is derived from
-[`src/compiler/lexer.l`](../src/compiler/lexer.l),
-[`src/compiler/parser.y`](../src/compiler/parser.y), lowering, and existing
-compiler/runtime tests. Library APIs remain in [`libcalls.md`](libcalls.md),
-the bytecode wire format in [`bytecode.md`](bytecode.md), and persistence in
-[`itemstore-format.md`](itemstore-format.md).
+This is the canonical reference for the Sinistra language language, frozen as of pre-release 0.8.0. “Canonical” means that this page is the normative description when other prose differs. The reference is derived from [`src/compiler/lexer.l`](../../src/compiler/lexer.l) and [`src/compiler/parser.y`](../../src/compiler/parser.y).
+
+Library APIs remain in [`libcalls.md`](libcalls.md) and persistence in [`itemstore-format.md`](../internals/itemstore-format.md).
 
 ## Lexical structure
 
@@ -74,12 +68,12 @@ inputs. Ordinary value-producing failures return the operation's documented
 `nil` or `false`; process-level memory exhaustion has no stronger
 recoverability guarantee.
 
-See [`bytecode.md`](bytecode.md) for encoding and verifier rules,
-[`itemstore-format.md`](itemstore-format.md) for persistence enforcement,
+See [`bytecode.md`](../internals/bytecode.md) for encoding and verifier rules,
+[`itemstore-format.md`](../internals/itemstore-format.md) for persistence enforcement,
 [`libcalls.md`](libcalls.md) for operation-specific failure values, and
-[`runtime.md`](runtime.md) for VM ownership and interruption behavior.
+[`runtime.md`](../internals/runtime.md) for VM ownership and interruption behavior.
 Reference-derived executable examples are mapped in
-[`tests/fixtures/conformance/README.md`](../tests/fixtures/conformance/README.md).
+[`tests/fixtures/conformance/README.md`](../../tests/fixtures/conformance/README.md).
 
 ## Concrete grammar
 
@@ -349,7 +343,7 @@ produces NaN.
 This section defines observable value semantics. List libcall signatures and
 failure details remain authoritative in [`libcalls.md`](libcalls.md), while
 persistence encoding remains authoritative in
-[`itemstore-format.md`](itemstore-format.md).
+[`itemstore-format.md`](../internals/itemstore-format.md).
 
 ### Lists
 
