@@ -41,6 +41,20 @@ Grammar tokens include `%token` and precedence declarations; opcode inventory
 rows reconcile all ten `OP(...)` fields, and libcall rows reconcile the exact
 handler symbol in addition to their numeric ABI metadata.
 
+## Test Framework
+
+The self-contained C17/POSIX framework lives under `tests/framework/` and is
+kept separate from the legacy unified harness during migration. Each test
+translation unit supplies a standard-C `TF_TestDescriptor` array to
+`tf_main()`. The framework validates metadata, lists descriptors as `TF|...`
+records, and runs one selected descriptor in a fresh process with captured
+output, timeout/process-group cleanup, fixture cleanup, and resettable
+allocation/itemstore hooks. `test_runner.c` discovers descriptors from each
+executable's `--list` output and invokes them through `--run ID`; it runs
+serially by default and uses positive `TEST_JOBS` values for non-exclusive
+batches. Build artifacts for `make test-framework` remain in the active
+variant's `obj/<build>-<compiler>/tests/framework/` directory.
+
 ## Module Boundaries
 
 ### Common Support

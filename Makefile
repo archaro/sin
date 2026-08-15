@@ -76,6 +76,13 @@ TEST_TMP_ARTIFACTS := $(TEST_DIR)/fixtures/sdiss/*.bin
 TEST_CFLAGS = $(filter-out -MMD -MP,$(CFLAGS))
 QUIET_RUNNER := $(TEST_DIR)/shared/quiet_runner.sh
 QUIET_OUTPUT_TEST := $(TEST_DIR)/test_quiet_output.sh
+FRAMEWORK_DIR := $(TEST_DIR)/framework
+FRAMEWORK_SELF_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-selftest
+FRAMEWORK_RUNNER_BIN := $(OBJ_DIR)/$(FRAMEWORK_DIR)/framework-runner
+FRAMEWORK_SOURCES := $(FRAMEWORK_DIR)/test_framework.c $(FRAMEWORK_DIR)/framework_config.c
+FRAMEWORK_SELF_SOURCES := $(FRAMEWORK_DIR)/framework_selftest.c
+FRAMEWORK_RUNNER_SOURCES := $(FRAMEWORK_DIR)/test_runner.c
+FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN)
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -189,7 +196,7 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
 
 .PHONY: all lib clean help debug release sanitize compiledb FORCE_BUILD
-.PHONY: test inventory-audit inventory-audit-self-test test-network test-chat-smoke test-output-contract test-build-switch test-strict test-benchmark test-release test-warnings test-asan test-lsan
+.PHONY: test test-framework framework-list inventory-audit inventory-audit-self-test test-network test-chat-smoke test-output-contract test-build-switch test-strict test-benchmark test-release test-warnings test-asan test-lsan
 .PHONY: _test _test-harness _test-network _test-chat-smoke _test-output-contract _test-build-switch _test-strict _test-benchmark
 .PHONY: _test-warnings _test-release _test-asan _test-lsan
 .PHONY: fuzz-build fuzz-corpora fuzz-smoke fuzz-smoke-run
@@ -242,6 +249,7 @@ help:
 		'Test targets:' \
 		'  Successful test targets print concise totals; failures replay captured diagnostics' \
 		'  test             Build debug artifacts and run network + combined core/compiler/runtime suite' \
+		'  test-framework   Build and run the self-contained C17 framework tests' \
 		'  inventory-audit  Validate checked-in language, bytecode, API, libcall, executable, and test catalogs' \
 		'  test-network     Build and run network tests only' \
 		'  test-chat-smoke  Run the real chat example through localhost' \
@@ -319,6 +327,13 @@ $(PARSER_DEPENDENT_OBJECTS): $(PARSER_H)
 
 test: inventory-audit $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) scomp sin sconv
 	@$(MAKE) --no-print-directory _test
+
+test-framework: $(FRAMEWORK_BINS)
+	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN)
+	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" ./$(FRAMEWORK_SELF_BIN) --run runner_discovery_and_jobs
+
+framework-list: $(FRAMEWORK_BINS)
+	@./$(FRAMEWORK_SELF_BIN) --list
 
 inventory-audit: $(LIB)
 	@PYTHONDONTWRITEBYTECODE=1 python3 tests/inventory/audit.py --archive "$(LIB)" >/dev/null
@@ -414,6 +429,14 @@ $(NETWORK_TEST_BIN): $(TEST_DIR)/network/test_network.c $(SRC_DIR)/net/network.c
 
 $(CHAT_SMOKE_BIN): $(TEST_DIR)/network/test_chat_smoke.c scomp sin FORCE_BUILD
 	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(TEST_DIR) -o $@ $(TEST_DIR)/network/test_chat_smoke.c
+
+$(FRAMEWORK_SELF_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_SELF_SOURCES) $(LIB) FORCE_BUILD
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -pthread -o $@ $(FRAMEWORK_SOURCES) $(FRAMEWORK_SELF_SOURCES) $(LIB) $(LDFLAGS) $(LIBS) -pthread
+
+$(FRAMEWORK_RUNNER_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_RUNNER_SOURCES) $(LIB) FORCE_BUILD
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -pthread -o $@ $(FRAMEWORK_SOURCES) $(FRAMEWORK_RUNNER_SOURCES) $(LIB) $(LDFLAGS) $(LIBS) -pthread
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)
