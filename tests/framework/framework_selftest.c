@@ -65,8 +65,10 @@ static void timeout_and_group_cleanup(void) {
   {
     FILE *pid_file = fopen(marker, "r");
     long descendant = -1;
-    if (pid_file) { (void)fscanf(pid_file, "%ld", &descendant); (void)fclose(pid_file); }
-    if (descendant > 0) {
+    int parsed = pid_file ? fscanf(pid_file, "%ld", &descendant) : EOF;
+    int closed = pid_file ? fclose(pid_file) : EOF;
+    TF_ASSERT_TRUE(parsed == 1); TF_ASSERT_TRUE(closed == 0); TF_ASSERT_TRUE(descendant > 0);
+    {
       struct timespec pause_time = {0, 10000000L};
       bool gone = false;
       for (int attempt = 0; attempt < 20; attempt++) {
@@ -96,8 +98,10 @@ static void exited_descendant_cleanup(void) {
   {
     FILE *pid_file = fopen(marker, "r");
     long descendant = -1;
-    if (pid_file) { (void)fscanf(pid_file, "%ld", &descendant); (void)fclose(pid_file); }
-    if (descendant > 0) {
+    int parsed = pid_file ? fscanf(pid_file, "%ld", &descendant) : EOF;
+    int closed = pid_file ? fclose(pid_file) : EOF;
+    TF_ASSERT_TRUE(parsed == 1); TF_ASSERT_TRUE(closed == 0); TF_ASSERT_TRUE(descendant > 0);
+    {
       struct timespec pause_time = {0, 10000000L};
       bool gone = false;
       for (int attempt = 0; attempt < 20; attempt++) {
@@ -125,8 +129,10 @@ static void normal_group_cleanup(void) {
   tf_process_result_destroy(&result);
   FILE *pid_file = fopen(marker, "r");
   long descendant = -1;
-  if (pid_file) { (void)fscanf(pid_file, "%ld", &descendant); (void)fclose(pid_file); }
-  if (descendant > 0) {
+  int parsed = pid_file ? fscanf(pid_file, "%ld", &descendant) : EOF;
+  int closed = pid_file ? fclose(pid_file) : EOF;
+  TF_ASSERT_TRUE(parsed == 1); TF_ASSERT_TRUE(closed == 0); TF_ASSERT_TRUE(descendant > 0);
+  {
     struct timespec pause_time = {0, 10000000L};
     bool gone = false;
     for (int attempt = 0; attempt < 20; attempt++) {
@@ -360,6 +366,17 @@ static void runner_discovery_and_jobs(void) {
   tf_fixture_cleanup(&fixture);
 }
 
+static bool write_all(int fd, const char *data, size_t length) {
+  size_t offset = 0;
+  while (offset < length) {
+    ssize_t written = write(fd, data + offset, length - offset);
+    if (written < 0 && errno == EINTR) continue;
+    if (written <= 0) return false;
+    offset += (size_t)written;
+  }
+  return true;
+}
+
 static void schedule_probe(void) {
   const char *log_path = getenv("TF_SCHEDULE_LOG");
   const char *lock_path = getenv("TF_SCHEDULE_LOCK");
@@ -368,13 +385,14 @@ static void schedule_probe(void) {
   if (!log_path || !lock_path || !id) return;
   lock_fd = mkdir(lock_path, 0700) == 0 ? 1 : 0;
   int log_fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND, 0600);
-  if (log_fd >= 0) {
-    char event[128];
-    int length = snprintf(event, sizeof event, "%s%s\n", lock_fd ? "" :
-                          (strncmp(id, "parallel", 8) == 0 ? "parallel-overlap " : "serial-overlap "), id);
-    if (length > 0) (void)write(log_fd, event, (size_t)length);
-    (void)close(log_fd);
-  }
+  TF_ASSERT_TRUE(log_fd >= 0);
+  char event[128];
+  int length = snprintf(event, sizeof event, "%s%s\n", lock_fd ? "" :
+                        (strncmp(id, "parallel", 8) == 0 ? "parallel-overlap " : "serial-overlap "), id);
+  TF_ASSERT_TRUE(length > 0 && (size_t)length < sizeof event);
+  TF_ASSERT_TRUE(write_all(log_fd, event, (size_t)length));
+  int closed = close(log_fd);
+  TF_ASSERT_TRUE(closed == 0);
   struct timespec delay = {0, 150000000L}; (void)nanosleep(&delay, NULL);
   if (lock_fd) (void)rmdir(lock_path);
 }
