@@ -17,8 +17,8 @@ Thus the following is invalid:
 
 `WHILE @a++ < 100 DO ...; ENDWHILE;`
 
-The usual boolean comparison operators are present; `||` and `&&` are not.
-Use `or` and `and`, which short-circuit and return normalized booleans.
+The usual boolean comparison operators are present; `||` and `&&` are not use
+`or` and `and`, which short-circuit and return normalized booleans.
 
 Boolean literals are `true` and `false`; `nil` is the explicit nil literal (all
 three are case-insensitive reserved words).

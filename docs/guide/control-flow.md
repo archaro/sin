@@ -1,17 +1,19 @@
-# Sinistra has several control structures:
+# Control Flow in Code Items
 
-## IF ... THEN ... \[ELSIF ...] \[ELSE ...] ENDIF ##
+Sinistra has several control structures:
+
+## IF ... THEN ... \[ELSIF ...] \[ELSE ...] ENDIF
 
 `IF condition THEN statements; ENDIF;`  
 `IF condition THEN statements; ELSE statements; ENDIF;`  
 `IF condition THEN statements; ELSIF condition THEN statements; ENDIF;`  
 `IF condition THEN statements; ELSIF condition THEN statements; ELSE statements; ENDIF;`
 
-## WHILE ... DO ... ENDWHILE (and DO ... WHILE) ##
+## WHILE ... DO ... ENDWHILE (and DO ... WHILE)
 `WHILE condition DO statements; ENDWHILE;`
 `DO statements; WHILE condition;`
 
-## FOREACH ... IN ... DO ... ENDFOR ##
+## FOREACH ... IN ... DO ... ENDFOR
 `FOREACH @local IN expression DO statements; ENDFOR;` evaluates `expression`
 once, then visits list elements in order. The iterator is initialized to `nil`
 and remains an ordinary item-local after the loop, containing the last visited
@@ -25,7 +27,7 @@ against the 255-local limit.
 truthy. For example, `@a = 0; DO sys.log{@a}; @a++; WHILE @a < 5;` logs a
 counter from zero through four. The loop itself has no result value.
 
-## BREAK, CONTINUE and RETURN ##
+## BREAK, CONTINUE and RETURN
 `BREAK;` exits the nearest enclosing loop. `CONTINUE;` skips to the next
 iteration of the nearest loop: in a `WHILE ... DO` loop it re-tests the
 condition, while in a `DO ... WHILE` loop it proceeds to the trailing condition

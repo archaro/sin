@@ -1,6 +1,6 @@
 # Sinistra
-/boot.src
-/items.dat
+items.dat
+/srcroot/
 
 # Python compilation artifacts
 __pycache__
@@ -33,7 +33,6 @@ tests/fuzz/fuzz_sin_object
 .vscode/
 .*.swp
 sin.code-workspace
-/srcroot
 
 # Prerequisites
 *.d
