@@ -151,10 +151,11 @@ static void normal_group_cleanup(void) {
 }
 
 static void crash_isolation(void) {
-  char *args[] = {"/bin/sh", "-c", "kill -ABRT $$", NULL};
+  char *args[] = {"/bin/sh", "-c", "ulimit -c 0; kill -ABRT $$", NULL};
   TF_ProcessResult result;
-  TF_ASSERT_TRUE(tf_process_run(args, 1000, &result) == 0);
-  TF_ASSERT_TRUE(result.signaled && result.signal_number == SIGABRT);
+  TF_ASSERT_TRUE(tf_process_run(args, 5000, &result) == 0);
+  TF_ASSERT_TRUE(result.signaled && result.signal_number == SIGABRT &&
+                 !result.timed_out);
   tf_process_result_destroy(&result);
 }
 

@@ -315,7 +315,7 @@ void test_sdiss_legacy_and_v1_headers_report_absolute_offsets(void) {
 void test_sdiss_missing_or_unreadable_input(void) {
   const char *paths[] = {
       "tests/fixtures/sdiss/does-not-exist.bin",
-      "tests/fixtures/sdiss",
+      "tests/fixtures/sdiss/basic.hex/child",
   };
   for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
     char *argv[] = {"./sdiss", "--quiet", "--no-header", "-o",
