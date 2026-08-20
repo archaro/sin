@@ -158,12 +158,111 @@ static void test_lower_propagates_ir_allocation_failures(void) {
   assert_lower_allocation_failures("add = code {@a, @b} ( return @a + @b; );");
 }
 
+static bool span_matches(CompilerSourceSpan span, const CompilerDiagnostic *diag) {
+  return diag->has_loc && diag->line == span.line &&
+         diag->column == span.column && diag->span == span.span;
+}
+
+static void test_lower_control_flow_allocation_failure_preserves_provenance(void) {
+  const char source[] = "while 1 do 2; endwhile;";
+  CompilerContext ctx;
+  ParseInput input;
+  char *errdetail = NULL;
+  AS_STMTLIST *statements;
+  AS_NODE *loop;
+  AS_NODE *condition;
+  AS_NODE *body_node;
+  AS_STMTLIST *body;
+  AS_NODE *body_statement;
+  bool saw_failure = false;
+  bool saw_provenance = false;
+
+  alloc_test_fail_after(-1);
+  compiler_context_init(&ctx, source, sizeof source - 1u);
+  ctx.sem_ctx = sem_create_ctx();
+  ASSERT_NOT_NULL(ctx.sem_ctx);
+  input = (ParseInput){ctx.source, ctx.source_len, "lower-control-flow.src"};
+  ASSERT_EQ_INT(ERR_NOERROR,
+                parse_source(&input, &ctx.ast_root, &errdetail));
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(ctx.ast_root);
+  ASSERT_EQ_INT(ERR_NOERROR,
+                sem_check_locals(ctx.ast_root, &errdetail, ctx.sem_ctx));
+  ASSERT_TRUE(errdetail == NULL);
+
+  statements = (AS_STMTLIST *)ctx.ast_root->lhs;
+  ASSERT_EQ_INT(1, (int)statements->count);
+  loop = statements->stmts[0];
+  ASSERT_NOT_NULL(loop);
+  ASSERT_EQ_INT(N_WHILESTMT, loop->nodetype);
+  condition = (AS_NODE *)loop->lhs;
+  body_node = (AS_NODE *)loop->rhs;
+  ASSERT_NOT_NULL(condition);
+  ASSERT_NOT_NULL(body_node);
+  ASSERT_NOT_NULL(body_node->lhs);
+  body = (AS_STMTLIST *)body_node->lhs;
+  ASSERT_EQ_INT(1, (int)body->count);
+  body_statement = body->stmts[0];
+
+  for (long fail_at = 0; fail_at < LOWER_ALLOC_FAILURE_TRIAL_LIMIT; fail_at++) {
+    IR_Unit *ir = NULL;
+    char *errdetail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    alloc_test_fail_after(fail_at);
+    int8_t rc = lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ir,
+                                     &errdetail, &diag);
+    alloc_test_fail_after(-1);
+
+    if (rc == ERR_NOERROR) {
+      ASSERT_NOT_NULL(ir);
+      ir_destroy_unit(ir);
+      compiler_diag_reset(&diag);
+      continue;
+    }
+
+    saw_failure = true;
+    ASSERT_TRUE(ir == NULL);
+    ASSERT_EQ_INT(ERR_COMP_UNKNOWN, rc);
+    ASSERT_EQ_INT(DIAG_PHASE_LOWER, diag.phase);
+    if (diag.has_loc) {
+      ASSERT_TRUE(span_matches(loop->span, &diag) ||
+                  span_matches(condition->span, &diag) ||
+                  span_matches(body_node->span, &diag) ||
+                  span_matches(body_statement->span, &diag));
+      saw_provenance = true;
+    }
+    free(errdetail);
+    compiler_diag_reset(&diag);
+  }
+
+  ASSERT_TRUE(saw_failure);
+  ASSERT_TRUE(saw_provenance);
+
+  {
+    IR_Unit *ir = NULL;
+    char *errdetail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    ASSERT_EQ_INT(ERR_NOERROR,
+                  lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ir,
+                                       &errdetail, &diag));
+    ASSERT_NOT_NULL(ir);
+    ASSERT_TRUE(errdetail == NULL);
+    ASSERT_TRUE(!diag.has_loc);
+    ir_destroy_unit(ir);
+    compiler_diag_reset(&diag);
+  }
+  compiler_context_destroy(&ctx);
+}
+
 void test_compiler_context_failures(void) {
   test_context_parse_failure_cleanup();
   test_context_semant_failure_cleanup();
   test_context_lower_failure_cleanup();
   test_context_emit_failure_cleanup();
   test_lower_propagates_ir_allocation_failures();
+  test_lower_control_flow_allocation_failure_preserves_provenance();
 
   alloc_test_fail_after(-1);
   {
