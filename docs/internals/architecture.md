@@ -138,9 +138,10 @@ The network/Telnet/chat migration adapters are
 `tests/rewrite/group7_adapter_chat_smoke.c`. The network adapter directly
 includes `tests/network/test_network.c`, preserving its white-box
 `CONFIG_t`, allocation/libuv/Telnet stubs, and embedded implementation
-sources; its framework rule links only `test_framework.c` plus the archive and
-therefore does not introduce `framework_config.c` or duplicate normal network
-objects. The chat adapter invokes the unchanged localhost orchestration in an
+sources; its framework rule links only `test_framework.c` plus the system
+libraries and therefore does not introduce `framework_config.c`, the
+production archive, or duplicate normal network objects. The chat adapter
+invokes the unchanged localhost orchestration in an
 isolated framework child. Both binaries own one explicit descriptor array,
 tag all cases `exclusive,network`, and are aggregated by `make test-framework`
 alongside the unchanged dedicated `test-network` and `test-chat-smoke` gates.
