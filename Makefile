@@ -192,9 +192,11 @@ BEAR ?= bear
 ifeq ($(CC_VENDOR),clang)
 LLVM_COV ?= llvm-cov-$(CC_MAJOR)
 LLVM_PROFDATA ?= llvm-profdata-$(CC_MAJOR)
+GCOV ?= gcov
 else
 LLVM_COV ?= llvm-cov
 LLVM_PROFDATA ?= llvm-profdata
+GCOV ?= gcov-$(CC_MAJOR)
 endif
 COMPILEDB := compile_commands.json
 FUZZ_DIR := $(TEST_DIR)/fuzz
@@ -389,6 +391,7 @@ help:
 		'  CSTD=c17                      Select C standard passed as -std=$(CSTD)' \
 		'  CC=gcc                        Select compiler' \
 		'  LLVM_COV/LLVM_PROFDATA        Override Clang tools; default requires matching LLVM major' \
+		'  GCOV                           Override GCC reporter; default requires matching GCC major' \
 		'  PKG_CONFIG=pkg-config         Dependency discovery command' \
 		'  LIBUV_PC=libuv                pkg-config module for libuv' \
 		'  STRICT_WARNINGS=1             Promote selected warnings to errors' \
@@ -470,6 +473,7 @@ test-coverage:
 	PYTHONDONTWRITEBYTECODE=1 python3 tests/coverage/coverage_gate.py \
 		--build-dir "$$coverage_obj" --compiler "$(CC)" \
 		--archive "$$coverage_archive" \
+		--gcov "$(GCOV)" \
 		--llvm-cov "$(LLVM_COV)" --llvm-profdata "$(LLVM_PROFDATA)"
 
 coverage-audit-self-test:

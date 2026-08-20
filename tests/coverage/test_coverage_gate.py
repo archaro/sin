@@ -144,6 +144,26 @@ class CoverageGateTests(unittest.TestCase):
             with self.assertRaisesRegex(coverage.CoverageError, "reports major 17.*clang-18"):
                 coverage.find_llvm_tool(str(tool), "llvm-cov", 18)
 
+    def test_gcov_override_must_match_compiler_major(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tool = Path(directory) / "gcov-override"
+            tool.write_text("#!/bin/sh\nprintf '%s\\n' 'gcov (Fake) 12.4.0'\n", encoding="utf-8")
+            tool.chmod(0o755)
+            with self.assertRaisesRegex(coverage.CoverageError, "reports major 12.*gcc-13"):
+                coverage.find_gcov(str(tool), 13)
+
+    def test_gcov_discovery_prefers_matching_suffix_over_wrong_generic(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            directory_path = Path(directory)
+            generic = directory_path / "gcov"
+            matching = directory_path / "gcov-13"
+            generic.write_text("#!/bin/sh\nprintf '%s\\n' 'gcov (Fake) 12.4.0'\n", encoding="utf-8")
+            matching.write_text("#!/bin/sh\nprintf '%s\\n' 'gcov (Fake) 13.3.0'\n", encoding="utf-8")
+            generic.chmod(0o755)
+            matching.chmod(0o755)
+            with mock.patch.dict(os.environ, {"PATH": directory}, clear=False):
+                self.assertEqual(coverage.find_gcov(None, 13), str(matching))
+
     def test_llvm_discovery_prefers_matching_suffix_over_wrong_generic(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             directory_path = Path(directory)
@@ -176,6 +196,29 @@ class CoverageGateTests(unittest.TestCase):
             coverage.parse_llvm_summaries(duplicate, ROOT, [module])
         with self.assertRaisesRegex(coverage.CoverageError, "omit authored module"):
             coverage.parse_llvm_summaries({"data": [{"files": []}]}, ROOT, [module])
+
+    def test_no_instrumentable_module_requires_zero_native_totals(self) -> None:
+        static = coverage.NO_INSTRUMENTABLE
+        empty_gcov = coverage.parse_gcov_payload(
+            {"files": []}, ROOT, static, allow_empty=True)
+        self.assertEqual(empty_gcov, {"lines": set(), "branches": set(), "functions": set()})
+        with self.assertRaisesRegex(coverage.CoverageError, "unexpectedly has gcov observations"):
+            coverage.parse_gcov_payload(
+                {"files": [{"file": str(ROOT / static),
+                            "lines": [{"line_number": 1, "count": 1}]}]},
+                ROOT, static, allow_empty=True)
+        zero = {"data": [{"files": [{"filename": str(ROOT / static),
+            "summary": {"lines": {"count": 0, "covered": 0},
+                        "branches": {"count": 0, "covered": 0},
+                        "functions": {"count": 0, "covered": 0}}}]}]}
+        summaries = coverage.parse_llvm_summaries(zero, ROOT, [], [static])
+        self.assertEqual(summaries[static]["lines"], {"covered": 0, "total": 0})
+        violating = {"data": [{"files": [{"filename": str(ROOT / static),
+            "summary": {"lines": {"count": 1, "covered": 0},
+                        "branches": {"count": 0, "covered": 0},
+                        "functions": {"count": 0, "covered": 0}}}]}]}
+        with self.assertRaisesRegex(coverage.CoverageError, "unexpectedly has LLVM lines"):
+            coverage.parse_llvm_summaries(violating, ROOT, [], [static])
 
     def test_coordinate_merge_uses_or_semantics_without_duplicates(self) -> None:
         first = {("src/net/network.c", 10, "handle", False),

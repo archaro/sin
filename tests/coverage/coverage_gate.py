@@ -131,6 +131,41 @@ def find_llvm_tool(requested: str | None, prefix: str, major: int) -> str:
     fail(f"missing LLVM tool matching clang-{major}; tried {', '.join(candidates)}")
 
 
+def gcov_tool_major(path: str) -> int:
+    try:
+        result = subprocess.run([path, "--version"], check=True,
+                                capture_output=True, text=True)
+    except (OSError, subprocess.CalledProcessError) as error:
+        fail(f"cannot identify gcov tool {path!r}: {error}")
+    match = re.search(r"\b(\d+)(?:\.\d+)+\b", result.stdout + result.stderr)
+    if not match:
+        fail(f"gcov tool {path!r} reported no major version")
+    return int(match.group(1))
+
+
+def find_gcov(requested: str | None, major: int) -> str:
+    """Find and verify a gcov reporter matching the selected GCC major."""
+    if requested:
+        path = requested if "/" in requested else shutil.which(requested)
+        if not path:
+            fail(f"missing requested gcov tool {requested!r} for gcc-{major}")
+        actual = gcov_tool_major(path)
+        if actual != major:
+            fail(f"gcov tool {path!r} reports major {actual}, but compiler toolchain is gcc-{major}")
+        return path
+    candidates = (f"gcov-{major}", "gcov")
+    for candidate in candidates:
+        path = shutil.which(candidate)
+        if not path:
+            continue
+        actual = gcov_tool_major(path)
+        if actual == major:
+            return path
+        if candidate == "gcov":
+            fail(f"gcov tool {path!r} reports major {actual}, but compiler toolchain is gcc-{major}")
+    fail(f"missing gcov tool matching gcc-{major}; tried {', '.join(candidates)}")
+
+
 def owner_for(module: str) -> str:
     parts = Path(module).parts
     if len(parts) < 2 or parts[0] != "src":
@@ -273,12 +308,8 @@ def source_key(path: str, root: Path) -> str | None:
         return None
 
 
-def parse_gcov_json(path: Path, root: Path, module: str) -> dict[str, set[tuple]]:
-    try:
-        with gzip.open(path, "rt", encoding="utf-8") as stream:
-            payload = json.load(stream)
-    except (OSError, json.JSONDecodeError) as error:
-        fail(f"cannot read gcov JSON {path}: {error}")
+def parse_gcov_payload(payload: dict, root: Path, module: str,
+                       allow_empty: bool = False) -> dict[str, set[tuple]]:
     lines: set[tuple] = set()
     branches: set[tuple] = set()
     functions: set[tuple] = set()
@@ -298,9 +329,21 @@ def parse_gcov_json(path: Path, root: Path, module: str) -> dict[str, set[tuple]
         for item in source.get("functions", []):
             name = str(item.get("name", item.get("demangled_name", "")))
             functions.add((module, name, int(item.get("execution_count", 0)) > 0))
-    if not lines and not functions and not branches:
-        fail(f"gcov JSON {path} has no observations for {module}")
+    if not lines and not functions and not branches and not allow_empty:
+        fail(f"gcov JSON has no observations for {module}")
+    if module == NO_INSTRUMENTABLE and (lines or branches or functions):
+        fail(f"{NO_INSTRUMENTABLE} unexpectedly has gcov observations")
     return {"lines": lines, "branches": branches, "functions": functions}
+
+
+def parse_gcov_json(path: Path, root: Path, module: str,
+                    allow_empty: bool = False) -> dict[str, set[tuple]]:
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as stream:
+            payload = json.load(stream)
+    except (OSError, json.JSONDecodeError) as error:
+        fail(f"cannot read gcov JSON {path}: {error}")
+    return parse_gcov_payload(payload, root, module, allow_empty)
 
 
 def run_command(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
@@ -315,7 +358,10 @@ def run_command(command: list[str], cwd: Path, env: dict[str, str] | None = None
 
 
 def collect_gcc(root: Path, build_dir: Path, modules: Iterable[str], report_dir: Path,
-                gcov: str = "gcov") -> dict[str, dict[str, set[tuple]]]:
+                major: int, gcov: str | None = None,
+                no_instrumentable: Iterable[str] = ()) -> dict[str, dict[str, set[tuple]]]:
+    gcov = find_gcov(gcov, major)
+    no_instrumentable_set = set(no_instrumentable)
     results: dict[str, dict[str, set[tuple]]] = {}
     for module in modules:
         source = root / module
@@ -333,9 +379,13 @@ def collect_gcc(root: Path, build_dir: Path, modules: Iterable[str], report_dir:
             # locate the newest output while still rejecting ambiguity.
             candidates = sorted(report_dir.glob("*.gcov.json.gz"), key=lambda item: item.stat().st_mtime)
             created = candidates[-1:] if candidates else []
-        if not created:
+        if not created and module not in no_instrumentable_set:
             fail(f"gcov produced no JSON report for {module}")
-        results[module] = parse_gcov_json(created[-1], root, module)
+        if not created:
+            results[module] = {"lines": set(), "branches": set(), "functions": set()}
+        else:
+            results[module] = parse_gcov_json(
+                created[-1], root, module, module in no_instrumentable_set)
     # The network test embeds the production implementation as a white-box
     # translation unit. Union it with the archive observation so coverage is
     # not made dependent on which executable happened to exercise a branch.
@@ -358,7 +408,8 @@ def collect_gcc(root: Path, build_dir: Path, modules: Iterable[str], report_dir:
 
 def collect_clang(root: Path, build_dir: Path, modules: Iterable[str], report_dir: Path,
                   major: int, llvm_cov: str | None = None,
-                  llvm_profdata: str | None = None) -> dict[str, dict[str, dict[str, int]]]:
+                  llvm_profdata: str | None = None,
+                  no_instrumentable: Iterable[str] = ()) -> dict[str, dict[str, dict[str, int]]]:
     """Collect Clang's exported source coordinates from the gate binaries."""
     llvm_cov = find_llvm_tool(llvm_cov, "llvm-cov", major)
     llvm_profdata = find_llvm_tool(llvm_profdata, "llvm-profdata", major)
@@ -382,16 +433,18 @@ def collect_clang(root: Path, build_dir: Path, modules: Iterable[str], report_di
         payload = json.loads(result.stdout)
     except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as error:
         fail(f"cannot export combined Clang coverage: {error}")
-    return parse_llvm_summaries(payload, root, modules)
+    return parse_llvm_summaries(payload, root, modules, no_instrumentable)
 
 
-def parse_llvm_summaries(payload: dict, root: Path, modules: Iterable[str]) -> dict[str, dict[str, dict[str, int]]]:
+def parse_llvm_summaries(payload: dict, root: Path, modules: Iterable[str],
+                         no_instrumentable: Iterable[str] = ()) -> dict[str, dict[str, dict[str, int]]]:
     """Read one LLVM export's native per-file summary counts.
 
     LLVM 18 puts the authoritative line/branch/function totals under each
     `data[].files[].summary`; segment coordinates are not line observations.
     """
-    expected = set(modules)
+    no_instrumentable_set = set(no_instrumentable)
+    expected = set(modules) | no_instrumentable_set
     summaries: dict[str, dict[str, dict[str, int]]] = {}
     for entry in payload.get("data", []):
         for source in entry.get("files", []):
@@ -401,6 +454,18 @@ def parse_llvm_summaries(payload: dict, root: Path, modules: Iterable[str]) -> d
             if module in summaries:
                 fail(f"duplicate LLVM coverage summary for {module}")
             summary = source.get("summary")
+            if module in no_instrumentable_set:
+                if not isinstance(summary, dict):
+                    fail(f"LLVM coverage summary is missing for {NO_INSTRUMENTABLE}")
+                for metric in ("lines", "branches", "functions"):
+                    values = summary.get(metric)
+                    if (not isinstance(values, dict)
+                            or int(values.get("covered", 0)) > 0
+                            or int(values.get("count", 0)) > 0):
+                        fail(f"{NO_INSTRUMENTABLE} unexpectedly has LLVM {metric} observations")
+                summaries[module] = {metric: {"covered": 0, "total": 0}
+                                     for metric in ("lines", "branches", "functions")}
+                continue
             if not isinstance(summary, dict):
                 fail(f"LLVM coverage summary is missing for {module}")
             current: dict[str, dict[str, int]] = {}
@@ -411,7 +476,7 @@ def parse_llvm_summaries(payload: dict, root: Path, modules: Iterable[str]) -> d
                 current[metric] = {"covered": int(values["covered"]),
                                    "total": int(values["count"])}
             summaries[module] = current
-    missing = expected - set(summaries)
+    missing = set(modules) - set(summaries)
     if missing:
         fail(f"LLVM coverage summaries omit authored module {sorted(missing)[0]}")
     return summaries
@@ -506,7 +571,7 @@ def main() -> int:
                         help="active obj/<build>-<compiler> directory")
     parser.add_argument("--floors", type=Path)
     parser.add_argument("--compiler", default="gcc", help="selected compiler (gcc or clang)")
-    parser.add_argument("--gcov", default="gcov")
+    parser.add_argument("--gcov")
     parser.add_argument("--llvm-cov")
     parser.add_argument("--llvm-profdata")
     parser.add_argument("--archive", type=Path)
@@ -524,11 +589,15 @@ def main() -> int:
         floors = validate_floors(root, floors_path, toolchain)
         report_dir.mkdir(parents=True, exist_ok=True)
         measured = [module for module, row in floors.items() if row["status"] == "measured"]
+        no_instrumentable = [module for module, row in floors.items()
+                             if row["status"] == "no_instrumentable_code"]
         if vendor == "clang":
             results = collect_clang(root, build_dir, measured, report_dir,
-                                    major, args.llvm_cov, args.llvm_profdata)
+                                    major, args.llvm_cov, args.llvm_profdata,
+                                    no_instrumentable)
         else:
-            results = collect_gcc(root, build_dir, measured, report_dir, args.gcov)
+            results = collect_gcc(root, build_dir, measured + no_instrumentable,
+                                  report_dir, major, args.gcov, no_instrumentable)
         rows, failures = evaluate_results(floors, results)
         write_reports(report_dir, rows)
         if failures:

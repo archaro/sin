@@ -196,6 +196,8 @@ line, branch, and function percentages against the compiler-specific floors;
 each floor row carries the matching vendor-major toolchain key (`gcc-13` or
 `clang-18`), and unreviewed majors fail closed. Detailed CSV and
 human-readable reports stay under `obj/coverage-<compiler>/coverage/`.
+GCC uses a matching `gcov-<major>` reporter by default; explicit GCC and LLVM
+reporter overrides are version-checked against the selected compiler.
 
 The floor file is never rewritten by a test command. Any intentional change
 must be a reviewed manual edit with a nonblank rationale. `libcall_table.c`

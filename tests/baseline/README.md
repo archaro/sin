@@ -69,6 +69,11 @@ files (each row also carries a matching vendor-major toolchain key) because
 their instrumentation coordinate definitions differ. A measured
 zero-total metric is valid only when its reviewed floor is `n/a`.
 
+GCC coverage selects `gcov-<compiler-major>` by default and Clang selects
+version-matched LLVM tools. An explicit `GCOV=...`, `LLVM_COV=...`, or
+`LLVM_PROFDATA=...` override is allowed only when the reporter's reported major
+matches the selected compiler/toolchain major.
+
 The reviewed floor keys are `gcc-13` for the historical GCC snapshot and
 `clang-18` for the initial Clang baseline. A different compiler major fails
 closed with a `no reviewed coverage baseline` error. The Clang floors were
