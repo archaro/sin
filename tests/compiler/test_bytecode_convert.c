@@ -65,6 +65,7 @@ void test_bytecode_convert_malformed_matrix(void) {
         bc_convert_latest(cases[i].bytes, (uint32_t)cases[i].length);
     ASSERT_EQ_INT(cases[i].status, r.status);
     ASSERT_TRUE(r.data == NULL);
+    ASSERT_EQ_INT(0, r.length);
     bc_convert_result_free(&r);
   }
 }

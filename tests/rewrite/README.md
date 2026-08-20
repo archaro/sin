@@ -6,3 +6,8 @@ the corresponding legacy native test translation unit, so the same test body
 continues to run in both the legacy suite and the isolated framework process.
 The Group 1 adapters under `group1/` remain the owners of their overlapping
 AST/parser/float-format descriptors.
+
+The `group3_adapter_*.c` files cover bytecode ABI/schema, wire encoding,
+conversion, emission, verification, and `sdiss`, with one descriptor-owning
+executable per native bytecode test translation unit. The legacy bytecode gate
+remains unchanged; Group 3 binaries are aggregated by `make test-framework`.

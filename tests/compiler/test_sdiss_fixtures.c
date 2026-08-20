@@ -311,3 +311,27 @@ void test_sdiss_legacy_and_v1_headers_report_absolute_offsets(void) {
   ASSERT_TRUE(strstr(legacy_out, "Byte 00002:") != NULL);
   ASSERT_TRUE(strstr(v1_out, "Byte 00008:") != NULL);
 }
+
+void test_sdiss_missing_or_unreadable_input(void) {
+  const char *paths[] = {
+      "tests/fixtures/sdiss/does-not-exist.bin",
+      "tests/fixtures/sdiss",
+  };
+  for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+    char command[512];
+    int written = snprintf(command, sizeof(command),
+                           "./sdiss --quiet --no-header -o %s 2>&1",
+                           paths[i]);
+    ASSERT_TRUE(written > 0 && (size_t)written < sizeof(command));
+    FILE *pipe = popen(command, "r");
+    ASSERT_NOT_NULL(pipe);
+    char output[4096];
+    size_t total = fread(output, 1, sizeof(output) - 1, pipe);
+    output[total] = '\0';
+    int status = pclose(pipe);
+    ASSERT_TRUE(status != -1);
+    ASSERT_TRUE(WIFEXITED(status));
+    ASSERT_EQ_INT(EXIT_FAILURE, WEXITSTATUS(status));
+    ASSERT_TRUE(strstr(output, "Unable to read object file") != NULL);
+  }
+}

@@ -124,7 +124,20 @@ REWRITE_GROUP2_BINS := \
 	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_parser_examples_obj_golden \
 	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_compiler_context_failures \
 	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_compiler_diag_pipeline
-FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN) $(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS)
+REWRITE_GROUP3_BINS := \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_opcode_schema \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_bytecode_convert \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_bytecode_v1_abi \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_bytecode_verify \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_bytecode_wire \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_emitbc_all_ir_ops \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_emitbc_header \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_emitbc_invariants \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_emitbc_jumps \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_emitbc_opcode_map \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_emitbc_post_verify \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_sdiss_fixtures
+FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN) $(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS) $(REWRITE_GROUP3_BINS)
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -372,7 +385,7 @@ test: inventory-audit $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) scomp si
 	@$(MAKE) --no-print-directory _test
 
 test-framework: $(FRAMEWORK_BINS)
-	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS)
+	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS) $(REWRITE_GROUP3_BINS)
 	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" ./$(FRAMEWORK_SELF_BIN) --run runner_discovery_and_jobs
 	@tmp_file="$$(mktemp)"; trap 'rm -f "$$tmp_file"' EXIT; \
 		if ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(FRAMEWORK_DUP_BIN) >"$$tmp_file" 2>&1; then \
@@ -563,6 +576,43 @@ $(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_compiler_context_failures: $(REWRITE_GROUP
 $(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_compiler_diag_pipeline: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group2_adapter_compiler_diag.c $(TEST_DIR)/compiler/test_compiler_diag_pipeline.c scomp sdiss sin sconv
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group2_adapter_compiler_diag.c $(TEST_DIR)/compiler/test_compiler_diag_pipeline.c $(LIB) $(LDFLAGS) $(LIBS)
+
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_opcode_schema: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group3_adapter_opcode_schema.c $(TEST_DIR)/core/test_opcode_schema.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group3_adapter_opcode_schema.c $(TEST_DIR)/core/test_opcode_schema.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_bytecode_convert: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group3_adapter_bytecode_convert.c $(TEST_DIR)/compiler/test_bytecode_convert.c $(TEST_DIR)/fixtures/bytecode-migration/legacy-0.7.1.hex $(TEST_DIR)/fixtures/bytecode-migration/v1.hex
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group3_adapter_bytecode_convert.c $(TEST_DIR)/compiler/test_bytecode_convert.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_bytecode_v1_abi: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group3_adapter_bytecode_v1_abi.c $(TEST_DIR)/compiler/test_bytecode_v1_abi.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group3_adapter_bytecode_v1_abi.c $(TEST_DIR)/compiler/test_bytecode_v1_abi.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_bytecode_verify: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group3_adapter_bytecode_verify.c $(TEST_DIR)/compiler/test_bytecode_verify.c $(TEST_DIR)/shared/test_pipeline_cases.c $(wildcard $(TEST_DIR)/fixtures/*.hex)
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group3_adapter_bytecode_verify.c $(TEST_DIR)/compiler/test_bytecode_verify.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_bytecode_wire: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group3_adapter_bytecode_wire.c $(TEST_DIR)/compiler/test_bytecode_wire.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group3_adapter_bytecode_wire.c $(TEST_DIR)/compiler/test_bytecode_wire.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_emitbc_all_ir_ops: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group3_adapter_emitbc_all_ir_ops.c $(TEST_DIR)/compiler/test_emitbc_all_ir_ops_accounted_for.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group3_adapter_emitbc_all_ir_ops.c $(TEST_DIR)/compiler/test_emitbc_all_ir_ops_accounted_for.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_emitbc_header: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group3_adapter_emitbc_header.c $(TEST_DIR)/compiler/test_emitbc_header.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group3_adapter_emitbc_header.c $(TEST_DIR)/compiler/test_emitbc_header.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_emitbc_invariants: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group3_adapter_emitbc_invariants.c $(TEST_DIR)/compiler/test_emitbc_invariants.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group3_adapter_emitbc_invariants.c $(TEST_DIR)/compiler/test_emitbc_invariants.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_emitbc_jumps: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group3_adapter_emitbc_jumps.c $(TEST_DIR)/compiler/test_emitbc_jumps.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group3_adapter_emitbc_jumps.c $(TEST_DIR)/compiler/test_emitbc_jumps.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_emitbc_opcode_map: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group3_adapter_emitbc_opcode_map.c $(TEST_DIR)/compiler/test_emitbc_opcode_map.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group3_adapter_emitbc_opcode_map.c $(TEST_DIR)/compiler/test_emitbc_opcode_map.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_emitbc_post_verify: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group3_adapter_emitbc_post_verify.c $(TEST_DIR)/compiler/test_emitbc_post_verify.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group3_adapter_emitbc_post_verify.c $(TEST_DIR)/compiler/test_emitbc_post_verify.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_sdiss_fixtures: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group3_adapter_sdiss_fixtures.c $(TEST_DIR)/compiler/test_sdiss_fixtures.c $(TEST_DIR)/fixtures/sdiss/basic.hex $(TEST_DIR)/fixtures/sdiss/basic.expected.txt sdiss
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group3_adapter_sdiss_fixtures.c $(TEST_DIR)/compiler/test_sdiss_fixtures.c $(LIB) $(LDFLAGS) $(LIBS)
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)

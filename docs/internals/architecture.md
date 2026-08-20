@@ -91,6 +91,14 @@ descriptor-owning executable per native source file; the six Group 1 overlap
 descriptors remain in their original adapters. Their binaries are aggregated
 by `make test-framework` without changing the legacy test target.
 
+The bytecode/disassembly migration adapters are also kept under
+`tests/rewrite/`, in `group3_adapter_*.c`. They cover each bytecode-owned
+native test translation unit with a separate descriptor-owning executable for
+ABI/schema, wire encoding, conversion, emission, verification, and `sdiss`.
+The Group 3 binaries are included in `make test-framework` and use only the
+active variant's `obj/` output directory; the legacy bytecode gate remains
+authoritative during migration.
+
 The fixture-driven conformance executable is
 `tests/conformance/test_conformance.c`, built under the active variant's
 `obj/<build>-<compiler>/tests/conformance/` directory. It consumes the strict,

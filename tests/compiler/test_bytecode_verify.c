@@ -121,6 +121,17 @@ void test_bytecode_verify_dense_budget_and_growth_failures(void) {
   r = bc_verify_bytecode(tiny, sizeof(tiny), "growth success", NULL);
   ASSERT_EQ_INT(BC_VERIFY_OK, r.status);
   alloc_test_fail_after(-1);
+
+  /* A malformed stream must retain the stable allocation diagnostic when
+   * verification setup fails before decoding can inspect its body. */
+  const uint8_t malformed[] = {0, 0, 'N'};
+  alloc_test_fail_after(0);
+  r = bc_verify_executable_bytecode(malformed, sizeof(malformed),
+                                    "malformed allocation precedence");
+  alloc_test_fail_after(-1);
+  ASSERT_EQ_INT(BC_VERIFY_ERROR, r.status);
+  ASSERT_TRUE(strstr(r.diagnostic.message,
+                     "out of memory recording instruction starts") != NULL);
 }
 
 void test_bytecode_verify_constrained_address_space(void) {
