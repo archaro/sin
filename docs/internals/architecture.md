@@ -109,6 +109,18 @@ aggregated by `make test-framework`; runtime tests preserve fresh-process
 isolation and mark global-hook, process, stress, and benchmark cases
 exclusive.
 
+The itemstore/persistence migration adapters are kept under
+`tests/rewrite/` as `group5_adapter_item_cache.c`,
+`group5_adapter_itemstore_io.c`, and
+`group5_adapter_sin_itemstore_policy.c`. They own one active-variant binary
+per native translation unit for cache topology, persistence versions and
+budgets, source sidecars, durability, and the two in-scope `sin` policy
+descriptors. The `group1/adapter_sconv.c` binary is extended with the other
+seven `sconv` descriptors, so conversion coverage has one executable. Fixed
+paths and process/global hooks are tagged `exclusive`; the cache benchmark is
+tagged `benchmark,exclusive`. All four binaries are aggregated by
+`make test-framework` while the legacy itemstore gate remains authoritative.
+
 The fixture-driven conformance executable is
 `tests/conformance/test_conformance.c`, built under the active variant's
 `obj/<build>-<compiler>/tests/conformance/` directory. It consumes the strict,

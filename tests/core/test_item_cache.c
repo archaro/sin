@@ -14,6 +14,22 @@
 #define get_itemstore_payload_revision() itemstore_payload_revision(itemstore_owner(root))
 #include "test_assert.h"
 
+#ifdef SIN_TEST_FRAMEWORK_COMPAT
+static bool fail_resize_calloc;
+static bool resize_calloc_was_forced;
+
+void *__real_calloc(size_t count, size_t size);
+
+void *__wrap_calloc(size_t count, size_t size) {
+  if (fail_resize_calloc && count == 33u && size == sizeof(void *)) {
+    fail_resize_calloc = false;
+    resize_calloc_was_forced = true;
+    return NULL;
+  }
+  return __real_calloc(count, size);
+}
+#endif
+
 static uint64_t itemstore_bench_now_ns(void) {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -453,6 +469,48 @@ void test_find_item_cached_root_lifecycle_invalidates_entries(void) {
 }
 
 void test_item_hashtable_resize_preserves_entries_and_count(void) {
+#ifdef SIN_TEST_FRAMEWORK_COMPAT
+  ITEM_t *failure_root = make_root_item("failure_root");
+  ASSERT_NOT_NULL(failure_root);
+  for (int i = 0; i < 12; i++) {
+    char name[32];
+    ASSERT_TRUE(snprintf(name, sizeof(name), "child_%02d", i) > 0);
+    ASSERT_NOT_NULL(test_item_set_value(
+        failure_root, name, (VALUE_t){.type = VALUE_int, .i = i}));
+  }
+  ASSERT_NOT_NULL(find_item_cached(failure_root, "child_00", NULL));
+  ASSERT_TRUE(find_item_cached(failure_root, "absent", NULL) == NULL);
+  size_t count_before = item_child_count(failure_root);
+  uint32_t buckets_before = item_children_bucket_count(failure_root->children);
+  size_t capacity_before =
+      item_children_ordered_capacity(failure_root->children);
+  VALUE_t probe_value = {.type = VALUE_int, .i = 10};
+  resize_calloc_was_forced = false;
+  fail_resize_calloc = true;
+  ITEM_t *probe = test_item_set_value(
+      failure_root, "allocation_probe", probe_value);
+  /* The targeted calloc(33, sizeof(void *)) is resize_children's table
+     allocation. Publication happens before this best-effort resize, so the
+     new entry remains visible while the old table/count state is preserved
+     for all pre-existing entries. */
+  ASSERT_NOT_NULL(probe);
+  ASSERT_TRUE(resize_calloc_was_forced);
+  ASSERT_TRUE(!fail_resize_calloc);
+  ASSERT_EQ_INT(count_before + 1u, item_child_count(failure_root));
+  ASSERT_EQ_INT(buckets_before,
+                item_children_bucket_count(failure_root->children));
+  ASSERT_EQ_INT(capacity_before,
+                item_children_ordered_capacity(failure_root->children));
+  ASSERT_NOT_NULL(find_item_cached(failure_root, "child_00", NULL));
+  ASSERT_TRUE(find_item_cached(failure_root, "absent", NULL) == NULL);
+  ASSERT_TRUE(find_item_cached(failure_root, "allocation_probe", NULL) == probe);
+  ASSERT_NOT_NULL(test_item_set_value(
+      failure_root, "resize_probe", (VALUE_t){.type = VALUE_int, .i = 12}));
+  ASSERT_EQ_INT(33, item_children_bucket_count(failure_root->children));
+  fail_resize_calloc = false;
+  destroy_item(failure_root);
+#endif
+
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
   ASSERT_EQ_INT(16, item_children_bucket_count(root->children));

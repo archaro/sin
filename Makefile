@@ -143,7 +143,11 @@ REWRITE_GROUP4_BINS := \
 	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_interpret_semantics \
 	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_interpret_stress \
 	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_runtime_benchmark
-FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN) $(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS) $(REWRITE_GROUP3_BINS) $(REWRITE_GROUP4_BINS)
+REWRITE_GROUP5_BINS := \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_item_cache \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_itemstore_io \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_sin_itemstore_policy
+FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN) $(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS) $(REWRITE_GROUP3_BINS) $(REWRITE_GROUP4_BINS) $(REWRITE_GROUP5_BINS)
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -391,7 +395,7 @@ test: inventory-audit $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) scomp si
 	@$(MAKE) --no-print-directory _test
 
 test-framework: $(FRAMEWORK_BINS)
-	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS) $(REWRITE_GROUP3_BINS) $(REWRITE_GROUP4_BINS)
+	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS) $(REWRITE_GROUP3_BINS) $(REWRITE_GROUP4_BINS) $(REWRITE_GROUP5_BINS)
 	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" ./$(FRAMEWORK_SELF_BIN) --run runner_discovery_and_jobs
 	@tmp_file="$$(mktemp)"; trap 'rm -f "$$tmp_file"' EXIT; \
 		if ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(FRAMEWORK_DUP_BIN) >"$$tmp_file" 2>&1; then \
@@ -635,6 +639,16 @@ $(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_interpret_stress: $(REWRITE_GROUP1_COMMON_
 $(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_runtime_benchmark: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group4_adapter_runtime_benchmark.c $(TEST_DIR)/interpreter/test_runtime_benchmark_optin.c
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group4_adapter_runtime_benchmark.c $(TEST_DIR)/interpreter/test_runtime_benchmark_optin.c $(LIB) $(LDFLAGS) $(LIBS)
+
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_item_cache: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group5_adapter_item_cache.c $(TEST_DIR)/core/test_item_cache.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -Wl,--wrap=calloc -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group5_adapter_item_cache.c $(TEST_DIR)/core/test_item_cache.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_itemstore_io: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group5_adapter_itemstore_io.c $(TEST_DIR)/core/test_itemstore_io.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group5_adapter_itemstore_io.c $(TEST_DIR)/core/test_itemstore_io.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_sin_itemstore_policy: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group5_adapter_sin_itemstore_policy.c $(TEST_DIR)/core/test_sin_itemstore_policy.c scomp sin
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group5_adapter_sin_itemstore_policy.c $(TEST_DIR)/core/test_sin_itemstore_policy.c $(LIB) $(LDFLAGS) $(LIBS)
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)

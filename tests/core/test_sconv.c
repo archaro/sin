@@ -1,3 +1,4 @@
+#include <glob.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -529,6 +530,14 @@ void test_sconv_rejects_bad_inputs_and_durability_failure(void) {
   ASSERT_EQ_INT(8, fread(sentinel, 1, 8, f));
   ASSERT_EQ_INT(0, fclose(f));
   ASSERT_TRUE(memcmp(sentinel, "sentinel", 8) == 0);
+  char temp_pattern[sizeof output + 8];
+  ASSERT_TRUE(snprintf(temp_pattern, sizeof(temp_pattern), "%s.tmp.*",
+                       output) > 0);
+  glob_t temp_matches = {0};
+  int glob_result = glob(temp_pattern, 0, NULL, &temp_matches);
+  ASSERT_TRUE(glob_result == 0 || glob_result == GLOB_NOMATCH);
+  ASSERT_EQ_INT(0, temp_matches.gl_pathc);
+  globfree(&temp_matches);
   ASSERT_EQ_INT(0, unlink(input));
   ASSERT_EQ_INT(0, unlink(output));
   ASSERT_EQ_INT(0, unlink(fast_output));
