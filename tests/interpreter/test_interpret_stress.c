@@ -149,5 +149,14 @@ void test_interpret_stress(void) {
     }
   }
 
+  /* The framework runner exits successful children with _exit(), so this
+   * explicit success-path release is required; atexit is only a failure-path
+   * fallback and must not own the cleanup contract. */
   stress_cleanup_results();
+  ASSERT_TRUE(stress_cleanup.current.stdout_text == NULL);
+  ASSERT_TRUE(stress_cleanup.current.stderr_text == NULL);
+  for (size_t i = 0; i < STRESS_CASE_COUNT; ++i) {
+    ASSERT_TRUE(stress_cleanup.baselines[i].stdout_text == NULL);
+    ASSERT_TRUE(stress_cleanup.baselines[i].stderr_text == NULL);
+  }
 }

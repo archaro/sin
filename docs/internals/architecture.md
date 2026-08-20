@@ -99,6 +99,16 @@ The Group 3 binaries are included in `make test-framework` and use only the
 active variant's `obj/` output directory; the legacy bytecode gate remains
 authoritative during migration.
 
+The runtime migration adapters are kept under `tests/rewrite/` in
+`group4_adapter_*.c`. They cover stack/frame transitions, immutable lists,
+interpreter execution, stress cleanup, and the opt-in runtime benchmark. The
+existing `group1/adapter_value_behavior.c` owns all value-behavior descriptors
+for its native translation unit, including the two diagnostic descriptors
+reused from Group 1. Each adapter has one active-variant binary and is
+aggregated by `make test-framework`; runtime tests preserve fresh-process
+isolation and mark global-hook, process, stress, and benchmark cases
+exclusive.
+
 The fixture-driven conformance executable is
 `tests/conformance/test_conformance.c`, built under the active variant's
 `obj/<build>-<compiler>/tests/conformance/` directory. It consumes the strict,

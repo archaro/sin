@@ -535,6 +535,10 @@ def main() -> int:
             name = row["canonical_id"].removeprefix("opcode.")
             if row["canonical_metadata"] != opcode_fingerprint(opcode_by_name[name]):
                 fail(f"opcode {name} has stale canonical metadata")
+            if ("requires_runtime_handler=true" in row["canonical_metadata"]
+                    and "rewrite.runtime.test_runtime_opcode_schema_witnesses"
+                    not in split_refs(row["test_ids"])):
+                fail(f"runtime opcode {name} lacks an execution witness")
         expected_libcalls = {(library, call): (lib_index, call_index, args, handler)
                              for library, call, lib_index, call_index, args, handler in libcalls}
         libcall_rows = catalogs["libcalls.csv"]

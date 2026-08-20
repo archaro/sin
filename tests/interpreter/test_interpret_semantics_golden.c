@@ -20,6 +20,7 @@
 #include "list.h"
 #include "itemref.h"
 #include "memory.h"
+#include "bytecode/bytecode_abi.h"
 
 #undef destroy_item
 static void destroy_raw_runtime_item(ITEM_t *item) { destroy_item(item); }
@@ -603,6 +604,25 @@ void test_interpret_rejects_malformed_bytecode_before_execution(void) {
   ASSERT_NOT_NULL(error_item);
   ASSERT_EQ_INT(VALUE_str, item_value(error_item)->type);
   ASSERT_TRUE(strcmp(item_value(error_item)->s, "malformed") == 0);
+
+  /* A failed multi-byte operand must leave this VM reusable.  This success
+   * path intentionally follows the malformed execution in the same process,
+   * rather than relying on fresh-process isolation to hide stale frames. */
+  static const uint8_t valid_bytecode[] = {
+      0, 0, 'p', 1, 0, 0, 0, 0, 0, 0, 0, 'Q', 'h'
+  };
+  uint8_t *valid_owned = malloc(sizeof(valid_bytecode));
+  ASSERT_NOT_NULL(valid_owned);
+  memcpy(valid_owned, valid_bytecode, sizeof(valid_bytecode));
+  ITEM_t *valid = test_item_set_code(itemstore_root(config.itemstore_ctx),
+                                     "reusable", sizeof(valid_bytecode),
+                                     valid_owned);
+  ASSERT_NOT_NULL(valid);
+  VALUE_t reused = interpret(&ctx, valid);
+  ASSERT_EQ_INT(VALUE_int, reused.type);
+  ASSERT_EQ_INT(1, reused.i);
+  value_free(&reused);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
 
   destroy_vm(config.vm);
   destroy_item(itemstore_root(config.itemstore_ctx));
@@ -1190,5 +1210,115 @@ void test_runtime_jump_diagnostic_uses_absolute_header_offset(void) {
     ASSERT_TRUE(strstr(item_value(message)->s, offset) != NULL);
     runtime_destroy(&ctx);
     teardown_result_semantics_runtime();
+  }
+}
+
+typedef struct {
+  const char *handler;
+  const char *witness;
+  bool seen;
+} RuntimeOpcodeWitness;
+
+typedef struct {
+  RuntimeOpcodeWitness *witnesses;
+  size_t count;
+  size_t visited;
+  bool unknown;
+  bool duplicate;
+} RuntimeOpcodeWitnessContext;
+
+/* This table names the existing source/runtime witnesses; the executable
+ * opcode set itself is always enumerated from opcode_schema.def through the
+ * schema visitor below.  A newly executable handler therefore fails this
+ * focused test until a real execution witness is recorded here. */
+static RuntimeOpcodeWitness runtime_opcode_witnesses[] = {
+    {"op_pushint", "result.explicit_return", false},
+    {"op_pushfloat", "result.nil_semantics", false},
+    {"op_pushbool", "result.nil_semantics", false},
+    {"op_pushstr", "result.owned_string_return", false},
+    {"op_pushnil", "result.explicit_nil_return", false},
+    {"op_add", "result.binary_operands_left_to_right", false},
+    {"op_subtract", "result.modulo_precedence", false},
+    {"op_multiply", "result.modulo_precedence", false},
+    {"op_divide", "result.nil_semantics", false},
+    {"op_modulo", "result.modulo_precedence", false},
+    {"op_negate", "result.nil_semantics", false},
+    {"op_equal", "result.nil_semantics", false},
+    {"op_notequal", "result.nil_semantics", false},
+    {"op_lessthan", "result.foreach_nested_loops", false},
+    {"op_greaterthan", "result.nil_semantics", false},
+    {"op_lessthanorequal", "result.nil_semantics", false},
+    {"op_greaterthanorequal", "result.nil_semantics", false},
+    {"op_logicalnot", "result.nil_semantics", false},
+    {"op_logicaland", "result.and_skips_falsy_rhs", false},
+    {"op_logicalor", "result.or_skips_truthy_rhs", false},
+    {"op_discard", "result.final_expression_is_discarded", false},
+    {"op_getlocal", "result.nil_local_and_item", false},
+    {"op_savelocal", "result.middle_expression_discard", false},
+    {"op_inclocal", "result.while_return", false},
+    {"op_declocal", "result.break_continue_while", false},
+    {"op_jump", "result.while_return", false},
+    {"op_jumpfalse", "result.if_return", false},
+    {"op_assembleitem", "result.value_item_unchanged", false},
+    {"op_assembleitem_rel", "result.relative_itemref", false},
+    {"op_fetchitem", "result.return_libcall", false},
+    {"op_assignitem", "result.assignment_has_no_result", false},
+    {"op_libcall", "result.return_libcall", false},
+    {"op_assigncodeitem", "result.embedded_code_return", false},
+    {"op_build_list", "result.empty_list", false},
+    {"op_make_itemref", "result.itemref", false},
+};
+
+static bool record_runtime_opcode_witness(uint8_t opcode_byte, IR_Op op,
+                                          const IR_OpSchema *schema,
+                                          void *raw_context) {
+  (void)opcode_byte;
+  (void)op;
+  RuntimeOpcodeWitnessContext *context = raw_context;
+  for (size_t i = 0; i < context->count; i++) {
+    if (strcmp(context->witnesses[i].handler,
+               schema->runtime_handler_name) == 0) {
+      if (context->witnesses[i].seen) {
+        context->duplicate = true;
+        return false;
+      }
+      context->witnesses[i].seen = true;
+      context->visited++;
+      return context->witnesses[i].witness[0] != '\0';
+    }
+  }
+  context->unknown = true;
+  return false;
+}
+
+void test_runtime_opcode_schema_witnesses(void) {
+  /* Execute the broad source/runtime matrices before auditing their canonical
+   * handler inventory.  The inventory audit below prevents schema drift from
+   * being hidden by an unchanged test list. */
+  test_interpret_semantics_golden();
+  test_interpret_result_semantics();
+
+  for (size_t i = 0; i < sizeof(runtime_opcode_witnesses) /
+                          sizeof(runtime_opcode_witnesses[0]); i++) {
+    runtime_opcode_witnesses[i].seen = false;
+    ASSERT_TRUE(runtime_opcode_witnesses[i].handler != NULL);
+    ASSERT_TRUE(runtime_opcode_witnesses[i].witness != NULL);
+  }
+  RuntimeOpcodeWitnessContext context = {
+      .witnesses = runtime_opcode_witnesses,
+      .count = sizeof(runtime_opcode_witnesses) /
+               sizeof(runtime_opcode_witnesses[0]),
+      .visited = 0,
+      .unknown = false,
+      .duplicate = false,
+  };
+  ir_opcode_schema_for_each_runtime_opcode(record_runtime_opcode_witness,
+                                           &context);
+  ASSERT_TRUE(!context.unknown);
+  ASSERT_TRUE(!context.duplicate);
+  ASSERT_EQ_INT((int)context.count, (int)context.visited);
+  for (size_t i = 0; i < sizeof(runtime_opcode_witnesses) /
+                          sizeof(runtime_opcode_witnesses[0]); i++) {
+    ASSERT_TRUE(runtime_opcode_witnesses[i].seen);
   }
 }
