@@ -91,6 +91,7 @@ FRAMEWORK_RUNNER_SOURCES := $(FRAMEWORK_DIR)/test_runner.c
 FRAMEWORK_DUP_SOURCES := $(FRAMEWORK_DIR)/framework_duplicate_fixture.c
 FRAMEWORK_NEG_SOURCES := $(FRAMEWORK_DIR)/framework_negative_fixture.c
 REWRITE_GROUP1_DIR := $(TEST_DIR)/rewrite/group1
+REWRITE_GROUP2_DIR := $(TEST_DIR)/rewrite
 REWRITE_GROUP1_SHARED_SOURCES := \
 	$(TEST_DIR)/shared/test_helpers.c \
 	$(TEST_DIR)/shared/test_libcall_support.c \
@@ -113,7 +114,17 @@ REWRITE_GROUP1_BINS := \
 	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_fixture_policy \
 	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_output_contract \
 	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_memory
-FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN) $(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS)
+REWRITE_GROUP2_BINS := \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_semant \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_ir_validate \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_relative_item_leading_dot \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_pipeline_golden \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_pipeline_source_golden \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_pipeline_negative_matrix \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_parser_examples_obj_golden \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_compiler_context_failures \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_compiler_diag_pipeline
+FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN) $(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS)
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -361,7 +372,7 @@ test: inventory-audit $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) scomp si
 	@$(MAKE) --no-print-directory _test
 
 test-framework: $(FRAMEWORK_BINS)
-	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS)
+	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS)
 	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" ./$(FRAMEWORK_SELF_BIN) --run runner_discovery_and_jobs
 	@tmp_file="$$(mktemp)"; trap 'rm -f "$$tmp_file"' EXIT; \
 		if ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(FRAMEWORK_DUP_BIN) >"$$tmp_file" 2>&1; then \
@@ -524,6 +535,34 @@ $(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_output_contract: $(FRAMEWORK_SOURCES) $(RE
 $(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_memory: $(FRAMEWORK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_memory.c $(REWRITE_GROUP1_HEADERS) $(LIB)
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -o $@ $(FRAMEWORK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_memory.c $(LIB) $(LDFLAGS) $(LIBS)
+
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_semant: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group2_adapter_semant.c $(TEST_DIR)/core/test_semant.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group2_adapter_semant.c $(TEST_DIR)/core/test_semant.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_ir_validate: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group2_adapter_ir_validate.c $(TEST_DIR)/core/test_ir_validate.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group2_adapter_ir_validate.c $(TEST_DIR)/core/test_ir_validate.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_relative_item_leading_dot: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group2_adapter_relative_item.c $(TEST_DIR)/core/test_relative_item_leading_dot.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group2_adapter_relative_item.c $(TEST_DIR)/core/test_relative_item_leading_dot.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_pipeline_golden: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group2_adapter_pipeline_golden.c $(TEST_DIR)/compiler/test_pipeline_golden.c scomp sdiss sin sconv
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group2_adapter_pipeline_golden.c $(TEST_DIR)/compiler/test_pipeline_golden.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_pipeline_source_golden: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group2_adapter_pipeline_source_golden.c $(TEST_DIR)/compiler/test_pipeline_source_golden.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group2_adapter_pipeline_source_golden.c $(TEST_DIR)/compiler/test_pipeline_source_golden.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_pipeline_negative_matrix: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group2_adapter_pipeline_negative.c $(TEST_DIR)/compiler/test_pipeline_negative_matrix.c scomp sdiss sin sconv
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group2_adapter_pipeline_negative.c $(TEST_DIR)/compiler/test_pipeline_negative_matrix.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_parser_examples_obj_golden: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group2_adapter_parser_examples.c $(TEST_DIR)/compiler/test_parser_examples_obj_golden.c scomp sdiss sin sconv
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group2_adapter_parser_examples.c $(TEST_DIR)/compiler/test_parser_examples_obj_golden.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_compiler_context_failures: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group2_adapter_compiler_context.c $(TEST_DIR)/compiler/test_compiler_context_failures.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group2_adapter_compiler_context.c $(TEST_DIR)/compiler/test_compiler_context_failures.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_compiler_diag_pipeline: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP2_DIR)/group2_adapter_compiler_diag.c $(TEST_DIR)/compiler/test_compiler_diag_pipeline.c scomp sdiss sin sconv
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group2_adapter_compiler_diag.c $(TEST_DIR)/compiler/test_compiler_diag_pipeline.c $(LIB) $(LDFLAGS) $(LIBS)
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)

@@ -84,6 +84,13 @@ framework failures only for these binaries. `make test-framework` discovers
 the group alongside framework and conformance binaries; the legacy `make test`
 target and its unified harness remain unchanged.
 
+The compiler front-end migration adapters are kept under `tests/rewrite/` and
+use the same compatibility boundary. They cover the compiler-owned AST,
+semantic, parser, IR/lowering, and pipeline translation units with one
+descriptor-owning executable per native source file; the six Group 1 overlap
+descriptors remain in their original adapters. Their binaries are aggregated
+by `make test-framework` without changing the legacy test target.
+
 The fixture-driven conformance executable is
 `tests/conformance/test_conformance.c`, built under the active variant's
 `obj/<build>-<compiler>/tests/conformance/` directory. It consumes the strict,

@@ -449,7 +449,10 @@ static bool catalog_contract_exists(const char *root, const char *contract) {
   if (join_path(path, sizeof path, root, "tests/inventory/contracts.csv") < 0) return false;
   file = fopen(path, "r");
   if (!file) return false;
-  (void)fgets(line, sizeof line, file);
+  if (!fgets(line, sizeof line, file)) {
+    fclose(file);
+    return false;
+  }
   while (fgets(line, sizeof line, file)) {
     char *comma = strchr(line, ',');
     if (comma) {
@@ -608,7 +611,10 @@ static bool inventory_contract_exists(const char *root, const char *contract) {
     if (join_path(path, sizeof path, root, paths[i]) < 0) return false;
     file = fopen(path, "r");
     if (!file) return false;
-    (void)fgets(line, sizeof line, file);
+    if (!fgets(line, sizeof line, file)) {
+      fclose(file);
+      return false;
+    }
     while (fgets(line, sizeof line, file)) {
       char *comma = strchr(line, ',');
       if (comma) {
@@ -651,7 +657,10 @@ static int validate_inventory(const Manifest *manifest, const char *root) {
     if (join_path(path, sizeof path, root, inventory_paths[path_index]) < 0) return -1;
     file = fopen(path, "r");
     if (!file) return -1;
-    (void)fgets(line, sizeof line, file);
+    if (!fgets(line, sizeof line, file)) {
+      fclose(file);
+      return -1;
+    }
     while (fgets(line, sizeof line, file)) {
       char *comma = strchr(line, ',');
       char *kind;

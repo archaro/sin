@@ -368,6 +368,28 @@ static void test_lower_short_circuit_uses_balanced_control_flow(void) {
   }
 }
 
+static void test_ir_growth_failure_preserves_unit_for_reuse(void) {
+  IR_Unit *unit = t_new_unit();
+  ASSERT_NOT_NULL(unit);
+  for (size_t i = 0; i < 8; i++) {
+    ASSERT_TRUE(ir_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT,
+                                        .imm = (int64_t)i}) != SIZE_MAX);
+  }
+  ASSERT_EQ_INT(8, (int)unit->function.count);
+
+  alloc_test_fail_after(0);
+  ASSERT_EQ_INT((int)SIZE_MAX,
+                (int)ir_emit(unit, (IR_Inst){.op = IR_OP_HALT}));
+  alloc_test_fail_after(-1);
+  ASSERT_EQ_INT(8, (int)unit->function.count);
+  ASSERT_EQ_INT(IR_OP_PUSH_INT, unit->function.code[7].op);
+
+  ASSERT_TRUE(ir_emit(unit, (IR_Inst){.op = IR_OP_HALT}) != SIZE_MAX);
+  ASSERT_EQ_INT(9, (int)unit->function.count);
+  ASSERT_EQ_INT(IR_OP_HALT, unit->function.code[8].op);
+  ir_destroy_unit(unit);
+}
+
 void test_ir_validate(void) {
   test_ir_validate_ok_case();
   test_ir_validate_unbound_label_rejected();
@@ -384,4 +406,5 @@ void test_ir_validate(void) {
   test_lower_local_resolution_errors_consistent();
   test_lower_control_flow_outside_loop_rejected();
   test_lower_short_circuit_uses_balanced_control_flow();
+  test_ir_growth_failure_preserves_unit_for_reuse();
 }
