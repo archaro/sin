@@ -121,6 +121,18 @@ paths and process/global hooks are tagged `exclusive`; the cache benchmark is
 tagged `benchmark,exclusive`. All four binaries are aggregated by
 `make test-framework` while the legacy itemstore gate remains authoritative.
 
+The libcall/task migration adapters are kept under `tests/rewrite/` as
+`group6_adapter_*.c`; the Group 1 registry and `sys` adapters are extended so
+each native translation unit still has exactly one descriptor owner. Their
+active-variant binaries cover the complete registry plus `task`, `net`, `str`,
+`list`, and `sys.compile` contracts. The `sys_compile` binary links the
+framework runner without `framework_config.c` because its native test owns the
+intentional `CONFIG_t config` definition. Libcall, task, network, and registry
+state is process-local and all such descriptors are tagged `exclusive`.
+The conformance manifest explicitly excludes real-language `net.*` cases as
+transport-dependent; native stubs are not treated as localhost chat
+integration, which belongs to the network migration group.
+
 The fixture-driven conformance executable is
 `tests/conformance/test_conformance.c`, built under the active variant's
 `obj/<build>-<compiler>/tests/conformance/` directory. It consumes the strict,

@@ -104,6 +104,9 @@ void test_task_setup_failures_unwind(void) {
   ASSERT_NOT_NULL(task);
   ASSERT_TRUE(!start_task_timer(task, &loop, NULL, 0));
   ASSERT_TRUE(find_task_by_id(task->id) == NULL);
+  ASSERT_EQ_INT(0, uv_run(&loop, UV_RUN_DEFAULT));
+  ASSERT_EQ_INT(0, task_list_count());
+  ASSERT_EQ_INT(0, uv_loop_alive(&loop));
   teardown_task_loop(&loop);
 }
 

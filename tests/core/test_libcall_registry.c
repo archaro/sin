@@ -214,6 +214,10 @@ void test_libcall_registry_roundtrip(void) {
       {"task", "count", 2, 4, 0, lc_task_count},
       {NULL, NULL, 0, 0, 0, NULL},
   };
+  size_t manifest_count = sizeof(manifest) / sizeof(manifest[0]) - 1;
+  size_t canonical_count = 0;
+  while (libcalls[canonical_count].libname != NULL) canonical_count++;
+  ASSERT_EQ_INT(canonical_count, manifest_count);
   uint8_t li = 0, ci = 0, args = 0;
   libcall_reset_registry_for_tests();
   ASSERT_TRUE(libcall_init_registry());
@@ -485,8 +489,19 @@ void test_libcall_registry_self_check_invalid_entries(void) {
   ASSERT_TRUE(!libcall_registry_self_check(dup_text, false));
 
   const LIBCALL_t gap_lib[] = {{"sys","a",1,0,0,test_noop_libcall},{"net","b",3,0,0,test_noop_libcall},{NULL,NULL,0,0,0,NULL}};
+  LibcallRegistry valid = {0};
+  uint8_t li = 0, ci = 0, args = 0;
+  ASSERT_TRUE(libcall_registry_init(&valid));
+  ASSERT_TRUE(libcall_registry_lookup_pair(&valid, "sys", "log", &li, &ci,
+                                           &args));
+  ASSERT_EQ_INT(1, args);
   ASSERT_TRUE(libcall_registry_self_check(gap_lib, false));
   ASSERT_TRUE(!libcall_func_pair(5, 255));
+  ASSERT_TRUE(libcall_registry_validate(&valid));
+  ASSERT_TRUE(libcall_registry_lookup_pair(&valid, "sys", "log", &li, &ci,
+                                           &args));
+  ASSERT_EQ_INT(1, args);
+  libcall_registry_destroy(&valid);
 }
 
 void test_libcall_invalid_arg_branches_return_contracts(void) {
