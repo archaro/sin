@@ -79,24 +79,23 @@ void test_sin_default_source_root_validation(void) {
   char cwd[PATH_MAX];
   ASSERT_NOT_NULL(getcwd(cwd, sizeof(cwd)));
 
-  char sin_path[PATH_MAX];
-  char scomp_path[PATH_MAX];
+  const char *sin_path = test_program_path("sin");
   char source_path[PATH_MAX];
   char object_path[PATH_MAX];
-  ASSERT_TRUE(snprintf(sin_path, sizeof(sin_path), "%s/sin", cwd) > 0);
-  ASSERT_TRUE(snprintf(scomp_path, sizeof(scomp_path), "%s/scomp", cwd) > 0);
   ASSERT_TRUE(snprintf(source_path, sizeof(source_path),
                        "%s/examples/echo-load.src", cwd) > 0);
   ASSERT_EQ_INT(0, test_make_temp_path("sin-default-source-object", object_path,
                                        sizeof(object_path)));
 
-  char *compile_argv[] = {scomp_path, source_path, object_path, NULL};
+  char *compile_argv[] = {TEST_SCOMP, source_path, object_path, NULL};
   TestProcessResult compile_result = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(compile_argv, 0, &compile_result));
   ASSERT_EQ_INT(0, compile_result.exit_code);
   test_process_result_free(&compile_result);
 
-  char run_dir[] = "/tmp/sin-default-srcroot-XXXXXX";
+  char run_dir[4096];
+
+  ASSERT_EQ_INT(0, test_temp_template(run_dir, sizeof run_dir, "sin-default-srcroot"));
   ASSERT_NOT_NULL(mkdtemp(run_dir));
   TestProcessResult result = {0};
   run_sin_from_directory(run_dir, sin_path, object_path, &result);
@@ -129,8 +128,8 @@ void test_sin_default_source_root_validation(void) {
   ASSERT_EQ_INT(0, rmdir(created_root));
   ASSERT_EQ_INT(0, rmdir(run_dir));
 
-  ASSERT_TRUE(snprintf(run_dir, sizeof(run_dir),
-                       "/tmp/sin-default-srcroot-XXXXXX") > 0);
+  ASSERT_EQ_INT(0, test_temp_template(run_dir, sizeof run_dir,
+                                      "sin-default-srcroot"));
   ASSERT_NOT_NULL(mkdtemp(run_dir));
   char dangling_root[PATH_MAX];
   ASSERT_TRUE(snprintf(dangling_root, sizeof(dangling_root), "%s/srcroot",
@@ -153,24 +152,24 @@ void test_sin_itemstore_version_policy(void) {
   char path[96];
   ASSERT_EQ_INT(0, test_make_temp_path("sin-policy-items", path, sizeof(path)));
   const uint8_t v1[] = {'S','I','N','I','T','E','M','\0',1,0};
-  char *v1_argv[] = {"./sin", "--itemstore", path, NULL};
+  char *v1_argv[] = {TEST_SIN, "--itemstore", path, NULL};
   run_rejected(path, v1, sizeof(v1), v1_argv,
                "found version 1; required version 2");
 
-  char *v1_loadonly[] = {"./sin", "--loadonly", "--itemstore", path, NULL};
+  char *v1_loadonly[] = {TEST_SIN, "--loadonly", "--itemstore", path, NULL};
   run_rejected(path, v1, sizeof(v1), v1_loadonly,
                "found version 1; required version 2");
-  char *v1_strict_after[] = {"./sin", "--itemstore", path,
+  char *v1_strict_after[] = {TEST_SIN, "--itemstore", path,
                              "--strict-validation", NULL};
   run_rejected(path, v1, sizeof(v1), v1_strict_after,
                "found version 1; required version 2");
-  char *v1_strict_before[] = {"./sin", "--strict-validation", "--itemstore",
+  char *v1_strict_before[] = {TEST_SIN, "--strict-validation", "--itemstore",
                               path, NULL};
   run_rejected(path, v1, sizeof(v1), v1_strict_before,
                "found version 1; required version 2");
 
   const uint8_t unknown[] = {'S','I','N','I','T','E','M','\0',9,0,0x42};
-  char *unknown_argv[] = {"./sin", "--itemstore", path, NULL};
+  char *unknown_argv[] = {TEST_SIN, "--itemstore", path, NULL};
   run_rejected(path, unknown, sizeof(unknown), unknown_argv,
                "found 9");
   const uint8_t invalid_magic[] = {'N','O','P','E','\0','\0','\0','\0',2,0};
@@ -186,7 +185,7 @@ void test_sin_itemstore_version_policy(void) {
   itemstore_destroy(store);
   size_t before_length = 0;
   uint8_t *before = read_bytes(path, &before_length);
-  char *parse_failure[] = {"./sin", "--itemstore", path, "--not-an-option", NULL};
+  char *parse_failure[] = {TEST_SIN, "--itemstore", path, "--not-an-option", NULL};
   TestProcessResult result = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(parse_failure, 0, &result));
   ASSERT_EQ_INT(1, result.exit_code);
@@ -214,7 +213,7 @@ void test_sin_itemstore_version_policy(void) {
     {unsupported_version, sizeof(unsupported_version), "unsupported bytecode version"},
     {invalid_opcode, sizeof(invalid_opcode), "invalid opcode"}
   };
-  char *malformed_argv[] = {"./sin", "--loadonly", "--itemstore", path,
+  char *malformed_argv[] = {TEST_SIN, "--loadonly", "--itemstore", path,
                             "--srcroot", "tests/fixtures", "--object",
                             object_path, NULL};
   for (size_t i = 0; i < sizeof(malformed) / sizeof(malformed[0]); i++) {
@@ -234,7 +233,7 @@ void test_sin_itemstore_version_policy(void) {
   ASSERT_NOT_NULL(legacy);
   write_bytes(object_path, legacy, legacy_length);
   free(legacy);
-  char *legacy_argv[] = {"./sin", "--loadonly", "--itemstore", path,
+  char *legacy_argv[] = {TEST_SIN, "--loadonly", "--itemstore", path,
                          "--srcroot", "tests/fixtures", "--object",
                          object_path, NULL};
   ASSERT_EQ_INT(0, test_run_argv_capture(legacy_argv, 0, &result));
@@ -250,7 +249,7 @@ void test_sin_itemstore_version_policy(void) {
   ASSERT_NOT_NULL(object);
   write_bytes(object_path, object, object_length);
   free(object);
-  char *missing_argv[] = {"./sin", "--loadonly", "--itemstore", path,
+  char *missing_argv[] = {TEST_SIN, "--loadonly", "--itemstore", path,
                           "--srcroot", "tests/fixtures", "--object",
                           object_path, NULL};
   ASSERT_EQ_INT(0, test_run_argv_capture(missing_argv, 0, &result));
@@ -289,12 +288,12 @@ void test_sin_boot_frees_aggregate_return_values(void) {
     ASSERT_EQ_INT(0, test_make_temp_path("sin-boot-items", itemstore_path,
                                          sizeof(itemstore_path)));
     write_bytes(source_path, (const uint8_t *)sources[i], strlen(sources[i]));
-    char *compile_argv[] = {"./scomp", source_path, object_path, NULL};
+    char *compile_argv[] = {TEST_SCOMP, source_path, object_path, NULL};
     TestProcessResult result = {0};
     ASSERT_EQ_INT(0, test_run_argv_capture(compile_argv, 0, &result));
     ASSERT_EQ_INT(0, result.exit_code);
     test_process_result_free(&result);
-    char *run_argv[] = {"./sin", "--loadonly", "--verbose", "--itemstore",
+    char *run_argv[] = {TEST_SIN, "--loadonly", "--verbose", "--itemstore",
                         itemstore_path, "--srcroot", "tests/fixtures", "--object",
                         object_path, NULL};
     ASSERT_EQ_INT(0, test_run_argv_capture(run_argv, 0, &result));

@@ -146,34 +146,31 @@ Keep C code compatible with C17. Useful variables include `CC`, `CSTD`,
 Run the narrowest meaningful checks while iterating, then broaden according to
 risk. Preferred gates are:
 
-1. `make test`: standard harness and network tests.
-2. `make test-warnings`: strict-warning regressions.
-3. `make test-asan`: ASan/UBSan with leak checks disabled.
-4. `make test-lsan`: ASan/UBSan with leak checks enabled. Run this outside a
+1. `make test`: deterministic framework, contract, and network tests.
+2. `make test-sanitize`: ASan/UBSan with leak detection. Run this outside a
    ptrace-restricted sandbox on the first attempt; LeakSanitizer cannot run
    correctly under ptrace.
-5. `make test-release`: release behavior, especially compiler/interpreter work.
-6. `./ci/gate_sanitizers_fuzz.sh`: compiler, runtime, parser, bytecode,
+3. `BUILD=release make test`: release behavior, especially compiler/interpreter work.
+4. `./ci/gate_sanitizers_fuzz.sh`: compiler, runtime, parser, bytecode,
    itemstore loading, or fuzz-harness changes.
 
-Use `make test-strict` only when benchmark-budget enforcement is relevant;
-`make test` is the normal deterministic gate.
+Use `make bench` when benchmark measurements are relevant; `make test` is the
+normal deterministic gate.
 
-Fuzz targets are `make fuzz-smoke`, `make fuzz-build`, `make fuzz-smoke-run`,
-and the individual `make fuzz-scomp`, `make fuzz-sdiss`, and
-`make fuzz-sin-object` targets. Tune smoke runs with `FUZZ_RUNS` and
-`FUZZ_TIME`; do not edit scripts for local iteration.
+Fuzzing is `make test-fuzz`, which builds and runs all three harnesses. Tune
+campaigns with `FUZZ_RUNS` and `FUZZ_TIME`; do not edit scripts for local
+iteration.
 
 Validation by change type:
 
 - Documentation only: inspect Markdown; no build unless examples are generated.
 - Build system: `make clean`, `make`, and `make test` when feasible.
-- Core C logic: `make test`; consider `make test-warnings`.
-- Compiler/parser/language: `make test`, `make test-release`, targeted golden
+- Core C logic: `make test`.
+- Compiler/parser/language: `make test`, `BUILD=release make test`, targeted golden
   tests, and the sanitizer/fuzz gate.
 - Runtime/bytecode/itemstore: `make test`, applicable sanitizers, and relevant
   fuzz smoke tests.
-- Fuzz harness: the specific harness plus a seeded run, or `make fuzz-smoke`.
+- Fuzz harness: `make test-fuzz` with a seeded run.
 
 Every behavior change needs corresponding unit, integration, golden,
 benchmark, or fuzz coverage as appropriate. Never remove a failing test merely

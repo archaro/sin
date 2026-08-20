@@ -91,6 +91,13 @@ char *test_extract_fixture_block(const char *fixture, const char *header);
 int test_contains_all_lines(const char *expected_lines, const char *actual,
                             int *missing_line);
 int test_make_temp_path(const char *prefix, char *path, size_t path_size);
+const char *test_temp_root(void);
+int test_temp_template(char *path, size_t path_size, const char *prefix);
+const char *test_program_path(const char *program);
+#define TEST_SCOMP ((char *)test_program_path("scomp"))
+#define TEST_SDISS ((char *)test_program_path("sdiss"))
+#define TEST_SIN ((char *)test_program_path("sin"))
+#define TEST_SCONV ((char *)test_program_path("sconv"))
 int test_run_argv_capture(char *const argv[], unsigned timeout_ms,
                           TestProcessResult *result);
 int test_run_argv_capture_with_stdin(char *const argv[], const void *stdin_data,

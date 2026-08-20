@@ -11,6 +11,10 @@
 
 typedef struct { char *buf; size_t len; size_t cap; } SdissCapture;
 static char *read_text(const char *path);
+static void temp_sdiss_path(char *path, size_t size, const char *name) {
+  int n = snprintf(path, size, "%s/%s", test_temp_root(), name);
+  ASSERT_TRUE(n > 0 && (size_t)n < size);
+}
 
 static bool capture_sdiss(void *ctx, const char *data, size_t len) {
   SdissCapture *c = ctx;
@@ -91,8 +95,9 @@ void test_sdiss_cli_reports_output_failure(void) {
   if (access("/dev/full", W_OK) != 0) return;
 
   const uint8_t bytes[] = {0x00, 0x00, 'N', 'h'};
-  const char *tmp_path = "tests/fixtures/sdiss/output-failure.bin";
-  const char *err_path = "tests/fixtures/sdiss/output-failure.err";
+  char tmp_path[4096], err_path[4096];
+  temp_sdiss_path(tmp_path, sizeof tmp_path, "output-failure.bin");
+  temp_sdiss_path(err_path, sizeof err_path, "output-failure.err");
   FILE *out = fopen(tmp_path, "wb");
   ASSERT_NOT_NULL(out);
   ASSERT_EQ_INT((int)sizeof(bytes), (int)fwrite(bytes, 1, sizeof(bytes), out));
@@ -100,8 +105,8 @@ void test_sdiss_cli_reports_output_failure(void) {
 
   char cmd[512];
   int written = snprintf(cmd, sizeof(cmd),
-                         "./sdiss --quiet --no-header -o %s > /dev/full 2> %s",
-                         tmp_path, err_path);
+                         "%s --quiet --no-header -o %s > /dev/full 2> %s",
+                         test_program_path("sdiss"), tmp_path, err_path);
   ASSERT_TRUE(written > 0 && (size_t)written < sizeof(cmd));
   int rc = system(cmd);
   ASSERT_TRUE(rc != -1);
@@ -136,14 +141,18 @@ void test_sdiss_fixture_basic(void) {
   uint8_t *bytes = load_hex_fixture("tests/fixtures/sdiss/basic.hex", &len);
   ASSERT_NOT_NULL(bytes);
 
-  const char *tmp_path = "tests/fixtures/sdiss/basic.bin";
+  char tmp_path[4096];
+  temp_sdiss_path(tmp_path, sizeof tmp_path, "basic.bin");
   FILE *out = fopen(tmp_path, "wb");
   ASSERT_NOT_NULL(out);
   ASSERT_EQ_INT((int)len, (int)fwrite(bytes, 1, len, out));
   fclose(out);
   free(bytes);
 
-  FILE *pipe = popen("./sdiss --no-header -o tests/fixtures/sdiss/basic.bin 2>&1", "r");
+  char command[8192];
+  int command_length = snprintf(command, sizeof command, "%s --no-header -o %s 2>&1", test_program_path("sdiss"), tmp_path);
+  ASSERT_TRUE(command_length > 0 && (size_t)command_length < sizeof command);
+  FILE *pipe = popen(command, "r");
   ASSERT_NOT_NULL(pipe);
   char output[4096];
   size_t total = fread(output, 1, sizeof(output) - 1, pipe);
@@ -165,7 +174,7 @@ void test_sdiss_fixture_basic(void) {
 
 static void run_sdiss_fixture(const char *path, char *output, size_t output_size, int *exit_code) {
   char cmd[512];
-  int rc = snprintf(cmd, sizeof(cmd), "./sdiss --no-header -o %s 2>&1", path);
+  int rc = snprintf(cmd, sizeof(cmd), "%s --no-header -o %s 2>&1", test_program_path("sdiss"), path);
   ASSERT_TRUE(rc > 0 && (size_t)rc < sizeof(cmd));
   FILE *pipe = popen(cmd, "r");
   ASSERT_NOT_NULL(pipe);
@@ -179,7 +188,8 @@ static void run_sdiss_fixture(const char *path, char *output, size_t output_size
 
 void test_sdiss_malformed_fixture_reports_verifier_diagnostic(void) {
   const uint8_t bytes[] = {0x00, 0x00, 'l', 0x03, 0x00, 'a'};
-  const char *tmp_path = "tests/fixtures/sdiss/malformed.bin";
+  char tmp_path[4096];
+  temp_sdiss_path(tmp_path, sizeof tmp_path, "malformed.bin");
   FILE *out = fopen(tmp_path, "wb");
   ASSERT_NOT_NULL(out);
   ASSERT_EQ_INT((int)sizeof(bytes), (int)fwrite(bytes, 1, sizeof(bytes), out));
@@ -224,13 +234,17 @@ void test_sdiss_reads_compiler_operand_widths(void) {
       'F', 0x02, 0x00, /* CALL argc=2 */
       'h'};
 
-  const char *tmp_path = "tests/fixtures/sdiss/operand-widths.bin";
+  char tmp_path[4096];
+  temp_sdiss_path(tmp_path, sizeof tmp_path, "operand-widths.bin");
   FILE *out = fopen(tmp_path, "wb");
   ASSERT_NOT_NULL(out);
   ASSERT_EQ_INT((int)sizeof(bytes), (int)fwrite(bytes, 1, sizeof(bytes), out));
   fclose(out);
 
-  FILE *pipe = popen("./sdiss --no-header -o tests/fixtures/sdiss/operand-widths.bin 2>&1", "r");
+  char command[8192];
+  int command_length = snprintf(command, sizeof command, "%s --no-header -o %s 2>&1", test_program_path("sdiss"), tmp_path);
+  ASSERT_TRUE(command_length > 0 && (size_t)command_length < sizeof command);
+  FILE *pipe = popen(command, "r");
   ASSERT_NOT_NULL(pipe);
   char output[4096];
   size_t total = fread(output, 1, sizeof(output) - 1, pipe);
@@ -246,7 +260,7 @@ void test_sdiss_reads_compiler_operand_widths(void) {
 
   char output2[4096];
   int exit_code = 0;
-  run_sdiss_fixture("tests/fixtures/sdiss/operand-widths.bin", output2, sizeof(output2), &exit_code);
+  run_sdiss_fixture(tmp_path, output2, sizeof(output2), &exit_code);
   ASSERT_EQ_INT(0, exit_code);
   remove(tmp_path);
 }
@@ -318,7 +332,7 @@ void test_sdiss_missing_or_unreadable_input(void) {
       "tests/fixtures/sdiss/basic.hex/child",
   };
   for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
-    char *argv[] = {"./sdiss", "--quiet", "--no-header", "-o",
+    char *argv[] = {TEST_SDISS, "--quiet", "--no-header", "-o",
                     (char *)paths[i], NULL};
     TestProcessResult result = {0};
     ASSERT_EQ_INT(0, test_run_argv_capture(argv, 1000, &result));

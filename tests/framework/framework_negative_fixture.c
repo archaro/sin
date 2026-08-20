@@ -68,7 +68,7 @@ static const TF_TestDescriptor tests[] = {
   {"assert_fail_bytes", assert_fail_bytes, "", 500, "framework.assertions"},
   {"assert_fail_float", assert_fail_float, "", 500, "framework.assertions"},
   {"assert_fail_diag", assert_fail_diag, "", 500, "framework.assertions"},
-  {"crash", crash_test, "", 500, "framework.process"},
+  {"crash", crash_test, "", 5000, "framework.process"},
   {"output_helper", output_helper, "", 500, "framework.output"},
   {"fixture_failure_helper", fixture_failure_helper, "", 1000, "framework.fixtures"},
   {"fixture_implicit_helper", fixture_implicit_helper, "", 1000, "framework.fixtures"},

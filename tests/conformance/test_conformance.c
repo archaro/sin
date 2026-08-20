@@ -1,4 +1,5 @@
 #include "test_framework.h"
+#include "test_helpers.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -1036,9 +1037,9 @@ static void run_case(const char *case_id) {
   item = find_case(&manifest, case_id);
   TF_ASSERT_TRUE(item != NULL);
   TF_ASSERT_TRUE(realpath(item->source, source) != NULL);
-  TF_ASSERT_TRUE(realpath("scomp", compiler) != NULL);
-  TF_ASSERT_TRUE(realpath("sdiss", disassembler) != NULL);
-  TF_ASSERT_TRUE(realpath("sin", interpreter) != NULL);
+  TF_ASSERT_TRUE(realpath(test_program_path("scomp"), compiler) != NULL);
+  TF_ASSERT_TRUE(realpath(test_program_path("sdiss"), disassembler) != NULL);
+  TF_ASSERT_TRUE(realpath(test_program_path("sin"), interpreter) != NULL);
   tf_fixture_init(&fixture);
   TF_ASSERT_TRUE(tf_fixture_path(&fixture) != NULL);
   TF_ASSERT_TRUE(join_path(object, sizeof object, tf_fixture_path(&fixture), "object.bin") == 0);

@@ -21,6 +21,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "test_helpers.h"
+
 #define TEST_TIMEOUT_MS 8000
 #define CONNECT_TIMEOUT_MS 5000
 
@@ -378,7 +380,7 @@ static pid_t spawn_server(const char *itemstore, const char *srcroot,
     char port_arg[16];
     snprintf(port_arg, sizeof(port_arg), "%u", (unsigned)port);
     char *const argv[] = {
-      "./sin", "-i", (char *)itemstore, "-s", (char *)srcroot,
+      TEST_SIN, "-i", (char *)itemstore, "-s", (char *)srcroot,
       "-p", port_arg, "-o", (char *)boot_obj, NULL
     };
     execv(argv[0], argv);
@@ -578,7 +580,9 @@ static void cleanup_resources(void) {
 }
 
 int main(void) {
-  char tmp_template[] = "/tmp/sin-chat-smoke-XXXXXX";
+  char tmp_template[PATH_MAX];
+  if (test_temp_template(tmp_template, sizeof tmp_template, "sin-chat-smoke") != 0)
+    fail_errno("temp template");
   char *tmp = mkdtemp(tmp_template);
   if (!tmp) fail_errno("mkdtemp");
   resources.tmp_dir = tmp;
@@ -614,40 +618,40 @@ int main(void) {
   if (mkdir(srcroot, 0700) != 0) fail_errno("mkdir srcroot");
 
   char *const compile_boot[] = {
-    "./scomp", "examples/chat-boot.src", boot_obj, NULL
+    TEST_SCOMP, "examples/chat-boot.src", boot_obj, NULL
   };
   char *const compile_load[] = {
-    "./scomp", "examples/chat-load.src", load_obj, NULL
+    TEST_SCOMP, "examples/chat-load.src", load_obj, NULL
   };
   run_checked(compile_boot, "compile chat-boot.src");
   run_checked(compile_load, "compile chat-load.src");
 
   char *const load_chat[] = {
-    "./sin", "--loadonly", "-q", "-i", itemstore, "-s", srcroot,
+    TEST_SIN, "--loadonly", "-q", "-i", itemstore, "-s", srcroot,
     "-o", load_obj, NULL
   };
   run_checked(load_chat, "load chat-load.obj");
 
   char *const help_after_itemstore[] = {
-    "./sin", "-i", itemstore, "--help", NULL
+    TEST_SIN, "-i", itemstore, "--help", NULL
   };
   char *const version_after_itemstore[] = {
-    "./sin", "--log", metadata_log, "-i", itemstore, "--version", NULL
+    TEST_SIN, "--log", metadata_log, "-i", itemstore, "--version", NULL
   };
   run_checked(help_after_itemstore, "help after itemstore");
   run_checked(version_after_itemstore, "version after itemstore");
   wait_for_log_text(metadata_output, "metadata version output", "sin ");
 
-  char *const missing_short_port[] = {"./sin", "-p", NULL};
-  char *const missing_long_port[] = {"./sin", "--port", NULL};
-  char *const empty_port[] = {"./sin", "--port=", NULL};
-  char *const signed_port[] = {"./sin", "-p", "+1", NULL};
-  char *const negative_port[] = {"./sin", "--port=-1", NULL};
-  char *const junk_port[] = {"./sin", "-p", "1x", NULL};
+  char *const missing_short_port[] = {TEST_SIN, "-p", NULL};
+  char *const missing_long_port[] = {TEST_SIN, "--port", NULL};
+  char *const empty_port[] = {TEST_SIN, "--port=", NULL};
+  char *const signed_port[] = {TEST_SIN, "-p", "+1", NULL};
+  char *const negative_port[] = {TEST_SIN, "--port=-1", NULL};
+  char *const junk_port[] = {TEST_SIN, "-p", "1x", NULL};
   char *const overflow_port[] = {
-    "./sin", "--port=999999999999999999999999", NULL
+    TEST_SIN, "--port=999999999999999999999999", NULL
   };
-  char *const high_port[] = {"./sin", "-p", "65536", NULL};
+  char *const high_port[] = {TEST_SIN, "-p", "65536", NULL};
   run_expect_failure(missing_short_port, "missing short port");
   run_expect_failure(missing_long_port, "missing long port");
   run_expect_failure(empty_port, "empty port");
@@ -667,7 +671,7 @@ int main(void) {
   }
   if (fclose(restart_file) != 0) fail_errno("close restart source");
   char *const compile_restart[] = {
-    "./scomp", restart_src, restart_obj, NULL
+    TEST_SCOMP, restart_src, restart_obj, NULL
   };
   run_checked(compile_restart, "compile SIGUSR1 restart source");
   resources.server_pid = spawn_server(itemstore, srcroot, restart_obj, 0,

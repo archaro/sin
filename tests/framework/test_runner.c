@@ -152,7 +152,10 @@ static void run_batch(Entry *entries, size_t first, size_t count,
   int *files = calloc(count, sizeof *files);
   if (!workers || !files) { free(workers); free(files); *failed += count; return; }
   for (size_t i = 0; i < count; i++) {
-    char name[] = "/tmp/sin-runner-XXXXXX";
+    char name[4096];
+    const char *root = getenv("TF_TMP_ROOT");
+    if (!root || !root[0]) root = "/tmp";
+    (void)snprintf(name, sizeof name, "%s/sin-runner-XXXXXX", root);
     files[i] = mkstemp(name);
     (void)unlink(name);
     if (files[i] < 0) { workers[i] = -1; continue; }

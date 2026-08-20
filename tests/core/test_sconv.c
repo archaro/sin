@@ -15,8 +15,7 @@
 #include "test_helpers.h"
 
 static void temp_path(char *path, size_t size, const char *tag) {
-  int length = snprintf(path, size, "/tmp/%s-XXXXXX", tag);
-  ASSERT_TRUE(length > 0 && (size_t)length < size);
+  ASSERT_EQ_INT(0, test_temp_template(path, size, tag));
   int fd = mkstemp(path);
   ASSERT_TRUE(fd >= 0);
   ASSERT_EQ_INT(0, close(fd));
@@ -53,7 +52,7 @@ static void write_v1_value(FILE *f, const char *name, int64_t value) {
 }
 
 void test_sconv_v1_to_v2_migrates_legacy_code(void) {
-  char input[64], output[64];
+  char input[4096], output[4096];
   temp_path(input, sizeof input, "sconv-v1");
   temp_path(output, sizeof output, "sconv-out");
   FILE *f = fopen(input, "wb");
@@ -105,7 +104,7 @@ void test_sconv_v1_to_v2_migrates_legacy_code(void) {
 }
 
 void test_sconv_conversion_work_budget_is_atomic(void) {
-  char input[64], output[64];
+  char input[4096], output[4096];
   temp_path(input, sizeof input, "sconv-budget");
   temp_path(output, sizeof output, "sconv-budget-out");
   FILE *f = fopen(input, "wb");
@@ -139,7 +138,7 @@ void test_sconv_conversion_work_budget_is_atomic(void) {
 }
 
 void test_sconv_decode_budget_failures_are_atomic(void) {
-  char input[64], output[64];
+  char input[4096], output[4096];
   temp_path(input, sizeof input, "sconv-decode-budget-v1");
   temp_path(output, sizeof output, "sconv-decode-budget-out");
   FILE *f = fopen(input, "wb");
@@ -207,7 +206,7 @@ void test_sconv_decode_budget_failures_are_atomic(void) {
 }
 
 void test_sconv_v1_embedded_nul_warns_with_full_path(void) {
-  char input[64], output[64];
+  char input[4096], output[4096];
   temp_path(input, sizeof input, "sconv-nul");
   temp_path(output, sizeof output, "sconv-nul-out");
   FILE *f = fopen(input, "wb");
@@ -233,7 +232,7 @@ void test_sconv_v1_embedded_nul_warns_with_full_path(void) {
   write_u32(f, 0);
   ASSERT_EQ_INT(0, fclose(f));
 
-  char *argv[] = {"./sconv", "-q", input, output, NULL};
+  char *argv[] = {TEST_SCONV, "-q", input, output, NULL};
   TestProcessResult result = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(argv, 0, &result));
   ASSERT_EQ_INT(0, result.exit_code);
@@ -251,7 +250,7 @@ void test_sconv_v1_embedded_nul_warns_with_full_path(void) {
   ASSERT_NOT_NULL(f);
   ASSERT_EQ_INT(8, fwrite("sentinel", 1, 8, f));
   ASSERT_EQ_INT(0, fclose(f));
-  char *refuse_argv[] = {"./sconv", input, output, NULL};
+  char *refuse_argv[] = {TEST_SCONV, input, output, NULL};
   TestProcessResult refused = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(refuse_argv, 0, &refused));
   ASSERT_EQ_INT(1, refused.exit_code);
@@ -268,7 +267,7 @@ void test_sconv_v1_embedded_nul_warns_with_full_path(void) {
 }
 
 void test_sconv_mixed_code_tree_and_failure_atomicity(void) {
-  char input[64], output[64];
+  char input[4096], output[4096];
   temp_path(input, sizeof input, "sconv-mixed");
   temp_path(output, sizeof output, "sconv-mixed-out");
   const uint8_t legacy[] = {1, 0, 'b', 1, 'Q', 'h'};
@@ -345,7 +344,7 @@ void test_sconv_mixed_code_tree_and_failure_atomicity(void) {
 }
 
 void test_sconv_v2_canonical_and_invocation_modes(void) {
-  char input[64], output[64], output2[64], output3[64];
+  char input[4096], output[4096], output2[4096], output3[4096];
   temp_path(input, sizeof input, "sconv-in");
   temp_path(output, sizeof output, "sconv-out");
   temp_path(output2, sizeof output2, "sconv-out2");
@@ -369,17 +368,17 @@ void test_sconv_v2_canonical_and_invocation_modes(void) {
   ASSERT_NOT_NULL(make_item("program", root, ITEM_code, VALUE_NIL, code, 9));
   ASSERT_TRUE(save_itemstore_with_options(input, root, ITEMSTORE_DURABLE_FAST));
   destroy_item(root);
-  char *missing_argv[] = {"./sconv", "-i", input, NULL};
+  char *missing_argv[] = {TEST_SCONV, "-i", input, NULL};
   TestProcessResult missing = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(missing_argv, 0, &missing));
   ASSERT_EQ_INT(1, missing.exit_code);
   test_process_result_free(&missing);
-  char *mixed_argv[] = {"./sconv", "-i", input, output2, NULL};
+  char *mixed_argv[] = {TEST_SCONV, "-i", input, output2, NULL};
   TestProcessResult mixed = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(mixed_argv, 0, &mixed));
   ASSERT_EQ_INT(1, mixed.exit_code);
   test_process_result_free(&mixed);
-  char *bad_d_argv[] = {"./sconv", "-d", "bogus", input, output2, NULL};
+  char *bad_d_argv[] = {TEST_SCONV, "-d", "bogus", input, output2, NULL};
   TestProcessResult bad_d = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(bad_d_argv, 0, &bad_d));
   ASSERT_EQ_INT(1, bad_d.exit_code);
@@ -387,14 +386,14 @@ void test_sconv_v2_canonical_and_invocation_modes(void) {
   ASSERT_EQ_INT(
       ITEMSTORE_CONVERT_SUCCESS,
       itemstore_convert(input, output, ITEMSTORE_DURABLE_FAST, false));
-  char *pos_argv[] = {"./sconv", "-q", input, output2, NULL};
+  char *pos_argv[] = {TEST_SCONV, "-q", input, output2, NULL};
   TestProcessResult pos = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(pos_argv, 0, &pos));
   ASSERT_EQ_INT(0, pos.exit_code);
   ASSERT_EQ_INT(0, (int)pos.stdout_length);
   ASSERT_EQ_INT(0, (int)pos.stderr_length);
   test_process_result_free(&pos);
-  char *opt_argv[] = {"./sconv", "-v", "-d",    "fast", "-i",
+  char *opt_argv[] = {TEST_SCONV, "-v", "-d",    "fast", "-i",
                       input,     "-o", output3, NULL};
   TestProcessResult opt = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(opt_argv, 0, &opt));
@@ -421,7 +420,7 @@ void test_sconv_v2_canonical_and_invocation_modes(void) {
 }
 
 void test_sconv_collisions_aliases_and_replace(void) {
-  char input[64], output[64], alias[64];
+  char input[4096], output[4096], alias[4096];
   temp_path(input, sizeof input, "sconv-in");
   temp_path(output, sizeof output, "sconv-out");
   temp_path(alias, sizeof alias, "sconv-alias");
@@ -444,7 +443,7 @@ void test_sconv_collisions_aliases_and_replace(void) {
   ASSERT_NOT_NULL(sentinel_file);
   ASSERT_EQ_INT(8, fwrite("sentinel", 1, 8, sentinel_file));
   ASSERT_EQ_INT(0, fclose(sentinel_file));
-  char *refuse_argv[] = {"./sconv", input, output, NULL};
+  char *refuse_argv[] = {TEST_SCONV, input, output, NULL};
   TestProcessResult refused = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(refuse_argv, 0, &refused));
   ASSERT_EQ_INT(1, refused.exit_code);
@@ -455,7 +454,7 @@ void test_sconv_collisions_aliases_and_replace(void) {
   ASSERT_EQ_INT(8, fread(sentinel, 1, 8, sentinel_file));
   ASSERT_EQ_INT(0, fclose(sentinel_file));
   ASSERT_TRUE(memcmp(sentinel, "sentinel", 8) == 0);
-  char *replace_argv[] = {"./sconv", "--replace", input, output, NULL};
+  char *replace_argv[] = {TEST_SCONV, "--replace", input, output, NULL};
   TestProcessResult replaced = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(replace_argv, 0, &replaced));
   ASSERT_EQ_INT(0, replaced.exit_code);
@@ -469,7 +468,7 @@ void test_sconv_collisions_aliases_and_replace(void) {
 }
 
 void test_sconv_rejects_bad_inputs_and_durability_failure(void) {
-  char input[64], output[64];
+  char input[4096], output[4096];
   temp_path(input, sizeof input, "sconv-bad");
   temp_path(output, sizeof output, "sconv-out");
   FILE *f = fopen(input, "wb");
@@ -487,7 +486,7 @@ void test_sconv_rejects_bad_inputs_and_durability_failure(void) {
   ASSERT_EQ_INT(
       ITEMSTORE_CONVERT_FAILURE,
       itemstore_convert(input, output, ITEMSTORE_DURABLE_FAST, false));
-  char *unknown_argv[] = {"./sconv", input, output, NULL};
+  char *unknown_argv[] = {TEST_SCONV, input, output, NULL};
   TestProcessResult unknown = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(unknown_argv, 0, &unknown));
   ASSERT_EQ_INT(1, unknown.exit_code);
@@ -509,7 +508,7 @@ void test_sconv_rejects_bad_inputs_and_durability_failure(void) {
   ASSERT_NOT_NULL(f);
   ASSERT_EQ_INT(8, fwrite("sentinel", 1, 8, f));
   ASSERT_EQ_INT(0, fclose(f));
-  char fast_output[64];
+  char fast_output[4096];
   temp_path(fast_output, sizeof fast_output, "sconv-fast");
   sync_calls = 0;
   itemstore_set_sync_hook_for_tests(fail_sync);

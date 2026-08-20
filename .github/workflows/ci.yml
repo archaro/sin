@@ -28,7 +28,7 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             build-essential clang bison flex libuv1-dev pkg-config xxd
       - name: Run strict-warning tests
-        run: make CC=gcc test-warnings
+        run: make CC=gcc test
 
   strict-warnings-clang:
     runs-on: ubuntu-24.04
@@ -41,7 +41,7 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             build-essential clang bison flex libuv1-dev pkg-config xxd
       - name: Run strict-warning tests
-        run: make CC=clang test-warnings
+        run: make CC=clang test
 
   release-tests:
     runs-on: ubuntu-24.04
@@ -54,7 +54,7 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             build-essential clang bison flex libuv1-dev pkg-config xxd
       - name: Run release tests
-        run: make test-release
+        run: BUILD=release make test
 
   sanitizer-tests:
     runs-on: ubuntu-24.04
@@ -67,7 +67,20 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             build-essential clang bison flex libuv1-dev pkg-config xxd
       - name: Run leak-detecting sanitizer tests
-        run: make test-lsan
+        run: make test-sanitize
+
+  coverage-and-inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential clang bison flex libuv1-dev pkg-config xxd
+      - name: Run full coverage and inventory gate
+        run: make _coverage-inventory
 
   fuzz-smoke:
     runs-on: ubuntu-24.04
@@ -86,7 +99,7 @@ jobs:
       - name: Prepare libFuzzer artifact directory
         run: mkdir -p "$RUNNER_TEMP/sin-libfuzzer-artifacts"
       - name: Run seeded fuzz smoke
-        run: make FUZZ_RUNS="$FUZZ_RUNS" FUZZ_TIME="$FUZZ_TIME" FUZZ_SEED="$FUZZ_SEED" FUZZ_ARTIFACT_DIR="$RUNNER_TEMP/sin-libfuzzer-artifacts" fuzz-smoke
+        run: make FUZZ_RUNS="$FUZZ_RUNS" FUZZ_TIME="$FUZZ_TIME" FUZZ_SEED="$FUZZ_SEED" FUZZ_ARTIFACT_DIR="$RUNNER_TEMP/sin-libfuzzer-artifacts" test-fuzz
       - name: Upload libFuzzer artifacts
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4

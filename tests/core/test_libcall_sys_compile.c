@@ -459,7 +459,9 @@ void test_sys_compile_libcall_runtime(void) {
               0);
   assert_nil_item("caller.results.compile_outer_after");
 
-  char source_srcroot[] = "/tmp/sin-sys-source-compile-XXXXXX";
+  char source_srcroot[4096];
+
+  ASSERT_EQ_INT(0, test_temp_template(source_srcroot, sizeof source_srcroot, "sin-sys-source-compile"));
   ASSERT_NOT_NULL(mkdtemp(source_srcroot));
   config.srcroot = source_srcroot;
   assert_compile_success_bool("source_runtime.target = code ( 7; );");

@@ -6,8 +6,8 @@ Reference-derived conformance fixtures live under `conformance/`; their
 traceability map is documented in
 [`conformance/README.md`](conformance/README.md).
 
-The conformance manifest is read-only test input. `make test-conformance` and
-`make test-framework` validate its schema, inventory coverage, checked-in source
+The conformance manifest is read-only test input. `make test` validates its
+schema, inventory coverage, checked-in source
 witnesses, and expectation references before driving `scomp`, `sdiss`, and
 `sin`. They never regenerate or rewrite fixture files. Use the deliberate
 manual regeneration procedure in `conformance/README.md` when a language or
@@ -29,7 +29,7 @@ runtime contract intentionally changes.
 3. **Itemstore hex seeds** (`itemstore/*.hex`)
    - Purpose: minimal v1, valid v2 nested-list/reference, and malformed recursive-list inputs for the `sin` object/itemstore fuzzer.
    - Source of truth: commented, hand-authored hex files.
-   - Regeneration: remove comment lines and decode with `sed '/^[[:space:]]*#/d' <seed>.hex | xxd -r -p > tests/fuzz/corpus/sin-object/<seed>.itemstore`; `make seed-fuzz-sin-object-corpus` performs this workflow alongside existing source seeds.
+   - Regeneration: use `make test-fuzz`; it removes comment lines and decodes seeds into the active `obj/<build>-<compiler>/tests/fuzz/corpus/` directory.
 
    Bytecode migration seeds live in `bytecode-migration/`; they are hand-authored
    historical 0.7.1 and v1 samples and are regenerated manually when the wire
@@ -74,4 +74,8 @@ Example:
 {"echo_load_expected", "tests/fixtures/interpret/echo-load.expected.txt", "SOT: runtime output contract for echo-load | regen: ./scomp examples/echo-load.src tests/fixtures/interpret/echo-load.generated.obj && ./sin -o tests/fixtures/interpret/echo-load.generated.obj > tests/fixtures/interpret/echo-load.expected.txt"},
 ```
 
-The enforcement test (`tests/shared/test_fixture_policy.c`) is compiled into `tests/test-suite` by the Makefile and validates declared fixture existence, metadata format, duplicate declarations, and pipeline golden paths. Run `make test` for the standard fixture checks; use `make fuzz-corpora` to seed fuzz inputs from checked-in `.hex` fixtures and `examples/*.src` files.
+The enforcement test (`tests/shared/test_fixture_policy.c`) is compiled into a
+framework adapter under the active `obj/` path and validates declared fixture
+existence, metadata format, duplicate declarations, and pipeline golden paths.
+Run `make test` for the standard fixture checks and `make test-fuzz` to seed
+fuzz inputs from checked-in `.hex` fixtures and `examples/*.src` files.

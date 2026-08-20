@@ -8,8 +8,8 @@ intended dependency direction. It is a reasoning aid, not a file-move plan.
 Top-level `src/` holds the CLI entry points and integration headers, with
 reusable implementation grouped under `src/common/`, `src/compiler/`,
 `src/runtime/`, `src/itemstore/`, `src/bytecode/`, `src/libcall/`, and
-`src/net/`. Generated parser and lexer output is written to `obj/generated/`
-by the build.
+`src/net/`. Generated parser and lexer output is written to the active
+`obj/<build>-<compiler>/generated/` directory by the build.
 
 The main command entry points are:
 
@@ -18,8 +18,22 @@ The main command entry points are:
 - `src/sin.c`: runtime/game executable CLI.
 - `src/sconv.c`: itemstore conversion CLI.
 
-The shared implementation is built into `lib/libsinshared.a` and linked into
-those tools and the test harnesses.
+The shared implementation is built into
+`lib/<build>-<compiler>/libsinshared.a` and linked into those tools and the
+test harnesses.
+
+## Make implementation
+
+The root `Makefile` is the public build and test interface. Production object,
+parser, lexer, and executable rules live in `mk/build.mk`; framework binaries
+and deterministic composition live in `mk/tests.mk`; fuzz compilation,
+corpus seeding, and campaigns live in `mk/fuzz.mk`. These fragments derive all
+outputs from the active build/compiler tag, use normal dependencies, and keep
+generated test data out of `tests/`.
+The Make recipes export `SIN_TEST_TMP_ROOT` and `TF_TMP_ROOT` so framework
+fixtures, runner capture files, and repository-tree transient files live below
+the active object directory. Direct manual test-binary invocations fall back to
+the OS temporary directory when those variables are not set.
 
 ## Contract Inventory
 
@@ -28,10 +42,9 @@ inventory for the language, compiler/bytecode pipeline, runtime APIs,
 libcalls, executable interfaces, and legacy test contracts.  Their canonical
 identifiers are reconciled against `parser.y`, `absyn.h`, `bytecode_abi.h`,
 `opcode_schema.def`, `libcall_list.h`, and the built shared archive.  Run
-`make inventory-audit` after `make lib` (or `make test`, which includes the
-audit) to detect missing, stale, duplicate, or unmapped entries.  The focused
-positive/negative checks are available with `make inventory-audit-self-test`;
-they mutate temporary copies only.  `tests/inventory/archive_symbols.csv`
+`make test` (which includes the audit) to detect missing, stale, duplicate, or
+unmapped entries. Catalog self-checks mutate temporary copies only.
+`tests/inventory/archive_symbols.csv`
 accounts for every maintained archive global with its object, architectural
 module, provenance, and grouped `api_contract_id`; `api.csv` contains the
 reviewed observable module contracts (including application entry points),
@@ -43,16 +56,15 @@ handler symbol in addition to their numeric ABI metadata.
 
 ## Test Framework
 
-The self-contained C17/POSIX framework lives under `tests/framework/` and is
-kept separate from the legacy unified harness during migration. Each test
-translation unit supplies a standard-C `TF_TestDescriptor` array to
+The authoritative C17/POSIX framework lives under `tests/framework/`. Each
+test translation unit supplies a standard-C `TF_TestDescriptor` array to
 `tf_main()`. The framework validates metadata, lists descriptors as `TF|...`
 records, and runs one selected descriptor in a fresh process with captured
 output, timeout/process-group cleanup, fixture cleanup, and resettable
 allocation/itemstore hooks. `test_runner.c` discovers descriptors from each
 executable's `--list` output and invokes them through `--run ID`; it runs
 serially by default and uses positive `TEST_JOBS` values for non-exclusive
-batches. Build artifacts for `make test-framework` remain in the active
+batches. Build artifacts for `make test` remain in the active
 variant's `obj/<build>-<compiler>/tests/framework/` directory.
 Successful captured output is suppressed by default; setting `TF_VERBOSE=1`
 replays it for diagnostics.
@@ -80,24 +92,22 @@ The first migration group is under `tests/rewrite/group1/`. Its adapters keep
 legacy native test bodies in their original translation units while each
 adapter owns an explicit descriptor array and is linked as a separate binary.
 The `SIN_TEST_FRAMEWORK_COMPAT` assertion shim maps legacy assertion names to
-framework failures only for these binaries. `make test-framework` discovers
-the group alongside framework and conformance binaries; the legacy `make test`
-target and its unified harness remain unchanged.
+framework failures only for these binaries. `make test` discovers the group
+alongside framework and conformance binaries.
 
 The compiler front-end migration adapters are kept under `tests/rewrite/` and
 use the same compatibility boundary. They cover the compiler-owned AST,
 semantic, parser, IR/lowering, and pipeline translation units with one
 descriptor-owning executable per native source file; the six Group 1 overlap
 descriptors remain in their original adapters. Their binaries are aggregated
-by `make test-framework` without changing the legacy test target.
+by `make test`.
 
 The bytecode/disassembly migration adapters are also kept under
 `tests/rewrite/`, in `group3_adapter_*.c`. They cover each bytecode-owned
 native test translation unit with a separate descriptor-owning executable for
 ABI/schema, wire encoding, conversion, emission, verification, and `sdiss`.
-The Group 3 binaries are included in `make test-framework` and use only the
-active variant's `obj/` output directory; the legacy bytecode gate remains
-authoritative during migration.
+The Group 3 binaries are included in `make test` and use only the active
+variant's `obj/` output directory.
 
 The runtime migration adapters are kept under `tests/rewrite/` in
 `group4_adapter_*.c`. They cover stack/frame transitions, immutable lists,
@@ -105,7 +115,7 @@ interpreter execution, stress cleanup, and the opt-in runtime benchmark. The
 existing `group1/adapter_value_behavior.c` owns all value-behavior descriptors
 for its native translation unit, including the two diagnostic descriptors
 reused from Group 1. Each adapter has one active-variant binary and is
-aggregated by `make test-framework`; runtime tests preserve fresh-process
+aggregated by `make test`; runtime tests preserve fresh-process
 isolation and mark global-hook, process, stress, and benchmark cases
 exclusive.
 
@@ -119,7 +129,7 @@ descriptors. The `group1/adapter_sconv.c` binary is extended with the other
 seven `sconv` descriptors, so conversion coverage has one executable. Fixed
 paths and process/global hooks are tagged `exclusive`; the cache benchmark is
 tagged `benchmark,exclusive`. All four binaries are aggregated by
-`make test-framework` while the legacy itemstore gate remains authoritative.
+`make test`.
 
 The libcall/task migration adapters are kept under `tests/rewrite/` as
 `group6_adapter_*.c`; the Group 1 registry and `sys` adapters are extended so
@@ -143,8 +153,8 @@ libraries and therefore does not introduce `framework_config.c`, the
 production archive, or duplicate normal network objects. The chat adapter
 invokes the unchanged localhost orchestration in an
 isolated framework child. Both binaries own one explicit descriptor array,
-tag all cases `exclusive,network`, and are aggregated by `make test-framework`
-alongside the unchanged dedicated `test-network` and `test-chat-smoke` gates.
+tag all cases `exclusive,network`, and are aggregated by `make test` alongside
+the CLI and integration cases.
 Chat uses an ephemeral loopback port, bounded waits, and teardown assertions
 for early disconnect and startup failure. The standalone smoke executable keeps
 its dedicated server process group; the framework adapter leaves `sin` in the
@@ -160,7 +170,7 @@ The executable CLI/end-to-end migration adapter is
 executable through the framework's separate stdout/stderr process capture,
 bounded timeout, process-group cleanup, and temporary-fixture helpers. The
 rule depends on all four executable targets, and the binary is included in
-`make test-framework` as the final active-variant Group 8 owner.
+`make test` as the final active-variant Group 8 owner.
 
 The fixture-driven conformance executable is
 `tests/conformance/test_conformance.c`, built under the active variant's
@@ -172,9 +182,8 @@ and drives the real `scomp`, `sdiss`, and `sin` executables through
 lowering, emission, bytecode verification, persistence/loading, and execution;
 negative cases assert compiler rejection and stop before later phases. Runtime
 cases use isolated framework fixtures, strict bytecode validation, and explicit
-repeat counts for persistence checks. `make test-conformance` is the focused
-target; `make test-framework` discovers it alongside the framework self-tests,
-while the legacy `make test` harness remains authoritative during migration.
+repeat counts for persistence checks. `make test` discovers it alongside the
+framework self-tests.
 
 Manifest coverage rows must classify every language and libcall inventory entry
 with a checked-in source witness. Explicit exclusion rows document network,
@@ -189,23 +198,29 @@ in `tests/fixtures/conformance/README.md`.
 `tests/coverage/coverage_gate.py` audits the manually reviewed floors in
 `tests/baseline/coverage_floors.csv` (GCC) or
 `tests/baseline/coverage_floors_clang.csv` (Clang) and collects native compiler coverage for
-the authored `src/**/*.c` modules. `make test-coverage` cleans the workspace,
-builds `BUILD=coverage` with GCC/gcov (or Clang's native profile mapping),
-runs the complete legacy test workload and `inventory-audit`, then compares
+the authored `src/**/*.c` modules. `make test-full` builds `BUILD=coverage`
+with GCC/gcov (or Clang's native profile mapping), runs the complete framework
+workload and inventory audit, then compares
 line, branch, and function percentages against the compiler-specific floors;
 each floor row carries the matching vendor-major toolchain key (`gcc-13` or
 `clang-18`), and unreviewed majors fail closed. Detailed CSV and
 human-readable reports stay under `obj/coverage-<compiler>/coverage/`.
 GCC uses a matching `gcov-<major>` reporter by default; explicit GCC and LLVM
 reporter overrides are version-checked against the selected compiler.
+For `src/net/network.c`, GCC collection reads both the production network
+object and the active-variant white-box adapter object
+(`tests/objects/tests/rewrite/group7_adapter_network.o`), then unions their
+line, branch, and function observations. A missing adapter coverage object is
+an explicit gate error; this keeps the network floor tied to the replacement
+test producer rather than the removed standalone binary.
 
 The floor file is never rewritten by a test command. Any intentional change
 must be a reviewed manual edit with a nonblank rationale. `libcall_table.c`
 has an explicit `no_instrumentable_code` record; the third-party-derived
 `libtelnet.c` has an explicit `excluded_third_party` record. All other
-authored C modules require one measured floor. `make coverage-audit-self-test`
-exercises the auditor's success and failure paths without changing checked-in
-data.
+authored C modules require one measured floor. The coverage phase of
+`make test-full` exercises the auditor's success and failure paths without
+changing checked-in data.
 
 ## Module Boundaries
 
@@ -457,9 +472,9 @@ hosted workflow keeps the warning, release, leak-sanitizer, and fuzz checks in
 separate parallel jobs; the combined local entry point is:
 
 ```sh
-make test-warnings
-make test-release
-make test-lsan
-FUZZ_SEED=1 FUZZ_ARTIFACT_DIR="$PWD/tests/fuzz/artifacts" make fuzz-smoke
+make test
+BUILD=release make test
+make test-sanitize
+FUZZ_SEED=1 make test-fuzz
 ```
 The sin-object fuzz harness exercises v2-only runtime loading, strict raw bytecode verification, and shared `itemstore_convert` version dispatch. Source-level list/item-reference persistence integration is owned by interpreter golden fixtures under `tests/fixtures/interpret/`.

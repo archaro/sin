@@ -18,15 +18,15 @@ export FUZZ_ARTIFACT_DIR="${FUZZ_ARTIFACT_DIR:-}"
 export CC="${CC:-gcc}"
 export FUZZ_CC="${FUZZ_CC:-clang}"
 
-echo "==> strict warnings tests"
-make CC="${CC}" test-warnings
+echo "==> deterministic tests"
+make CC="${CC}" test
 
 echo "==> release-mode tests"
-make CC="${CC}" test-release
+BUILD=release make CC="${CC}" test
 
 echo "==> leak-detecting sanitizer tests"
-make CC="${CC}" test-lsan
+make CC="${CC}" test-sanitize
 
 echo "==> seeded fuzz smoke"
 make FUZZ_CC="${FUZZ_CC}" FUZZ_RUNS="${FUZZ_RUNS}" FUZZ_TIME="${FUZZ_TIME}" \
-	FUZZ_SEED="${FUZZ_SEED}" FUZZ_ARTIFACT_DIR="${FUZZ_ARTIFACT_DIR}" fuzz-smoke
+	FUZZ_SEED="${FUZZ_SEED}" FUZZ_ARTIFACT_DIR="${FUZZ_ARTIFACT_DIR}" test-fuzz

@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -176,20 +177,24 @@ void test_pipeline_negative_matrix(void) {
 }
 
 void test_pipeline_ast_budget_subprocess(void) {
-  char srcname[] = "/tmp/sin-ast-src-XXXXXX";
-  char outname[] = "/tmp/sin-ast-out-XXXXXX";
+  char srcname[PATH_MAX], outname[PATH_MAX], logname[PATH_MAX];
+  ASSERT_EQ_INT(0, test_temp_template(srcname, sizeof srcname, "sin-ast-src"));
+  ASSERT_EQ_INT(0, test_temp_template(outname, sizeof outname, "sin-ast-out"));
+  ASSERT_EQ_INT(0, test_temp_template(logname, sizeof logname, "sin-ast-log"));
   int sfd = mkstemp(srcname), ofd = mkstemp(outname);
   ASSERT_TRUE(sfd >= 0 && ofd >= 0);
   FILE *f = fdopen(sfd, "w"); ASSERT_NOT_NULL(f);
   for (int i = 0; i < 5000; ++i) fprintf(f, "%s1", i ? "+" : "");
   fputs(";\n", f); fclose(f); close(ofd);
-  char cmd[512]; snprintf(cmd, sizeof(cmd), "./scomp -q -i %s -o %s > /tmp/sin-ast-log 2>&1", srcname, outname);
+  char cmd[(PATH_MAX * 4) + 64];
+  snprintf(cmd, sizeof(cmd), "%s -q -i %s -o %s > %s 2>&1",
+           test_program_path("scomp"), srcname, outname, logname);
   int status = system(cmd);
   ASSERT_TRUE(WIFEXITED(status)); ASSERT_TRUE(WEXITSTATUS(status) != 0);
-  FILE *log = fopen("/tmp/sin-ast-log", "r"); ASSERT_NOT_NULL(log);
+  FILE *log = fopen(logname, "r"); ASSERT_NOT_NULL(log);
   char text[2048] = {0}; size_t got = fread(text, 1, sizeof(text) - 1, log); (void)got; fclose(log);
   ASSERT_TRUE(strstr(text, "AST traversal depth budget exceeded") != NULL);
-  unlink(srcname); unlink(outname); unlink("/tmp/sin-ast-log");
+  unlink(srcname); unlink(outname); unlink(logname);
 
   char shallow[256];
   size_t shallow_len = 0;
@@ -211,8 +216,9 @@ void test_pipeline_ast_budget_subprocess(void) {
   ASSERT_TRUE(strstr(shallow_diag.message, "AST node budget exceeded") != NULL);
   compiler_diag_reset(&shallow_diag);
 
-  char shallow_srcname[] = "/tmp/sin-ast-shallow-src-XXXXXX";
-  char shallow_outname[] = "/tmp/sin-ast-shallow-out-XXXXXX";
+  char shallow_srcname[PATH_MAX], shallow_outname[PATH_MAX];
+  ASSERT_EQ_INT(0, test_temp_template(shallow_srcname, sizeof shallow_srcname, "sin-ast-shallow-src"));
+  ASSERT_EQ_INT(0, test_temp_template(shallow_outname, sizeof shallow_outname, "sin-ast-shallow-out"));
   sfd = mkstemp(shallow_srcname);
   ofd = mkstemp(shallow_outname);
   ASSERT_TRUE(sfd >= 0 && ofd >= 0);
@@ -223,12 +229,12 @@ void test_pipeline_ast_budget_subprocess(void) {
   close(ofd);
   ASSERT_EQ_INT(0, setenv("SINISTRA_TEST_AST_NODE_LIMIT", "32", 1));
   snprintf(cmd, sizeof(cmd),
-           "./scomp -q -i %s -o %s > /tmp/sin-ast-log 2>&1", shallow_srcname,
-           shallow_outname);
+           "%s -q -i %s -o %s > %s 2>&1", test_program_path("scomp"), shallow_srcname,
+           shallow_outname, logname);
   status = system(cmd);
   ASSERT_TRUE(WIFEXITED(status));
   ASSERT_TRUE(WEXITSTATUS(status) != 0);
-  log = fopen("/tmp/sin-ast-log", "r");
+  log = fopen(logname, "r");
   ASSERT_NOT_NULL(log);
   memset(text, 0, sizeof(text));
   got = fread(text, 1, sizeof(text) - 1, log);
@@ -238,7 +244,7 @@ void test_pipeline_ast_budget_subprocess(void) {
   ASSERT_EQ_INT(0, unsetenv("SINISTRA_TEST_AST_NODE_LIMIT"));
   unlink(shallow_srcname);
   unlink(shallow_outname);
-  unlink("/tmp/sin-ast-log");
+  unlink(logname);
 
   ASSERT_EQ_INT(ERR_NOERROR,
                 compile_source_to_bytecode("1;", 2, &out, &errdetail));

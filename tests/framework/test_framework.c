@@ -1,5 +1,11 @@
 #include "test_framework.h"
 
+#if defined(SIN_COVERAGE_GCC)
+extern void __gcov_dump(void);
+#elif defined(SIN_COVERAGE_CLANG)
+extern int __llvm_profile_write_file(void);
+#endif
+
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -22,6 +28,22 @@ static bool g_io_close_failure;
 static bool g_io_sync_failure;
 #define TF_MAX_FIXTURES 128u
 static char g_fixture_paths[TF_MAX_FIXTURES][sizeof(((TF_Fixture *)0)->path)];
+
+static void tf_configure_gcov_prefix(const char *program) {
+  const char *base = getenv("GCOV_PREFIX_BASE");
+  uint64_t hash = UINT64_C(1469598103934665603);
+  char prefix[4096];
+  int written;
+  if (!base || !base[0] || !program) return;
+  for (const unsigned char *p = (const unsigned char *)program; *p; p++) {
+    hash ^= *p;
+    hash *= UINT64_C(1099511628211);
+  }
+  written = snprintf(prefix, sizeof prefix, "%s/gcov-%016llx", base,
+                     (unsigned long long)hash);
+  if (written > 0 && (size_t)written < sizeof prefix)
+    (void)setenv("GCOV_PREFIX", prefix, 1);
+}
 static size_t g_fixture_count;
 
 static void tf_detail(char *detail, size_t size, const char *format,
@@ -231,6 +253,7 @@ int tf_process_run(char *const argv[], unsigned timeout_ms,
     if (dup2(out_pipe[1], STDOUT_FILENO) < 0 || dup2(err_pipe[1], STDERR_FILENO) < 0) _exit(126);
     tf_close_fd(&out_pipe[0]); tf_close_fd(&out_pipe[1]);
     tf_close_fd(&err_pipe[0]); tf_close_fd(&err_pipe[1]);
+    tf_configure_gcov_prefix(argv[0]);
     execvp(argv[0], argv);
     dprintf(STDERR_FILENO, "exec %s: %s\n", argv[0], strerror(errno));
     _exit(127);
@@ -289,9 +312,11 @@ static bool tf_valid_fixture_name(const char *name) {
 }
 
 void tf_fixture_init(TF_Fixture *fixture) {
+  const char *root = getenv("TF_TMP_ROOT");
   if (!fixture) return;
   memset(fixture, 0, sizeof *fixture);
-  (void)snprintf(fixture->path, sizeof fixture->path, "/tmp/sin-test-XXXXXX");
+  if (!root || !root[0]) root = "/tmp";
+  (void)snprintf(fixture->path, sizeof fixture->path, "%s/sin-test-XXXXXX", root);
   fixture->active = mkdtemp(fixture->path) != NULL;
   if (fixture->active && g_fixture_count < TF_MAX_FIXTURES) {
     (void)snprintf(g_fixture_paths[g_fixture_count++], sizeof g_fixture_paths[0], "%s", fixture->path);
@@ -465,6 +490,11 @@ static int tf_run_one(const TF_TestDescriptor *test) {
     test->fn();
     (void)fflush(NULL);
     tf_fixture_cleanup_all();
+#if defined(SIN_COVERAGE_GCC)
+    __gcov_dump();
+#elif defined(SIN_COVERAGE_CLANG)
+    (void)__llvm_profile_write_file();
+#endif
     _exit(0);
   }
   (void)setpgid(pid, pid);

@@ -91,8 +91,7 @@ effects, clocks, or task scheduling). The validator reads both inventories and
 fails closed when a newly added entry has neither a witness nor an explicit
 exclusion.
 
-Run the read-only suite with `make test-conformance` or as part of
-`make test-framework`. Tests compile each positive source with `scomp`, require
+Run the read-only suite with `make test`. Tests compile each positive source with `scomp`, require
 `sdiss` to accept the emitted object, then invoke `sin --loadonly
 --strict-validation` in an isolated temporary
 fixture. Repeated runs share the fixture itemstore when `runtime-runs` is

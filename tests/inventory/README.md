@@ -15,21 +15,17 @@ directives. Opcode rows store an exact fingerprint of all ten canonical
 mark that field `not-applicable`. Libcall rows store and reconcile the exact
 handler symbol as well as library/call indices and arity.
 
-Run the positive gate with:
+The positive catalog gate runs as part of the deterministic framework suite:
 
 ```sh
-make inventory-audit
+make test
 ```
 
-Run focused drift checks, which mutate temporary copies only, with:
-
-```sh
-make inventory-audit-self-test
-```
+Focused drift checks mutate temporary copies only and are included in `make test`.
 
 Catalogs are reviewed source data. Normal test commands never rewrite catalog
 files; canonical-definition changes require an intentional catalog edit and a
-fresh audit. During the migration, the audit discovers checked-in
+fresh audit. After cutover, the audit discovers checked-in
 `rewrite.*` descriptors under `tests/rewrite/` and requires their IDs to match
 the catalog rewrite rows exactly; ledger rows marked with verified parallel
 coverage must be a subset. Replacement test rows retain the same reciprocal

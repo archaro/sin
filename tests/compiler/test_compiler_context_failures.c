@@ -206,12 +206,12 @@ static void test_lower_control_flow_allocation_failure_preserves_provenance(void
 
   for (long fail_at = 0; fail_at < LOWER_ALLOC_FAILURE_TRIAL_LIMIT; fail_at++) {
     IR_Unit *ir = NULL;
-    char *errdetail = NULL;
+    char *lower_errdetail = NULL;
     CompilerDiagnostic diag;
     compiler_diag_init(&diag);
     alloc_test_fail_after(fail_at);
     int8_t rc = lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ir,
-                                     &errdetail, &diag);
+                                     &lower_errdetail, &diag);
     alloc_test_fail_after(-1);
 
     if (rc == ERR_NOERROR) {
@@ -232,7 +232,7 @@ static void test_lower_control_flow_allocation_failure_preserves_provenance(void
                   span_matches(body_statement->span, &diag));
       saw_provenance = true;
     }
-    free(errdetail);
+    free(lower_errdetail);
     compiler_diag_reset(&diag);
   }
 
@@ -241,14 +241,14 @@ static void test_lower_control_flow_allocation_failure_preserves_provenance(void
 
   {
     IR_Unit *ir = NULL;
-    char *errdetail = NULL;
+    char *final_errdetail = NULL;
     CompilerDiagnostic diag;
     compiler_diag_init(&diag);
     ASSERT_EQ_INT(ERR_NOERROR,
                   lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ir,
-                                       &errdetail, &diag));
+                                       &final_errdetail, &diag));
     ASSERT_NOT_NULL(ir);
-    ASSERT_TRUE(errdetail == NULL);
+    ASSERT_TRUE(final_errdetail == NULL);
     ASSERT_TRUE(!diag.has_loc);
     ir_destroy_unit(ir);
     compiler_diag_reset(&diag);

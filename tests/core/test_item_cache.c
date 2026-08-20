@@ -85,7 +85,9 @@ void test_itemstore_benchmarks(void) {
   ASSERT_EQ_INT(64, item_child_count(root));
   ASSERT_EQ_INT(101, item_child_at(root, 0)->value.i);
 
-  char path[] = "/tmp/sin-itemstore-bench-XXXXXX";
+  char path[4096];
+
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-bench"));
   int fd = mkstemp(path);
   ASSERT_TRUE(fd >= 0);
   ASSERT_EQ_INT(0, close(fd));

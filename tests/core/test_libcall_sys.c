@@ -1005,7 +1005,9 @@ static void overwrite_source_file(const char *filename, const void *bytes,
 void test_sys_source_libcall(void) {
   setup_libcall_runtime();
 
-  char srcroot[] = "/tmp/sin-sys-source-XXXXXX";
+  char srcroot[4096];
+
+  ASSERT_EQ_INT(0, test_temp_template(srcroot, sizeof srcroot, "sin-sys-source"));
   ASSERT_NOT_NULL(mkdtemp(srcroot));
   ITEM_t *runner = insert_halt_code(itemstore_root(config.itemstore_ctx), "source.scope.runner");
   ITEM_t *target = insert_halt_code(itemstore_root(config.itemstore_ctx),

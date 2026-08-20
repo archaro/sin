@@ -20,6 +20,7 @@
 #include "itemref.h"
 #include "item_persist_internal.h"
 #include "test_assert.h"
+#include "test_helpers.h"
 #include "shared/test_libcall_support.h"
 
 static uint64_t now_ns(void) {
@@ -427,7 +428,8 @@ static void run_extended_list_benchmarks(void) {
 }
 
 static void run_extended_itemstore_benchmarks(void) {
-  char path[] = "/tmp/sin-list-bench-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-list-bench"));
   ITEMSTORE_t *store = itemstore_create("list_bench");
   ASSERT_NOT_NULL(store);
   SIN_LIST_t *list = bench_make_list(33);

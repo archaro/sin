@@ -128,7 +128,7 @@ static void run_case(const InterpretGoldenCase *tc) {
   ASSERT_EQ_INT(0, test_make_temp_path("sin-interp-golden", generated_obj_path,
                                        sizeof(generated_obj_path)));
   char *const compile_argv[] = {
-    "./scomp", (char *)tc->src_path, generated_obj_path, NULL
+    TEST_SCOMP, (char *)tc->src_path, generated_obj_path, NULL
   };
   TestProcessResult compile_result = {0};
   int capture_rc = test_run_argv_capture(compile_argv, 0, &compile_result);
@@ -139,7 +139,9 @@ static void run_case(const InterpretGoldenCase *tc) {
   if (compile_exit != 0) remove(generated_obj_path);
   ASSERT_EQ_INT(0, compile_exit);
 
-  char run_dir[] = "/tmp/sin-interp-golden-run-XXXXXX";
+  char run_dir[4096];
+
+  ASSERT_EQ_INT(0, test_temp_template(run_dir, sizeof run_dir, "sin-interp-golden-run"));
   ASSERT_NOT_NULL(mkdtemp(run_dir));
   char itemstore_path[sizeof(run_dir) + sizeof("/items.dat")];
   char srcroot_path[sizeof(run_dir) + sizeof("/srcroot")];
@@ -149,7 +151,7 @@ static void run_case(const InterpretGoldenCase *tc) {
                        run_dir) > 0);
   ASSERT_EQ_INT(0, mkdir(srcroot_path, 0700));
   char *const run_argv[] = {
-    "./sin", "--loadonly", "-i", itemstore_path, "-s", srcroot_path,
+    TEST_SIN, "--loadonly", "-i", itemstore_path, "-s", srcroot_path,
     "-o", generated_obj_path, NULL
   };
   char *fixture = test_read_text_file(tc->fixture_path);

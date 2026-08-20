@@ -14,6 +14,11 @@
 #include "version.h"
 #include "test_assert.h"
 
+static void temp_path(char *path, size_t size, const char *name) {
+  int n = snprintf(path, size, "%s/%s", test_temp_root(), name);
+  ASSERT_TRUE(n > 0 && (size_t)n < size);
+}
+
 static void assert_capture_stdout_matches_file(const TestProcessResult *result,
                                                const char *expected_path,
                                                const char *context) {
@@ -44,10 +49,10 @@ static void assert_cli_metadata_case(const char *tool, const char *flag,
                                      const char *stderr_contains,
                                      int expect_empty_stdout,
                                      int expect_empty_stderr) {
-  char *argv[] = {"./scomp", (char *)flag, NULL};
-  if (strcmp(tool, "sin") == 0) argv[0] = "./sin";
-  else if (strcmp(tool, "sdiss") == 0) argv[0] = "./sdiss";
-  else if (strcmp(tool, "sconv") == 0) argv[0] = "./sconv";
+  char *argv[] = {TEST_SCOMP, (char *)flag, NULL};
+  if (strcmp(tool, "sin") == 0) argv[0] = TEST_SIN;
+  else if (strcmp(tool, "sdiss") == 0) argv[0] = TEST_SDISS;
+  else if (strcmp(tool, "sconv") == 0) argv[0] = TEST_SCONV;
 
   TestProcessResult result = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(argv, 0, &result));
@@ -127,9 +132,10 @@ static void test_compiler_cli_help_inventory_and_missing_arguments(void) {
 
 
 static void test_shared_logging_cli_levels(void) {
-  const char *src_path = "tests/fixtures/log-level.tmp.src";
-  const char *obj_path = "tests/fixtures/log-level.tmp.obj";
-  const char *itemstore_path = "tests/fixtures/log-level.tmp.items";
+  char src_path[4096], obj_path[4096], itemstore_path[4096];
+  temp_path(src_path, sizeof src_path, "log-level.tmp.src");
+  temp_path(obj_path, sizeof obj_path, "log-level.tmp.obj");
+  temp_path(itemstore_path, sizeof itemstore_path, "log-level.tmp.items");
   FILE *src = fopen(src_path, "wb");
   ASSERT_NOT_NULL(src);
   const char *program = "@x = 1;\nreturn @x;\n";
@@ -137,7 +143,7 @@ static void test_shared_logging_cli_levels(void) {
   ASSERT_EQ_INT(0, fclose(src));
 
   char *const quiet_compile_argv[] = {
-      "./scomp", "--quiet", "-i", (char *)src_path, "-o", (char *)obj_path,
+      TEST_SCOMP, "--quiet", "-i", (char *)src_path, "-o", (char *)obj_path,
       NULL};
   TestProcessResult result = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(quiet_compile_argv, 0, &result));
@@ -147,7 +153,7 @@ static void test_shared_logging_cli_levels(void) {
   test_process_result_free(&result);
 
   char *const verbose_compile_argv[] = {
-      "./scomp", "--verbose", "-i", (char *)src_path, "-o", (char *)obj_path,
+      TEST_SCOMP, "--verbose", "-i", (char *)src_path, "-o", (char *)obj_path,
       NULL};
   ASSERT_EQ_INT(0, test_run_argv_capture(verbose_compile_argv, 0, &result));
   ASSERT_EQ_INT(0, result.exit_code);
@@ -157,7 +163,7 @@ static void test_shared_logging_cli_levels(void) {
   test_process_result_free(&result);
 
   char *const quiet_disassemble_argv[] = {
-      "./sdiss", "--quiet", "--no-header", "-o", (char *)obj_path, NULL};
+      TEST_SDISS, "--quiet", "--no-header", "-o", (char *)obj_path, NULL};
   ASSERT_EQ_INT(0, test_run_argv_capture(quiet_disassemble_argv, 0, &result));
   ASSERT_EQ_INT(0, result.exit_code);
   ASSERT_TRUE(strlen(result.stdout_text) > 0);
@@ -166,7 +172,7 @@ static void test_shared_logging_cli_levels(void) {
   test_process_result_free(&result);
 
   char *const verbose_disassemble_argv[] = {
-      "./sdiss", "--verbose", "--no-header", "-o", (char *)obj_path, NULL};
+      TEST_SDISS, "--verbose", "--no-header", "-o", (char *)obj_path, NULL};
   ASSERT_EQ_INT(0, test_run_argv_capture(verbose_disassemble_argv, 0, &result));
   ASSERT_EQ_INT(0, result.exit_code);
   ASSERT_TRUE(strstr(result.stdout_text, "Beginning disassembly") != NULL);
@@ -175,7 +181,7 @@ static void test_shared_logging_cli_levels(void) {
   test_process_result_free(&result);
 
   char *const quiet_sin_argv[] = {
-      "./sin", "--quiet", "--loadonly", "-i", (char *)itemstore_path,
+      TEST_SIN, "--quiet", "--loadonly", "-i", (char *)itemstore_path,
       "-s", "tests/fixtures", "-o", (char *)obj_path, NULL};
   ASSERT_EQ_INT(0, test_run_argv_capture(quiet_sin_argv, 0, &result));
   ASSERT_EQ_INT(0, result.exit_code);
@@ -184,7 +190,7 @@ static void test_shared_logging_cli_levels(void) {
   test_process_result_free(&result);
 
   char *const default_sin_argv[] = {
-      "./sin", "--loadonly", "-i", (char *)itemstore_path, "-s",
+      TEST_SIN, "--loadonly", "-i", (char *)itemstore_path, "-s",
       "tests/fixtures", "-o", (char *)obj_path, NULL};
   ASSERT_EQ_INT(0, test_run_argv_capture(default_sin_argv, 0, &result));
   ASSERT_EQ_INT(0, result.exit_code);
@@ -196,7 +202,7 @@ static void test_shared_logging_cli_levels(void) {
   test_process_result_free(&result);
 
   char *const verbose_sin_argv[] = {
-      "./sin", "--verbose", "--loadonly", "-i", (char *)itemstore_path,
+      TEST_SIN, "--verbose", "--loadonly", "-i", (char *)itemstore_path,
       "-s", "tests/fixtures", "-o", (char *)obj_path, NULL};
   ASSERT_EQ_INT(0, test_run_argv_capture(verbose_sin_argv, 0, &result));
   ASSERT_EQ_INT(0, result.exit_code);
@@ -210,9 +216,10 @@ static void test_shared_logging_cli_levels(void) {
 }
 
 static void test_scomp_cli_options(void) {
-  const char *src_path = "tests/fixtures/scomp-cli-options.tmp.src";
-  const char *pos_obj_path = "tests/fixtures/scomp-cli-options-pos.tmp.obj";
-  const char *opt_obj_path = "tests/fixtures/scomp-cli-options-opt.tmp.obj";
+  char src_path[4096], pos_obj_path[4096], opt_obj_path[4096];
+  temp_path(src_path, sizeof src_path, "scomp-cli-options.tmp.src");
+  temp_path(pos_obj_path, sizeof pos_obj_path, "scomp-cli-options-pos.tmp.obj");
+  temp_path(opt_obj_path, sizeof opt_obj_path, "scomp-cli-options-opt.tmp.obj");
   FILE *src = fopen(src_path, "wb");
   ASSERT_NOT_NULL(src);
   const char *program = "@x = 1;\n@x;\n";
@@ -220,13 +227,13 @@ static void test_scomp_cli_options(void) {
   ASSERT_EQ_INT(0, fclose(src));
 
   char *const positional_argv[] = {
-      "./scomp", (char *)src_path, (char *)pos_obj_path, NULL};
+      TEST_SCOMP, (char *)src_path, (char *)pos_obj_path, NULL};
   TestProcessResult result = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(positional_argv, 0, &result));
   ASSERT_EQ_INT(0, result.exit_code);
   test_process_result_free(&result);
 
-  char *const option_argv[] = {"./scomp", "-q", "-i", (char *)src_path,
+  char *const option_argv[] = {TEST_SCOMP, "-q", "-i", (char *)src_path,
                                "-o", (char *)opt_obj_path, NULL};
   ASSERT_EQ_INT(0, test_run_argv_capture(option_argv, 0, &result));
   ASSERT_EQ_INT(0, result.exit_code);
@@ -234,7 +241,7 @@ static void test_scomp_cli_options(void) {
   assert_file_bytes_equal(pos_obj_path, opt_obj_path,
                           "scomp positional and option output");
 
-  char *const stdio_argv[] = {"./scomp", "-q", "-i", "-", "-o", "-", NULL};
+  char *const stdio_argv[] = {TEST_SCOMP, "-q", "-i", "-", "-o", "-", NULL};
   ASSERT_EQ_INT(0, test_run_argv_capture_with_stdin(
                       stdio_argv, program, strlen(program), 0, &result));
   ASSERT_EQ_INT(0, result.exit_code);
@@ -251,23 +258,28 @@ static void test_scomp_cli_options(void) {
 }
 
 static void test_scomp_cli_malformed_diagnostic_shape(void) {
-  const char *src_path = "tests/fixtures/scomp-cli-malformed.tmp.src";
-  const char *obj_path = "tests/fixtures/scomp-cli-malformed.tmp.obj";
+  char src_path[4096], obj_path[4096];
+  char expected_file[4103];
+  temp_path(src_path, sizeof src_path, "scomp-cli-malformed.tmp.src");
+  temp_path(obj_path, sizeof obj_path, "scomp-cli-malformed.tmp.obj");
+  int expected_file_length = snprintf(expected_file, sizeof expected_file,
+                                      "file: %s", src_path);
+  ASSERT_TRUE(expected_file_length > 0 &&
+              (size_t)expected_file_length < sizeof expected_file);
   FILE *src = fopen(src_path, "wb");
   ASSERT_NOT_NULL(src);
   const char *malformed = "@x = 1;\n@yy = 2;\n^;";
   ASSERT_EQ_INT((int)strlen(malformed), (int)fwrite(malformed, 1, strlen(malformed), src));
   ASSERT_EQ_INT(0, fclose(src));
 
-  char *const argv[] = {"./scomp", (char *)src_path, (char *)obj_path, NULL};
+  char *const argv[] = {TEST_SCOMP, (char *)src_path, (char *)obj_path, NULL};
   TestProcessResult result = {0};
   ASSERT_EQ_INT(0, test_run_argv_capture(argv, 0, &result));
   ASSERT_TRUE(result.exit_code != 0);
 
   ASSERT_TRUE(strstr(result.stderr_text, "Diagnostic SIN-PARSE-") != NULL);
   ASSERT_TRUE(strstr(result.stderr_text, "stage: PARSE") != NULL);
-  ASSERT_TRUE(strstr(result.stderr_text,
-                     "file: tests/fixtures/scomp-cli-malformed.tmp.src") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text, expected_file) != NULL);
   ASSERT_TRUE(strstr(result.stderr_text, "line: 3") != NULL);
   ASSERT_TRUE(strstr(result.stderr_text, "column: 1") != NULL);
   ASSERT_TRUE(strstr(result.stderr_text, "message:") != NULL);

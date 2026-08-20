@@ -5,10 +5,13 @@
 
 #include "cli_io.h"
 #include "test_assert.h"
+#include "test_helpers.h"
 
 void test_cli_io_helpers(void) {
-  const char *path = "tests/fixtures/cli-io.tmp.bin";
-  const char *copy_path = "tests/fixtures/cli-io-copy.tmp.bin";
+  char path[4096], copy_path[4096], missing_path[4096];
+  snprintf(path, sizeof path, "%s/cli-io.tmp.bin", test_temp_root());
+  snprintf(copy_path, sizeof copy_path, "%s/cli-io-copy.tmp.bin", test_temp_root());
+  snprintf(missing_path, sizeof missing_path, "%s/cli-io-missing.tmp.bin", test_temp_root());
   const uint8_t bytes[] = {'a', 'b', '\0', 'c', '\n'};
   CliIoStatus status = cli_io_write_bytes(path, bytes, sizeof(bytes));
   ASSERT_EQ_INT(CLI_IO_OK, status.code);
@@ -39,7 +42,7 @@ void test_cli_io_helpers(void) {
 
   uint8_t *missing = NULL;
   size_t missing_len = 123;
-  status = cli_io_read_file_bytes("tests/fixtures/cli-io-missing.tmp.bin",
+  status = cli_io_read_file_bytes(missing_path,
                                   &missing, &missing_len);
   ASSERT_EQ_INT(CLI_IO_OPEN_FAILED, status.code);
   ASSERT_TRUE(status.sys_error != 0);

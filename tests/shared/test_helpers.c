@@ -308,8 +308,9 @@ void test_process_result_free(TestProcessResult *result) {
 }
 
 int test_make_temp_path(const char *prefix, char *path, size_t path_size) {
+  const char *root = test_temp_root();
   if (!prefix || !path || path_size == 0) return -1;
-  int written = snprintf(path, path_size, "/tmp/%s-XXXXXX", prefix);
+  int written = snprintf(path, path_size, "%s/%s-XXXXXX", root, prefix);
   if (written < 0 || (size_t)written >= path_size) return -1;
   int fd = mkstemp(path);
   if (fd < 0) return -1;
@@ -318,6 +319,34 @@ int test_make_temp_path(const char *prefix, char *path, size_t path_size) {
     return -1;
   }
   return 0;
+}
+
+const char *test_temp_root(void) {
+  const char *root = getenv("SIN_TEST_TMP_ROOT");
+  return root && root[0] ? root : "/tmp";
+}
+
+int test_temp_template(char *path, size_t path_size, const char *prefix) {
+  const char *root = test_temp_root();
+  int written;
+  if (!path || path_size == 0 || !prefix || !prefix[0]) return -1;
+  written = snprintf(path, path_size, "%s/%s-XXXXXX", root, prefix);
+  return written < 0 || (size_t)written >= path_size ? -1 : 0;
+}
+
+const char *test_program_path(const char *program) {
+  const char *path;
+  if (!program) return NULL;
+  if (strcmp(program, "scomp") == 0) path = getenv("SIN_TEST_SCOMP");
+  else if (strcmp(program, "sdiss") == 0) path = getenv("SIN_TEST_SDISS");
+  else if (strcmp(program, "sin") == 0) path = getenv("SIN_TEST_SIN");
+  else if (strcmp(program, "sconv") == 0) path = getenv("SIN_TEST_SCONV");
+  else return NULL;
+  if (path && path[0]) return path;
+  if (strcmp(program, "scomp") == 0) return "./scomp";
+  if (strcmp(program, "sdiss") == 0) return "./sdiss";
+  if (strcmp(program, "sin") == 0) return "./sin";
+  return "./sconv";
 }
 
 static int test_run_argv_capture_impl(char *const argv[], const void *stdin_data,

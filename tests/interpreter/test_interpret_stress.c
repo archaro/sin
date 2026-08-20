@@ -62,7 +62,7 @@ void test_interpret_stress(void) {
   for (int iter = 0; iter < iterations; ++iter) {
     for (size_t i = 0; i < STRESS_CASE_COUNT; ++i) {
       char *const compile_argv[] = {
-        "./scomp", (char *)cases[i].src_path, obj_paths[i], NULL
+        TEST_SCOMP, (char *)cases[i].src_path, obj_paths[i], NULL
       };
       TestProcessResult compile_result = {0};
       int capture_rc = test_run_argv_capture(compile_argv, 0, &compile_result);
@@ -73,7 +73,9 @@ void test_interpret_stress(void) {
       if (compile_exit != 0) remove(obj_paths[i]);
       ASSERT_EQ_INT(0, compile_exit);
 
-      char run_dir[] = "/tmp/sin-interp-stress-run-XXXXXX";
+      char run_dir[4096];
+
+      ASSERT_EQ_INT(0, test_temp_template(run_dir, sizeof run_dir, "sin-interp-stress-run"));
       ASSERT_NOT_NULL(mkdtemp(run_dir));
       char itemstore_path[sizeof(run_dir) + sizeof("/items.dat")];
       char srcroot_path[sizeof(run_dir) + sizeof("/srcroot")];
@@ -83,7 +85,7 @@ void test_interpret_stress(void) {
                            run_dir) > 0);
       ASSERT_EQ_INT(0, mkdir(srcroot_path, 0700));
       char *const run_argv[] = {
-        "./sin", "--loadonly", "-i", itemstore_path, "-s", srcroot_path,
+        TEST_SIN, "--loadonly", "-i", itemstore_path, "-s", srcroot_path,
         "-o", obj_paths[i], NULL
       };
       int run_capture_rc = test_run_argv_capture(run_argv, 2000,

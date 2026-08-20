@@ -358,7 +358,8 @@ static void assert_code_item(ITEM_t *root, const char *name,
 }
 
 void test_itemstore_value_and_code_roundtrip(void) {
-  char path[] = "/tmp/sin-itemstore-roundtrip-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-roundtrip"));
   FILE *file = new_fixture(path);
   ASSERT_EQ_INT(0, fclose(file));
 
@@ -446,7 +447,8 @@ void test_itemstore_value_and_code_roundtrip(void) {
 }
 
 void test_itemstore_v2_lists_and_itemrefs_roundtrip(void) {
-  char path[] = "/tmp/sin-itemstore-v2-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-v2"));
   int fd = mkstemp(path);
   ASSERT_TRUE(fd >= 0);
   ASSERT_EQ_INT(0, close(fd));
@@ -515,7 +517,8 @@ void test_itemstore_v2_lists_and_itemrefs_roundtrip(void) {
 }
 
 void test_itemstore_v2_all_values_fixture(void) {
-  char path[] = "/tmp/sin-itemstore-v2-values-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-v2-values"));
   FILE *file = new_fixture(path);
   static const uint8_t code[] = {0x01, 0x02, 0x03};
   put_header(file, 2);
@@ -581,7 +584,8 @@ void test_itemstore_v2_all_values_fixture(void) {
               sin_list_get(
                   sin_list_get(find_item(root, "list")->value.list, 1)->list, 0)
           ->itemref)) == 0);
-  char roundtrip_path[] = "/tmp/sin-itemstore-v2-values-roundtrip-XXXXXX";
+  char roundtrip_path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(roundtrip_path, sizeof roundtrip_path, "sin-itemstore-v2-values-roundtrip"));
   FILE *roundtrip_file = new_fixture(roundtrip_path);
   ASSERT_EQ_INT(0, fclose(roundtrip_file));
   ASSERT_TRUE(save_itemstore(roundtrip_path, root));
@@ -640,7 +644,8 @@ void test_itemstore_v2_malformed_value_table(void) {
       BAD_REF_TRUNC_LEN, BAD_REF_TRUNC_PATH, BAD_LIST_COUNT,  BAD_LIST_TAG,
       BAD_LIST_INT,      BAD_LIST_NESTING};
   for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
-    char path[] = "/tmp/sin-itemstore-v2-bad-XXXXXX";
+    char path[4096];
+    ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-v2-bad"));
     FILE *file = new_fixture(path);
     put_header(file, 2);
     put_record_prefix(file, "root", WIRE_ITEM_VALUE);
@@ -704,7 +709,8 @@ void test_itemstore_v2_malformed_value_table(void) {
     ASSERT_EQ_INT(0, unlink(path));
   }
   {
-    char path[] = "/tmp/sin-itemstore-v2-list-count-XXXXXX";
+    char path[4096];
+    ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-v2-list-count"));
     FILE *file = new_fixture(path);
     put_header(file, 2);
     put_record_prefix(file, "root", WIRE_ITEM_VALUE);
@@ -714,7 +720,8 @@ void test_itemstore_v2_malformed_value_table(void) {
     ASSERT_TRUE(load_itemstore(path) == NULL);
     ASSERT_EQ_INT(0, unlink(path));
   }
-  char path[] = "/tmp/sin-itemstore-v2-trailing-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-v2-trailing"));
   FILE *file = new_fixture(path);
   put_header(file, 2);
   put_nil_record_prefix(file, "root", 0);
@@ -725,7 +732,8 @@ void test_itemstore_v2_malformed_value_table(void) {
 }
 
 void test_itemstore_v2_budget_and_malformed_save(void) {
-  char path[] = "/tmp/sin-itemstore-v2-budget-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-v2-budget"));
   FILE *file = new_fixture(path);
   put_header(file, 2);
   put_record_prefix(file, "root", WIRE_ITEM_VALUE);
@@ -744,7 +752,8 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
   ASSERT_TRUE(itemstore_read_record_for_version(2, file, NULL, &ctx) == NULL);
   ASSERT_EQ_INT(0, fclose(file));
   ASSERT_EQ_INT(0, unlink(path));
-  char badpath[] = "/tmp/sin-itemstore-v2-save-XXXXXX";
+  char badpath[4096];
+  ASSERT_EQ_INT(0, test_temp_template(badpath, sizeof badpath, "sin-itemstore-v2-save"));
   file = new_fixture(badpath);
   static const uint8_t sentinel[] = {'k', 'e', 'e', 'p'};
   put_bytes(file, sentinel, sizeof sentinel);
@@ -763,7 +772,9 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
   ASSERT_EQ_INT(0, fclose(file));
   ASSERT_EQ_INT(0, unlink(badpath));
 
-  char aggregate_path[] = "/tmp/sin-itemstore-v2-aggregate-XXXXXX";
+  char aggregate_path[4096];
+
+  ASSERT_EQ_INT(0, test_temp_template(aggregate_path, sizeof aggregate_path, "sin-itemstore-v2-aggregate"));
   file = new_fixture(aggregate_path);
   static const uint8_t aggregate_sentinel[] = {'a', 'g', 'g'};
   put_bytes(file, aggregate_sentinel, sizeof aggregate_sentinel);
@@ -797,7 +808,8 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
   ASSERT_EQ_INT(0, unlink(aggregate_path));
 
   badpath[0] = '\0';
-  snprintf(badpath, sizeof badpath, "/tmp/sin-itemstore-v2-ref-XXXXXX");
+  ASSERT_EQ_INT(0, test_temp_template(badpath, sizeof badpath,
+                                      "sin-itemstore-v2-ref"));
   file = new_fixture(badpath);
   put_bytes(file, sentinel, sizeof sentinel);
   ASSERT_EQ_INT(0, fclose(file));
@@ -819,7 +831,8 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
   uint8_t header_bytes[10];
   ITEMSTORE_READ_CTX_t alloc_ctx;
   {
-    char alloc_path[] = "/tmp/sin-itemstore-v2-alloc-XXXXXX";
+    char alloc_path[4096];
+    ASSERT_EQ_INT(0, test_temp_template(alloc_path, sizeof alloc_path, "sin-itemstore-v2-alloc"));
     file = new_fixture(alloc_path);
     put_header(file, 2);
     put_record_prefix(file, "root", WIRE_ITEM_VALUE);
@@ -840,7 +853,8 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
     ASSERT_EQ_INT(0, unlink(alloc_path));
   }
   {
-    char alloc_path[] = "/tmp/sin-itemstore-v2-list-alloc-XXXXXX";
+    char alloc_path[4096];
+    ASSERT_EQ_INT(0, test_temp_template(alloc_path, sizeof alloc_path, "sin-itemstore-v2-list-alloc"));
     file = new_fixture(alloc_path);
     put_header(file, 2);
     put_record_prefix(file, "root", WIRE_ITEM_VALUE);
@@ -861,7 +875,8 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
     ASSERT_EQ_INT(0, unlink(alloc_path));
   }
   {
-    char alloc_path[] = "/tmp/sin-itemstore-v2-partial-XXXXXX";
+    char alloc_path[4096];
+    ASSERT_EQ_INT(0, test_temp_template(alloc_path, sizeof alloc_path, "sin-itemstore-v2-partial"));
     file = new_fixture(alloc_path);
     put_header(file, 2);
     put_record_prefix(file, "root", WIRE_ITEM_VALUE);
@@ -888,8 +903,10 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
   }
 
   {
-    char constructor_path[] =
-        "/tmp/sin-itemstore-list-ref-constructor-failure-XXXXXX";
+    char constructor_path[4096];
+    ASSERT_EQ_INT(0, test_temp_template(
+                         constructor_path, sizeof constructor_path,
+                         "sin-itemstore-list-ref-constructor-failure"));
     FILE *constructor_file = new_fixture(constructor_path);
     put_header(constructor_file, WIRE_VERSION);
     put_nil_record_prefix(constructor_file, "root", 2);
@@ -917,7 +934,8 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
 }
 
 void test_itemstore_whole_file_budgets(void) {
-  char path[] = "/tmp/sin-itemstore-whole-budget-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-whole-budget"));
   FILE *file = new_fixture(path);
   put_header(file, 2);
   put_nil_record_prefix(file, "root", 0);
@@ -939,7 +957,9 @@ void test_itemstore_whole_file_budgets(void) {
   ASSERT_EQ_INT(0, fclose(file));
   ASSERT_EQ_INT(0, unlink(path));
 
-  char excess_path[] = "/tmp/sin-itemstore-whole-records-XXXXXX";
+  char excess_path[4096];
+
+  ASSERT_EQ_INT(0, test_temp_template(excess_path, sizeof excess_path, "sin-itemstore-whole-records"));
   file = new_fixture(excess_path);
   put_header(file, 2);
   put_nil_record_prefix(file, "root", 1);
@@ -957,7 +977,8 @@ void test_itemstore_whole_file_budgets(void) {
 }
 
 void test_itemstore_decode_budget_allocation_boundaries(void) {
-  char path[] = "/tmp/sin-itemstore-decode-boundary-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-decode-boundary"));
 
   FILE *file = new_fixture(path);
   put_header(file, 2);
@@ -1021,7 +1042,8 @@ void test_itemstore_decode_budget_allocation_boundaries(void) {
 }
 
 void test_itemstore_v1_lossy_path_budget_aborts_record(void) {
-  char path[] = "/tmp/sin-itemstore-v1-lossy-budget-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-v1-lossy-budget"));
   FILE *file = new_fixture(path);
   put_header(file, 1);
   put_record_prefix(file, "root", WIRE_ITEM_VALUE);
@@ -1050,7 +1072,8 @@ void test_itemstore_v1_lossy_path_budget_aborts_record(void) {
 }
 
 void test_itemstore_rejects_production_record_limit(void) {
-  char path[] = "/tmp/sin-itemstore-record-limit-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-record-limit"));
   FILE *file = new_fixture(path);
   put_header(file, 2);
   put_nil_record_prefix(file, "root", 250);
@@ -1076,7 +1099,8 @@ void test_itemstore_rejects_production_record_limit(void) {
 }
 
 void test_itemstore_save_preflight_budget_boundaries(void) {
-  char path[] = "/tmp/sin-itemstore-save-boundary-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-save-boundary"));
   FILE *file = new_fixture(path);
   static const uint8_t sentinel[] = {'s', 'e', 'n', 't', 'i', 'n', 'e', 'l'};
   put_bytes(file, sentinel, sizeof sentinel);
@@ -1092,7 +1116,9 @@ void test_itemstore_save_preflight_budget_boundaries(void) {
   ASSERT_TRUE(item_children_loaded_allocation_bytes(0, &child_bytes));
   size_t total_bytes = root_bytes + child_bytes;
 
-  char exact_path[] = "/tmp/sin-itemstore-save-exact-XXXXXX";
+  char exact_path[4096];
+
+  ASSERT_EQ_INT(0, test_temp_template(exact_path, sizeof exact_path, "sin-itemstore-save-exact"));
   FILE *exact_file = new_fixture(exact_path);
   ASSERT_EQ_INT(0, fclose(exact_file));
   ASSERT_TRUE(save_itemstore_with_limits(
@@ -1118,7 +1144,8 @@ void test_itemstore_save_preflight_budget_boundaries(void) {
 }
 
 void test_loaded_itemstore_mutation_roundtrip(void) {
-  char path[] = "/tmp/sin-itemstore-mutation-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-mutation"));
   FILE *file = new_fixture(path);
   ASSERT_EQ_INT(0, fclose(file));
 
@@ -1635,7 +1662,8 @@ void test_itemstore_path_creation_rolls_back_on_failure(void) {
 }
 
 void test_itemstore_nested_depth_roundtrip(void) {
-  char path[] = "/tmp/sin-itemstore-depth-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-depth"));
   FILE *file = new_fixture(path);
   ASSERT_EQ_INT(0, fclose(file));
 
@@ -1658,7 +1686,8 @@ void test_itemstore_nested_depth_roundtrip(void) {
 }
 
 void test_itemstore_item_name_contract_boundaries_roundtrip(void) {
-  char path[] = "/tmp/sin-itemstore-name-boundaries-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-name-boundaries"));
   FILE *file = new_fixture(path);
   ASSERT_EQ_INT(0, fclose(file));
 
@@ -1771,7 +1800,8 @@ void test_itemstore_item_name_relative_depth_contract(void) {
 }
 
 void test_save_itemstore_rejects_manually_invalid_item_names(void) {
-  char path[] = "/tmp/sin-itemstore-invalid-tree-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-invalid-tree"));
   FILE *file = new_fixture(path);
   ASSERT_EQ_INT(0, fclose(file));
 
@@ -1796,7 +1826,8 @@ void test_save_itemstore_rejects_manually_invalid_item_names(void) {
 
 void test_load_itemstore_handles_constructor_failure_with_children(void) {
   {
-    char path[] = "/tmp/sin-itemstore-string-constructor-failure-XXXXXX";
+    char path[4096];
+    ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-string-constructor-failure"));
     FILE *file = new_fixture(path);
     put_header(file, WIRE_VERSION);
     put_nil_record_prefix(file, "root", 2);
@@ -1821,7 +1852,8 @@ void test_load_itemstore_handles_constructor_failure_with_children(void) {
   }
 
   {
-    char path[] = "/tmp/sin-itemstore-code-constructor-failure-XXXXXX";
+    char path[4096];
+    ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-code-constructor-failure"));
     static const uint8_t bytecode[] = {0x01, 0x02, 0x03};
     FILE *file = new_fixture(path);
     put_header(file, WIRE_VERSION);
@@ -1846,7 +1878,8 @@ void test_load_itemstore_handles_constructor_failure_with_children(void) {
 }
 
 void test_itemstore_loads_generated_v1_wire_fixture(void) {
-  char path[] = "/tmp/sin-itemstore-wire-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-wire"));
   FILE *file = new_fixture(path);
   put_header(file, 1);
   put_nil_record_prefix(file, "root", 6);
@@ -1924,7 +1957,8 @@ static void put_code_record(FILE *file, const char *name, const uint8_t *bytecod
 
 static void assert_malformed_code_rejected(const uint8_t *bytecode,
                                            uint32_t bytecode_len) {
-  char path[] = "/tmp/sin-itemstore-bad-code-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-bad-code"));
   FILE *file = new_fixture(path);
   put_header(file, WIRE_VERSION);
   put_nil_record_prefix(file, "root", 1);
@@ -1969,7 +2003,9 @@ void test_load_itemstore_allows_malformed_code_when_strict_validation_disabled(
   bool previous_strict_validation = config.strict_validation;
   config.strict_validation = false;
 
-  char path[] = "/tmp/sin-itemstore-bad-code-disabled-XXXXXX";
+  char path[4096];
+
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-bad-code-disabled"));
   FILE *file = new_fixture(path);
   const uint8_t missing_halt[] = {0, 0, 'b', 1};
   put_header(file, WIRE_VERSION);
@@ -1990,7 +2026,8 @@ void test_load_itemstore_allows_malformed_code_when_strict_validation_disabled(
 }
 
 void test_load_itemstore_rejects_bad_headers(void) {
-  char path[] = "/tmp/sin-itemstore-header-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-header"));
   FILE *file = new_fixture(path);
 
   static const uint8_t bad_magic[] = {'B', 'A', 'D', 'I', 'T', 'E', 'M', 0};
@@ -2024,7 +2061,8 @@ void test_load_itemstore_rejects_bad_headers(void) {
 }
 
 void test_load_itemstore_rejects_invalid_wire_tags(void) {
-  char path[] = "/tmp/sin-itemstore-tags-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-tags"));
   FILE *file = new_fixture(path);
   put_header(file, WIRE_VERSION);
   put_record_prefix(file, "root", 0xff);
@@ -2040,7 +2078,8 @@ void test_load_itemstore_rejects_invalid_wire_tags(void) {
 }
 
 void test_load_itemstore_rejects_structural_corruption(void) {
-  char path[] = "/tmp/sin-itemstore-structure-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-structure"));
   FILE *file = new_fixture(path);
   put_header(file, WIRE_VERSION);
   put_nil_record_prefix(file, "root", 0);
@@ -2084,7 +2123,8 @@ void test_load_itemstore_rejects_structural_corruption(void) {
 }
 
 void test_load_itemstore_rejects_resource_limit_violations(void) {
-  char path[] = "/tmp/sin-itemstore-limits-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-limits"));
   FILE *file = new_fixture(path);
   put_header(file, WIRE_VERSION);
   put_record_prefix(file, "root", WIRE_ITEM_VALUE);
@@ -2112,7 +2152,8 @@ void test_load_itemstore_rejects_resource_limit_violations(void) {
 }
 
 void test_save_itemstore_preserves_existing_file_on_failure(void) {
-  char path[] = "/tmp/sin-itemstore-save-test-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-save-test"));
   FILE *file = new_fixture(path);
   ASSERT_EQ_INT(0, fclose(file));
 
@@ -2153,7 +2194,8 @@ void test_save_itemstore_preserves_existing_file_on_failure(void) {
 }
 
 void test_save_itemsource_reports_write_and_close_failure(void) {
-  char srcroot[] = "/tmp/sin-itemsource-save-XXXXXX";
+  char srcroot[4096];
+  ASSERT_EQ_INT(0, test_temp_template(srcroot, sizeof srcroot, "sin-itemsource-save"));
   ASSERT_NOT_NULL(mkdtemp(srcroot));
   ITEM_t *root = make_item("root", NULL, ITEM_code, VALUE_NIL, NULL, 0);
   ASSERT_NOT_NULL(root);
@@ -2196,9 +2238,12 @@ void test_save_itemsource_reports_write_and_close_failure(void) {
 }
 
 void test_itemsource_paths_are_validated_and_contained(void) {
-  char srcroot[] = "/tmp/sin-itemsource-path-XXXXXX";
-  char outside[] = "/tmp/sin-itemsource-out-XXXXXX";
-  char missing_srcroot[] = "/tmp/sin-itemsource-missing-XXXXXX";
+  char srcroot[4096];
+  ASSERT_EQ_INT(0, test_temp_template(srcroot, sizeof srcroot, "sin-itemsource-path"));
+  char outside[4096];
+  ASSERT_EQ_INT(0, test_temp_template(outside, sizeof outside, "sin-itemsource-out"));
+  char missing_srcroot[4096];
+  ASSERT_EQ_INT(0, test_temp_template(missing_srcroot, sizeof missing_srcroot, "sin-itemsource-missing"));
   ASSERT_NOT_NULL(mkdtemp(srcroot));
   ASSERT_NOT_NULL(mkdtemp(outside));
   ASSERT_NOT_NULL(mkdtemp(missing_srcroot));
@@ -2331,22 +2376,40 @@ void test_itemsource_paths_are_validated_and_contained(void) {
   ASSERT_TRUE(strcmp("created root\n", missing_contents) == 0);
   ASSERT_EQ_INT(0, fclose(missing_source));
 
-  char slash_item_dir[] = "/tmp/sin_itemsource_slash_XXXXXX";
+  char slash_item_dir[4096];
+  int slash_written = snprintf(slash_item_dir, sizeof slash_item_dir,
+                               "%s/sin_itemsource_slash_XXXXXX",
+                               test_temp_root());
+  ASSERT_TRUE(slash_written > 0 &&
+              (size_t)slash_written < sizeof slash_item_dir);
   ASSERT_NOT_NULL(mkdtemp(slash_item_dir));
   ASSERT_EQ_INT(0, rmdir(slash_item_dir));
   const char *slash_leaf_name = strrchr(slash_item_dir, '/');
   ASSERT_NOT_NULL(slash_leaf_name);
   slash_leaf_name++;
+  char slash_srcroot[4096];
+  char slash_tmp_name[4096];
+  ASSERT_TRUE(snprintf(slash_srcroot, sizeof slash_srcroot, "%s",
+                       test_temp_root()) > 0);
+  char *slash_separator = strrchr(slash_srcroot, '/');
+  ASSERT_NOT_NULL(slash_separator);
+  ASSERT_TRUE(snprintf(slash_tmp_name, sizeof slash_tmp_name, "%s",
+                       slash_separator + 1) > 0);
+  if (slash_separator == slash_srcroot)
+    slash_srcroot[1] = '\0';
+  else
+    *slash_separator = '\0';
   ITEM_t *slash_root = make_item("unused", NULL, ITEM_code, VALUE_NIL, NULL,
                                  0);
   ASSERT_NOT_NULL(slash_root);
-  ITEM_t *slash_tmp = make_item("tmp", slash_root, ITEM_code, VALUE_NIL,
-                                NULL, 0);
+  ITEM_t *slash_tmp = make_item(slash_tmp_name, slash_root, ITEM_code,
+                                VALUE_NIL, NULL, 0);
   ASSERT_NOT_NULL(slash_tmp);
   ITEM_t *slash_leaf = make_item(slash_leaf_name, slash_tmp, ITEM_code,
                                  VALUE_NIL, NULL, 0);
   ASSERT_NOT_NULL(slash_leaf);
-  ASSERT_TRUE(save_itemsource_in_srcroot(slash_leaf, "slash root\n", "/"));
+  ASSERT_TRUE(save_itemsource_in_srcroot(slash_leaf, "slash root\n",
+                                         slash_srcroot));
   char slash_file[sizeof slash_item_dir + sizeof "/source.sin"];
   ASSERT_TRUE(snprintf(slash_file, sizeof slash_file, "%s/source.sin",
                        slash_item_dir) > 0);
@@ -2387,7 +2450,9 @@ void test_itemstore_durability_modes(void) {
   ASSERT_TRUE(itemstore_durability_requires_sync(ITEMSTORE_DURABLE_FULL));
   ASSERT_TRUE(!itemstore_durability_requires_sync(ITEMSTORE_DURABLE_FAST));
 
-  char path[] = "/tmp/sin-itemstore-durability-XXXXXX";
+  char path[4096];
+
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-durability"));
   FILE *file = new_fixture(path);
   ASSERT_EQ_INT(0, fclose(file));
   ITEM_t *root = make_root_item("root");
@@ -2462,7 +2527,8 @@ void test_itemstore_durability_modes(void) {
 
 void test_itemstore_large_load_presizes_child_storage(void) {
   enum { CHILD_COUNT = 200 };
-  char path[] = "/tmp/sin-itemstore-large-load-XXXXXX";
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-large-load"));
   FILE *file = new_fixture(path);
   put_header(file, WIRE_VERSION);
   put_nil_record_prefix(file, "root", CHILD_COUNT);

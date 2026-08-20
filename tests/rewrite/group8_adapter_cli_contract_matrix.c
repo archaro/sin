@@ -1,4 +1,5 @@
 #include "test_framework.h"
+#include "test_helpers.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -84,22 +85,22 @@ static void test_scomp_cli_contract_matrix(void) {
   write_bytes(source_path, source, sizeof source - 1u);
   before = read_bytes(source_path, &before_length);
 
-  char *normal[] = {"./scomp", "--quiet", source_path, object_path, NULL};
+  char *normal[] = {TEST_SCOMP, "--quiet", source_path, object_path, NULL};
   run_process(normal, 0, NULL, NULL, true, true);
   TF_ASSERT_TRUE(file_exists(object_path));
   after = read_bytes(source_path, &after_length);
   TF_ASSERT_BYTES(before, before_length, after, after_length);
   free(after);
 
-  char *help[] = {"./scomp", "--help", NULL};
+  char *help[] = {TEST_SCOMP, "--help", NULL};
   run_process(help, 0, "Usage:", NULL, false, true);
-  char *version[] = {"./scomp", "--version", NULL};
+  char *version[] = {TEST_SCOMP, "--version", NULL};
   run_process(version, 0, "scomp ", NULL, false, true);
-  char *unknown[] = {"./scomp", "--unknown-option", NULL};
+  char *unknown[] = {TEST_SCOMP, "--unknown-option", NULL};
   run_process(unknown, 1, NULL, "invalid option", true, false);
-  char *missing_argument[] = {"./scomp", "-i", source_path, "-o", NULL};
+  char *missing_argument[] = {TEST_SCOMP, "-i", source_path, "-o", NULL};
   run_process(missing_argument, 1, NULL, "invalid option", true, false);
-  char *unreadable[] = {"./scomp", "--quiet", missing_path, object_path,
+  char *unreadable[] = {TEST_SCOMP, "--quiet", missing_path, object_path,
                         NULL};
   run_process(unreadable, 1, NULL, "Error:", true, false);
 
@@ -121,21 +122,21 @@ static void test_sdiss_cli_contract_matrix(void) {
   write_bytes(empty_path, "bad", 3u);
   before = read_bytes(object_path, &before_length);
 
-  char *normal[] = {"./sdiss", "--quiet", "--object", object_path, NULL};
+  char *normal[] = {TEST_SDISS, "--quiet", "--object", object_path, NULL};
   run_process(normal, 0, "INTEGER 42", NULL, false, true);
   after = read_bytes(object_path, &after_length);
   TF_ASSERT_BYTES(before, before_length, after, after_length);
   free(after);
 
-  char *help[] = {"./sdiss", "--help", NULL};
+  char *help[] = {TEST_SDISS, "--help", NULL};
   run_process(help, 0, "Usage:", NULL, false, true);
-  char *version[] = {"./sdiss", "--version", NULL};
+  char *version[] = {TEST_SDISS, "--version", NULL};
   run_process(version, 0, "sdiss ", NULL, false, true);
-  char *unknown[] = {"./sdiss", "--unknown-option", NULL};
+  char *unknown[] = {TEST_SDISS, "--unknown-option", NULL};
   run_process(unknown, 1, NULL, "invalid option", true, false);
-  char *missing_argument[] = {"./sdiss", "--object", NULL};
+  char *missing_argument[] = {TEST_SDISS, "--object", NULL};
   run_process(missing_argument, 1, NULL, "invalid option", true, false);
-  char *malformed[] = {"./sdiss", "--quiet", "--object", empty_path, NULL};
+  char *malformed[] = {TEST_SDISS, "--quiet", "--object", empty_path, NULL};
   run_process(malformed, 1, "Local variables",
               "Disassembly aborted due to malformed bytecode.", false, false);
 
@@ -159,12 +160,12 @@ static void test_sin_cli_contract_matrix(void) {
   fixture_path(&fixture, "missing.obj", missing_object_path,
                sizeof missing_object_path);
   write_bytes(source_path, source, sizeof source - 1u);
-  char *compile[] = {"./scomp", "--quiet", source_path, object_path, NULL};
+  char *compile[] = {TEST_SCOMP, "--quiet", source_path, object_path, NULL};
   run_process(compile, 0, NULL, NULL, true, true);
   source_before = read_bytes(source_path, &source_before_length);
   object_before = read_bytes(object_path, &object_before_length);
 
-  char *normal[] = {"./sin", "--loadonly", "--quiet", "--itemstore",
+  char *normal[] = {TEST_SIN, "--loadonly", "--quiet", "--itemstore",
                     itemstore_path, "--srcroot", "tests/fixtures", "--object",
                     object_path, NULL};
   run_process(normal, 0, NULL, NULL, true, true);
@@ -178,17 +179,17 @@ static void test_sin_cli_contract_matrix(void) {
   free(source_after);
   free(object_after);
 
-  char *help[] = {"./sin", "--help", NULL};
+  char *help[] = {TEST_SIN, "--help", NULL};
   run_process(help, 0, "Syntax:", NULL, false, true);
-  char *version[] = {"./sin", "--version", NULL};
+  char *version[] = {TEST_SIN, "--version", NULL};
   run_process(version, 0, "sin ", NULL, false, true);
-  char *unknown[] = {"./sin", "--unknown-option", NULL};
+  char *unknown[] = {TEST_SIN, "--unknown-option", NULL};
   run_process(unknown, 1, NULL, "invalid option", true, false);
-  char *missing_argument[] = {"./sin", "--loadonly", "--quiet", "--itemstore",
+  char *missing_argument[] = {TEST_SIN, "--loadonly", "--quiet", "--itemstore",
                               itemstore_path, "--srcroot", "tests/fixtures",
                               "--object", NULL};
   run_process(missing_argument, 1, NULL, "invalid option", true, false);
-  char *unreadable[] = {"./sin", "--loadonly", "--quiet", "--itemstore",
+  char *unreadable[] = {TEST_SIN, "--loadonly", "--quiet", "--itemstore",
                         itemstore_path, "--srcroot", "tests/fixtures", "--object",
                         missing_object_path, NULL};
   run_process(unreadable, 1, NULL, "Unable to read object file", true, false);
@@ -216,22 +217,22 @@ static void test_sconv_cli_contract_matrix(void) {
   write_bytes(malformed_path, "bad", 3u);
   before = read_bytes(input_path, &before_length);
 
-  char *normal[] = {"./sconv", "--quiet", input_path, output_path, NULL};
+  char *normal[] = {TEST_SCONV, "--quiet", input_path, output_path, NULL};
   run_process(normal, 0, NULL, NULL, true, true);
   TF_ASSERT_TRUE(file_exists(output_path));
   after = read_bytes(input_path, &after_length);
   TF_ASSERT_BYTES(before, before_length, after, after_length);
   free(after);
 
-  char *help[] = {"./sconv", "--help", NULL};
+  char *help[] = {TEST_SCONV, "--help", NULL};
   run_process(help, 0, "Usage:", NULL, false, true);
-  char *version[] = {"./sconv", "--version", NULL};
+  char *version[] = {TEST_SCONV, "--version", NULL};
   run_process(version, 0, "sconv ", NULL, false, true);
-  char *unknown[] = {"./sconv", "--unknown-option", NULL};
+  char *unknown[] = {TEST_SCONV, "--unknown-option", NULL};
   run_process(unknown, 1, NULL, "invalid option", true, false);
-  char *missing_argument[] = {"./sconv", "-i", input_path, "-o", NULL};
+  char *missing_argument[] = {TEST_SCONV, "-i", input_path, "-o", NULL};
   run_process(missing_argument, 1, NULL, "invalid option", true, false);
-  char *malformed[] = {"./sconv", "--quiet", malformed_path,
+  char *malformed[] = {TEST_SCONV, "--quiet", malformed_path,
                        malformed_output_path, NULL};
   run_process(malformed, 1, NULL, "Failed to convert", true, false);
 

@@ -33,6 +33,7 @@ ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 # These scanner/parser hooks are implemented in the authored .l/.y sources;
 # generated Flex/Bison entry points remain the only excluded yy* symbols.
 AUTHORED_YY_SYMBOLS = {"yyalloc", "yyfree", "yyrealloc", "yyerror"}
+INSTRUMENTATION_SYMBOL_PREFIXES = ("__odr_asan.", "__covrec_")
 ARCHIVE_OBJECT_MODULES = {
     "log.o": "common", "memory.o": "common", "cli_io.o": "common", "floatconv.o": "common", "error.o": "common", "util.o": "common",
     "bytecode_abi.o": "bytecode", "bytecode_wire.o": "bytecode", "bytecode_format.o": "bytecode", "bytecode_verify.o": "bytecode", "bytecode_convert.o": "bytecode", "sdiss_core.o": "bytecode",
@@ -372,7 +373,10 @@ def archive_symbol_objects(archive: Path) -> dict[str, str]:
             continue
         fields = line.split()
         if len(fields) >= 3 and len(fields[-2]) == 1:
-            symbols[fields[-1]] = object_name
+            symbol = fields[-1]
+            if symbol.startswith(INSTRUMENTATION_SYMBOL_PREFIXES):
+                continue
+            symbols[symbol] = object_name
     if not symbols:
         fail(f"archive has no global symbols: {archive}")
     return symbols

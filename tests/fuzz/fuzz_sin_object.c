@@ -21,8 +21,18 @@ CONFIG_t config;
 static const size_t kMaxFuzzObjectSize = 128 * 1024;
 static const size_t kMaxBytecodeProbeSize = 64 * 1024;
 
+static int fuzz_temp_template(char *path, size_t path_size,
+                              const char *prefix) {
+  const char *root = getenv("SIN_TEST_TMP_ROOT");
+  int written;
+  if (!root || !root[0]) root = "/tmp";
+  written = snprintf(path, path_size, "%s/%s-XXXXXX", root, prefix);
+  return written < 0 || (size_t)written >= path_size ? -1 : 0;
+}
+
 static void fuzz_load_itemstore_bytes(const uint8_t *data, size_t size) {
-  char path[] = "/tmp/sin-object-fuzz-XXXXXX";
+  char path[4096];
+  if (fuzz_temp_template(path, sizeof path, "sin-object-fuzz") != 0) return;
   int fd = mkstemp(path);
   if (fd < 0) return;
 
@@ -46,8 +56,11 @@ static void fuzz_load_itemstore_bytes(const uint8_t *data, size_t size) {
 }
 
 static void fuzz_convert_itemstore_bytes(const uint8_t *data, size_t size) {
-  char input_path[] = "/tmp/sin-object-fuzz-convert-in-XXXXXX";
-  char output_path[] = "/tmp/sin-object-fuzz-convert-out-XXXXXX";
+  char input_path[4096], output_path[4096];
+  if (fuzz_temp_template(input_path, sizeof input_path,
+                         "sin-object-fuzz-convert-in") != 0 ||
+      fuzz_temp_template(output_path, sizeof output_path,
+                         "sin-object-fuzz-convert-out") != 0) return;
   int input_fd = mkstemp(input_path);
   int output_fd = mkstemp(output_path);
   if (input_fd < 0 || output_fd < 0) {

@@ -19,6 +19,7 @@ import shutil
 import shlex
 import subprocess
 import sys
+import tempfile
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Iterable
 
@@ -336,14 +337,35 @@ def parse_gcov_payload(payload: dict, root: Path, module: str,
     return {"lines": lines, "branches": branches, "functions": functions}
 
 
-def parse_gcov_json(path: Path, root: Path, module: str,
-                    allow_empty: bool = False) -> dict[str, set[tuple]]:
+def _read_gcov_payload(path: Path) -> dict:
     try:
         with gzip.open(path, "rt", encoding="utf-8") as stream:
-            payload = json.load(stream)
+            return json.load(stream)
     except (OSError, json.JSONDecodeError) as error:
         fail(f"cannot read gcov JSON {path}: {error}")
-    return parse_gcov_payload(payload, root, module, allow_empty)
+
+
+def _select_gcov_report(candidates: Iterable[Path], root: Path, module: str,
+                        allow_empty: bool = False) -> dict[str, set[tuple]]:
+    matches: list[tuple[Path, dict]] = []
+    for candidate in candidates:
+        payload = _read_gcov_payload(candidate)
+        if any(source_key(str(source.get("file", "")), root) == module
+               for source in payload.get("files", [])):
+            matches.append((candidate, payload))
+    if not matches:
+        if allow_empty:
+            return {"lines": set(), "branches": set(), "functions": set()}
+        fail(f"gcov produced no JSON report containing {module}")
+    if len(matches) != 1:
+        names = ", ".join(str(path) for path, _ in matches)
+        fail(f"gcov produced ambiguous JSON reports containing {module}: {names}")
+    return parse_gcov_payload(matches[0][1], root, module, allow_empty)
+
+
+def parse_gcov_json(path: Path, root: Path, module: str,
+                    allow_empty: bool = False) -> dict[str, set[tuple]]:
+    return _select_gcov_report([path], root, module, allow_empty)
 
 
 def run_command(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
@@ -357,52 +379,100 @@ def run_command(command: list[str], cwd: Path, env: dict[str, str] | None = None
         fail(f"coverage command failed ({result.returncode}): {' '.join(command)}\n{output}")
 
 
+def _collect_gcov_module(gcov: str, root: Path, coverage_input: Path,
+                         source: Path, module: str, report_dir: Path,
+                         no_instrumentable: set[str]) -> dict[str, set[tuple]]:
+    if not coverage_input.exists():
+        fail(f"missing instrumented coverage input for {module}: {coverage_input}")
+    raw_root = report_dir / "raw"
+    raw_root.mkdir(parents=True, exist_ok=True)
+    invocation_dir = Path(tempfile.mkdtemp(prefix="gcov-", dir=raw_root))
+    run_command([gcov, "-b", "-f", "--json-format", "-o", str(coverage_input), str(source)],
+                invocation_dir)
+    created = sorted(invocation_dir.glob("*.gcov.json.gz"))
+    if not created:
+        if module in no_instrumentable:
+            return {"lines": set(), "branches": set(), "functions": set()}
+        fail(f"gcov produced no new JSON report for {module}")
+    return _select_gcov_report(created, root, module, module in no_instrumentable)
+
+
+def _merge_gcov_modules(first: dict[str, set[tuple]],
+                        second: dict[str, set[tuple]]) -> dict[str, set[tuple]]:
+    return {metric: merge_observations(first[metric], second[metric])
+            for metric in ("lines", "branches", "functions")}
+
+
+def merge_gcc_profiles(profile_root: Path, build_dir: Path, report_dir: Path,
+                       gcov_tool: str) -> None:
+    """Merge per-process gcda trees and publish them beside their gcno files."""
+    profiles = sorted(path for path in profile_root.glob("gcov-*")
+                      if path.is_dir())
+    if not profiles:
+        fail(f"no isolated GCC profiles under {profile_root}")
+    work = report_dir / "gcov-merge"
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True)
+    current = profiles
+    level = 0
+    while len(current) > 1:
+        next_level: list[Path] = []
+        level_dir = work / f"level-{level}"
+        level_dir.mkdir()
+        for index in range(0, len(current), 2):
+            if index + 1 == len(current):
+                next_level.append(current[index])
+                continue
+            output = level_dir / f"profile-{index // 2}"
+            run_command([gcov_tool, "merge", str(current[index]),
+                         str(current[index + 1]), "-o", str(output)],
+                        report_dir)
+            next_level.append(output)
+        current = next_level
+        level += 1
+    relative_build = Path(*build_dir.resolve().parts[1:])
+    merged_build = current[0] / relative_build
+    if not merged_build.is_dir():
+        fail(f"merged GCC profile omits build tree {build_dir.resolve()}")
+    copied = 0
+    for source in merged_build.rglob("*.gcda"):
+        target = build_dir / source.relative_to(merged_build)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        copied += 1
+    if copied == 0:
+        fail(f"merged GCC profile contains no gcda files for {build_dir.resolve()}")
+
+
 def collect_gcc(root: Path, build_dir: Path, modules: Iterable[str], report_dir: Path,
                 major: int, gcov: str | None = None,
-                no_instrumentable: Iterable[str] = ()) -> dict[str, dict[str, set[tuple]]]:
+                no_instrumentable: Iterable[str] = (),
+                network_adapter: Path | None = None) -> dict[str, dict[str, set[tuple]]]:
     gcov = find_gcov(gcov, major)
     no_instrumentable_set = set(no_instrumentable)
     results: dict[str, dict[str, set[tuple]]] = {}
-    for module in modules:
+    module_list = list(modules)
+    if network_adapter is not None and "src/net/network.c" in module_list:
+        if not network_adapter.is_file():
+            fail(f"missing network adapter coverage object: {network_adapter}")
+    for module in module_list:
         source = root / module
         object_dir = build_dir / source.relative_to(root).parent.relative_to("src")
         if source.relative_to(root).parent == Path("src"):
             object_dir = build_dir
-        if not object_dir.is_dir():
-            fail(f"missing instrumented object directory for {module}: {object_dir}")
-        before = set(report_dir.glob("*.gcov.json.gz"))
-        run_command([gcov, "-b", "-f", "--json-format", "-o", str(object_dir), str(source)],
-                    report_dir)
-        created = sorted(set(report_dir.glob("*.gcov.json.gz")) - before)
-        if len(created) != 1:
-            # gcov may reuse a deterministic name after a previous invocation;
-            # locate the newest output while still rejecting ambiguity.
-            candidates = sorted(report_dir.glob("*.gcov.json.gz"), key=lambda item: item.stat().st_mtime)
-            created = candidates[-1:] if candidates else []
-        if not created and module not in no_instrumentable_set:
-            fail(f"gcov produced no JSON report for {module}")
-        if not created:
-            results[module] = {"lines": set(), "branches": set(), "functions": set()}
-        else:
-            results[module] = parse_gcov_json(
-                created[-1], root, module, module in no_instrumentable_set)
-    # The network test embeds the production implementation as a white-box
-    # translation unit. Union it with the archive observation so coverage is
-    # not made dependent on which executable happened to exercise a branch.
-    network_module = "src/net/network.c"
-    standalone_gcno = build_dir / "coverage-input/network/test-network-test_network.gcno"
-    if network_module in results and standalone_gcno.is_file():
-        before = set(report_dir.glob("test_network.gcov.json.gz"))
-        run_command([gcov, "-b", "-f", "--json-format", "-o", str(standalone_gcno),
-                     str(root / "tests/network/test_network.c")], report_dir)
-        candidates = sorted(report_dir.glob("test_network.gcov.json.gz"),
-                            key=lambda item: item.stat().st_mtime)
-        if not candidates and not before:
-            fail("gcov produced no standalone network JSON report")
-        standalone = parse_gcov_json(candidates[-1], root, network_module)
-        for metric in ("lines", "branches", "functions"):
-            results[network_module][metric] = merge_observations(
-                results[network_module][metric], standalone[metric])
+        results[module] = _collect_gcov_module(
+            gcov, root, object_dir, source, module, report_dir, no_instrumentable_set)
+        if module == "src/net/network.c" and network_adapter is not None:
+            adapter_source = root / "tests/rewrite/group7_adapter_network.c"
+            adapter_gcno = network_adapter.with_suffix(".gcno")
+            if not adapter_source.is_file():
+                fail(f"missing network adapter source: {adapter_source}")
+            if not adapter_gcno.is_file():
+                fail(f"missing network adapter coverage note: {adapter_gcno}")
+            adapter_result = _collect_gcov_module(
+                gcov, root, adapter_gcno, adapter_source, module,
+                report_dir, no_instrumentable_set)
+            results[module] = _merge_gcov_modules(results[module], adapter_result)
     return results
 
 
@@ -419,9 +489,11 @@ def collect_clang(root: Path, build_dir: Path, modules: Iterable[str], report_di
     profile = report_dir / "coverage.profdata"
     run_command([llvm_profdata, "merge", "-sparse", "-o", str(profile),
                  *[str(path) for path in profiles]], report_dir)
-    binaries = [root / name for name in ("scomp", "sdiss", "sin", "sconv",
-                                         "tests/test-suite", "tests/network/test-network",
-                                         "tests/network/test-chat-smoke")]
+    binaries = [build_dir / "bin" / name
+                for name in ("scomp", "sdiss", "sin", "sconv")]
+    binaries.extend(sorted((build_dir / "tests/framework").glob("*")))
+    binaries.extend(sorted((build_dir / "tests/conformance").glob("*")))
+    binaries.extend(sorted((build_dir / "tests/rewrite").glob("**/test_*")))
     binaries = [binary for binary in binaries if binary.is_file()]
     if not binaries:
         fail("Clang coverage export has no gate binaries")
@@ -572,6 +644,8 @@ def main() -> int:
     parser.add_argument("--floors", type=Path)
     parser.add_argument("--compiler", default="gcc", help="selected compiler (gcc or clang)")
     parser.add_argument("--gcov")
+    parser.add_argument("--gcov-tool")
+    parser.add_argument("--gcov-profile-root", type=Path)
     parser.add_argument("--llvm-cov")
     parser.add_argument("--llvm-profdata")
     parser.add_argument("--archive", type=Path)
@@ -596,8 +670,17 @@ def main() -> int:
                                     major, args.llvm_cov, args.llvm_profdata,
                                     no_instrumentable)
         else:
+            if args.gcov_profile_root:
+                profile_root = (args.gcov_profile_root if
+                                args.gcov_profile_root.is_absolute() else
+                                root / args.gcov_profile_root)
+                gcov_tool = args.gcov_tool or f"gcov-tool-{major}"
+                merge_gcc_profiles(profile_root, build_dir, report_dir,
+                                   gcov_tool)
+            network_adapter = build_dir / "tests/objects/tests/rewrite/group7_adapter_network.o"
             results = collect_gcc(root, build_dir, measured + no_instrumentable,
-                                  report_dir, major, args.gcov, no_instrumentable)
+                                  report_dir, major, args.gcov, no_instrumentable,
+                                  network_adapter)
         rows, failures = evaluate_results(floors, results)
         write_reports(report_dir, rows)
         if failures:

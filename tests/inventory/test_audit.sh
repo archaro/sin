@@ -91,6 +91,9 @@ assert libcall_opcode[7] == "op_libcall"
 assert libcall_opcode[8] == "STACK_DYNAMIC(0,1,IR_STACK_LIBCALL)"
 assert libcall_opcode[9] == "IR_CONTROL_STRAIGHT"
 assert next(row for row in libcalls if row[:2] == ("sys", "backup"))[5] == "lc_sys_backup"
+assert "__odr_asan.VALUE_FALSE".startswith(audit.INSTRUMENTATION_SYMBOL_PREFIXES)
+assert "__covrec_101931F9928A8C6Fu".startswith(audit.INSTRUMENTATION_SYMBOL_PREFIXES)
+assert not "VALUE_FALSE".startswith(audit.INSTRUMENTATION_SYMBOL_PREFIXES)
 print("[inventory-audit] exact grammar, IR, opcode, and libcall extraction passed")
 PY
 

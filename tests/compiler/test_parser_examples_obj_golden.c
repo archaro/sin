@@ -60,8 +60,9 @@ static void run_case(const ParserObjGoldenCase *tc) {
   write_output_file(tc->out_path, out);
   {
     char compile_cmd[512];
-    int cmd_rc = snprintf(compile_cmd, sizeof(compile_cmd), "./scomp %s %s",
-                          tc->src_path, tc->reference_obj_out_path);
+    int cmd_rc = snprintf(compile_cmd, sizeof(compile_cmd), "%s %s %s",
+                          test_program_path("scomp"), tc->src_path,
+                          tc->reference_obj_out_path);
     ASSERT_TRUE(cmd_rc > 0 && (size_t)cmd_rc < sizeof(compile_cmd));
     ASSERT_EQ_INT(0, system(compile_cmd));
   }
@@ -75,12 +76,24 @@ static void run_case(const ParserObjGoldenCase *tc) {
 }
 
 void test_parser_examples_obj_golden(void) {
-  const ParserObjGoldenCase cases[] = {
-      {"chat_boot", "examples/chat-boot.src", "tests/fixtures/chat-boot.reference.obj", "tests/fixtures/chat-boot.generated.obj"},
-      {"chat_load", "examples/chat-load.src", "tests/fixtures/chat-load.reference.obj", "tests/fixtures/chat-load.generated.obj"},
-      {"echo_boot", "examples/echo-boot.src", "tests/fixtures/echo-boot.reference.obj", "tests/fixtures/echo-boot.generated.obj"},
-      {"echo_load", "examples/echo-load.src", "tests/fixtures/echo-load.reference.obj", "tests/fixtures/echo-load.generated.obj"},
+  ParserObjGoldenCase cases[4] = {
+      {"chat_boot", "examples/chat-boot.src", NULL, NULL},
+      {"chat_load", "examples/chat-load.src", NULL, NULL},
+      {"echo_boot", "examples/echo-boot.src", NULL, NULL},
+      {"echo_load", "examples/echo-load.src", NULL, NULL},
   };
+  char references[4][4096], outputs[4][4096];
+
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+    int ref_n = snprintf(references[i], sizeof references[i], "%s/%s.reference.obj",
+                         test_temp_root(), cases[i].name);
+    int out_n = snprintf(outputs[i], sizeof outputs[i], "%s/%s.generated.obj",
+                         test_temp_root(), cases[i].name);
+    ASSERT_TRUE(ref_n > 0 && (size_t)ref_n < sizeof references[i]);
+    ASSERT_TRUE(out_n > 0 && (size_t)out_n < sizeof outputs[i]);
+    cases[i].reference_obj_out_path = references[i];
+    cases[i].out_path = outputs[i];
+  }
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
     run_case(&cases[i]);

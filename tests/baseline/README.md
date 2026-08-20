@@ -1,8 +1,9 @@
-# Pre-rewrite baseline
+# Test baseline and coverage floors
 
 This directory is the authoritative, checked-in baseline for the test-harness
-rewrite. The old gate remains authoritative until cutover; no legacy row may
-be removed or silently consolidated before parity is recorded here.
+rewrite. The C17 framework is authoritative after cutover; ledger rows remain
+as the recorded parity and coverage comparison and may not be silently
+removed or consolidated.
 
 Files:
 
@@ -12,7 +13,7 @@ Files:
 - [`coverage_snapshot.csv`](coverage_snapshot.csv) — GCC/gcov counts and
   percentages for every authored production `src/**/*.c` module.
 - [`coverage_floors.csv`](coverage_floors.csv) — the active, manually reviewed
-  percentage floors enforced by `make test-coverage`. This is intentionally
+  percentage floors enforced by `make test-full`. This is intentionally
   separate from the historical snapshot and is never rewritten by a test
   command.
 - [`coverage_floors_clang.csv`](coverage_floors_clang.csv) — the separately
@@ -52,14 +53,14 @@ gcov -b -f --json-format -o obj/debug-gcc/<module-dir> src/<module>.c
 
 ## Active coverage gate
 
-Run the complete instrumented legacy workload, the contract inventory audit,
-and the floor comparison with:
+Run the complete instrumented framework workload, contract inventory audit,
+and floor comparison with:
 
 ```sh
-make test-coverage
+make test-full
 ```
 
-The target adds `BUILD=coverage`, using GCC's `gcov` instrumentation for GCC
+The target composes a `BUILD=coverage` phase, using GCC's `gcov` instrumentation for GCC
 and the corresponding native profile instrumentation for Clang. Machine and
 human-readable reports are written below
 `obj/coverage-<compiler>/coverage/`; they are generated artifacts and are not
@@ -98,7 +99,7 @@ reason for the change. The self-test target exercises the auditor's success
 and failure cases:
 
 ```sh
-make coverage-audit-self-test
+make test-full
 ```
 
 The standalone network translation unit was collected separately with:

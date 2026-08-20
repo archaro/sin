@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import importlib.util
+import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest import mock
@@ -202,6 +205,13 @@ class CoverageGateTests(unittest.TestCase):
         empty_gcov = coverage.parse_gcov_payload(
             {"files": []}, ROOT, static, allow_empty=True)
         self.assertEqual(empty_gcov, {"lines": set(), "branches": set(), "functions": set()})
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "empty.gcov.json.gz"
+            with gzip.open(report, "wt", encoding="utf-8") as stream:
+                json.dump({"files": []}, stream)
+            selected = coverage._select_gcov_report(
+                [report], ROOT, static, allow_empty=True)
+            self.assertEqual(selected, empty_gcov)
         with self.assertRaisesRegex(coverage.CoverageError, "unexpectedly has gcov observations"):
             coverage.parse_gcov_payload(
                 {"files": [{"file": str(ROOT / static),
@@ -231,6 +241,127 @@ class CoverageGateTests(unittest.TestCase):
              ("src/net/network.c", 11, "handle", True),
              ("src/net/network.c", 12, "handle", False)},
         )
+
+    def test_gcc_network_collection_requires_replacement_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build_dir = root / "obj/coverage-gcc"
+            (build_dir / "net").mkdir(parents=True)
+            missing_adapter = build_dir / "tests/objects/tests/rewrite/group7_adapter_network.o"
+            with mock.patch.object(coverage, "find_gcov", return_value="gcov"):
+                with self.assertRaisesRegex(coverage.CoverageError,
+                                             "missing network adapter coverage object"):
+                    coverage.collect_gcc(
+                        root, build_dir, ["src/net/network.c"],
+                        build_dir / "coverage", 13,
+                        network_adapter=missing_adapter)
+
+    def test_gcov_report_selection_ignores_decoy_and_finds_embedded_network(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            decoy = root / "decoy.gcov.json.gz"
+            correct = root / "adapter.gcov.json.gz"
+
+            def write_report(path: Path, files: list[dict]) -> None:
+                with gzip.open(path, "wt", encoding="utf-8") as stream:
+                    json.dump({"files": files}, stream)
+
+            write_report(decoy, [{"file": str(root / "src/common/error.c"),
+                                 "lines": [{"line_number": 1, "count": 9}]}])
+            write_report(correct, [
+                {"file": str(root / "tests/rewrite/group7_adapter_network.c"),
+                 "lines": [{"line_number": 1, "count": 1}]},
+                {"file": str(root / "src/net/network.c"),
+                 "lines": [{"line_number": 42, "count": 3}],
+                 "functions": [{"name": "network_runtime_create",
+                                "execution_count": 3}]},
+            ])
+            result = coverage._select_gcov_report(
+                [decoy, correct], root, "src/net/network.c")
+            self.assertIn(("src/net/network.c", 42, "", True), result["lines"])
+            self.assertIn(("src/net/network.c", "network_runtime_create", True),
+                          result["functions"])
+
+    def test_gcov_report_selection_rejects_ambiguous_embedded_network_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = []
+            for name in ("adapter-a.gcov.json.gz", "adapter-b.gcov.json.gz"):
+                path = root / name
+                with gzip.open(path, "wt", encoding="utf-8") as stream:
+                    json.dump({"files": [{"file": str(root / "src/net/network.c"),
+                                           "lines": [{"line_number": 42, "count": 1}]}]}, stream)
+                reports.append(path)
+            with self.assertRaisesRegex(coverage.CoverageError, "ambiguous JSON reports"):
+                coverage._select_gcov_report(reports, root, "src/net/network.c")
+
+    def test_gcov_collection_isolates_same_named_reports_and_repeats_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_dir = root / "obj/coverage-gcc/coverage"
+            report_dir.mkdir(parents=True)
+            coverage_input = root / "obj/coverage-gcc/net"
+            coverage_input.mkdir(parents=True)
+            source = root / "src/net/network.c"
+            source.parent.mkdir(parents=True)
+            source.write_text("", encoding="utf-8")
+
+            def write_report(path: Path, line_number: int) -> None:
+                with gzip.open(path, "wt", encoding="utf-8") as stream:
+                    json.dump({"files": [{"file": str(source),
+                                           "lines": [{"line_number": line_number,
+                                                      "count": 1}]}]}, stream)
+
+            # This shared-directory decoy has the same basename as gcov's
+            # output; collection must never inspect it.
+            write_report(report_dir / "network.c.gcov.json.gz", 999)
+
+            def mocked_gcov(command: list[str], cwd: Path,
+                            env: dict | None = None) -> None:
+                self.assertEqual(Path(cwd).parent, report_dir / "raw")
+                write_report(Path(cwd) / "network.c.gcov.json.gz", 42)
+
+            with mock.patch.object(coverage, "run_command", side_effect=mocked_gcov):
+                first = coverage._collect_gcov_module(
+                    "gcov", root, coverage_input, source, "src/net/network.c",
+                    report_dir, set())
+                second = coverage._collect_gcov_module(
+                    "gcov", root, coverage_input, source, "src/net/network.c",
+                    report_dir, set())
+            expected = {("src/net/network.c", 42, "", True)}
+            self.assertEqual(first["lines"], expected)
+            self.assertEqual(second["lines"], expected)
+            self.assertEqual(len(list((report_dir / "raw").glob("gcov-*"))), 2)
+
+    def test_gcc_profile_merge_publishes_absolute_build_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build_dir = root / "obj/coverage-gcc"
+            profile_root = build_dir / "coverage-data"
+            report_dir = build_dir / "coverage"
+            embedded = Path(*build_dir.resolve().parts[1:])
+            first = profile_root / "gcov-1" / embedded / "common"
+            second = profile_root / "gcov-2" / embedded / "bytecode"
+            first.mkdir(parents=True)
+            second.mkdir(parents=True)
+            (first / "error.gcda").write_bytes(b"first")
+            (second / "wire.gcda").write_bytes(b"second")
+
+            def fake_merge(command: list[str], cwd: Path,
+                           env: dict[str, str] | None = None) -> None:
+                del cwd, env
+                output = Path(command[command.index("-o") + 1])
+                shutil.copytree(Path(command[2]), output)
+                shutil.copytree(Path(command[3]), output, dirs_exist_ok=True)
+
+            with mock.patch.object(coverage, "run_command",
+                                   side_effect=fake_merge):
+                coverage.merge_gcc_profiles(profile_root, build_dir,
+                                            report_dir, "gcov-tool-13")
+            self.assertEqual((build_dir / "common/error.gcda").read_bytes(),
+                             b"first")
+            self.assertEqual((build_dir / "bytecode/wire.gcda").read_bytes(),
+                             b"second")
 
     def test_regression_writes_detailed_current_results(self) -> None:
         floors = coverage.validate_floors(ROOT, coverage.FLOORS)
