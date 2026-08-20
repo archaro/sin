@@ -33,6 +33,13 @@ typedef struct {
   bool capture_failed;
 } TF_ProcessResult;
 
+#if defined(__GNUC__) || defined(__clang__)
+#define TF_PRINTF_FORMAT(format_index, argument_index) \
+  __attribute__((format(printf, format_index, argument_index)))
+#else
+#define TF_PRINTF_FORMAT(format_index, argument_index)
+#endif
+
 typedef struct {
   char path[4096];
   bool active;
@@ -61,12 +68,15 @@ void tf_io_failures(bool write_failure, bool close_failure,
 
 void tf_fail(const char *file, int line, const char *expression,
              const char *expected, const char *actual, const char *detail);
-void tf_legacy_failf(const char *file, int line, const char *format, ...);
+void tf_legacy_failf(const char *file, int line, const char *format, ...)
+    TF_PRINTF_FORMAT(3, 4);
 void tf_assert_bytes(const char *file, int line, const char *expression,
                      const void *expected, size_t expected_len,
                      const void *actual, size_t actual_len);
 void tf_assert_process(const char *file, int line, const char *expression,
                        const TF_ProcessResult *result, int expected_status);
+
+#undef TF_PRINTF_FORMAT
 
 #define TF_ASSERT_TRUE(value) do { \
   bool tf_actual__ = (value); \

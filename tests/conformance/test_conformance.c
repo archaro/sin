@@ -60,10 +60,26 @@ typedef struct {
 
 static char validation_detail[512];
 
+#if defined(__GNUC__) || defined(__clang__)
+static void validation_error(const char *format, ...)
+    __attribute__((format(printf, 1, 2)));
+#else
+static void validation_error(const char *format, ...);
+#endif
+
 static void validation_error(const char *format, ...) {
   va_list ap;
   va_start(ap, format);
+  /* The declaration checks callers; this va_list forwarding call must
+   * pass a runtime format string, which Clang otherwise warns about. */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
+#endif
   (void)vsnprintf(validation_detail, sizeof validation_detail, format, ap);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
   va_end(ap);
 }
 

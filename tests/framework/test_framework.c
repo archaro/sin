@@ -409,7 +409,17 @@ void tf_legacy_failf(const char *file, int line, const char *format, ...) {
   char detail[1024];
   va_list args;
   va_start(args, format);
+  /* Callers receive printf checking through tf_legacy_failf's declaration,
+   * but this va_list forwarding necessarily passes a runtime format string.
+   * Clang warns about that specific stdio use, so keep the suppression local. */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
+#endif
   (void)vsnprintf(detail, sizeof detail, format, args);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
   va_end(args);
   tf_fail(file, line, "legacy assertion", "no failure", detail, NULL);
 }

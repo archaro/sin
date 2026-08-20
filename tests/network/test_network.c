@@ -17,7 +17,16 @@
 #include "runtime_context.h"
 
 CONFIG_t config; static size_t current_test_index, current_test_total; static const char *current_test_name = "<startup>";
+/* The legacy harness forwards its checked va_list to vfprintf; suppress only
+ * Clang's nonliteral warning for that unavoidable forwarding call. */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
+#endif
 const char *test_harness_current_suite(void){return "network";} const char *test_harness_current_test(void){return current_test_name;} void test_harness_failf(const char *file,int line_no,const char *fmt,...){va_list ap;fprintf(stderr,"[network][FAIL] test=%s at %s:%d: ",current_test_name,file,line_no);va_start(ap,fmt);vfprintf(stderr,fmt,ap);va_end(ap);fprintf(stderr,"\n[network] totals: ran=%zu passed=%zu failed=1 skipped=%zu status=FAILURE\n",current_test_index,current_test_index?current_test_index-1:0,current_test_total-current_test_index);exit(1);}
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 typedef void (*test_fn_t)(void);
 typedef struct { const char *name; test_fn_t fn; } test_case_t;

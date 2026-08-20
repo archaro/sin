@@ -4,8 +4,6 @@
 
 #include "test_framework.h"
 
-void tf_legacy_failf(const char *file, int line, const char *format, ...);
-
 #define TEST_FAILF(...) \
   do { \
     tf_legacy_failf(__FILE__, __LINE__, __VA_ARGS__); \
