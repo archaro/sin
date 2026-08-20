@@ -451,9 +451,9 @@ item data. Crossings between them should be explicit. Examples:
   `tests/compiler/` (including `test_bytecode_v1_abi.c`, the independent frozen
   opcode ABI oracle); and
   interpreter semantic/stress/benchmark tests under `tests/interpreter/`.
-- The dedicated network harnesses live under `tests/network/`: one uses local
+- Network adapter sources live under `tests/network/`: one uses local
   libuv/libtelnet stubs and the other runs the chat example over localhost.
-  Shared harness and fixture-policy code lives under `tests/shared/`; the
+  Shared test helpers and fixture-policy code lives under `tests/shared/`; the
   private libcall runtime fixture support is `test_libcall_support.[ch]`, with
   opaque network setup helpers declared in `test_network_fixture.h`. Golden
   inputs and outputs under `tests/fixtures/`, and fuzz harnesses/corpora under

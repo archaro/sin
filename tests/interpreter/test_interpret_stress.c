@@ -15,9 +15,10 @@ typedef struct {
 
 enum { STRESS_CASE_COUNT = 2 };
 
-/* The test harness aborts a test with longjmp on assertion failure.  Keep the
- * small, bounded set of process results in static storage so the atexit hook
- * can release them when that happens. */
+/* Each descriptor runs in an isolated child, and tf_fail terminates that child
+ * with _exit, so atexit handlers cannot provide assertion-failure cleanup.
+ * Keep the small, bounded set of process results in static storage and release
+ * them explicitly on the normal success path below. */
 typedef struct {
   TestProcessResult current;
   TestProcessResult baselines[STRESS_CASE_COUNT];
@@ -52,7 +53,6 @@ void test_interpret_stress(void) {
   };
   const int iterations = 30;
   memset(&stress_cleanup, 0, sizeof(stress_cleanup));
-  ASSERT_EQ_INT(0, atexit(stress_cleanup_results));
   char obj_paths[STRESS_CASE_COUNT][128];
   for (size_t i = 0; i < STRESS_CASE_COUNT; ++i) {
     ASSERT_EQ_INT(0, test_make_temp_path("sin-interp-stress", obj_paths[i],
@@ -152,8 +152,7 @@ void test_interpret_stress(void) {
   }
 
   /* The framework runner exits successful children with _exit(), so this
-   * explicit success-path release is required; atexit is only a failure-path
-   * fallback and must not own the cleanup contract. */
+   * explicit success-path release is required. */
   stress_cleanup_results();
   ASSERT_TRUE(stress_cleanup.current.stdout_text == NULL);
   ASSERT_TRUE(stress_cleanup.current.stderr_text == NULL);

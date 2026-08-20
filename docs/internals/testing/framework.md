@@ -37,7 +37,11 @@ without empty components.
 `tf_fixture_init` creates a private `sin-test-XXXXXX` directory below
 `TF_TMP_ROOT` (default `/tmp`). `tf_fixture_file` rejects absolute and `..`
 paths, and `tf_fixture_cleanup` removes the tree. The framework registers every
-fixture so an assertion, crash, or `_exit` path can clean up the remainder.
+fixture for normal-path cleanup. Assertions run the framework cleanup before
+`_exit`; crashes, timeouts, and other forced termination cannot execute
+in-process fixture cleanup and may leave a private directory below the
+configured temporary root. Process-group cleanup still runs for managed child
+processes.
 Make exports both `TF_TMP_ROOT` and `SIN_TEST_TMP_ROOT` into the active object
 tree; direct invocations may use `/tmp`.
 

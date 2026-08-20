@@ -446,7 +446,7 @@ void tf_assertf(const char *file, int line, const char *format, ...) {
 #pragma clang diagnostic pop
 #endif
   va_end(args);
-  tf_fail(file, line, "legacy assertion", "no failure", detail, NULL);
+  tf_fail(file, line, "formatted assertion", "no failure", detail, NULL);
 }
 
 void tf_assert_process(const char *file, int line, const char *expression,

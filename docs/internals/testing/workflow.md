@@ -75,8 +75,8 @@ regression. Run `make test-fuzz` with `FUZZ_RUNS`, `FUZZ_TIME`, `FUZZ_SEED`, and
 Supported targets are `make`, `make lib`, `make test`, `make bench`,
 `make test-sanitize`, `make test-fuzz`, and `make test-full`. Relevant
 variables are `BUILD=debug|release|sanitize|coverage`, `CC=gcc|clang`,
-`TEST_JOBS=N`, `TF_VERBOSE=1`, `FUZZ_RUNS`, `FUZZ_TIME`, `FUZZ_SEED`, and
-`FUZZ_ARTIFACT_DIR`. Coverage is limited to reviewed GCC 13 or Clang 18 tool
+`TEST_JOBS=N`, `TF_VERBOSE=1`, `FUZZ_CC`, `FUZZ_RUNS`, `FUZZ_TIME`, `FUZZ_SEED`,
+and `FUZZ_ARTIFACT_DIR`. Coverage is limited to reviewed GCC 13 or Clang 18 tool
 chains and writes reports under `obj/coverage-<compiler>/`; sanitizer builds
 also stay under `obj/`, while fuzz outputs use `obj/fuzz-<profile>-<compiler>/`.
 
