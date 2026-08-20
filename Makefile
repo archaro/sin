@@ -154,7 +154,10 @@ REWRITE_GROUP6_BINS := \
 	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_libcall_str \
 	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_libcall_list \
 	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_libcall_sys_compile
-FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN) $(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS) $(REWRITE_GROUP3_BINS) $(REWRITE_GROUP4_BINS) $(REWRITE_GROUP5_BINS) $(REWRITE_GROUP6_BINS)
+REWRITE_GROUP7_BINS := \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_network \
+	$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_chat_smoke
+FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN) $(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS) $(REWRITE_GROUP3_BINS) $(REWRITE_GROUP4_BINS) $(REWRITE_GROUP5_BINS) $(REWRITE_GROUP6_BINS) $(REWRITE_GROUP7_BINS)
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -402,7 +405,7 @@ test: inventory-audit $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) scomp si
 	@$(MAKE) --no-print-directory _test
 
 test-framework: $(FRAMEWORK_BINS)
-	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS) $(REWRITE_GROUP3_BINS) $(REWRITE_GROUP4_BINS) $(REWRITE_GROUP5_BINS) $(REWRITE_GROUP6_BINS)
+	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS) $(REWRITE_GROUP3_BINS) $(REWRITE_GROUP4_BINS) $(REWRITE_GROUP5_BINS) $(REWRITE_GROUP6_BINS) $(REWRITE_GROUP7_BINS)
 	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" ./$(FRAMEWORK_SELF_BIN) --run runner_discovery_and_jobs
 	@tmp_file="$$(mktemp)"; trap 'rm -f "$$tmp_file"' EXIT; \
 		if ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(FRAMEWORK_DUP_BIN) >"$$tmp_file" 2>&1; then \
@@ -676,6 +679,17 @@ REWRITE_GROUP6_SYSCOMP_LINK_SOURCES := $(FRAMEWORK_DIR)/test_framework.c $(TEST_
 $(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_libcall_sys_compile: $(REWRITE_GROUP6_SYSCOMP_LINK_SOURCES) $(REWRITE_GROUP1_HEADERS) $(REWRITE_GROUP2_DIR)/group6_adapter_libcall_sys_compile.c $(TEST_DIR)/core/test_libcall_sys_compile.c $(LIB)
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP6_SYSCOMP_LINK_SOURCES) $(REWRITE_GROUP2_DIR)/group6_adapter_libcall_sys_compile.c $(TEST_DIR)/core/test_libcall_sys_compile.c $(LIB) $(LDFLAGS) $(LIBS)
+
+# Group 7 network is a white-box translation unit: its adapter directly
+# includes the legacy source, which owns CONFIG_t, stubs, and implementation
+# inclusions.  Do not add framework_config.c or normal network objects here.
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_network: $(FRAMEWORK_DIR)/test_framework.c $(REWRITE_GROUP2_DIR)/group7_adapter_network.c $(TEST_DIR)/network/test_network.c $(SRC_DIR)/net/network.c $(SRC_DIR)/net/libtelnet.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(FRAMEWORK_DIR)/test_framework.c $(REWRITE_GROUP2_DIR)/group7_adapter_network.c $(LDFLAGS) $(LIBS)
+
+$(OBJ_DIR)/$(REWRITE_GROUP2_DIR)/test_chat_smoke: $(FRAMEWORK_SOURCES) $(REWRITE_GROUP2_DIR)/group7_adapter_chat_smoke.c $(TEST_DIR)/network/test_chat_smoke.c $(LIB) scomp sin
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(TEST_DIR) -I$(FRAMEWORK_DIR) -o $@ $(FRAMEWORK_SOURCES) $(REWRITE_GROUP2_DIR)/group7_adapter_chat_smoke.c $(LIB) $(LDFLAGS) $(LIBS)
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)

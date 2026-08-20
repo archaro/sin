@@ -221,6 +221,14 @@ static void fail_if_server_exited(const char *path, const char *phase,
   }
 }
 
+static void assert_server_group_gone(pid_t pid) {
+  if (pid <= 0) fail("invalid server process-group identity");
+  errno = 0;
+  if (kill(-pid, 0) == 0 || errno != ESRCH) {
+    fail("server process group remains after teardown");
+  }
+}
+
 static void wait_for_log_text(const char *path, const char *phase,
                               const char *needle) {
   int64_t deadline = monotonic_ms() + TEST_TIMEOUT_MS;
@@ -290,7 +298,10 @@ static void wait_server_failure(void) {
     if (ret < 0) fail_errno("waitpid");
     if (ret == pid) {
       resources.server_pid = -1;
-      if (WIFEXITED(status) && WEXITSTATUS(status) != 0) return;
+      if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+        assert_server_group_gone(pid);
+        return;
+      }
       fail("occupied-port server did not fail");
     }
     usleep(50000);
@@ -332,6 +343,7 @@ static pid_t spawn_server(const char *itemstore, const char *srcroot,
   pid_t pid = fork();
   if (pid < 0) fail_errno("fork");
   if (pid == 0) {
+    if (setpgid(0, 0) != 0) _exit(126);
     int log_fd = open(log_path, O_CREAT | O_WRONLY | O_TRUNC, 0600);
     if (log_fd >= 0) {
       dup2(log_fd, STDOUT_FILENO);
@@ -347,6 +359,9 @@ static pid_t spawn_server(const char *itemstore, const char *srcroot,
     };
     execv(argv[0], argv);
     _exit(127);
+  }
+  if (setpgid(pid, pid) != 0 && errno != EACCES && errno != ESRCH) {
+    fail_errno("setpgid server");
   }
   return pid;
 }
@@ -451,7 +466,7 @@ static void stop_server(void) {
     return;
   }
 
-  (void)kill(resources.server_pid, SIGTERM);
+  (void)kill(-resources.server_pid, SIGTERM);
   int64_t deadline = monotonic_ms() + 1000;
   while (monotonic_ms() < deadline) {
     ret = waitpid(resources.server_pid, &status, WNOHANG);
@@ -463,7 +478,7 @@ static void stop_server(void) {
     usleep(10000);
   }
 
-  (void)kill(resources.server_pid, SIGKILL);
+  (void)kill(-resources.server_pid, SIGKILL);
   while (waitpid(resources.server_pid, &status, 0) < 0 && errno == EINTR) {
   }
   resources.server_pid = -1;
@@ -479,7 +494,10 @@ static void wait_server_clean(void) {
     if (ret < 0) fail_errno("waitpid");
     if (ret == pid) {
       resources.server_pid = -1;
-      if (WIFEXITED(status) && WEXITSTATUS(status) == 0) return;
+      if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        assert_server_group_gone(pid);
+        return;
+      }
       fprintf(stderr, "[chat-smoke][FAIL] server exited with status %d\n",
               status);
       fail("server exited unsuccessfully");
@@ -684,6 +702,15 @@ int main(void) {
   uint16_t port = reserve_port();
   resources.server_pid = spawn_server(itemstore, srcroot, boot_obj, port,
                                        chat_flow_log);
+
+  /* An early client disconnect must release its line without taking down the
+   * listener; the next client proves the server remains usable. */
+  resources.client_fd = connect_loop(port);
+  close(resources.client_fd);
+  resources.client_fd = -1;
+  if (kill(resources.server_pid, 0) != 0) {
+    fail_errno("server exited after early client disconnect");
+  }
 
   char seen[4096] = {0};
   resources.client_fd = connect_loop(port);

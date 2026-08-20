@@ -133,6 +133,23 @@ The conformance manifest explicitly excludes real-language `net.*` cases as
 transport-dependent; native stubs are not treated as localhost chat
 integration, which belongs to the network migration group.
 
+The network/Telnet/chat migration adapters are
+`tests/rewrite/group7_adapter_network.c` and
+`tests/rewrite/group7_adapter_chat_smoke.c`. The network adapter directly
+includes `tests/network/test_network.c`, preserving its white-box
+`CONFIG_t`, allocation/libuv/Telnet stubs, and embedded implementation
+sources; its framework rule links only `test_framework.c` plus the archive and
+therefore does not introduce `framework_config.c` or duplicate normal network
+objects. The chat adapter invokes the unchanged localhost orchestration in an
+isolated framework child. Both binaries own one explicit descriptor array,
+tag all cases `exclusive,network`, and are aggregated by `make test-framework`
+alongside the unchanged dedicated `test-network` and `test-chat-smoke` gates.
+Chat uses an ephemeral loopback port, bounded waits, a dedicated server
+process group, and teardown assertions for early disconnect, startup failure,
+and complete process-group cleanup. Network cases explicitly drain write and
+close callbacks and release Telnet/input/output state before destroying their
+fixture runtime.
+
 The fixture-driven conformance executable is
 `tests/conformance/test_conformance.c`, built under the active variant's
 `obj/<build>-<compiler>/tests/conformance/` directory. It consumes the strict,
