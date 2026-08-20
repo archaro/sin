@@ -142,12 +142,36 @@ def rewrite_descriptor_ids(root: Path) -> set[str]:
     directory = root / "tests/rewrite"
     if not directory.is_dir():
         return set()
-    descriptors: set[str] = set()
+    descriptors: dict[str, Path] = {}
+    marker = "static const TF_TestDescriptor tests[] = {"
     for source_path in sorted(directory.rglob("*.c")):
-        source = strip_c_comments(source_path.read_text(encoding="utf-8"))
-        descriptors.update(re.findall(
-            r'\{"(rewrite\.[A-Za-z0-9_.-]+)",', source))
-    return descriptors
+        try:
+            source = strip_c_comments(source_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError) as error:
+            fail(f"cannot read rewrite descriptors from {source_path}: {error}")
+        if source.count(marker) != 1:
+            fail(f"{source_path}: rewrite descriptor array is missing or ambiguous")
+        remainder = source.split(marker, 1)[1]
+        closing = re.search(r"(?m)^\s*};\s*$", remainder)
+        if closing is None:
+            fail(f"{source_path}: rewrite descriptor array is unterminated")
+        body = remainder[:closing.start()]
+        initializer_rows = re.findall(r"^\s*\{", body, re.MULTILINE)
+        rows = re.findall(
+            r'^\s*\{"(rewrite\.[A-Za-z0-9_.-]+)",', body, re.MULTILINE)
+        if not rows or len(rows) != len(initializer_rows):
+            fail(f"{source_path}: rewrite descriptor array contains an unparseable row")
+        seen: set[str] = set()
+        for descriptor_id in rows:
+            if descriptor_id in seen:
+                fail(f"{source_path}: duplicate rewrite descriptor ID {descriptor_id}")
+            seen.add(descriptor_id)
+            previous = descriptors.get(descriptor_id)
+            if previous is not None:
+                fail(f"duplicate rewrite descriptor ID {descriptor_id}: "
+                     f"{previous} and {source_path}")
+            descriptors[descriptor_id] = source_path
+    return set(descriptors)
 
 
 def grammar_tokens(parser: str) -> list[str]:

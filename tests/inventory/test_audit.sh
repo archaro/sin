@@ -16,6 +16,8 @@ esac
 PYTHONDONTWRITEBYTECODE=1 python3 "$audit" --archive "$archive" >/dev/null
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$repo_root/tests/inventory" python3 - <<'PY'
 import audit
+import tempfile
+from pathlib import Path
 
 assert audit.grammar_tokens("%token TPLUS\n%left TPLUS\n") == ["TPLUS"]
 descriptor_source = r'''
@@ -29,6 +31,48 @@ static const TF_TestDescriptor tests[] = {
 };
 '''
 assert audit.conformance_descriptor_ids(descriptor_source) == {"conformance.real"}
+with tempfile.TemporaryDirectory() as directory:
+    rewrite_dir = Path(directory) / "tests/rewrite/group1"
+    rewrite_dir.mkdir(parents=True)
+    valid = '''
+const char *spoof = "{\\"rewrite.spoof\\", not_a_descriptor}";
+static const TF_TestDescriptor tests[] = {
+  {"rewrite.real", real_test, "", 100, "contract.real"},
+};
+'''
+    (rewrite_dir / "valid.c").write_text(valid, encoding="utf-8")
+    assert audit.rewrite_descriptor_ids(Path(directory)) == {"rewrite.real"}
+
+    malformed = '''
+static const TF_TestDescriptor tests[] = {
+  {"not-a-rewrite-id", real_test, "", 100, "contract.real"},
+};
+'''
+    malformed_path = rewrite_dir / "malformed.c"
+    malformed_path.write_text(malformed, encoding="utf-8")
+    try:
+        audit.rewrite_descriptor_ids(Path(directory))
+    except audit.AuditError as error:
+        assert str(malformed_path) in str(error)
+        assert "unparseable row" in str(error)
+    else:
+        raise AssertionError("malformed rewrite descriptor was accepted")
+    malformed_path.unlink()
+
+    duplicate = '''
+static const TF_TestDescriptor tests[] = {
+  {"rewrite.real", other_test, "", 100, "contract.other"},
+};
+'''
+    duplicate_path = rewrite_dir / "duplicate.c"
+    duplicate_path.write_text(duplicate, encoding="utf-8")
+    try:
+        audit.rewrite_descriptor_ids(Path(directory))
+    except audit.AuditError as error:
+        assert str(duplicate_path) in str(error)
+        assert "duplicate rewrite descriptor ID rewrite.real" in str(error)
+    else:
+        raise AssertionError("duplicate rewrite descriptor was accepted")
 try:
     audit.grammar_tokens("%left TPLUS\n%right TPLUS\n")
 except audit.AuditError as error:

@@ -3,6 +3,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 static void assert_fail_bool(void) { TF_ASSERT_TRUE(false); }
@@ -50,6 +51,14 @@ static void assert_process_capture_failure(void) {
   TF_ProcessResult result = {.exited = true, .exit_status = 0, .capture_failed = true};
   TF_ASSERT_PROCESS(&result, 0);
 }
+static void legacy_failf_long(void) {
+  static const char sentinel[] = "LEGACY_FAILF_SENTINEL_AFTER_BYTE_512";
+  char diagnostic[1024];
+  memset(diagnostic, 'Z', sizeof diagnostic - 1u);
+  memcpy(diagnostic + 768u, sentinel, sizeof sentinel - 1u);
+  diagnostic[sizeof diagnostic - 1u] = '\0';
+  tf_legacy_failf(__FILE__, __LINE__, "%s", diagnostic);
+}
 
 static const TF_TestDescriptor tests[] = {
   {"assert_fail_bool", assert_fail_bool, "", 500, "framework.assertions"},
@@ -65,6 +74,7 @@ static const TF_TestDescriptor tests[] = {
   {"fixture_implicit_helper", fixture_implicit_helper, "", 1000, "framework.fixtures"},
   {"fixture_multiple_helper", fixture_multiple_helper, "", 1000, "framework.fixtures"},
   {"assert_process_capture_failure", assert_process_capture_failure, "", 500, "framework.process"},
+  {"legacy_failf_long", legacy_failf_long, "", 500, "framework.assertions"},
   {"hang", hang_test, "", 500, "framework.process"}
 };
 

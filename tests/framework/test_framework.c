@@ -406,7 +406,7 @@ void tf_fail(const char *file, int line, const char *expression,
 }
 
 void tf_legacy_failf(const char *file, int line, const char *format, ...) {
-  char detail[512];
+  char detail[1024];
   va_list args;
   va_start(args, format);
   (void)vsnprintf(detail, sizeof detail, format, args);
