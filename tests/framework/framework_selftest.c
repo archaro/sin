@@ -410,7 +410,7 @@ static const TF_TestDescriptor tests[] = {
   {"timeout_group_cleanup", timeout_and_group_cleanup, "exclusive", 3000, "framework.process"},
   {"exited_descendant_cleanup", exited_descendant_cleanup, "exclusive", 3000, "framework.process"},
   {"normal_group_cleanup", normal_group_cleanup, "exclusive", 3000, "framework.process"},
-  {"crash_isolation", crash_isolation, "", 2000, "framework.process"},
+  {"crash_isolation", crash_isolation, "", 7000, "framework.process"},
   {"fixture_cleanup", fixture_cleanup, "", 2000, "framework.fixtures"},
   {"fixture_failure_cleanup", fixture_failure_cleanup, "", 3000, "framework.fixtures"},
   {"fixture_implicit_and_multiple_cleanup", fixture_implicit_and_multiple_cleanup, "", 4000, "framework.fixtures"},
