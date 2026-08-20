@@ -151,6 +151,15 @@ and complete process-group cleanup. Network cases explicitly drain write and
 close callbacks and release Telnet/input/output state before destroying their
 fixture runtime.
 
+The executable CLI/end-to-end migration adapter is
+`tests/rewrite/group8_adapter_cli_contract_matrix.c`, built as
+`test_cli_contract_matrix`. It owns one exclusive descriptor for each of
+`scomp`, `sdiss`, `sin`, and `sconv`; each descriptor invokes the real sibling
+executable through the framework's separate stdout/stderr process capture,
+bounded timeout, process-group cleanup, and temporary-fixture helpers. The
+rule depends on all four executable targets, and the binary is included in
+`make test-framework` as the final active-variant Group 8 owner.
+
 The fixture-driven conformance executable is
 `tests/conformance/test_conformance.c`, built under the active variant's
 `obj/<build>-<compiler>/tests/conformance/` directory. It consumes the strict,

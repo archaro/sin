@@ -769,3 +769,8 @@ rewrite.network.test_input_processor_releases_interpreter_results,api.network.ru
 rewrite.network.test_input_processor_missing_item_requests_unsafe_shutdown,api.network.runtime-io;baseline.legacy.network.test_input_processor_missing_item_requests_unsafe_shutdown
 rewrite.network.test_input_processor_timer_is_nonblocking_and_sleepable,api.network.runtime-io;baseline.legacy.network.test_input_processor_timer_is_nonblocking_and_sleepable
 rewrite.chat_smoke.examples_chat_flow,executable.sin.command-line;executable.sin.errors;executable.sin.exit-status;executable.sin.input-output;baseline.legacy.chat_smoke.examples_chat_flow
+rewrite.runtime.test_sin_boot_frees_aggregate_return_values,api.entrypoint.sin;baseline.legacy.unified.runtime.test_sin_boot_frees_aggregate_return_values;executable.sin.command-line;executable.sin.errors;executable.sin.exit-status;executable.sin.input-output;executable.sin.persistence
+rewrite.e2e.scomp_cli_contract_matrix,api.entrypoint.scomp;executable.scomp.command-line;executable.scomp.errors;executable.scomp.exit-status;executable.scomp.input-output;executable.scomp.persistence
+rewrite.e2e.sdiss_cli_contract_matrix,api.entrypoint.sdiss;executable.sdiss.command-line;executable.sdiss.errors;executable.sdiss.exit-status;executable.sdiss.input-output;executable.sdiss.persistence
+rewrite.e2e.sin_cli_contract_matrix,api.entrypoint.sin;executable.sin.command-line;executable.sin.errors;executable.sin.exit-status;executable.sin.input-output;executable.sin.persistence
+rewrite.e2e.sconv_cli_contract_matrix,api.entrypoint.sconv;executable.sconv.command-line;executable.sconv.errors;executable.sconv.exit-status;executable.sconv.input-output;executable.sconv.persistence
