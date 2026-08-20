@@ -1,10 +1,14 @@
-# Compiler rewrite adapters
+# Native test adapters
+
+The authoritative framework and test-authoring workflow are documented in
+[`docs/internals/testing/README.md`](../../docs/internals/testing/README.md).
+This directory records adapter layout and historical parity ownership.
 
 The `group2_adapter_*.c` files own explicit framework descriptor arrays for
 the compiler front-end and lowering migration. Each adapter is linked with
 the corresponding native test translation unit retained at cutover, so the
-test body runs in an isolated framework process without the removed legacy
-harness.
+test body runs in an isolated framework process. The retained native files are
+historical source ownership; they do not provide a second test runner.
 The Group 1 adapters under `group1/` remain the owners of their overlapping
 AST/parser/float-format descriptors.
 

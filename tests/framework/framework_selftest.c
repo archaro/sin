@@ -27,7 +27,7 @@ static void assertion_diagnostics(void) {
   const char *ids[] = {"assert_fail_bool", "assert_fail_i64", "assert_fail_u64",
                        "assert_fail_str", "assert_fail_bytes", "assert_fail_float",
                        "assert_fail_diag", "assert_process_capture_failure",
-                       "legacy_failf_long"};
+                       "formatted_failure_long"};
   for (size_t i = 0; i < sizeof ids / sizeof ids[0]; i++) {
     char *args[] = {(char *)program, "--run", (char *)ids[i], NULL};
     TF_ProcessResult result;
@@ -36,8 +36,8 @@ static void assertion_diagnostics(void) {
     TF_ASSERT_DIAGNOSTIC("assertion failed at", result.stderr_data);
     TF_ASSERT_DIAGNOSTIC("expected:", result.stderr_data);
     TF_ASSERT_DIAGNOSTIC("actual:", result.stderr_data);
-    if (strcmp(ids[i], "legacy_failf_long") == 0) {
-      TF_ASSERT_DIAGNOSTIC("LEGACY_FAILF_SENTINEL_AFTER_BYTE_512",
+    if (strcmp(ids[i], "formatted_failure_long") == 0) {
+      TF_ASSERT_DIAGNOSTIC("FORMATTED_FAILURE_SENTINEL_AFTER_BYTE_512",
                            result.stderr_data);
     }
     tf_process_result_destroy(&result);

@@ -34,6 +34,10 @@ network, and integration checks. `TEST_JOBS=N` controls non-exclusive runner
 batches. `test-sanitize` must run outside ptrace-restricted environments
 because LeakSanitizer cannot operate correctly there.
 
+The [testing internals guide](docs/internals/testing/README.md) documents the
+framework protocol, assertion/process/fixture APIs, and workflows for adding
+native, conformance, inventory, fixture, network, and fuzz coverage.
+
 `test-full` is the pre-PR gate for compiler, parser, bytecode, runtime,
 itemstore, or fuzz changes. It composes the shared recipes without cleaning or
 recursively rebuilding the workspace. Coverage is checked against the recorded

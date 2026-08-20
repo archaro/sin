@@ -175,6 +175,6 @@ _bench: $(REWRITE_GROUP2_BINS)
 	@SIN_EXTENDED_BENCH=1 SIN_BENCH_REPORT=1 ./$(OBJ_DIR)/$(REWRITE_DIR)/test_runtime_benchmark
 $(TEST_OBJECT_DIR)/%.o: %.c $(PARSER_H)
 	@mkdir -p $(@D)
-	$(CC) -c $(TEST_CPPFLAGS) $(TEST_CFLAGS) -DSIN_TEST_FRAMEWORK_COMPAT -MMD -MP -MF $(@:.o=.d) $< -o $@
+	$(CC) -c $(TEST_CPPFLAGS) $(TEST_CFLAGS) -MMD -MP -MF $(@:.o=.d) $< -o $@
 
 -include $(TEST_OBJECTS:.o=.d)

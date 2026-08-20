@@ -430,11 +430,11 @@ void tf_fail(const char *file, int line, const char *expression,
   _exit(1);
 }
 
-void tf_legacy_failf(const char *file, int line, const char *format, ...) {
+void tf_assertf(const char *file, int line, const char *format, ...) {
   char detail[1024];
   va_list args;
   va_start(args, format);
-  /* Callers receive printf checking through tf_legacy_failf's declaration,
+  /* Callers receive printf checking through tf_assertf's declaration,
    * but this va_list forwarding necessarily passes a runtime format string.
    * Clang warns about that specific stdio use, so keep the suppression local. */
 #if defined(__clang__)

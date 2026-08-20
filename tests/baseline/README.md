@@ -102,7 +102,9 @@ and failure cases:
 make test-full
 ```
 
-The standalone network translation unit was collected separately with:
+The following is historical provenance for the checked-in pre-cutover
+snapshot; it is not an active test or coverage command after framework
+cutover. The standalone network translation unit was collected separately with:
 
 ```sh
 gcov -b -f --json-format \

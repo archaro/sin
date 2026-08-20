@@ -3,7 +3,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
@@ -16,20 +15,7 @@
 #include "test_assert.h"
 #include "runtime_context.h"
 
-CONFIG_t config; static size_t current_test_index, current_test_total; static const char *current_test_name = "<startup>";
-/* The legacy harness forwards its checked va_list to vfprintf; suppress only
- * Clang's nonliteral warning for that unavoidable forwarding call. */
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wformat-nonliteral"
-#endif
-const char *test_harness_current_suite(void){return "network";} const char *test_harness_current_test(void){return current_test_name;} void test_harness_failf(const char *file,int line_no,const char *fmt,...){va_list ap;fprintf(stderr,"[network][FAIL] test=%s at %s:%d: ",current_test_name,file,line_no);va_start(ap,fmt);vfprintf(stderr,fmt,ap);va_end(ap);fprintf(stderr,"\n[network] totals: ran=%zu passed=%zu failed=1 skipped=%zu status=FAILURE\n",current_test_index,current_test_index?current_test_index-1:0,current_test_total-current_test_index);exit(1);}
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
-
-typedef void (*test_fn_t)(void);
-typedef struct { const char *name; test_fn_t fn; } test_case_t;
+CONFIG_t config;
 
 static int fail_malloc_after = -1, malloc_calls, uv_close_calls;
 static uv_close_cb last_close_cb; static uv_handle_t *last_close_handle; static uv_write_cb last_write_cb; static uv_write_t *last_write_req;
@@ -632,5 +618,3 @@ void test_input_processor_timer_is_nonblocking_and_sleepable(void) {
   ASSERT_EQ_INT(0, uv_run(&loop, UV_RUN_DEFAULT));
   ASSERT_EQ_INT(0, uv_loop_close(&loop));
 }
-
-static const test_case_t tests[]={{"append_input_lines_and_limits",test_append_input_lines_and_limits},{"get_input_cases",test_get_input_cases},{"input_cursor_drain_and_compaction_counters",test_input_cursor_drain_and_compaction_counters},{"input_buffer_boundary_preserves_64k_limit",test_input_buffer_boundary_preserves_64k_limit},{"input_cursor_growth_failure_disconnects",test_input_cursor_growth_failure_disconnects},{"runtime_poll_skips_failed_input",test_runtime_poll_skips_failed_input},{"output_flush_limits_and_callback",test_output_flush_limits_and_callback},{"disconnect_waits_for_pending_output",test_disconnect_waits_for_pending_output},{"line_lifecycle_states_and_reuse",test_line_lifecycle_states_and_reuse},{"remote_disconnect_marks_line_before_close_callback",test_remote_disconnect_marks_line_before_close_callback},{"disconnect_close_write_callback_orders",test_disconnect_close_write_callback_orders},{"destroy_line_does_not_release_live_transport",test_destroy_line_does_not_release_live_transport},{"destroy_line_after_real_telnet_init_failure",test_destroy_line_after_real_telnet_init_failure},{"runtime_destroy_failure_preserves_pending_disconnect",test_runtime_destroy_failure_preserves_pending_disconnect},{"on_new_connection_rejections_and_close_ownership",test_on_new_connection_rejections_and_close_ownership},{"adversarial_long_stream_without_newline",test_adversarial_long_stream_without_newline},{"input_processor_releases_interpreter_results",test_input_processor_releases_interpreter_results},{"input_processor_missing_item_requests_unsafe_shutdown",test_input_processor_missing_item_requests_unsafe_shutdown},{"input_processor_timer_is_nonblocking_and_sleepable",test_input_processor_timer_is_nonblocking_and_sleepable}};int main(void){size_t total=sizeof(tests)/sizeof(tests[0]);current_test_total=total;for(size_t i=0;i<total;i++){current_test_index=i+1;current_test_name=tests[i].name;tests[i].fn();}printf("[network] totals: ran=%zu passed=%zu failed=0 skipped=0 status=SUCCESS\n",total,total);return 0;}

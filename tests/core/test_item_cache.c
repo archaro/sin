@@ -14,7 +14,6 @@
 #define get_itemstore_payload_revision() itemstore_payload_revision(itemstore_owner(root))
 #include "test_assert.h"
 
-#ifdef SIN_TEST_FRAMEWORK_COMPAT
 static bool fail_resize_calloc;
 static bool resize_calloc_was_forced;
 
@@ -28,7 +27,6 @@ void *__wrap_calloc(size_t count, size_t size) {
   }
   return __real_calloc(count, size);
 }
-#endif
 
 static uint64_t itemstore_bench_now_ns(void) {
   struct timespec ts;
@@ -471,7 +469,6 @@ void test_find_item_cached_root_lifecycle_invalidates_entries(void) {
 }
 
 void test_item_hashtable_resize_preserves_entries_and_count(void) {
-#ifdef SIN_TEST_FRAMEWORK_COMPAT
   ITEM_t *failure_root = make_root_item("failure_root");
   ASSERT_NOT_NULL(failure_root);
   for (int i = 0; i < 12; i++) {
@@ -511,7 +508,6 @@ void test_item_hashtable_resize_preserves_entries_and_count(void) {
   ASSERT_EQ_INT(33, item_children_bucket_count(failure_root->children));
   fail_resize_calloc = false;
   destroy_item(failure_root);
-#endif
 
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);

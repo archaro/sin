@@ -16,12 +16,6 @@ __pycache__
 /sin
 /sdiss
 /sconv
-tests/test-suite
-tests/network/test-network
-tests/network/test-chat-smoke
-tests/fuzz/fuzz_scomp
-tests/fuzz/fuzz_sdiss
-tests/fuzz/fuzz_sin_object
 /obj/
 /tests/fixtures/**/*.tmp
 /tests/fixtures/**/*.tmp.*

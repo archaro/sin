@@ -1,18 +1,14 @@
 #include "test_framework.h"
 
 /* This white-box TU owns CONFIG_t, the libuv/Telnet stubs, and direct source
- * inclusion.  Keep it out of the ordinary archive/object link so the
+ * inclusion. Keep it out of the ordinary archive/object link so the
  * framework binary cannot acquire duplicate network globals. */
-#define tests legacy_network_tests
-#define main legacy_network_main
 #include "../../tests/network/test_network.c"
-#undef main
-#undef tests
 #include "item_internal.h"
 
 /* The network white-box binary intentionally does not link the production
  * archive: test_framework.c only needs these reset-hook entry points, while
- * the included legacy TU already supplies its item lookup stubs. */
+ * the included white-box TU already supplies its item lookup stubs. */
 void alloc_test_fail_after(long allocation) { (void)allocation; }
 void itemstore_set_load_constructor_failure_hook_for_tests(
     ITEMSTORE_LOAD_CONSTRUCTOR_FAILURE_HOOK_t hook) { (void)hook; }

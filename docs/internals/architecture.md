@@ -56,6 +56,10 @@ handler symbol in addition to their numeric ABI metadata.
 
 ## Test Framework
 
+For the authoritative framework architecture, API reference, and contributor
+workflow, see the [testing internals guide](testing/README.md). The summary
+below describes only its place in the module map.
+
 The authoritative C17/POSIX framework lives under `tests/framework/`. Each
 test translation unit supplies a standard-C `TF_TestDescriptor` array to
 `tf_main()`. The framework validates metadata, lists descriptors as `TF|...`
@@ -88,15 +92,14 @@ separate `framework-negative-fixture` translation unit and are addressed by
 ID through `TF_FRAMEWORK_NEGATIVE`; it is listed and run directly for focused
 checks, but is not included in the ordinary all-pass aggregate.
 
-The first migration group is under `tests/rewrite/group1/`. Its adapters keep
-legacy native test bodies in their original translation units while each
-adapter owns an explicit descriptor array and is linked as a separate binary.
-The `SIN_TEST_FRAMEWORK_COMPAT` assertion shim maps legacy assertion names to
-framework failures only for these binaries. `make test` discovers the group
-alongside framework and conformance binaries.
+The adapters under `tests/rewrite/` retain white-box native test bodies while
+each adapter owns an explicit descriptor array and is linked as a separate
+framework binary. Their historical parity and inventory relationships are
+recorded in the baseline ledger and inventory; those records are compatibility
+evidence, not a second runtime framework.
 
-The compiler front-end migration adapters are kept under `tests/rewrite/` and
-use the same compatibility boundary. They cover the compiler-owned AST,
+The compiler front-end adapters are kept under `tests/rewrite/` and use the
+same descriptor pattern. They cover the compiler-owned AST,
 semantic, parser, IR/lowering, and pipeline translation units with one
 descriptor-owning executable per native source file; the six Group 1 overlap
 descriptors remain in their original adapters. Their binaries are aggregated
@@ -146,7 +149,7 @@ integration, which belongs to the network migration group.
 The network/Telnet/chat migration adapters are
 `tests/rewrite/group7_adapter_network.c` and
 `tests/rewrite/group7_adapter_chat_smoke.c`. The network adapter directly
-includes `tests/network/test_network.c`, preserving its white-box
+includes `tests/network/test_network.c` as a white-box source, preserving its
 `CONFIG_t`, allocation/libuv/Telnet stubs, and embedded implementation
 sources; its framework rule links only `test_framework.c` plus the system
 libraries and therefore does not introduce `framework_config.c`, the
@@ -156,8 +159,8 @@ isolated framework child. Both binaries own one explicit descriptor array,
 tag all cases `exclusive,network`, and are aggregated by `make test` alongside
 the CLI and integration cases.
 Chat uses an ephemeral loopback port, bounded waits, and teardown assertions
-for early disconnect and startup failure. The standalone smoke executable keeps
-its dedicated server process group; the framework adapter leaves `sin` in the
+for early disconnect and startup failure. The chat server has a dedicated
+process group; the framework adapter leaves `sin` in the
 descriptor child's process group so forced framework cleanup includes it, while
 ordinary adapter teardown signals and reaps the server PID directly. Network
 cases explicitly drain write and close callbacks and release
