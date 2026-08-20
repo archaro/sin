@@ -479,6 +479,10 @@ void test_libcall_registry_self_check_invalid_entries(void) {
   const LIBCALL_t null_name[] = {{NULL, "x", 1, 0, 0, test_noop_libcall}, {NULL,NULL,0,0,0,NULL}};
   ASSERT_TRUE(!libcall_registry_self_check(null_name, false));
 
+  LibcallRegistry valid = {0};
+  uint8_t li = 0, ci = 0, args = 0;
+  ASSERT_TRUE(libcall_registry_init(&valid));
+
   const LIBCALL_t bad_args[] = {{"sys", "x", 1, 0, 255, test_noop_libcall}, {NULL,NULL,0,0,0,NULL}};
   ASSERT_TRUE(!libcall_registry_self_check(bad_args, false));
 
@@ -488,19 +492,14 @@ void test_libcall_registry_self_check_invalid_entries(void) {
   const LIBCALL_t dup_text[] = {{"sys","a",1,1,0,test_noop_libcall},{"sys","a",1,2,0,test_noop_libcall},{NULL,NULL,0,0,0,NULL}};
   ASSERT_TRUE(!libcall_registry_self_check(dup_text, false));
 
-  const LIBCALL_t gap_lib[] = {{"sys","a",1,0,0,test_noop_libcall},{"net","b",3,0,0,test_noop_libcall},{NULL,NULL,0,0,0,NULL}};
-  LibcallRegistry valid = {0};
-  uint8_t li = 0, ci = 0, args = 0;
-  ASSERT_TRUE(libcall_registry_init(&valid));
-  ASSERT_TRUE(libcall_registry_lookup_pair(&valid, "sys", "log", &li, &ci,
-                                           &args));
-  ASSERT_EQ_INT(1, args);
-  ASSERT_TRUE(libcall_registry_self_check(gap_lib, false));
-  ASSERT_TRUE(!libcall_func_pair(5, 255));
   ASSERT_TRUE(libcall_registry_validate(&valid));
   ASSERT_TRUE(libcall_registry_lookup_pair(&valid, "sys", "log", &li, &ci,
                                            &args));
   ASSERT_EQ_INT(1, args);
+
+  const LIBCALL_t gap_lib[] = {{"sys","a",1,0,0,test_noop_libcall},{"net","b",3,0,0,test_noop_libcall},{NULL,NULL,0,0,0,NULL}};
+  ASSERT_TRUE(libcall_registry_self_check(gap_lib, false));
+  ASSERT_TRUE(!libcall_func_pair(5, 255));
   libcall_registry_destroy(&valid);
 }
 
