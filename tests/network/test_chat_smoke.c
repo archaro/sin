@@ -221,13 +221,35 @@ static void fail_if_server_exited(const char *path, const char *phase,
   }
 }
 
-static void assert_server_group_gone(pid_t pid) {
+#if defined(SIN_CHAT_SMOKE_FRAMEWORK)
+static void assert_server_reaped(pid_t pid) {
+  int status = 0;
+  errno = 0;
+  if (waitpid(pid, &status, WNOHANG) != -1 || errno != ECHILD) {
+    fail("framework server child was not reaped");
+  }
+}
+
+static void assert_server_in_descriptor_group(pid_t pid) {
+  pid_t descriptor_pgid = getpgrp();
+  pid_t server_pgid = getpgid(pid);
+  if (descriptor_pgid <= 0 || server_pgid != descriptor_pgid) {
+    fail("server is not in the framework descriptor process group");
+  }
+}
+
+static void assert_server_teardown(pid_t pid) {
+  assert_server_reaped(pid);
+}
+#else
+static void assert_server_teardown(pid_t pid) {
   if (pid <= 0) fail("invalid server process-group identity");
   errno = 0;
   if (kill(-pid, 0) == 0 || errno != ESRCH) {
     fail("server process group remains after teardown");
   }
 }
+#endif
 
 static void wait_for_log_text(const char *path, const char *phase,
                               const char *needle) {
@@ -299,7 +321,7 @@ static void wait_server_failure(void) {
     if (ret == pid) {
       resources.server_pid = -1;
       if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
-        assert_server_group_gone(pid);
+        assert_server_teardown(pid);
         return;
       }
       fail("occupied-port server did not fail");
@@ -343,7 +365,9 @@ static pid_t spawn_server(const char *itemstore, const char *srcroot,
   pid_t pid = fork();
   if (pid < 0) fail_errno("fork");
   if (pid == 0) {
+#if !defined(SIN_CHAT_SMOKE_FRAMEWORK)
     if (setpgid(0, 0) != 0) _exit(126);
+#endif
     int log_fd = open(log_path, O_CREAT | O_WRONLY | O_TRUNC, 0600);
     if (log_fd >= 0) {
       dup2(log_fd, STDOUT_FILENO);
@@ -360,9 +384,11 @@ static pid_t spawn_server(const char *itemstore, const char *srcroot,
     execv(argv[0], argv);
     _exit(127);
   }
+#if !defined(SIN_CHAT_SMOKE_FRAMEWORK)
   if (setpgid(pid, pid) != 0 && errno != EACCES && errno != ESRCH) {
     fail_errno("setpgid server");
   }
+#endif
   return pid;
 }
 
@@ -466,7 +492,11 @@ static void stop_server(void) {
     return;
   }
 
+#if defined(SIN_CHAT_SMOKE_FRAMEWORK)
+  (void)kill(resources.server_pid, SIGTERM);
+#else
   (void)kill(-resources.server_pid, SIGTERM);
+#endif
   int64_t deadline = monotonic_ms() + 1000;
   while (monotonic_ms() < deadline) {
     ret = waitpid(resources.server_pid, &status, WNOHANG);
@@ -478,7 +508,11 @@ static void stop_server(void) {
     usleep(10000);
   }
 
+#if defined(SIN_CHAT_SMOKE_FRAMEWORK)
+  (void)kill(resources.server_pid, SIGKILL);
+#else
   (void)kill(-resources.server_pid, SIGKILL);
+#endif
   while (waitpid(resources.server_pid, &status, 0) < 0 && errno == EINTR) {
   }
   resources.server_pid = -1;
@@ -493,9 +527,9 @@ static void wait_server_clean(void) {
     if (ret < 0 && errno == EINTR) continue;
     if (ret < 0) fail_errno("waitpid");
     if (ret == pid) {
-      resources.server_pid = -1;
       if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-        assert_server_group_gone(pid);
+        resources.server_pid = -1;
+        assert_server_teardown(pid);
         return;
       }
       fprintf(stderr, "[chat-smoke][FAIL] server exited with status %d\n",
@@ -640,6 +674,9 @@ int main(void) {
                                        boot_interrupt_log);
   wait_for_log_occurrences(boot_interrupt_log, "initial boot interrupt",
                            entry_marker, 1);
+#if defined(SIN_CHAT_SMOKE_FRAMEWORK)
+  assert_server_in_descriptor_group(resources.server_pid);
+#endif
   if (kill(resources.server_pid, SIGUSR1) != 0) {
     fail_errno("kill boot-phase SIGUSR1");
   }

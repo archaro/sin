@@ -145,11 +145,13 @@ invokes the unchanged localhost orchestration in an
 isolated framework child. Both binaries own one explicit descriptor array,
 tag all cases `exclusive,network`, and are aggregated by `make test-framework`
 alongside the unchanged dedicated `test-network` and `test-chat-smoke` gates.
-Chat uses an ephemeral loopback port, bounded waits, a dedicated server
-process group, and teardown assertions for early disconnect, startup failure,
-and complete process-group cleanup. Network cases explicitly drain write and
-close callbacks and release Telnet/input/output state before destroying their
-fixture runtime.
+Chat uses an ephemeral loopback port, bounded waits, and teardown assertions
+for early disconnect and startup failure. The standalone smoke executable keeps
+its dedicated server process group; the framework adapter leaves `sin` in the
+descriptor child's process group so forced framework cleanup includes it, while
+ordinary adapter teardown signals and reaps the server PID directly. Network
+cases explicitly drain write and close callbacks and release
+Telnet/input/output state before destroying their fixture runtime.
 
 The executable CLI/end-to-end migration adapter is
 `tests/rewrite/group8_adapter_cli_contract_matrix.c`, built as

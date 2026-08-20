@@ -2,9 +2,11 @@
 
 /* Keep the legacy executable's complete localhost orchestration and cleanup;
  * the framework descriptor runs that same flow in its isolated child. */
+#define SIN_CHAT_SMOKE_FRAMEWORK 1
 #define main legacy_chat_smoke_main
 #include "../../tests/network/test_chat_smoke.c"
 #undef main
+#undef SIN_CHAT_SMOKE_FRAMEWORK
 
 static void test_chat_smoke_flow(void) {
   (void)legacy_chat_smoke_main();
