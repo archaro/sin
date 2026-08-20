@@ -11,6 +11,15 @@ Files:
   chat-smoke check, and eight logical output-contract checks.
 - [`coverage_snapshot.csv`](coverage_snapshot.csv) — GCC/gcov counts and
   percentages for every authored production `src/**/*.c` module.
+- [`coverage_floors.csv`](coverage_floors.csv) — the active, manually reviewed
+  percentage floors enforced by `make test-coverage`. This is intentionally
+  separate from the historical snapshot and is never rewritten by a test
+  command.
+- [`coverage_floors_clang.csv`](coverage_floors_clang.csv) — the separately
+  reviewed Clang 18 floors. GCC/gcov and LLVM source-coordinate metrics are
+  not silently compared as if they were identical; each compiler has an
+  explicit complete floor set. Each row carries a toolchain key (`gcc-13` or
+  `clang-18`), so a floor cannot be accidentally applied to another major.
 - [`audit_baseline.py`](audit_baseline.py) — deterministic validation of row
   counts, required fields, owners/categories, source-module coverage rows, and
   count/percentage consistency. It reads only checked-in files and source
@@ -39,6 +48,52 @@ authored C source):
 
 ```sh
 gcov -b -f --json-format -o obj/debug-gcc/<module-dir> src/<module>.c
+```
+
+## Active coverage gate
+
+Run the complete instrumented legacy workload, the contract inventory audit,
+and the floor comparison with:
+
+```sh
+make test-coverage
+```
+
+The target adds `BUILD=coverage`, using GCC's `gcov` instrumentation for GCC
+and the corresponding native profile instrumentation for Clang. Machine and
+human-readable reports are written below
+`obj/coverage-<compiler>/coverage/`; they are generated artifacts and are not
+checked in. The comparison uses rounded two-decimal percentage floors for
+lines, branches, and functions. GCC and Clang use separate complete floor
+files (each row also carries a matching vendor-major toolchain key) because
+their instrumentation coordinate definitions differ. A measured
+zero-total metric is valid only when its reviewed floor is `n/a`.
+
+The reviewed floor keys are `gcc-13` for the historical GCC snapshot and
+`clang-18` for the initial Clang baseline. A different compiler major fails
+closed with a `no reviewed coverage baseline` error. The Clang floors were
+reviewed from the initial LLVM 18 native run on
+`Ubuntu clang version 18.1.3` using `llvm-cov-18` and `llvm-profdata-18`.
+The collector invokes one combined `llvm-cov export` over the merged profile
+and all gate binaries, then uses each authored file's native
+`summary.lines`, `summary.branches`, and `summary.functions` covered/count
+pairs. These floors are a separate LLVM-native baseline, not converted GCC
+percentages; LLVM and gcov metrics are intentionally incomparable.
+
+`src/net/libtelnet.c` is third-party-derived and is explicitly recorded as
+`excluded_third_party`; it is not silently omitted from the module inventory.
+`src/libcall/libcall_table.c` is retained as an explicit
+`no_instrumentable_code` static-data-only record. Every other authored C
+module is measured and must have exactly one floor record.
+
+Changing a floor is a manual review edit to the applicable compiler-specific
+floor file (`coverage_floors.csv` or `coverage_floors_clang.csv`): update the
+percentage deliberately and include a nonblank rationale that cites the
+reason for the change. The self-test target exercises the auditor's success
+and failure cases:
+
+```sh
+make coverage-audit-self-test
 ```
 
 The standalone network translation unit was collected separately with:

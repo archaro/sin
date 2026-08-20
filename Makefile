@@ -1,8 +1,13 @@
 CC = gcc
 PKG_CONFIG ?= pkg-config
 LIBUV_PC ?= libuv
+CC_VERSION := $(shell $(CC) --version 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr '\n' ' ')
+CC_VENDOR := $(if $(findstring clang,$(CC_VERSION)),clang,$(if $(or $(findstring gcc,$(CC_VERSION)),$(findstring free software foundation,$(CC_VERSION))),gcc,unsupported))
+CC_MAJOR := $(shell printf '%s\n' '$(CC_VERSION)' | sed -n -E 's/^[^0-9]*([0-9]+)(\.[0-9]+)+.*/\1/p' | head -n 1)
+CC_TOOLCHAIN := $(CC_VENDOR)-$(CC_MAJOR)
 # Default `make`/`make all` builds the debug variant. Override with
-# `BUILD=release` or `BUILD=sanitize`, or use the variant targets below.
+# `BUILD=release`, `BUILD=sanitize`, or `BUILD=coverage`, or use the variant
+# targets below.
 BUILD ?= debug
 CSTD ?= c17
 
@@ -47,8 +52,25 @@ LDFLAGS += $(RELEASE_LDFLAGS)
 else ifeq ($(BUILD),sanitize)
 CFLAGS += $(SANITIZE_CFLAGS)
 LDFLAGS += $(SANITIZE_LDFLAGS)
+else ifeq ($(BUILD),coverage)
+CFLAGS += -g -O0
+ifeq ($(CC_VENDOR),clang)
+ifneq ($(CC_TOOLCHAIN),clang-18)
+$(error BUILD=coverage has no reviewed baseline for compiler toolchain $(CC_TOOLCHAIN))
+endif
+CFLAGS += -fprofile-instr-generate -fcoverage-mapping
+LDFLAGS += -fprofile-instr-generate -fcoverage-mapping
+else ifeq ($(CC_VENDOR),gcc)
+ifneq ($(CC_TOOLCHAIN),gcc-13)
+$(error BUILD=coverage has no reviewed baseline for compiler toolchain $(CC_TOOLCHAIN))
+endif
+CFLAGS += -fprofile-arcs -ftest-coverage
+LDFLAGS += -fprofile-arcs -ftest-coverage
 else
-$(error Unknown BUILD '$(BUILD)'; expected debug, release, or sanitize)
+$(error BUILD=coverage requires a compiler identified as GCC or Clang; '$(CC)' reported '$(CC_VERSION)')
+endif
+else
+$(error Unknown BUILD '$(BUILD)'; expected debug, release, sanitize, or coverage)
 endif
 
 CFLAGS += $(LIBUV_CFLAGS)
@@ -167,6 +189,13 @@ FUZZ_SEED ?= 1
 FUZZ_ARTIFACT_DIR ?=
 XXD ?= xxd
 BEAR ?= bear
+ifeq ($(CC_VENDOR),clang)
+LLVM_COV ?= llvm-cov-$(CC_MAJOR)
+LLVM_PROFDATA ?= llvm-profdata-$(CC_MAJOR)
+else
+LLVM_COV ?= llvm-cov
+LLVM_PROFDATA ?= llvm-profdata
+endif
 COMPILEDB := compile_commands.json
 FUZZ_DIR := $(TEST_DIR)/fuzz
 FUZZ_LOCAL_ARTIFACT_DIR := $(FUZZ_DIR)/artifacts
@@ -272,8 +301,8 @@ $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
 
-.PHONY: all lib clean help debug release sanitize compiledb FORCE_BUILD
-.PHONY: test test-framework test-conformance framework-list inventory-audit inventory-audit-self-test test-network test-chat-smoke test-output-contract test-build-switch test-strict test-benchmark test-release test-warnings test-asan test-lsan
+.PHONY: all lib clean help debug release sanitize coverage compiledb FORCE_BUILD
+.PHONY: test test-framework test-conformance test-coverage coverage-audit-self-test framework-list inventory-audit inventory-audit-self-test test-network test-chat-smoke test-output-contract test-build-switch test-strict test-benchmark test-release test-warnings test-asan test-lsan
 .PHONY: _test _test-harness _test-network _test-chat-smoke _test-output-contract _test-build-switch _test-strict _test-benchmark
 .PHONY: _test-warnings _test-release _test-asan _test-lsan
 .PHONY: fuzz-build fuzz-corpora fuzz-smoke fuzz-smoke-run
@@ -297,6 +326,10 @@ sanitize:
 	+$(MAKE) clean
 	+ASAN_OPTIONS="$(ASAN_OPTIONS):detect_leaks=0" $(MAKE) BUILD=sanitize all
 
+coverage:
+	+$(MAKE) clean
+	+$(MAKE) BUILD=coverage all
+
 # Regenerate the clangd compilation database.
 #
 # Always starts from a clean tree, deliberately. bear records only the
@@ -319,6 +352,7 @@ help:
 		'  debug            Clean, then build all with BUILD=debug' \
 		'  release          Clean, then build all with BUILD=release' \
 		'  sanitize         Clean, then build all with BUILD=sanitize and ASan/UBSan' \
+		'  coverage         Clean, then build all with native compiler coverage instrumentation' \
 		'  lib              Build lib/libsinshared.a only' \
 		'  compiledb        Clean, rebuild, and regenerate compile_commands.json via bear' \
 		'  clean            Remove objects, binaries, libraries, tests, fuzz artifacts, and stale generated files' \
@@ -327,6 +361,7 @@ help:
 		'  Successful test targets print concise totals; failures replay captured diagnostics' \
 		'  test             Build debug artifacts and run network + combined core/compiler/runtime suite' \
 		'  test-framework   Build and run the self-contained C17 framework tests' \
+		'  test-coverage    Clean, run the complete instrumented gate, and enforce coverage floors' \
 		'  test-conformance  Run fixture-driven source-to-runtime conformance cases' \
 		'  inventory-audit  Validate checked-in language, bytecode, API, libcall, executable, and test catalogs' \
 		'  test-network     Build and run network tests only' \
@@ -350,9 +385,10 @@ help:
 		'  fuzz-sin-object  Build the itemstore fuzz harness' \
 		'' \
 		'Common variables:' \
-		'  BUILD=debug|release|sanitize  Select build variant; default debug' \
+		'  BUILD=debug|release|sanitize|coverage  Select build variant; default debug' \
 		'  CSTD=c17                      Select C standard passed as -std=$(CSTD)' \
 		'  CC=gcc                        Select compiler' \
+		'  LLVM_COV/LLVM_PROFDATA        Override Clang tools; default requires matching LLVM major' \
 		'  PKG_CONFIG=pkg-config         Dependency discovery command' \
 		'  LIBUV_PC=libuv                pkg-config module for libuv' \
 		'  STRICT_WARNINGS=1             Promote selected warnings to errors' \
@@ -414,6 +450,31 @@ test-framework: $(FRAMEWORK_BINS)
 			cat "$$tmp_file"; printf '%s\n' 'duplicate discovery unexpectedly succeeded' >&2; exit 1; \
 		fi; grep -F 'TF|ERROR|discovery' "$$tmp_file" >/dev/null
 
+test-coverage:
+	+set -eu; \
+	coverage_obj="obj/coverage-$(notdir $(CC))"; \
+	coverage_archive="lib/coverage-$(notdir $(CC))/libsinshared.a"; \
+	if test "$(CC_VENDOR)" = clang; then coverage_archive="lib/debug-$(notdir $(CC))/libsinshared.a"; fi; \
+	cleanup() { find tests -type f \( -name '*.gcno' -o -name '*.gcda' -o -name '*.pyc' \) -delete; \
+		find tests -type d -name __pycache__ -prune -exec rm -rf {} +; }; \
+	trap cleanup EXIT INT TERM; \
+	$(MAKE) --no-print-directory clean; \
+	mkdir -p "$$coverage_obj/coverage-data"; \
+	LLVM_PROFILE_FILE="$$coverage_obj/coverage-data/%p.profraw" $(MAKE) --no-print-directory BUILD=coverage test; \
+	mkdir -p "$$coverage_obj/coverage-input/network"; \
+	for suffix in gcno gcda; do \
+		if test -f "tests/network/test-network-test_network.$$suffix"; then \
+			cp "tests/network/test-network-test_network.$$suffix" "$$coverage_obj/coverage-input/network/"; \
+		fi; \
+	done; \
+	PYTHONDONTWRITEBYTECODE=1 python3 tests/coverage/coverage_gate.py \
+		--build-dir "$$coverage_obj" --compiler "$(CC)" \
+		--archive "$$coverage_archive" \
+		--llvm-cov "$(LLVM_COV)" --llvm-profdata "$(LLVM_PROFDATA)"
+
+coverage-audit-self-test:
+	@PYTHONDONTWRITEBYTECODE=1 python3 tests/coverage/test_coverage_gate.py
+
 test-conformance: $(CONFORMANCE_BIN) $(FRAMEWORK_RUNNER_BIN) scomp sdiss sin
 	@./$(FRAMEWORK_RUNNER_BIN) ./$(CONFORMANCE_BIN)
 
@@ -421,7 +482,16 @@ framework-list: $(FRAMEWORK_BINS)
 	@./$(FRAMEWORK_SELF_BIN) --list
 
 inventory-audit: $(LIB)
+ifeq ($(BUILD),coverage)
+ifeq ($(CC_VENDOR),clang)
+	+$(MAKE) --no-print-directory BUILD=debug lib
+	@PYTHONDONTWRITEBYTECODE=1 python3 tests/inventory/audit.py --archive "lib/debug-$(notdir $(CC))/libsinshared.a" >/dev/null
+else
 	@PYTHONDONTWRITEBYTECODE=1 python3 tests/inventory/audit.py --archive "$(LIB)" >/dev/null
+endif
+else
+	@PYTHONDONTWRITEBYTECODE=1 python3 tests/inventory/audit.py --archive "$(LIB)" >/dev/null
+endif
 
 inventory-audit-self-test: inventory-audit
 	@bash tests/inventory/test_audit.sh "$(LIB)"

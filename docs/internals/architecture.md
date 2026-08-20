@@ -184,6 +184,27 @@ also rejects undeclared conformance fixture drift. Normal test execution is
 read-only; expectation regeneration is a deliberate manual workflow documented
 in `tests/fixtures/conformance/README.md`.
 
+## Coverage Gate
+
+`tests/coverage/coverage_gate.py` audits the manually reviewed floors in
+`tests/baseline/coverage_floors.csv` (GCC) or
+`tests/baseline/coverage_floors_clang.csv` (Clang) and collects native compiler coverage for
+the authored `src/**/*.c` modules. `make test-coverage` cleans the workspace,
+builds `BUILD=coverage` with GCC/gcov (or Clang's native profile mapping),
+runs the complete legacy test workload and `inventory-audit`, then compares
+line, branch, and function percentages against the compiler-specific floors;
+each floor row carries the matching vendor-major toolchain key (`gcc-13` or
+`clang-18`), and unreviewed majors fail closed. Detailed CSV and
+human-readable reports stay under `obj/coverage-<compiler>/coverage/`.
+
+The floor file is never rewritten by a test command. Any intentional change
+must be a reviewed manual edit with a nonblank rationale. `libcall_table.c`
+has an explicit `no_instrumentable_code` record; the third-party-derived
+`libtelnet.c` has an explicit `excluded_third_party` record. All other
+authored C modules require one measured floor. `make coverage-audit-self-test`
+exercises the auditor's success and failure paths without changing checked-in
+data.
+
 ## Module Boundaries
 
 ### Common Support
