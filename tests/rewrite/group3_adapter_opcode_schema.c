@@ -22,4 +22,3 @@ static const TF_TestDescriptor tests[] = {
 int main(int argc, char **argv) {
   return tf_main(argc, argv, tests, sizeof tests / sizeof tests[0]);
 }
-

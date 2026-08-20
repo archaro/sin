@@ -318,20 +318,14 @@ void test_sdiss_missing_or_unreadable_input(void) {
       "tests/fixtures/sdiss",
   };
   for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
-    char command[512];
-    int written = snprintf(command, sizeof(command),
-                           "./sdiss --quiet --no-header -o %s 2>&1",
-                           paths[i]);
-    ASSERT_TRUE(written > 0 && (size_t)written < sizeof(command));
-    FILE *pipe = popen(command, "r");
-    ASSERT_NOT_NULL(pipe);
-    char output[4096];
-    size_t total = fread(output, 1, sizeof(output) - 1, pipe);
-    output[total] = '\0';
-    int status = pclose(pipe);
-    ASSERT_TRUE(status != -1);
-    ASSERT_TRUE(WIFEXITED(status));
-    ASSERT_EQ_INT(EXIT_FAILURE, WEXITSTATUS(status));
-    ASSERT_TRUE(strstr(output, "Unable to read object file") != NULL);
+    char *argv[] = {"./sdiss", "--quiet", "--no-header", "-o",
+                    (char *)paths[i], NULL};
+    TestProcessResult result = {0};
+    ASSERT_EQ_INT(0, test_run_argv_capture(argv, 1000, &result));
+    ASSERT_EQ_INT(0, result.timed_out);
+    ASSERT_EQ_INT(EXIT_FAILURE, result.exit_code);
+    ASSERT_EQ_INT(0, (int)result.stdout_length);
+    ASSERT_TRUE(strstr(result.stderr_text, "Unable to read object file") != NULL);
+    test_process_result_free(&result);
   }
 }
