@@ -82,7 +82,7 @@ expect_root_failure() {
 # Precedence directives declare lexer tokens too; canonical drift must fail.
 mkdir -p "$work/root/src/compiler" "$work/root/src/bytecode" \
   "$work/root/src/libcall" "$work/root/tests/baseline" \
-  "$work/root/tests/conformance"
+  "$work/root/tests/conformance" "$work/root/tests/rewrite"
 cp "$repo_root/src/compiler/parser.y" "$work/root/src/compiler/parser.y"
 cp "$repo_root/src/compiler/absyn.h" "$work/root/src/compiler/absyn.h"
 cp "$repo_root/src/bytecode/bytecode_abi.h" "$work/root/src/bytecode/bytecode_abi.h"
@@ -92,8 +92,39 @@ cp "$repo_root/tests/baseline/legacy_test_ledger.csv" \
   "$work/root/tests/baseline/legacy_test_ledger.csv"
 cp "$repo_root/tests/conformance/test_conformance.c" \
   "$work/root/tests/conformance/test_conformance.c"
+cp -a "$repo_root/tests/rewrite/." "$work/root/tests/rewrite/"
 sed -i 's/^%left TAND$/%left/' "$work/root/src/compiler/parser.y"
 expect_root_failure precedence_token 'language token inventory mismatch'
+
+# Removing a rewrite catalog row and its reciprocal API edge must expose the
+# exact descriptor/catalog reconciliation, independently of migrated ledger
+# coverage.
+python3 - "$work/catalog/tests.csv" "$work/catalog/api.csv" <<'PY'
+import csv
+import sys
+from pathlib import Path
+
+tests_path = Path(sys.argv[1])
+api_path = Path(sys.argv[2])
+removed = "rewrite.common.memory_allocation_boundaries"
+
+tests = list(csv.DictReader(tests_path.open(newline="", encoding="utf-8")))
+tests = [row for row in tests if row["test_id"] != removed]
+with tests_path.open("w", newline="", encoding="utf-8") as stream:
+    writer = csv.DictWriter(stream, fieldnames=tests[0].keys(), lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(tests)
+
+api = list(csv.DictReader(api_path.open(newline="", encoding="utf-8")))
+row = next(row for row in api if row["contract_id"] == "api.common.memory")
+row["test_ids"] = ";".join(item for item in row["test_ids"].split(";") if item != removed)
+with api_path.open("w", newline="", encoding="utf-8") as stream:
+    writer = csv.DictWriter(stream, fieldnames=api[0].keys(), lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(api)
+PY
+expect_failure rewrite_descriptor_catalog 'replacement descriptor inventory mismatch'
+cp -a "$repo_root/tests/inventory/." "$work/catalog"
 
 # Duplicate contract IDs are rejected before any canonical comparison.
 sed -n '2p' "$work/catalog/contracts.csv" >>"$work/catalog/contracts.csv"

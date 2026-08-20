@@ -76,6 +76,14 @@ separate `framework-negative-fixture` translation unit and are addressed by
 ID through `TF_FRAMEWORK_NEGATIVE`; it is listed and run directly for focused
 checks, but is not included in the ordinary all-pass aggregate.
 
+The first migration group is under `tests/rewrite/group1/`. Its adapters keep
+legacy native test bodies in their original translation units while each
+adapter owns an explicit descriptor array and is linked as a separate binary.
+The `SIN_TEST_FRAMEWORK_COMPAT` assertion shim maps legacy assertion names to
+framework failures only for these binaries. `make test-framework` discovers
+the group alongside framework and conformance binaries; the legacy `make test`
+target and its unified harness remain unchanged.
+
 The fixture-driven conformance executable is
 `tests/conformance/test_conformance.c`, built under the active variant's
 `obj/<build>-<compiler>/tests/conformance/` directory. It consumes the strict,

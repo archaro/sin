@@ -61,6 +61,7 @@ void tf_io_failures(bool write_failure, bool close_failure,
 
 void tf_fail(const char *file, int line, const char *expression,
              const char *expected, const char *actual, const char *detail);
+void tf_legacy_failf(const char *file, int line, const char *format, ...);
 void tf_assert_bytes(const char *file, int line, const char *expression,
                      const void *expected, size_t expected_len,
                      const void *actual, size_t actual_len);

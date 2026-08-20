@@ -1,5 +1,23 @@
 #pragma once
 
+#ifdef SIN_TEST_FRAMEWORK_COMPAT
+
+#include "test_framework.h"
+
+void tf_legacy_failf(const char *file, int line, const char *format, ...);
+
+#define TEST_FAILF(...) \
+  do { \
+    tf_legacy_failf(__FILE__, __LINE__, __VA_ARGS__); \
+  } while (0)
+
+#define ASSERT_TRUE(value) TF_ASSERT_TRUE(value)
+#define ASSERT_EQ_INT(expected, actual) \
+  TF_ASSERT_I64((int64_t)(expected), (int64_t)(actual))
+#define ASSERT_NOT_NULL(pointer) TF_ASSERT_TRUE((pointer) != NULL)
+
+#else
+
 const char *test_harness_current_suite(void);
 const char *test_harness_current_test(void);
 void test_harness_failf(const char *file, int line, const char *fmt, ...)
@@ -32,3 +50,5 @@ void test_harness_failf(const char *file, int line, const char *fmt, ...)
       TEST_FAILF("%s was NULL", #ptr); \
     } \
   } while (0)
+
+#endif

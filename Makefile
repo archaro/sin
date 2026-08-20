@@ -90,7 +90,30 @@ FRAMEWORK_SELF_SOURCES := $(FRAMEWORK_DIR)/framework_selftest.c
 FRAMEWORK_RUNNER_SOURCES := $(FRAMEWORK_DIR)/test_runner.c
 FRAMEWORK_DUP_SOURCES := $(FRAMEWORK_DIR)/framework_duplicate_fixture.c
 FRAMEWORK_NEG_SOURCES := $(FRAMEWORK_DIR)/framework_negative_fixture.c
-FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN) $(CONFORMANCE_BIN)
+REWRITE_GROUP1_DIR := $(TEST_DIR)/rewrite/group1
+REWRITE_GROUP1_SHARED_SOURCES := \
+	$(TEST_DIR)/shared/test_helpers.c \
+	$(TEST_DIR)/shared/test_libcall_support.c \
+	$(TEST_DIR)/shared/test_pipeline_cases.c
+REWRITE_GROUP1_HEADERS := \
+	$(FRAMEWORK_DIR)/test_framework.h $(TEST_DIR)/test_assert.h \
+	$(SRC_DIR)/config.h $(SRC_DIR)/itemstore/item.h $(SRC_DIR)/itemstore/item_internal.h \
+	$(SRC_DIR)/common/memory.h $(PARSER_H)
+REWRITE_GROUP1_LINK_SOURCES := $(FRAMEWORK_SOURCES) $(REWRITE_GROUP1_SHARED_SOURCES)
+REWRITE_GROUP1_COMMON_DEPS := $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP1_HEADERS) $(LIB)
+REWRITE_GROUP1_BINS := \
+	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_absyn_lifecycle \
+	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_parser_input_api \
+	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_cli_io \
+	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_parser_float_literals \
+	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_sconv \
+	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_value_behavior \
+	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_libcall_registry \
+	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_libcall_sys \
+	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_fixture_policy \
+	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_output_contract \
+	$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_memory
+FRAMEWORK_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN) $(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS)
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 30
 FUZZ_RUNS ?= 10000
@@ -338,7 +361,7 @@ test: inventory-audit $(TEST_BIN) $(NETWORK_TEST_BIN) $(CHAT_SMOKE_BIN) scomp si
 	@$(MAKE) --no-print-directory _test
 
 test-framework: $(FRAMEWORK_BINS)
-	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(CONFORMANCE_BIN)
+	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" TEST_JOBS="$${TEST_JOBS:-1}" ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(CONFORMANCE_BIN) $(REWRITE_GROUP1_BINS)
 	@TF_FRAMEWORK_RUNNER="./$(FRAMEWORK_RUNNER_BIN)" TF_FRAMEWORK_NEGATIVE="./$(FRAMEWORK_NEG_BIN)" ./$(FRAMEWORK_SELF_BIN) --run runner_discovery_and_jobs
 	@tmp_file="$$(mktemp)"; trap 'rm -f "$$tmp_file"' EXIT; \
 		if ./$(FRAMEWORK_RUNNER_BIN) ./$(FRAMEWORK_SELF_BIN) ./$(FRAMEWORK_DUP_BIN) >"$$tmp_file" 2>&1; then \
@@ -465,6 +488,42 @@ $(FRAMEWORK_NEG_BIN): $(FRAMEWORK_SOURCES) $(FRAMEWORK_NEG_SOURCES) $(FRAMEWORK_
 $(CONFORMANCE_BIN): $(FRAMEWORK_SOURCES) $(CONFORMANCE_DIR)/test_conformance.c $(FRAMEWORK_DIR)/test_framework.h $(CONFORMANCE_FIXTURES) $(TEST_DIR)/fixtures/interpret/list-itemref-persist.src $(TEST_DIR)/inventory/language.csv $(TEST_DIR)/inventory/libcalls.csv $(TEST_DIR)/inventory/contracts.csv $(TEST_DIR)/inventory/tests.csv $(LIB) scomp sdiss sin
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -o $@ $(FRAMEWORK_SOURCES) $(CONFORMANCE_DIR)/test_conformance.c $(LIB) $(LDFLAGS) $(LIBS)
+
+REWRITE_GROUP1_CFLAGS = $(TEST_CFLAGS) -DSIN_TEST_FRAMEWORK_COMPAT -I$(TEST_DIR) -I$(FRAMEWORK_DIR)
+
+$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_absyn_lifecycle: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP1_DIR)/adapter_absyn_lifecycle.c $(TEST_DIR)/core/test_absyn_lifecycle.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_absyn_lifecycle.c $(TEST_DIR)/core/test_absyn_lifecycle.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_parser_input_api: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP1_DIR)/adapter_parser_input_api.c $(TEST_DIR)/core/test_parser_input_api.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_parser_input_api.c $(TEST_DIR)/core/test_parser_input_api.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_cli_io: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP1_DIR)/adapter_cli_io.c $(TEST_DIR)/core/test_cli_io.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_cli_io.c $(TEST_DIR)/core/test_cli_io.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_parser_float_literals: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP1_DIR)/adapter_parser_float_literals.c $(TEST_DIR)/core/test_parser_float_literals.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_parser_float_literals.c $(TEST_DIR)/core/test_parser_float_literals.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_sconv: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP1_DIR)/adapter_sconv.c $(TEST_DIR)/core/test_sconv.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_sconv.c $(TEST_DIR)/core/test_sconv.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_value_behavior: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP1_DIR)/adapter_value_behavior.c $(TEST_DIR)/core/test_value_behavior.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_value_behavior.c $(TEST_DIR)/core/test_value_behavior.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_libcall_registry: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP1_DIR)/adapter_libcall_registry.c $(TEST_DIR)/core/test_libcall_registry.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_libcall_registry.c $(TEST_DIR)/core/test_libcall_registry.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_libcall_sys: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP1_DIR)/adapter_libcall_sys.c $(TEST_DIR)/core/test_libcall_sys.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_libcall_sys.c $(TEST_DIR)/core/test_libcall_sys.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_fixture_policy: $(REWRITE_GROUP1_COMMON_DEPS) $(REWRITE_GROUP1_DIR)/adapter_fixture_policy.c $(TEST_DIR)/shared/test_fixture_policy.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(REWRITE_GROUP1_CFLAGS) -o $@ $(REWRITE_GROUP1_LINK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_fixture_policy.c $(TEST_DIR)/shared/test_fixture_policy.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_output_contract: $(FRAMEWORK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_output_contract.c $(REWRITE_GROUP1_HEADERS) $(LIB)
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -o $@ $(FRAMEWORK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_output_contract.c $(LIB) $(LDFLAGS) $(LIBS)
+$(OBJ_DIR)/$(REWRITE_GROUP1_DIR)/test_memory: $(FRAMEWORK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_memory.c $(REWRITE_GROUP1_HEADERS) $(LIB)
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(TEST_CFLAGS) -I$(FRAMEWORK_DIR) -o $@ $(FRAMEWORK_SOURCES) $(REWRITE_GROUP1_DIR)/adapter_memory.c $(LIB) $(LDFLAGS) $(LIBS)
 
 $(OBJ_DIR)/tests/fuzz/%.o : $(FUZZ_DIR)/%.c $(PARSER_GENERATED)
 	@mkdir -p $(@D)

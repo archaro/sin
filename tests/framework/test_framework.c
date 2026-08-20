@@ -3,6 +3,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdarg.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -402,6 +403,15 @@ void tf_fail(const char *file, int line, const char *expression,
   tf_reset_hooks();
   tf_fixture_cleanup_all();
   _exit(1);
+}
+
+void tf_legacy_failf(const char *file, int line, const char *format, ...) {
+  char detail[512];
+  va_list args;
+  va_start(args, format);
+  (void)vsnprintf(detail, sizeof detail, format, args);
+  va_end(args);
+  tf_fail(file, line, "legacy assertion", "no failure", detail, NULL);
 }
 
 void tf_assert_process(const char *file, int line, const char *expression,

@@ -137,6 +137,19 @@ def conformance_descriptor_ids(source: str) -> set[str]:
     return descriptors
 
 
+def rewrite_descriptor_ids(root: Path) -> set[str]:
+    """Discover explicit replacement descriptors in checked-in adapters."""
+    directory = root / "tests/rewrite"
+    if not directory.is_dir():
+        return set()
+    descriptors: set[str] = set()
+    for source_path in sorted(directory.rglob("*.c")):
+        source = strip_c_comments(source_path.read_text(encoding="utf-8"))
+        descriptors.update(re.findall(
+            r'\{"(rewrite\.[A-Za-z0-9_.-]+)",', source))
+    return descriptors
+
+
 def grammar_tokens(parser: str) -> list[str]:
     tokens: list[str] = []
     declarations: dict[str, dict[str, int | str | None]] = {}
@@ -406,7 +419,14 @@ def main() -> int:
         ledger_path = root / "tests/baseline/legacy_test_ledger.csv"
         ledger = read_csv(ledger_path, ("legacy_id", "category", "suite", "owner", "source_location", "behavioral_purpose", "planned_replacement_id", "parity_notes"))
         expected_tests = {row["legacy_id"] for row in ledger}
+        migrated_replacements = {
+            row["planned_replacement_id"] for row in ledger
+            if "verified parallel coverage" in row["parity_notes"]
+        }
         tests = {row["test_id"] for row in catalogs["tests.csv"]}
+        catalog_rewrite_ids = {test_id for test_id in tests
+                               if test_id.startswith("rewrite.")}
+        expected_tests.update(catalog_rewrite_ids)
         missing = expected_tests - tests
         extra = tests - expected_tests
         if missing or any(not test_id.startswith("conformance.") for test_id in extra):
@@ -421,6 +441,11 @@ def main() -> int:
         catalog_descriptor_ids = {test_id for test_id in tests if test_id.startswith("conformance.")}
         if catalog_descriptor_ids != descriptor_ids:
             fail(f"conformance descriptor inventory mismatch (missing={sorted(descriptor_ids - catalog_descriptor_ids)[:1]}, unknown={sorted(catalog_descriptor_ids - descriptor_ids)[:1]})")
+        replacement_descriptors = rewrite_descriptor_ids(root)
+        if replacement_descriptors != catalog_rewrite_ids:
+            fail(f"replacement descriptor inventory mismatch (missing={sorted(catalog_rewrite_ids - replacement_descriptors)[:1]}, unknown={sorted(replacement_descriptors - catalog_rewrite_ids)[:1]})")
+        if not migrated_replacements.issubset(replacement_descriptors):
+            fail(f"migrated replacement descriptor missing (missing={sorted(migrated_replacements - replacement_descriptors)[:1]})")
         for row in catalogs["contracts.csv"]:
             refs = split_refs(row["test_ids"])
             if not refs:
