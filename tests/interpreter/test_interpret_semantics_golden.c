@@ -21,6 +21,7 @@
 #include "itemref.h"
 #include "memory.h"
 #include "bytecode/bytecode_abi.h"
+#include "bytecode/bytecode_verify.h"
 
 #undef destroy_item
 static void destroy_raw_runtime_item(ITEM_t *item) { destroy_item(item); }
@@ -31,6 +32,7 @@ uint8_t *op_jump(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 extern CONFIG_t config;
 extern uint8_t *op_build_list(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 extern uint8_t *op_pushstr(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+extern uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 
 typedef struct {
   const char *name;
@@ -1215,7 +1217,26 @@ void test_runtime_jump_diagnostic_uses_absolute_header_offset(void) {
 
 typedef struct {
   const char *handler;
-  const char *witness;
+  const char *source;
+  const char *item_name;
+  IR_Op op;
+  enum {
+    RUNTIME_WITNESS_INT,
+    RUNTIME_WITNESS_FLOAT,
+    RUNTIME_WITNESS_BOOL,
+    RUNTIME_WITNESS_NIL,
+    RUNTIME_WITNESS_STRING,
+    RUNTIME_WITNESS_ITEMREF,
+    RUNTIME_WITNESS_LIST
+  } result_kind;
+  int64_t expected_int;
+  double expected_float;
+  bool expected_bool;
+  const char *expected_string;
+  const char *expected_itemref;
+  int64_t expected_list[2];
+  size_t expected_list_count;
+  bool executed;
   bool seen;
 } RuntimeOpcodeWitness;
 
@@ -1227,47 +1248,206 @@ typedef struct {
   bool duplicate;
 } RuntimeOpcodeWitnessContext;
 
-/* This table names the existing source/runtime witnesses; the executable
- * opcode set itself is always enumerated from opcode_schema.def through the
- * schema visitor below.  A newly executable handler therefore fails this
- * focused test until a real execution witness is recorded here. */
+/* Every row below is an executable source or direct-IR witness.  The test
+ * verifies the emitted bytecode, executes it through interpret(), and checks
+ * its result.  The decoder callback also proves that the expected schema
+ * opcode is present as an instruction, rather than merely occurring in an
+ * operand or header. */
+#define RUNTIME_WITNESS_INT_ROW(HANDLER, SOURCE, OP, VALUE) \
+    {.handler = (HANDLER), .source = (SOURCE), .item_name = NULL, .op = (OP), \
+     .result_kind = RUNTIME_WITNESS_INT, .expected_int = (VALUE), \
+     .executed = false, .seen = false}
+#define RUNTIME_WITNESS_FLOAT_ROW(HANDLER, SOURCE, OP, VALUE) \
+    {.handler = (HANDLER), .source = (SOURCE), .item_name = NULL, .op = (OP), \
+     .result_kind = RUNTIME_WITNESS_FLOAT, .expected_float = (VALUE), \
+     .executed = false, .seen = false}
+#define RUNTIME_WITNESS_BOOL_ROW(HANDLER, SOURCE, OP, VALUE) \
+    {.handler = (HANDLER), .source = (SOURCE), .item_name = NULL, .op = (OP), \
+     .result_kind = RUNTIME_WITNESS_BOOL, .expected_bool = (VALUE), \
+     .executed = false, .seen = false}
+#define RUNTIME_WITNESS_NIL_ROW(HANDLER, SOURCE, OP) \
+    {.handler = (HANDLER), .source = (SOURCE), .item_name = NULL, .op = (OP), \
+     .result_kind = RUNTIME_WITNESS_NIL, .executed = false, .seen = false}
+#define RUNTIME_WITNESS_STRING_ROW(HANDLER, SOURCE, OP, VALUE) \
+    {.handler = (HANDLER), .source = (SOURCE), .item_name = NULL, .op = (OP), \
+     .result_kind = RUNTIME_WITNESS_STRING, .expected_string = (VALUE), \
+     .executed = false, .seen = false}
+#define RUNTIME_WITNESS_ITEMREF_ROW(HANDLER, SOURCE, OP, VALUE) \
+    {.handler = (HANDLER), .source = (SOURCE), .item_name = NULL, .op = (OP), \
+     .result_kind = RUNTIME_WITNESS_ITEMREF, .expected_itemref = (VALUE), \
+     .executed = false, .seen = false}
+#define RUNTIME_WITNESS_LIST_ROW(HANDLER, SOURCE, OP, FIRST, SECOND) \
+    {.handler = (HANDLER), .source = (SOURCE), .item_name = NULL, .op = (OP), \
+     .result_kind = RUNTIME_WITNESS_LIST, .expected_list = {(FIRST), (SECOND)}, \
+     .expected_list_count = 2u, .executed = false, .seen = false}
 static RuntimeOpcodeWitness runtime_opcode_witnesses[] = {
-    {"op_pushint", "result.explicit_return", false},
-    {"op_pushfloat", "result.nil_semantics", false},
-    {"op_pushbool", "result.nil_semantics", false},
-    {"op_pushstr", "result.owned_string_return", false},
-    {"op_pushnil", "result.explicit_nil_return", false},
-    {"op_add", "result.binary_operands_left_to_right", false},
-    {"op_subtract", "result.modulo_precedence", false},
-    {"op_multiply", "result.modulo_precedence", false},
-    {"op_divide", "result.nil_semantics", false},
-    {"op_modulo", "result.modulo_precedence", false},
-    {"op_negate", "result.nil_semantics", false},
-    {"op_equal", "result.nil_semantics", false},
-    {"op_notequal", "result.nil_semantics", false},
-    {"op_lessthan", "result.foreach_nested_loops", false},
-    {"op_greaterthan", "result.nil_semantics", false},
-    {"op_lessthanorequal", "result.nil_semantics", false},
-    {"op_greaterthanorequal", "result.nil_semantics", false},
-    {"op_logicalnot", "result.nil_semantics", false},
-    {"op_logicaland", "result.and_skips_falsy_rhs", false},
-    {"op_logicalor", "result.or_skips_truthy_rhs", false},
-    {"op_discard", "result.final_expression_is_discarded", false},
-    {"op_getlocal", "result.nil_local_and_item", false},
-    {"op_savelocal", "result.middle_expression_discard", false},
-    {"op_inclocal", "result.while_return", false},
-    {"op_declocal", "result.break_continue_while", false},
-    {"op_jump", "result.while_return", false},
-    {"op_jumpfalse", "result.if_return", false},
-    {"op_assembleitem", "result.value_item_unchanged", false},
-    {"op_assembleitem_rel", "result.relative_itemref", false},
-    {"op_fetchitem", "result.return_libcall", false},
-    {"op_assignitem", "result.assignment_has_no_result", false},
-    {"op_libcall", "result.return_libcall", false},
-    {"op_assigncodeitem", "result.embedded_code_return", false},
-    {"op_build_list", "result.empty_list", false},
-    {"op_make_itemref", "result.itemref", false},
+    RUNTIME_WITNESS_INT_ROW("op_pushint", "return 7;", IR_OP_PUSH_INT, 7),
+    RUNTIME_WITNESS_FLOAT_ROW("op_pushfloat", "return 1.5;", IR_OP_PUSH_FLOAT, 1.5),
+    RUNTIME_WITNESS_BOOL_ROW("op_pushbool", "return true;", IR_OP_PUSH_BOOL, true),
+    RUNTIME_WITNESS_STRING_ROW("op_pushstr", "return \"opcode witness\";", IR_OP_PUSH_STRING, "opcode witness"),
+    RUNTIME_WITNESS_NIL_ROW("op_pushnil", "return nil;", IR_OP_PUSH_NIL),
+    RUNTIME_WITNESS_INT_ROW("op_add", "return 2 + 3;", IR_OP_ADD, 5),
+    RUNTIME_WITNESS_INT_ROW("op_subtract", "return 8 - 3;", IR_OP_SUB, 5),
+    RUNTIME_WITNESS_INT_ROW("op_multiply", "return 2 * 3;", IR_OP_MUL, 6),
+    RUNTIME_WITNESS_INT_ROW("op_divide", "return 8 / 2;", IR_OP_DIV, 4),
+    RUNTIME_WITNESS_INT_ROW("op_modulo", "return 8 % 3;", IR_OP_MOD, 2),
+    RUNTIME_WITNESS_INT_ROW("op_negate", NULL, IR_OP_NEG, -3),
+    RUNTIME_WITNESS_BOOL_ROW("op_equal", "return 2 == 2;", IR_OP_EQ, true),
+    RUNTIME_WITNESS_BOOL_ROW("op_notequal", "return 2 != 3;", IR_OP_NEQ, true),
+    RUNTIME_WITNESS_BOOL_ROW("op_lessthan", "return 2 < 3;", IR_OP_LT, true),
+    RUNTIME_WITNESS_BOOL_ROW("op_greaterthan", "return 3 > 2;", IR_OP_GT, true),
+    RUNTIME_WITNESS_BOOL_ROW("op_lessthanorequal", "return 2 <= 2;", IR_OP_LE, true),
+    RUNTIME_WITNESS_BOOL_ROW("op_greaterthanorequal", "return 2 >= 2;", IR_OP_GE, true),
+    RUNTIME_WITNESS_BOOL_ROW("op_logicalnot", "return !false;", IR_OP_NOT, true),
+    RUNTIME_WITNESS_BOOL_ROW("op_logicaland", NULL, IR_OP_AND, true),
+    RUNTIME_WITNESS_BOOL_ROW("op_logicalor", NULL, IR_OP_OR, true),
+    RUNTIME_WITNESS_INT_ROW("op_discard", "1; return 2;", IR_OP_DISCARD, 2),
+    RUNTIME_WITNESS_INT_ROW("op_getlocal", "@x = 7; return @x;", IR_OP_LOAD_LOCAL, 7),
+    RUNTIME_WITNESS_INT_ROW("op_savelocal", "@x = 7; return @x;", IR_OP_STORE_LOCAL, 7),
+    RUNTIME_WITNESS_INT_ROW("op_inclocal", "@x = 0; @x++; return @x;", IR_OP_INC_LOCAL, 1),
+    RUNTIME_WITNESS_INT_ROW("op_declocal", "@x = 2; @x--; return @x;", IR_OP_DEC_LOCAL, 1),
+    RUNTIME_WITNESS_INT_ROW("op_jump", "@x = 0; if true then @x = 1; else @x = 2; endif; return @x;", IR_OP_JUMP, 1),
+    RUNTIME_WITNESS_INT_ROW("op_jumpfalse", "@x = 0; if false then @x = 1; else @x = 2; endif; return @x;", IR_OP_JUMP_IF_FALSE, 2),
+    RUNTIME_WITNESS_INT_ROW("op_assembleitem", "result.witness_value = 17; return result.witness_value;", IR_OP_ITEM_BEGIN, 17),
+    {.handler = "op_assembleitem_rel", .source = "return &.sibling;",
+     .item_name = "result.relative_witness", .op = IR_OP_ITEM_BEGIN_REL,
+     .result_kind = RUNTIME_WITNESS_ITEMREF,
+     .expected_itemref = "result.relative_witness.sibling",
+     .executed = false, .seen = false},
+    RUNTIME_WITNESS_INT_ROW("op_fetchitem", "return result.[result.witness_name];", IR_OP_ITEM_DEREF, 17),
+    RUNTIME_WITNESS_INT_ROW("op_assignitem", "result.witness_value = 19; return result.witness_value;", IR_OP_ITEM_SAVE, 19),
+    RUNTIME_WITNESS_BOOL_ROW("op_libcall", "return sys.exists{\"result.missing\"};", IR_OP_LIBCALL, false),
+    RUNTIME_WITNESS_INT_ROW("op_assigncodeitem", "result.callee = code ( return 11; ); return result.callee;", IR_OP_ITEM_SAVE_CODE, 11),
+    RUNTIME_WITNESS_LIST_ROW("op_build_list", "return #[1, 2];", IR_OP_BUILD_LIST, 1, 2),
+    RUNTIME_WITNESS_ITEMREF_ROW("op_make_itemref", "return &fred;", IR_OP_MAKE_ITEMREF, "fred"),
 };
+#undef RUNTIME_WITNESS_INT_ROW
+#undef RUNTIME_WITNESS_FLOAT_ROW
+#undef RUNTIME_WITNESS_BOOL_ROW
+#undef RUNTIME_WITNESS_NIL_ROW
+#undef RUNTIME_WITNESS_STRING_ROW
+#undef RUNTIME_WITNESS_ITEMREF_ROW
+#undef RUNTIME_WITNESS_LIST_ROW
+
+typedef struct {
+  IR_Op op;
+  bool found;
+} RuntimeOpcodeDecodeContext;
+
+static bool find_runtime_opcode_instruction(const BC_Instruction *instruction,
+                                            void *raw_context) {
+  RuntimeOpcodeDecodeContext *context = raw_context;
+  if (instruction->schema && instruction->schema->op == context->op) {
+    context->found = true;
+  }
+  return true;
+}
+
+static ITEM_t *build_direct_runtime_opcode_witness(
+    const RuntimeOpcodeWitness *witness) {
+  ASSERT_TRUE(witness->op == IR_OP_NEG || witness->op == IR_OP_AND ||
+              witness->op == IR_OP_OR);
+  IR_Unit *unit = t_new_unit();
+  ASSERT_NOT_NULL(unit);
+  if (witness->op == IR_OP_NEG) {
+    t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 3});
+  } else {
+    t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_BOOL,
+                           .a = witness->op == IR_OP_OR ? 0 : 1});
+    t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_BOOL, .a = 1});
+  }
+  t_emit(unit, (IR_Inst){.op = witness->op});
+  t_emit(unit, (IR_Inst){.op = IR_OP_RETURN});
+  t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
+
+  OUTPUT_t output = {0};
+  output.maxsize = 64u;
+  output.bytecode = malloc(output.maxsize);
+  output.nextbyte = output.bytecode;
+  ASSERT_NOT_NULL(output.bytecode);
+  char *errdetail = NULL;
+  ASSERT_EQ_INT(ERR_NOERROR,
+                t_emit_bytecode(unit, 0, 0, &output, &errdetail));
+  ASSERT_TRUE(errdetail == NULL);
+  size_t output_len = (size_t)(output.nextbyte - output.bytecode);
+  ASSERT_TRUE(output_len <= UINT32_MAX);
+  ITEM_t *item = test_item_set_code(itemstore_root(config.itemstore_ctx),
+                                    witness->handler, (uint32_t)output_len,
+                                    output.bytecode);
+  ASSERT_NOT_NULL(item);
+  output.bytecode = NULL;
+  free(errdetail);
+  ir_destroy_unit(unit);
+  free(output.bytecode);
+  return item;
+}
+
+static void run_runtime_opcode_witness(RuntimeOpcodeWitness *witness) {
+  ITEM_t *item = witness->source
+      ? compile_result_semantics_item_named(witness->handler, witness->source,
+                                             witness->item_name)
+      : build_direct_runtime_opcode_witness(witness);
+  RuntimeOpcodeDecodeContext decode = {
+      .op = witness->op == IR_OP_ITEM_DEREF ? IR_OP_CALL : witness->op,
+      .found = false,
+  };
+  BC_VerifyResult verify = bc_decode_bytecode_events(
+      item_bytecode(item), item_bytecode_length(item), witness->handler, NULL,
+      NULL, find_runtime_opcode_instruction, &decode);
+  ASSERT_EQ_INT(BC_VERIFY_OK, verify.status);
+  ASSERT_TRUE(decode.found);
+
+  RuntimeContext context;
+  runtime_context_init(&context, config.vm);
+  ASSERT_TRUE(runtime_init(&context, config.vm));
+  context.itemstore = config.itemstore_ctx;
+  context.itemstore_filename = config.itemstore;
+  context.itemstore_durability = config.itemstore_durability;
+  context.strict_runtime_contracts = config.strict_runtime_contracts;
+  if (witness->op == IR_OP_ITEM_DEREF) {
+    ASSERT_TRUE(context.opcode[bc_opcode_byte(IR_OP_ITEM_DEREF)] ==
+                op_fetchitem);
+  }
+  VALUE_t result = interpret(&context, item);
+  switch (witness->result_kind) {
+    case RUNTIME_WITNESS_INT:
+      ASSERT_EQ_INT(VALUE_int, result.type);
+      ASSERT_EQ_INT(witness->expected_int, result.i);
+      break;
+    case RUNTIME_WITNESS_FLOAT:
+      ASSERT_EQ_INT(VALUE_float, result.type);
+      ASSERT_TRUE(result.f == witness->expected_float);
+      break;
+    case RUNTIME_WITNESS_BOOL:
+      ASSERT_EQ_INT(VALUE_bool, result.type);
+      ASSERT_EQ_INT(witness->expected_bool ? 1 : 0, result.i ? 1 : 0);
+      break;
+    case RUNTIME_WITNESS_NIL:
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      break;
+    case RUNTIME_WITNESS_STRING:
+      ASSERT_EQ_INT(VALUE_str, result.type);
+      ASSERT_TRUE(strcmp(result.s, witness->expected_string) == 0);
+      break;
+    case RUNTIME_WITNESS_ITEMREF:
+      ASSERT_EQ_INT(VALUE_itemref, result.type);
+      ASSERT_TRUE(strcmp(sin_itemref_path(result.itemref),
+                         witness->expected_itemref) == 0);
+      break;
+    case RUNTIME_WITNESS_LIST:
+      ASSERT_EQ_INT(VALUE_list, result.type);
+      ASSERT_EQ_INT((int)witness->expected_list_count,
+                    (int)sin_list_count(result.list));
+      for (size_t i = 0; i < witness->expected_list_count; i++) {
+        ASSERT_EQ_INT(VALUE_int, sin_list_get(result.list, i)->type);
+        ASSERT_EQ_INT(witness->expected_list[i], sin_list_get(result.list, i)->i);
+      }
+      break;
+  }
+  value_free(&result);
+  runtime_destroy(&context);
+  witness->executed = true;
+}
 
 static bool record_runtime_opcode_witness(uint8_t opcode_byte, IR_Op op,
                                           const IR_OpSchema *schema,
@@ -1284,7 +1464,7 @@ static bool record_runtime_opcode_witness(uint8_t opcode_byte, IR_Op op,
       }
       context->witnesses[i].seen = true;
       context->visited++;
-      return context->witnesses[i].witness[0] != '\0';
+      return context->witnesses[i].executed;
     }
   }
   context->unknown = true;
@@ -1298,11 +1478,24 @@ void test_runtime_opcode_schema_witnesses(void) {
   test_interpret_semantics_golden();
   test_interpret_result_semantics();
 
+  setup_result_semantics_runtime();
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx),
+                                      "result.witness_value",
+                                      (VALUE_t){VALUE_int, {.i = 17}}));
+  ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx),
+                                      "result.witness_name",
+                                      (VALUE_t){VALUE_str, {.s = strdup("witness_value")}}));
+
   for (size_t i = 0; i < sizeof(runtime_opcode_witnesses) /
                           sizeof(runtime_opcode_witnesses[0]); i++) {
     runtime_opcode_witnesses[i].seen = false;
+    runtime_opcode_witnesses[i].executed = false;
     ASSERT_TRUE(runtime_opcode_witnesses[i].handler != NULL);
-    ASSERT_TRUE(runtime_opcode_witnesses[i].witness != NULL);
+    ASSERT_TRUE(runtime_opcode_witnesses[i].source != NULL ||
+                runtime_opcode_witnesses[i].op == IR_OP_NEG ||
+                runtime_opcode_witnesses[i].op == IR_OP_AND ||
+                runtime_opcode_witnesses[i].op == IR_OP_OR);
+    run_runtime_opcode_witness(&runtime_opcode_witnesses[i]);
   }
   RuntimeOpcodeWitnessContext context = {
       .witnesses = runtime_opcode_witnesses,
@@ -1321,4 +1514,5 @@ void test_runtime_opcode_schema_witnesses(void) {
                           sizeof(runtime_opcode_witnesses[0]); i++) {
     ASSERT_TRUE(runtime_opcode_witnesses[i].seen);
   }
+  teardown_result_semantics_runtime();
 }
