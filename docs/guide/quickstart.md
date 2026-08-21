@@ -23,9 +23,9 @@ This builds:
 The chat server is a simple example of Sinistra in action, so this walkthrough
 uses the chat source files consistently:
 
-- [docs/guide/examples/chat-load.src] creates the persistent `input` code item that handles
+- `docs/guide/examples/chat-load.src` creates the persistent `input` code item that handles
   connections, disconnections, and incoming text.
-- [docs/guide/examples/chat-boot.src] is the startup code that runs each time the server is
+- `docs/guide/examples/chat-boot.src` is the startup code that runs each time the server is
   launched.
 
 From the repository root, compile each source file to bytecode object code:

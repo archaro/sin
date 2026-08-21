@@ -5,7 +5,7 @@ A running Sinistra instance allows for the possibility that items may be modifie
 The exception to this is that (for reasons which should be clear) an item which is currently being executed cannot be replaced in-flight.  An example:
 
 ```
-@source = "hello = code ( sys.log{\"Hello\\n"}; );";
+@source = "hello = code ( sys.log{\"Hello!\\n\"}; );";
 @result = sys.compile{@source};
 hello;
 ```

@@ -16,11 +16,13 @@ Sinistra is to be found in [Your First World](first-world.md).
 ## Items ##
 
 - [Items](items-and-the-tree.md): The core Sinistra concept.
+- [Code Items](code-items.md): Executable items and how they behave.
 - [Live Update](live-update.md): How Sinistra instances change at runtime.
 
 ## Expressions and Values ##
 
 - [Expressions and Values](expressions-and-values.md): How data is manipulated to give meaning.
+- [Lists](lists.md): Sinistra's aggregate value type.
 
 ## Control structures ##
 

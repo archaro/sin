@@ -9,7 +9,6 @@
 - I use LLMs (mostly Codex) as a programming partner.  I generally work by providing an extremely detailed technical overview of the current task, and then work iteratively with the LLM until the code does what I want it to do.  I have found this approach to be broadly satisfactory, although it isn't everyone's drinking receptacle of a hot beverage.
 - The compiler isn't particularly helpful if it encounters something it doesn't like, but it is improving.
 - Documentation is maintained under [`docs/`](docs/README.md). The implementation-derived references are current for the pre-release runtime;
-  [`docs/documentation-roadmap.md`](docs/documentation-roadmap.md) lists the remaining reader-guide and language-reference work.
 - The language freeze should happen with pre-release 0.8.0.
 
 ## Compiling and Running ##
