@@ -39,7 +39,7 @@ the OS temporary directory when those variables are not set.
 
 The checked-in catalogs under `tests/inventory/` are the completeness
 inventory for the language, compiler/bytecode pipeline, runtime APIs,
-libcalls, executable interfaces, and legacy test contracts.  Their canonical
+libcalls, executable interfaces, and executable test contracts. Their canonical
 identifiers are reconciled against `parser.y`, `absyn.h`, `bytecode_abi.h`,
 `opcode_schema.def`, `libcall_list.h`, and the built shared archive.  Run
 `make test` (which includes the audit) to detect missing, stale, duplicate, or
@@ -94,9 +94,9 @@ checks, but is not included in the ordinary all-pass aggregate.
 
 The adapters under `tests/rewrite/` retain white-box native test bodies while
 each adapter owns an explicit descriptor array and is linked as a separate
-framework binary. Their historical parity and inventory relationships are
-recorded in the baseline ledger and inventory; those records are compatibility
-evidence, not a second runtime framework.
+framework binary. Their descriptors and the inventory catalogs are the single
+source of executable test and contract relationships; they do not provide a
+second runtime framework.
 
 The compiler front-end adapters are kept under `tests/rewrite/` and use the
 same descriptor pattern. They cover the compiler-owned AST,
@@ -105,14 +105,14 @@ descriptor-owning executable per native source file; the six Group 1 overlap
 descriptors remain in their original adapters. Their binaries are aggregated
 by `make test`.
 
-The bytecode/disassembly migration adapters are also kept under
+The bytecode/disassembly adapters are also kept under
 `tests/rewrite/`, in `group3_adapter_*.c`. They cover each bytecode-owned
 native test translation unit with a separate descriptor-owning executable for
 ABI/schema, wire encoding, conversion, emission, verification, and `sdiss`.
 The Group 3 binaries are included in `make test` and use only the active
 variant's `obj/` output directory.
 
-The runtime migration adapters are kept under `tests/rewrite/` in
+The runtime adapters are kept under `tests/rewrite/` in
 `group4_adapter_*.c`. They cover stack/frame transitions, immutable lists,
 interpreter execution, stress cleanup, and the opt-in runtime benchmark. The
 existing `group1/adapter_value_behavior.c` owns all value-behavior descriptors
@@ -122,7 +122,7 @@ aggregated by `make test`; runtime tests preserve fresh-process
 isolation and mark global-hook, process, stress, and benchmark cases
 exclusive.
 
-The itemstore/persistence migration adapters are kept under
+The itemstore/persistence adapters are kept under
 `tests/rewrite/` as `group5_adapter_item_cache.c`,
 `group5_adapter_itemstore_io.c`, and
 `group5_adapter_sin_itemstore_policy.c`. They own one active-variant binary
@@ -134,7 +134,7 @@ paths and process/global hooks are tagged `exclusive`; the cache benchmark is
 tagged `benchmark,exclusive`. All four binaries are aggregated by
 `make test`.
 
-The libcall/task migration adapters are kept under `tests/rewrite/` as
+The libcall/task adapters are kept under `tests/rewrite/` as
 `group6_adapter_*.c`; the Group 1 registry and `sys` adapters are extended so
 each native translation unit still has exactly one descriptor owner. Their
 active-variant binaries cover the complete registry plus `task`, `net`, `str`,
@@ -144,9 +144,9 @@ intentional `CONFIG_t config` definition. Libcall, task, network, and registry
 state is process-local and all such descriptors are tagged `exclusive`.
 The conformance manifest explicitly excludes real-language `net.*` cases as
 transport-dependent; native stubs are not treated as localhost chat
-integration, which belongs to the network migration group.
+integration, which belongs to the network adapter group.
 
-The network/Telnet/chat migration adapters are
+The network/Telnet/chat adapters are
 `tests/rewrite/group7_adapter_network.c` and
 `tests/rewrite/group7_adapter_chat_smoke.c`. The network adapter directly
 includes `tests/network/test_network.c` as a white-box source, preserving its
@@ -166,7 +166,7 @@ ordinary adapter teardown signals and reaps the server PID directly. Network
 cases explicitly drain write and close callbacks and release
 Telnet/input/output state before destroying their fixture runtime.
 
-The executable CLI/end-to-end migration adapter is
+The executable CLI/end-to-end adapter is
 `tests/rewrite/group8_adapter_cli_contract_matrix.c`, built as
 `test_cli_contract_matrix`. It owns one exclusive descriptor for each of
 `scomp`, `sdiss`, `sin`, and `sconv`; each descriptor invokes the real sibling
@@ -214,8 +214,8 @@ For `src/net/network.c`, GCC collection reads both the production network
 object and the active-variant white-box adapter object
 (`tests/objects/tests/rewrite/group7_adapter_network.o`), then unions their
 line, branch, and function observations. A missing adapter coverage object is
-an explicit gate error; this keeps the network floor tied to the replacement
-test producer rather than the removed standalone binary.
+an explicit gate error; this keeps the network floor tied to the network
+adapter rather than the removed standalone binary.
 
 The floor file is never rewritten by a test command. Any intentional change
 must be a reviewed manual edit with a nonblank rationale. `libcall_table.c`

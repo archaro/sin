@@ -369,9 +369,9 @@ static bool file_exists(const char *path) {
 }
 
 static bool listed_reference(const Manifest *manifest, const char *relative) {
-  /* This checked-in golden predates the declarative runtime schema and remains
-   * owned by the legacy interpreter suite.  Keep its exemption exact so new
-   * conformance drift still fails closed. */
+  /* This checked-in golden is maintained by the interpreter conformance
+   * fixtures. Keep its exemption exact so new conformance drift still fails
+   * closed. */
   if (strcmp(relative, "tests/fixtures/conformance/positive-core.expected.txt") == 0)
     return true;
   for (size_t i = 0; i < manifest->case_count; i++) {

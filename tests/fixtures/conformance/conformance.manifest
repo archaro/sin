@@ -32,7 +32,7 @@ exclude|libcall.task.newgametask|schedules an external timer task; covered by na
 exclude|libcall.task.killtask|mutates task scheduling state; covered by native runtime tests
 exclude|libcall.sys.now|wall-clock output is nondeterministic; covered by native runtime tests
 exclude|libcall.sys.monotime|monotonic-clock output is nondeterministic; covered by native runtime tests
-exclude|libcall.sys.compile|nested-compile source currently fails mandatory strict verifier stack-flow validation; covered by legacy.unified.runtime.test_sys_compile_libcall_runtime and interpreter source-integration tests
+exclude|libcall.sys.compile|nested-compile source currently fails mandatory strict verifier stack-flow validation; covered by rewrite.runtime.test_sys_compile_libcall_runtime and interpreter source-integration tests
 coverage|libcall.sys.save|persistence-list-itemref|tests/fixtures/interpret/list-itemref-persist.src|native|-|yes
 coverage|libcall.sys.call|persistence-list-itemref|tests/fixtures/interpret/list-itemref-persist.src|native|-|yes
 coverage|language.token.tinteger|positive-core|tests/fixtures/conformance/positive-core.src|negative-language-bundle|tests/fixtures/conformance/negative-language-bundle.src|yes

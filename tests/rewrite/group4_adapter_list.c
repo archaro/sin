@@ -11,21 +11,21 @@ void test_list_limits_invalid_inputs_and_failures(void);
 
 static const TF_TestDescriptor tests[] = {
     {"rewrite.core.test_list_basic_ownership_and_access", test_list_basic_ownership_and_access, "", 30000,
-     "api.runtime.list,baseline.legacy.unified.core.test_list_basic_ownership_and_access"},
+     "api.runtime.list"},
     {"rewrite.core.test_list_rendering_contract", test_list_rendering_contract, "", 30000,
-     "api.runtime.list,baseline.legacy.unified.core.test_list_rendering_contract"},
+     "api.runtime.list"},
     {"rewrite.core.test_list_leaf_iterator_boundaries_and_observability", test_list_leaf_iterator_boundaries_and_observability, "", 30000,
-     "api.runtime.list,baseline.legacy.unified.core.test_list_leaf_iterator_boundaries_and_observability"},
+     "api.runtime.list"},
     {"rewrite.core.test_list_equality_iterator_fast_paths_and_early_exit", test_list_equality_iterator_fast_paths_and_early_exit, "", 30000,
-     "api.runtime.list,baseline.legacy.unified.core.test_list_equality_iterator_fast_paths_and_early_exit"},
+     "api.runtime.list"},
     {"rewrite.core.test_list_concat_shares_rhs_leaves", test_list_concat_shares_rhs_leaves, "", 30000,
-     "api.runtime.list,baseline.legacy.unified.core.test_list_concat_shares_rhs_leaves"},
+     "api.runtime.list"},
     {"rewrite.core.test_list_slice_shares_aligned_leaves_and_boundaries", test_list_slice_shares_aligned_leaves_and_boundaries, "", 30000,
-     "api.runtime.list,baseline.legacy.unified.core.test_list_slice_shares_aligned_leaves_and_boundaries"},
+     "api.runtime.list"},
     {"rewrite.core.test_list_boundaries_persistence_and_equality", test_list_boundaries_persistence_and_equality, "exclusive", 30000,
-     "api.runtime.list,baseline.legacy.unified.core.test_list_boundaries_persistence_and_equality"},
+     "api.runtime.list"},
     {"rewrite.core.test_list_limits_invalid_inputs_and_failures", test_list_limits_invalid_inputs_and_failures, "exclusive", 30000,
-     "api.common.memory,api.runtime.list,baseline.legacy.unified.core.test_list_limits_invalid_inputs_and_failures"},
+     "api.common.memory,api.runtime.list"},
 };
 
 int main(int argc, char **argv) {

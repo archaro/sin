@@ -52,8 +52,8 @@ contracts as applicable.
 The normal gate does not rewrite coverage data. A production-source behavior
 change should add a witness first. Run `make test-full` when coverage-floor
 implications are part of the change; update the applicable reviewed floor only
-after manual review with a rationale. The checked-in baseline snapshots and
-parity ledger are active audit inputs, not disposable migration files.
+after manual review with a rationale. The checked-in coverage snapshots and
+floors are active audit inputs, not disposable test-run output.
 
 ### Network and exclusive tests
 

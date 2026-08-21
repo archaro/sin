@@ -1,27 +1,15 @@
 #!/usr/bin/env python3
-"""Validate the checked-in legacy test and coverage baseline."""
+"""Validate the checked-in coverage baseline."""
 
 import csv
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-import re
 import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
-LEDGER = ROOT / "tests/baseline/legacy_test_ledger.csv"
 COVERAGE = ROOT / "tests/baseline/coverage_snapshot.csv"
 
-LEDGER_FIELDS = (
-    "legacy_id",
-    "category",
-    "suite",
-    "owner",
-    "source_location",
-    "behavioral_purpose",
-    "planned_replacement_id",
-    "parity_notes",
-)
 COVERAGE_FIELDS = (
     "module",
     "owner",
@@ -46,12 +34,6 @@ OWNERS = {
     "libcall",
     "net",
     "executable",
-}
-CATEGORY_COUNTS = {
-    "unified_harness": 351,
-    "standalone_network": 19,
-    "chat_smoke": 1,
-    "output_contract": 8,
 }
 REQUIRED_COVERAGE_OWNERS = OWNERS
 INTEGER_FIELDS = (
@@ -88,34 +70,6 @@ def check_row_shape(rows, fields, name):
             fail(f"{name} row {index} has extra or missing cells")
         if any(value is None for value in row.values()):
             fail(f"{name} row {index} has a missing cell")
-
-
-def check_ledger(rows):
-    check_row_shape(rows, LEDGER_FIELDS, "ledger")
-    if len(rows) != sum(CATEGORY_COUNTS.values()):
-        fail(f"ledger has {len(rows)} rows, expected 379")
-    seen = set()
-    categories = {}
-    for index, row in enumerate(rows, start=2):
-        for field in LEDGER_FIELDS:
-            if not row[field].strip():
-                fail(f"ledger row {index} has a blank {field}")
-        legacy_id = row["legacy_id"]
-        if legacy_id in seen:
-            fail(f"duplicate legacy_id {legacy_id}")
-        seen.add(legacy_id)
-        category = row["category"]
-        categories[category] = categories.get(category, 0) + 1
-        if category not in CATEGORY_COUNTS:
-            fail(f"unknown category {category}")
-        if row["owner"] not in OWNERS:
-            fail(f"unknown owner {row['owner']}")
-        if not re.fullmatch(r"[^:]+:[0-9]+", row["source_location"]):
-            fail(f"malformed source location on row {index}")
-        if "one-for-one" not in row["parity_notes"] and "consolidat" not in row["parity_notes"]:
-            fail(f"row {index} does not state parity handling")
-    if categories != CATEGORY_COUNTS:
-        fail(f"category counts {categories} do not match {CATEGORY_COUNTS}")
 
 
 def check_percent(value, covered, total, field, row_number):
@@ -183,11 +137,9 @@ def check_coverage(rows):
 
 
 def main():
-    ledger = read_csv(LEDGER, LEDGER_FIELDS)
     coverage = read_csv(COVERAGE, COVERAGE_FIELDS)
-    check_ledger(ledger)
     check_coverage(coverage)
-    print("baseline audit: 379 ledger rows and coverage snapshot are valid")
+    print("baseline audit: coverage snapshot is valid")
 
 
 if __name__ == "__main__":

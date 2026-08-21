@@ -1,30 +1,27 @@
-# Test baseline and coverage floors
+# Coverage baseline and floors
 
-This directory is the authoritative, checked-in baseline for the test-harness
-rewrite. The C17 framework is authoritative after cutover; ledger rows remain
-as the recorded parity and coverage comparison and may not be silently
-removed or consolidated.
+This directory is the authoritative, checked-in baseline for production
+coverage. The C17 framework and current adapter/catalog descriptors own test
+execution and contract relationships; this directory contains coverage data
+and its reviewed floors.
 
 Files:
 
-- [`legacy_test_ledger.csv`](legacy_test_ledger.csv) — all 379 legacy checks:
-  351 unified-harness registrations, 19 standalone network registrations, one
-  chat-smoke check, and eight logical output-contract checks.
 - [`coverage_snapshot.csv`](coverage_snapshot.csv) — GCC/gcov counts and
   percentages for every authored production `src/**/*.c` module.
 - [`coverage_floors.csv`](coverage_floors.csv) — the active, manually reviewed
   percentage floors enforced by `make test-full`. This is intentionally
-  separate from the historical snapshot and is never rewritten by a test
+  separate from the coverage snapshot and is never rewritten by a test
   command.
 - [`coverage_floors_clang.csv`](coverage_floors_clang.csv) — the separately
   reviewed Clang 18 floors. GCC/gcov and LLVM source-coordinate metrics are
   not silently compared as if they were identical; each compiler has an
   explicit complete floor set. Each row carries a toolchain key (`gcc-13` or
   `clang-18`), so a floor cannot be accidentally applied to another major.
-- [`audit_baseline.py`](audit_baseline.py) — deterministic validation of row
-  counts, required fields, owners/categories, source-module coverage rows, and
-  count/percentage consistency. It reads only checked-in files and source
-  paths; it does not require build artifacts.
+- [`audit_baseline.py`](audit_baseline.py) — deterministic validation of
+  coverage fields, owners, source-module coverage rows, and count/percentage
+  consistency. It reads only checked-in files and source paths; it does not
+  require build artifacts.
 
 ## Recorded provenance
 
@@ -33,7 +30,7 @@ Files:
 - Compiler: `gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0`
 - Coverage tool: `gcov (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0`
 
-The exact clean and instrumented full-gate command was:
+The exact clean and instrumented coverage-gate command was:
 
 ```sh
 make clean && make test \
@@ -41,8 +38,6 @@ make clean && make test \
   LDFLAGS='-fprofile-arcs -ftest-coverage'
 ```
 
-It completed with exit 0 and
-`[test] totals: ran=379 passed=379 failed=0 skipped=0 status=SUCCESS [PASS]`.
 The coverage collection command, run after that gate, was the following
 per-module invocation (with `<module-dir>` and `<module>.c` expanded for every
 authored C source):
@@ -53,8 +48,8 @@ gcov -b -f --json-format -o obj/debug-gcc/<module-dir> src/<module>.c
 
 ## Active coverage gate
 
-Run the complete instrumented framework workload, contract inventory audit,
-and floor comparison with:
+Run the complete instrumented workload, contract inventory audit, and floor
+comparison with:
 
 ```sh
 make test-full
@@ -62,27 +57,26 @@ make test-full
 
 The target composes a `BUILD=coverage` phase, using GCC's `gcov` instrumentation for GCC
 and the corresponding native profile instrumentation for Clang. Machine and
-human-readable reports are written below
-`obj/coverage-<compiler>/coverage/`; they are generated artifacts and are not
-checked in. The comparison uses rounded two-decimal percentage floors for
-lines, branches, and functions. GCC and Clang use separate complete floor
-files (each row also carries a matching vendor-major toolchain key) because
-their instrumentation coordinate definitions differ. A measured
-zero-total metric is valid only when its reviewed floor is `n/a`.
+human-readable reports are written below `obj/coverage-<compiler>/coverage/`;
+they are generated artifacts and are not checked in. The comparison uses
+rounded two-decimal percentage floors for lines, branches, and functions. GCC
+and Clang use separate complete floor files (each row also carries a matching
+vendor-major toolchain key) because their instrumentation coordinate
+definitions differ. A measured zero-total metric is valid only when its
+reviewed floor is `n/a`.
 
 GCC coverage selects `gcov-<compiler-major>` by default and Clang selects
 version-matched LLVM tools. An explicit `GCOV=...`, `LLVM_COV=...`, or
 `LLVM_PROFDATA=...` override is allowed only when the reporter's reported major
 matches the selected compiler/toolchain major.
 
-The reviewed floor keys are `gcc-13` for the historical GCC snapshot and
-`clang-18` for the initial Clang baseline. A different compiler major fails
-closed with a `no reviewed coverage baseline` error. The Clang floors were
-reviewed from the initial LLVM 18 native run on
-`Ubuntu clang version 18.1.3` using `llvm-cov-18` and `llvm-profdata-18`.
-The collector invokes one combined `llvm-cov export` over the merged profile
-and all gate binaries, then uses each authored file's native
-`summary.lines`, `summary.branches`, and `summary.functions` covered/count
+The reviewed floor keys are `gcc-13` for the GCC snapshot and `clang-18` for
+the initial Clang baseline. A different compiler major fails closed with a
+`no reviewed coverage baseline` error. The Clang floors were reviewed from the
+initial LLVM 18 native run on `Ubuntu clang version 18.1.3` using `llvm-cov-18`
+and `llvm-profdata-18`. The collector invokes one combined `llvm-cov export`
+over the merged profile and all gate binaries, then uses each authored file's
+native `summary.lines`, `summary.branches`, and `summary.functions` covered/count
 pairs. These floors are a separate LLVM-native baseline, not converted GCC
 percentages; LLVM and gcov metrics are intentionally incomparable.
 
@@ -102,9 +96,8 @@ and failure cases:
 make test-full
 ```
 
-The following is historical provenance for the checked-in pre-cutover
-snapshot; it is not an active test or coverage command after framework
-cutover. The standalone network translation unit was collected separately with:
+The checked-in coverage snapshot was collected with a separate standalone
+network translation-unit observation:
 
 ```sh
 gcov -b -f --json-format \
@@ -152,15 +145,7 @@ The resulting aggregate owner totals (covered/total and percentage) are:
 | executable | 653/795 (82.14%) | 317/475 (66.74%) | 38/38 (100.00%) |
 | **all modules** | **10357/12729 (81.37%)** | **6215/9392 (66.17%)** | **867/919 (94.34%)** |
 
-## Parity rule
-
-Every ledger row must remain accounted for. The current plan is one-for-one:
-each row has a deterministic `planned_replacement_id`. A future intentional
-consolidation must change every affected row's parity note from one-for-one,
-name the equivalent replacement ID, and explain why every old behavior and
-assertion remains covered before any old row or test is removed.
-
-Run the audit with:
+Run the coverage-only baseline audit with:
 
 ```sh
 python3 tests/baseline/audit_baseline.py

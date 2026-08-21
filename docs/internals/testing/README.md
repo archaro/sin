@@ -18,8 +18,8 @@ These documents are checked-in inputs or policy owned by the test suite:
 
 - [`tests/TEST_COVERAGE.md`](../../../tests/TEST_COVERAGE.md) — coverage and
   group overview.
-- [`tests/baseline/README.md`](../../../tests/baseline/README.md) — historical
-  parity ledger and reviewed coverage floors.
+- [`tests/baseline/README.md`](../../../tests/baseline/README.md) — reviewed
+  coverage snapshots and floors.
 - [`tests/fixtures/README.md`](../../../tests/fixtures/README.md) — fixture
   classes, naming, and regeneration policy.
 - [`tests/fixtures/conformance/README.md`](../../../tests/fixtures/conformance/README.md)
@@ -27,13 +27,13 @@ These documents are checked-in inputs or policy owned by the test suite:
 - [`tests/inventory/README.md`](../../../tests/inventory/README.md) — inventory
   catalogs and audit rules.
 - [`tests/rewrite/README.md`](../../../tests/rewrite/README.md) — native adapter
-  ownership and migration history.
+  ownership and descriptor layout.
 - [`tests/rewrite/group1/README.md`](../../../tests/rewrite/group1/README.md)
   — Group 1 adapter layout.
 
-The baseline ledger and `legacy.*` catalog identifiers are historical evidence
-used by current audits. They are not APIs for running tests and must not be
-removed merely because the old harness has gone away.
+The checked-in catalogs and current adapter descriptors are the authoritative
+inventory for executable tests and their contract edges. Coverage snapshots
+remain separate baseline data used by the coverage-floor checks.
 
 ## Quick commands
 

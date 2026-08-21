@@ -19,8 +19,8 @@ Completeness is enforced by checked-in catalogs rather than a brittle claim of
 - `tests/fixtures/conformance/conformance.manifest` provides executable
   source-to-bytecode-to-runtime witnesses and explicit exclusions for
   nondeterministic facilities.
-- `tests/baseline/legacy_test_ledger.csv` records the migrated baseline and
-  parity mapping; no entry is silently dropped.
+- `tests/baseline/coverage_snapshot.csv` records the reviewed production
+  coverage snapshot used alongside the active floor files.
 
 The inventory auditor fails closed on missing, duplicate, stale, or unmapped
 rows. The framework self-tests cover descriptor validation, crash and timeout

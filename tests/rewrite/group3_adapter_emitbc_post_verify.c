@@ -4,7 +4,7 @@ void test_emitbc_post_emission_verification(void);
 
 static const TF_TestDescriptor tests[] = {
     {"rewrite.compiler.test_emitbc_post_emission_verification", test_emitbc_post_emission_verification, "exclusive", 30000,
-     "api.compiler.bytecode-emission,baseline.legacy.unified.compiler.test_emitbc_post_emission_verification"},
+     "api.compiler.bytecode-emission"},
 };
 
 int main(int argc, char **argv) {

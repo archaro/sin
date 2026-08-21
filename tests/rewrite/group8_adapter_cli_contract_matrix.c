@@ -243,16 +243,16 @@ static void test_sconv_cli_contract_matrix(void) {
 static const TF_TestDescriptor tests[] = {
     {"rewrite.e2e.scomp_cli_contract_matrix", test_scomp_cli_contract_matrix,
      "exclusive", 30000,
-     "api.entrypoint.scomp,executable.scomp.command-line,executable.scomp.errors,executable.scomp.exit-status,executable.scomp.input-output,executable.scomp.persistence"},
+     "api.entrypoint.scomp,executable.scomp.command-line,executable.scomp.input-output,executable.scomp.exit-status,executable.scomp.persistence,executable.scomp.errors"},
     {"rewrite.e2e.sdiss_cli_contract_matrix", test_sdiss_cli_contract_matrix,
      "exclusive", 30000,
-     "api.entrypoint.sdiss,executable.sdiss.command-line,executable.sdiss.errors,executable.sdiss.exit-status,executable.sdiss.input-output,executable.sdiss.persistence"},
+     "api.entrypoint.sdiss,executable.sdiss.command-line,executable.sdiss.input-output,executable.sdiss.exit-status,executable.sdiss.persistence,executable.sdiss.errors"},
     {"rewrite.e2e.sin_cli_contract_matrix", test_sin_cli_contract_matrix,
      "exclusive", 30000,
-     "api.entrypoint.sin,executable.sin.command-line,executable.sin.errors,executable.sin.exit-status,executable.sin.input-output,executable.sin.persistence"},
+     "api.entrypoint.sin,executable.sin.command-line,executable.sin.input-output,executable.sin.exit-status,executable.sin.persistence,executable.sin.errors"},
     {"rewrite.e2e.sconv_cli_contract_matrix", test_sconv_cli_contract_matrix,
      "exclusive", 30000,
-     "api.entrypoint.sconv,executable.sconv.command-line,executable.sconv.errors,executable.sconv.exit-status,executable.sconv.input-output,executable.sconv.persistence"},
+     "api.entrypoint.sconv,executable.sconv.command-line,executable.sconv.input-output,executable.sconv.exit-status,executable.sconv.persistence,executable.sconv.errors"},
 };
 
 int main(int argc, char **argv) {

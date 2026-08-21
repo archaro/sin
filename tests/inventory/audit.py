@@ -2,8 +2,10 @@
 """Audit Sinistra's checked-in contract inventories.
 
 The source files named in the project brief are the authority for language,
-IR, opcode, and libcall identifiers.  This script deliberately uses only the
-Python standard library so it can run before the replacement test framework.
+IR, opcode, and libcall identifiers.  Current rewrite and conformance
+descriptors are the authority for executable test identifiers.  This script
+deliberately uses only the Python standard library so it can run before the
+test framework.
 """
 
 from __future__ import annotations
@@ -139,7 +141,7 @@ def conformance_descriptor_ids(source: str) -> set[str]:
 
 
 def rewrite_descriptor_ids(root: Path) -> set[str]:
-    """Discover explicit replacement descriptors in checked-in adapters."""
+    """Discover explicit rewrite descriptors in checked-in adapters."""
     directory = root / "tests/rewrite"
     if not directory.is_dir():
         return set()
@@ -444,22 +446,7 @@ def main() -> int:
                 fail(f"duplicate contract IDs across catalogs: {sorted(overlap)[0]}")
             all_contracts.update(row["contract_id"] for row in catalogs[name])
         check_ids(catalogs["tests.csv"], "test_id", "tests")
-        ledger_path = root / "tests/baseline/legacy_test_ledger.csv"
-        ledger = read_csv(ledger_path, ("legacy_id", "category", "suite", "owner", "source_location", "behavioral_purpose", "planned_replacement_id", "parity_notes"))
-        expected_tests = {row["legacy_id"] for row in ledger}
-        migrated_replacements = {
-            row["planned_replacement_id"] for row in ledger
-            if "verified parallel coverage" in row["parity_notes"]
-        }
         tests = {row["test_id"] for row in catalogs["tests.csv"]}
-        catalog_rewrite_ids = {test_id for test_id in tests
-                               if test_id.startswith("rewrite.")}
-        expected_tests.update(catalog_rewrite_ids)
-        missing = expected_tests - tests
-        extra = tests - expected_tests
-        if missing or any(not test_id.startswith("conformance.") for test_id in extra):
-            fail(f"test inventory mismatch (missing={sorted(missing)[:1]}, unknown={sorted(extra)[:1]})")
-        known_tests = expected_tests | extra
         conformance_source = root / "tests/conformance/test_conformance.c"
         try:
             descriptor_ids = conformance_descriptor_ids(
@@ -469,11 +456,17 @@ def main() -> int:
         catalog_descriptor_ids = {test_id for test_id in tests if test_id.startswith("conformance.")}
         if catalog_descriptor_ids != descriptor_ids:
             fail(f"conformance descriptor inventory mismatch (missing={sorted(descriptor_ids - catalog_descriptor_ids)[:1]}, unknown={sorted(catalog_descriptor_ids - descriptor_ids)[:1]})")
-        replacement_descriptors = rewrite_descriptor_ids(root)
-        if replacement_descriptors != catalog_rewrite_ids:
-            fail(f"replacement descriptor inventory mismatch (missing={sorted(catalog_rewrite_ids - replacement_descriptors)[:1]}, unknown={sorted(replacement_descriptors - catalog_rewrite_ids)[:1]})")
-        if not migrated_replacements.issubset(replacement_descriptors):
-            fail(f"migrated replacement descriptor missing (missing={sorted(migrated_replacements - replacement_descriptors)[:1]})")
+        rewrite_descriptors = rewrite_descriptor_ids(root)
+        catalog_rewrite_ids = {test_id for test_id in tests
+                               if test_id.startswith("rewrite.")}
+        if rewrite_descriptors != catalog_rewrite_ids:
+            fail(f"rewrite descriptor inventory mismatch (missing={sorted(catalog_rewrite_ids - rewrite_descriptors)[:1]}, unknown={sorted(rewrite_descriptors - catalog_rewrite_ids)[:1]})")
+        expected_tests = rewrite_descriptors | descriptor_ids
+        missing = expected_tests - tests
+        unknown_tests = tests - expected_tests
+        if missing or unknown_tests:
+            fail(f"test inventory mismatch (missing={sorted(missing)[:1]}, unknown={sorted(unknown_tests)[:1]})")
+        known_tests = expected_tests
         for row in catalogs["contracts.csv"]:
             refs = split_refs(row["test_ids"])
             if not refs:
