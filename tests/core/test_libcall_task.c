@@ -334,20 +334,37 @@ void test_task_callback_frees_aggregate_return_values(void) {
                        "return #[1, &fred];");
   insert_compiled_code(itemstore_root(config.itemstore_ctx), "task.ref_return",
                        "return &fred;");
+  push_stack(config.vm->stack,
+      (VALUE_t){VALUE_str, {.s = strdup(
+          "frame_task.param_default = code {@p} ( observed.task_param = @p; );")}});
+  (void)lc_sys_compile(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  VALUE_t compiled = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, compiled.type);
+  ASSERT_EQ_INT(1, compiled.i);
 
   TASK_t *list_task = make_task("task.list_return", 0);
   TASK_t *ref_task = make_task("task.ref_return", 0);
+  TASK_t *param_task = make_task("frame_task.param_default", 0);
   ASSERT_NOT_NULL(list_task);
   ASSERT_NOT_NULL(ref_task);
+  ASSERT_NOT_NULL(param_task);
   list_task->itemstore = config.itemstore_ctx;
   ref_task->itemstore = config.itemstore_ctx;
+  param_task->itemstore = config.itemstore_ctx;
   uint64_t list_id = list_task->id;
   uint64_t ref_id = ref_task->id;
+  uint64_t param_id = param_task->id;
   ASSERT_TRUE(start_task_timer(list_task, &loop, execute_task_cb, 0));
   ASSERT_TRUE(start_task_timer(ref_task, &loop, execute_task_cb, 0));
+  ASSERT_TRUE(start_task_timer(param_task, &loop, execute_task_cb, 0));
   (void)uv_run(&loop, UV_RUN_DEFAULT);
   ASSERT_TRUE(find_task_by_id(list_id) == NULL);
   ASSERT_TRUE(find_task_by_id(ref_id) == NULL);
+  ASSERT_TRUE(find_task_by_id(param_id) == NULL);
+  ITEM_t *observed_param = find_item(itemstore_root(config.itemstore_ctx),
+                                     "observed.task_param");
+  ASSERT_NOT_NULL(observed_param);
+  ASSERT_EQ_INT(VALUE_nil, item_value(observed_param)->type);
 
   finalise_tasks(&loop);
   ASSERT_EQ_INT(0, uv_loop_close(&loop));

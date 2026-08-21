@@ -402,10 +402,20 @@ void test_sys_compile_libcall_runtime(void) {
       " caller.results.compile_target = sys.calleritem;"
       ");"
       "caller.compile_host = code ("
+      " @sentinel = \"caller local\";"
+      " @numbers = #[4, 5, 6];"
       " caller.results.compile_host_before = sys.calleritem;"
-      " sys.compile{\"caller.results.compile_temp = sys.calleritem;"
+      " sys.compile{\"@nested = \\\"nested local\\\";"
+      " caller.results.compile_nested_local = @nested;"
+      " caller.results.compile_temp = sys.calleritem;"
       " caller.compile_target;\"};"
       " caller.results.compile_host_after = sys.calleritem;"
+      " caller.results.compile_sentinel = @sentinel;"
+      " caller.results.compile_numbers = @numbers;"
+      " @compile_failure = sys.compile{\"sys.exists{42};\"};"
+      " caller.results.compile_failure = @compile_failure;"
+      " caller.results.compile_sentinel_after_failure = @sentinel;"
+      " caller.results.compile_numbers_after_failure = @numbers;"
       ");"
       "caller.compile_outer = code ("
       " caller.compile_host;"
@@ -441,6 +451,7 @@ void test_sys_compile_libcall_runtime(void) {
   caller_ctx->invocation_caller_item = foo;
   VALUE_t caller_result = interpret(caller_ctx, compile_outer);
   ASSERT_EQ_INT(VALUE_nil, caller_result.type);
+  value_free(&caller_result);
   ASSERT_EQ_INT(29, caller_ctx->invocation_callstack_floor);
   ASSERT_TRUE(caller_ctx->invocation_caller_item == foo);
   introspection_value = assert_string_item("caller.results.compile_host_before",
@@ -451,13 +462,79 @@ void test_sys_compile_libcall_runtime(void) {
                                             NULL);
   ASSERT_TRUE(strcmp(item_value(introspection_value)->s, "caller.compile_host") ==
               0);
+  introspection_value = assert_string_item("caller.results.compile_nested_local",
+                                            NULL);
+  ASSERT_TRUE(strcmp(item_value(introspection_value)->s, "nested local") == 0);
   introspection_value = assert_string_item("caller.results.compile_target",
                                             "__sys_compile_tmp__");
   introspection_value = assert_string_item("caller.results.compile_host_after",
                                             NULL);
   ASSERT_TRUE(strcmp(item_value(introspection_value)->s, "caller.compile_outer") ==
               0);
+  introspection_value = assert_string_item("caller.results.compile_sentinel",
+                                            NULL);
+  ASSERT_TRUE(strcmp(item_value(introspection_value)->s, "caller local") == 0);
+  ITEM_t *compile_numbers = find_item(itemstore_root(config.itemstore_ctx),
+                                      "caller.results.compile_numbers");
+  ASSERT_NOT_NULL(compile_numbers);
+  ASSERT_EQ_INT(VALUE_list, item_value(compile_numbers)->type);
+  ASSERT_EQ_INT(3, sin_list_count(item_value(compile_numbers)->list));
+  ASSERT_EQ_INT(4, sin_list_get(item_value(compile_numbers)->list, 0)->i);
+  ASSERT_EQ_INT(5, sin_list_get(item_value(compile_numbers)->list, 1)->i);
+  ASSERT_EQ_INT(6, sin_list_get(item_value(compile_numbers)->list, 2)->i);
+  ITEM_t *compile_failure = find_item(itemstore_root(config.itemstore_ctx),
+                                      "caller.results.compile_failure");
+  ASSERT_NOT_NULL(compile_failure);
+  ASSERT_EQ_INT(VALUE_bool, item_value(compile_failure)->type);
+  ASSERT_EQ_INT(0, item_value(compile_failure)->i);
+  introspection_value = assert_string_item(
+      "caller.results.compile_sentinel_after_failure", NULL);
+  ASSERT_TRUE(strcmp(item_value(introspection_value)->s, "caller local") == 0);
+  compile_numbers = find_item(itemstore_root(config.itemstore_ctx),
+      "caller.results.compile_numbers_after_failure");
+  ASSERT_NOT_NULL(compile_numbers);
+  ASSERT_EQ_INT(VALUE_list, item_value(compile_numbers)->type);
+  ASSERT_EQ_INT(3, sin_list_count(item_value(compile_numbers)->list));
+  ASSERT_EQ_INT(4, sin_list_get(item_value(compile_numbers)->list, 0)->i);
+  ASSERT_EQ_INT(5, sin_list_get(item_value(compile_numbers)->list, 1)->i);
+  ASSERT_EQ_INT(6, sin_list_get(item_value(compile_numbers)->list, 2)->i);
   assert_nil_item("caller.results.compile_outer_after");
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+
+  assert_compile_success_bool(
+      "frame_init.skipped = code ("
+      " if false then @never = 99; endif;"
+      " frame_init.results.skipped = @never;"
+      ");"
+      "frame_init.direct_param = code {@p} ("
+      " frame_init.results.direct_param = @p;"
+      ");");
+  ITEM_t *skipped = find_item(itemstore_root(config.itemstore_ctx),
+                              "frame_init.skipped");
+  ASSERT_NOT_NULL(skipped);
+  for (int iteration = 0; iteration < 3; iteration++) {
+    ASSERT_EQ_INT(-1, config.vm->stack->current);
+    config.vm->stack->stack[0] =
+        (VALUE_t){VALUE_int, {.i = (int64_t)(1000 + iteration)}};
+    VALUE_t frame_result = interpret(test_ctx(), skipped);
+    ASSERT_EQ_INT(VALUE_nil, frame_result.type);
+    value_free(&frame_result);
+    assert_nil_item("frame_init.results.skipped");
+    ASSERT_EQ_INT(-1, config.vm->stack->current);
+    ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  }
+
+  ITEM_t *direct_param = find_item(itemstore_root(config.itemstore_ctx),
+                                   "frame_init.direct_param");
+  ASSERT_NOT_NULL(direct_param);
+  config.vm->stack->stack[0] = (VALUE_t){VALUE_int, {.i = 4242}};
+  VALUE_t direct_result = interpret(test_ctx(), direct_param);
+  ASSERT_EQ_INT(VALUE_nil, direct_result.type);
+  value_free(&direct_result);
+  assert_nil_item("frame_init.results.direct_param");
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
 
   char source_srcroot[4096];
 
