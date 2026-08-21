@@ -204,6 +204,17 @@ void test_stack_reset_to_frees_values_at_boundaries(void) {
 
   reset_stack(stack);
   ASSERT_EQ_INT(-1, stack->current);
+  ASSERT_EQ_INT(0, size_stack(stack));
+
+  /* Values below base belong to an outer frame and must not count as
+   * operands in the current frame. */
+  stack->base = 2;
+  stack->locals = 2;
+  stack->current = 3;
+  ASSERT_EQ_INT(0, size_stack(stack));
+  stack->current = 5;
+  ASSERT_EQ_INT(2, size_stack(stack));
+
   destroy_stack(stack);
 }
 

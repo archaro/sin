@@ -95,8 +95,7 @@ VALUE_t *peek_stack(STACK_t *stack) {
 }
 
 int size_stack(STACK_t *stack) {
-  // How many items are on me?
-  // An empty stack is size 0.  Also don't include any sneaky locals
-  // which are freeloading at the bottom of the stack.
-  return (stack->current + 1 - stack->locals);
+  // How many operand values are on the current frame?
+  // Exclude both values below this frame's base and the frame's locals.
+  return (stack->current - stack->base + 1 - stack->locals);
 }
