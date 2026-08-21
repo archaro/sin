@@ -1,6 +1,6 @@
 # Fixture policy
 
-This directory and related `examples/` artifacts define golden fixtures used by compiler and interpreter tests.
+This directory and related `docs/guide/examples/` artifacts define golden fixtures used by compiler and interpreter tests.
 
 Reference-derived conformance fixtures live under `conformance/`; their
 traceability map is documented in
@@ -40,14 +40,14 @@ runtime contract intentionally changes.
    - Source of truth: `./scomp` output from the paired `.src` source at test time.
    - Ownership: `tests/compiler/test_parser_examples_obj_golden.c` creates both files and removes them after each case; `make clean` also removes them.
    - Manual reproduction examples:
-     - `./scomp examples/chat-boot.src tests/fixtures/chat-boot.reference.obj`
-     - `./scomp examples/echo-boot.src tests/fixtures/echo-boot.generated.obj`
+     - `./scomp docs/guide/examples/chat-boot.src tests/fixtures/chat-boot.reference.obj`
+     - `./scomp docs/guide/examples/echo-boot.src tests/fixtures/echo-boot.generated.obj`
 
 5. **Interpreter output fixtures** (`*.expected.txt`)
    - Purpose: expected stdout/stderr/exit contracts for runtime behavior.
    - Source of truth: `./sin` output for a freshly-compiled object, normalized to test format.
    - Ownership: `tests/interpreter/test_interpret_semantics_golden.c` and `tests/interpreter/test_interpret_stress.c` compile temporary objects, run them, and compare the checked-in contracts.
-   - Update workflow: run `./scomp examples/echo-boot.src tests/fixtures/interpret/echo-boot.generated.obj && ./sin -o tests/fixtures/interpret/echo-boot.generated.obj`, then manually update the fixture's `===stdout===`, `===stderr===`, and `===exit===` sections and run `make test`.
+   - Update workflow: run `./scomp docs/guide/examples/echo-boot.src tests/fixtures/interpret/echo-boot.generated.obj && ./sin -o tests/fixtures/interpret/echo-boot.generated.obj`, then manually update the fixture's `===stdout===`, `===stderr===`, and `===exit===` sections and run `make test`.
    - The sdiss expectation is checked by `tests/compiler/test_sdiss_fixtures.c`; `make test` creates the temporary input from `basic.hex`, runs `./sdiss --no-header -o tests/fixtures/sdiss/basic.bin`, and removes it. Update `basic.expected.txt` deliberately when that output contract changes; `make clean` removes any leftover temporary `.bin` files.
    - `list-itemref-persist.expected.txt` is a two-run contract: compile its source once, create one temporary itemstore and source root, invoke `sin --loadonly -i <same-store> -s <same-srcroot> -o <object>` twice, normalize paths, and update the expected sections manually. The second run must observe persisted aggregates.
 
@@ -71,11 +71,11 @@ When adding a declared fixture to the policy table in `tests/shared/test_fixture
 Example:
 
 ```c
-{"echo_load_expected", "tests/fixtures/interpret/echo-load.expected.txt", "SOT: runtime output contract for echo-load | regen: ./scomp examples/echo-load.src tests/fixtures/interpret/echo-load.generated.obj && ./sin -o tests/fixtures/interpret/echo-load.generated.obj > tests/fixtures/interpret/echo-load.expected.txt"},
+{"echo_load_expected", "tests/fixtures/interpret/echo-load.expected.txt", "SOT: runtime output contract for echo-load | regen: ./scomp docs/guide/examples/echo-load.src tests/fixtures/interpret/echo-load.generated.obj && ./sin -o tests/fixtures/interpret/echo-load.generated.obj > tests/fixtures/interpret/echo-load.expected.txt"},
 ```
 
 The enforcement test (`tests/shared/test_fixture_policy.c`) is compiled into a
 framework adapter under the active `obj/` path and validates declared fixture
 existence, metadata format, duplicate declarations, and pipeline golden paths.
 Run `make test` for the standard fixture checks and `make test-fuzz` to seed
-fuzz inputs from checked-in `.hex` fixtures and `examples/*.src` files.
+fuzz inputs from checked-in `.hex` fixtures and `docs/guide/examples/*.src` files.

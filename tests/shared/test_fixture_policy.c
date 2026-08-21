@@ -61,10 +61,10 @@ static void assert_pipeline_golden_fixtures_present(void) {
 
 void test_fixture_policy_declared_goldens_exist(void) {
   static const FixtureEntry source_fixtures[] = {
-      {"chat_boot_src", "examples/chat-boot.src", "SOT: examples/chat-boot.src | regen: authored source fixture"},
-      {"chat_load_src", "examples/chat-load.src", "SOT: examples/chat-load.src | regen: authored source fixture"},
-      {"echo_boot_src", "examples/echo-boot.src", "SOT: examples/echo-boot.src | regen: authored source fixture"},
-      {"echo_load_src", "examples/echo-load.src", "SOT: examples/echo-load.src | regen: authored source fixture"},
+      {"chat_boot_src", "docs/guide/examples/chat-boot.src", "SOT: docs/guide/examples/chat-boot.src | regen: authored source fixture"},
+      {"chat_load_src", "docs/guide/examples/chat-load.src", "SOT: docs/guide/examples/chat-load.src | regen: authored source fixture"},
+      {"echo_boot_src", "docs/guide/examples/echo-boot.src", "SOT: docs/guide/examples/echo-boot.src | regen: authored source fixture"},
+      {"echo_load_src", "docs/guide/examples/echo-load.src", "SOT: docs/guide/examples/echo-load.src | regen: authored source fixture"},
       {"int_literal_src", "tests/fixtures/int_literal.src", "SOT: tests/fixtures/int_literal.src | regen: authored source fixture"},
       {"break_log_src", "tests/fixtures/interpret/break-log.src", "SOT: tests/fixtures/interpret/break-log.src | regen: authored source fixture"},
       {"continue_log_src", "tests/fixtures/interpret/continue-log.src", "SOT: tests/fixtures/interpret/continue-log.src | regen: authored source fixture"},
@@ -89,10 +89,10 @@ void test_fixture_policy_declared_goldens_exist(void) {
   };
 
   static const FixtureEntry interpret_output_fixtures[] = {
-      {"chat_boot_expected", "tests/fixtures/interpret/chat-boot.expected.txt", "SOT: runtime output contract for chat-boot | regen: ./scomp examples/chat-boot.src tests/fixtures/interpret/chat-boot.generated.obj && ./sin -o tests/fixtures/interpret/chat-boot.generated.obj > tests/fixtures/interpret/chat-boot.expected.txt"},
-      {"chat_load_expected", "tests/fixtures/interpret/chat-load.expected.txt", "SOT: runtime output contract for chat-load | regen: ./scomp examples/chat-load.src tests/fixtures/interpret/chat-load.generated.obj && ./sin -o tests/fixtures/interpret/chat-load.generated.obj > tests/fixtures/interpret/chat-load.expected.txt"},
-      {"echo_boot_expected", "tests/fixtures/interpret/echo-boot.expected.txt", "SOT: runtime output contract for echo-boot | regen: ./scomp examples/echo-boot.src tests/fixtures/interpret/echo-boot.generated.obj && ./sin -o tests/fixtures/interpret/echo-boot.generated.obj > tests/fixtures/interpret/echo-boot.expected.txt"},
-      {"echo_load_expected", "tests/fixtures/interpret/echo-load.expected.txt", "SOT: runtime output contract for echo-load | regen: ./scomp examples/echo-load.src tests/fixtures/interpret/echo-load.generated.obj && ./sin -o tests/fixtures/interpret/echo-load.generated.obj > tests/fixtures/interpret/echo-load.expected.txt"},
+      {"chat_boot_expected", "tests/fixtures/interpret/chat-boot.expected.txt", "SOT: runtime output contract for chat-boot | regen: ./scomp docs/guide/examples/chat-boot.src tests/fixtures/interpret/chat-boot.generated.obj && ./sin -o tests/fixtures/interpret/chat-boot.generated.obj > tests/fixtures/interpret/chat-boot.expected.txt"},
+      {"chat_load_expected", "tests/fixtures/interpret/chat-load.expected.txt", "SOT: runtime output contract for chat-load | regen: ./scomp docs/guide/examples/chat-load.src tests/fixtures/interpret/chat-load.generated.obj && ./sin -o tests/fixtures/interpret/chat-load.generated.obj > tests/fixtures/interpret/chat-load.expected.txt"},
+      {"echo_boot_expected", "tests/fixtures/interpret/echo-boot.expected.txt", "SOT: runtime output contract for echo-boot | regen: ./scomp docs/guide/examples/echo-boot.src tests/fixtures/interpret/echo-boot.generated.obj && ./sin -o tests/fixtures/interpret/echo-boot.generated.obj > tests/fixtures/interpret/echo-boot.expected.txt"},
+      {"echo_load_expected", "tests/fixtures/interpret/echo-load.expected.txt", "SOT: runtime output contract for echo-load | regen: ./scomp docs/guide/examples/echo-load.src tests/fixtures/interpret/echo-load.generated.obj && ./sin -o tests/fixtures/interpret/echo-load.generated.obj > tests/fixtures/interpret/echo-load.expected.txt"},
       {"sdiss_basic_expected", "tests/fixtures/sdiss/basic.expected.txt", "SOT: sdiss stdout for tests/fixtures/sdiss/basic.hex | regen: ./sdiss --no-header -o tests/fixtures/sdiss/basic.bin"},
       {"break_log_expected", "tests/fixtures/interpret/break-log.expected.txt", "SOT: runtime output contract for break-log | regen: ./scomp tests/fixtures/interpret/break-log.src tests/fixtures/interpret/break-log.generated.obj && ./sin -o tests/fixtures/interpret/break-log.generated.obj > tests/fixtures/interpret/break-log.expected.txt"},
       {"continue_log_expected", "tests/fixtures/interpret/continue-log.expected.txt", "SOT: runtime output contract for continue-log | regen: ./scomp tests/fixtures/interpret/continue-log.src tests/fixtures/interpret/continue-log.generated.obj && ./sin -o tests/fixtures/interpret/continue-log.generated.obj > tests/fixtures/interpret/continue-log.expected.txt"},

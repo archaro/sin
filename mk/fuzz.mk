@@ -49,7 +49,7 @@ _fuzz-build: $(VARIANT_BIN_DIR)/scomp $(FUZZ_BINS)
 		for src in $(FUZZ_DIR)/corpus/scomp/*; do test -f "$$src" && cp "$$src" "$(FUZZ_CORPUS_DIR)/scomp/" || true; done; \
 		command -v "$(XXD)" >/dev/null 2>&1; \
 		for hex in $(TEST_DIR)/fixtures/sdiss/*.hex; do test -f "$$hex" || continue; "$(XXD)" -r -p "$$hex" "$(FUZZ_CORPUS_DIR)/sdiss/$$(basename "$$hex" .hex).obj"; done; \
-		for src in examples/*.src; do test -f "$$src" || continue; obj="$(FUZZ_CORPUS_DIR)/sin-object/$$(basename "$$src" .src).obj"; "$(VARIANT_BIN_DIR)/scomp" "$$src" "$$obj" >/dev/null 2>&1 || rm -f "$$obj"; done; \
+		for src in docs/guide/examples/*.src; do test -f "$$src" || continue; obj="$(FUZZ_CORPUS_DIR)/sin-object/$$(basename "$$src" .src).obj"; "$(VARIANT_BIN_DIR)/scomp" "$$src" "$$obj" >/dev/null 2>&1 || rm -f "$$obj"; done; \
 		for hex in $(TEST_DIR)/fixtures/itemstore/*.hex; do test -f "$$hex" || continue; sed '/^[[:space:]]*#/d' "$$hex" | "$(XXD)" -r -p > "$(FUZZ_CORPUS_DIR)/sin-object/$$(basename "$$hex" .hex).itemstore"; done
 _fuzz-run: _fuzz-build
 	@set -eu; artifact_dir="$(FUZZ_ARTIFACT_DIR)"; test -n "$$artifact_dir" || artifact_dir="$(FUZZ_LOCAL_ARTIFACT_DIR)"; \

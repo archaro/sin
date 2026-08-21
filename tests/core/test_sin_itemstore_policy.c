@@ -83,7 +83,7 @@ void test_sin_default_source_root_validation(void) {
   char source_path[PATH_MAX];
   char object_path[PATH_MAX];
   ASSERT_TRUE(snprintf(source_path, sizeof(source_path),
-                       "%s/examples/echo-load.src", cwd) > 0);
+                       "%s/docs/guide/examples/echo-load.src", cwd) > 0);
   ASSERT_EQ_INT(0, test_make_temp_path("sin-default-source-object", object_path,
                                        sizeof(object_path)));
 

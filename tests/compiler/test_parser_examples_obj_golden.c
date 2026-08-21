@@ -77,10 +77,10 @@ static void run_case(const ParserObjGoldenCase *tc) {
 
 void test_parser_examples_obj_golden(void) {
   ParserObjGoldenCase cases[4] = {
-      {"chat_boot", "examples/chat-boot.src", NULL, NULL},
-      {"chat_load", "examples/chat-load.src", NULL, NULL},
-      {"echo_boot", "examples/echo-boot.src", NULL, NULL},
-      {"echo_load", "examples/echo-load.src", NULL, NULL},
+      {"chat_boot", "docs/guide/examples/chat-boot.src", NULL, NULL},
+      {"chat_load", "docs/guide/examples/chat-load.src", NULL, NULL},
+      {"echo_boot", "docs/guide/examples/echo-boot.src", NULL, NULL},
+      {"echo_load", "docs/guide/examples/echo-load.src", NULL, NULL},
   };
   char references[4][4096], outputs[4][4096];
 

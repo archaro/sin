@@ -48,8 +48,8 @@ static void normalize_runtime_path(char *text, const char *path,
 
 void test_interpret_stress(void) {
   const StressCase cases[] = {
-      {"chat_boot", "examples/chat-boot.src", "tests/fixtures/interpret/chat-boot.expected.txt"},
-      {"echo_boot", "examples/echo-boot.src", "tests/fixtures/interpret/echo-boot.expected.txt"},
+      {"chat_boot", "docs/guide/examples/chat-boot.src", "tests/fixtures/interpret/chat-boot.expected.txt"},
+      {"echo_boot", "docs/guide/examples/echo-boot.src", "tests/fixtures/interpret/echo-boot.expected.txt"},
   };
   const int iterations = 30;
   memset(&stress_cleanup, 0, sizeof(stress_cleanup));

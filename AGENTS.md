@@ -120,7 +120,7 @@ relocated.
 - `src/libcall/`: host library calls and registry plumbing.
 - `src/net/`: libuv networking and Telnet support.
 - `tests/`: core, compiler, interpreter, network, fixture, benchmark, and fuzz tests.
-- `docs/`, `examples/`, and `ci/`: documentation, sample programs, and local/CI gates.
+- `docs/`, `docs/guide/examples/`, and `ci/`: documentation, sample programs, and local/CI gates.
 - `Makefile`: authoritative build, test, sanitizer, and fuzz interface.
 
 Parser sources are `src/compiler/parser.y` and `src/compiler/lexer.l`; generated

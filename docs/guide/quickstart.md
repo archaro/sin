@@ -101,4 +101,4 @@ from saved state with only the boot object:
 
 Do not rerun the `./sin --loadonly -o chat-load.obj` initialization
 step unless you intentionally want to reload or replace the persistent `input`
-item from `examples/chat-load.src`.
+item from `docs/guide/examples/chat-load.src`.

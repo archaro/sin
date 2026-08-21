@@ -202,13 +202,13 @@ static void run_case(const InterpretGoldenCase *tc) {
 
 void test_interpret_semantics_golden(void) {
   const InterpretGoldenCase cases[] = {
-      {"chat_boot", "examples/chat-boot.src",
+      {"chat_boot", "docs/guide/examples/chat-boot.src",
        "tests/fixtures/interpret/chat-boot.expected.txt", {NULL, NULL}, 0},
-      {"chat_load", "examples/chat-load.src",
+      {"chat_load", "docs/guide/examples/chat-load.src",
        "tests/fixtures/interpret/chat-load.expected.txt", {"input", "docommand"}, 0},
-      {"echo_boot", "examples/echo-boot.src",
+      {"echo_boot", "docs/guide/examples/echo-boot.src",
        "tests/fixtures/interpret/echo-boot.expected.txt", {NULL, NULL}, 0},
-      {"echo_load", "examples/echo-load.src",
+      {"echo_load", "docs/guide/examples/echo-load.src",
        "tests/fixtures/interpret/echo-load.expected.txt", {"input", NULL}, 0},
       {"break_log", "tests/fixtures/interpret/break-log.src",
        "tests/fixtures/interpret/break-log.expected.txt", {NULL, NULL}, 0},

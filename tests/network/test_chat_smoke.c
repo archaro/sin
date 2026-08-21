@@ -1,4 +1,4 @@
-// End-to-end smoke test for the examples/chat-* flow.
+// End-to-end smoke test for the docs/guide/examples/chat-* flow.
 
 // Licensed under the MIT License - see LICENSE file for details.
 
@@ -618,10 +618,10 @@ int main(void) {
   if (mkdir(srcroot, 0700) != 0) fail_errno("mkdir srcroot");
 
   char *const compile_boot[] = {
-    TEST_SCOMP, "examples/chat-boot.src", boot_obj, NULL
+    TEST_SCOMP, "docs/guide/examples/chat-boot.src", boot_obj, NULL
   };
   char *const compile_load[] = {
-    TEST_SCOMP, "examples/chat-load.src", load_obj, NULL
+    TEST_SCOMP, "docs/guide/examples/chat-load.src", load_obj, NULL
   };
   run_checked(compile_boot, "compile chat-boot.src");
   run_checked(compile_load, "compile chat-load.src");
