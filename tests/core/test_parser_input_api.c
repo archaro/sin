@@ -101,6 +101,36 @@ void test_parser_input_api(void) {
   ASSERT_EQ_INT('\0', escape_value->value.s[1]);
   as_delete(absyn);
 
+  const char raw_source[] =
+      "\"\"\"one\\ntwo\n"
+      "\"quoted\" C:\\temp\"\"\";";
+  ParseInput raw_input = {raw_source, sizeof(raw_source) - 1, "raw-string.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&raw_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(absyn);
+  AS_STMTLIST *raw_list = (AS_STMTLIST *)absyn->lhs;
+  ASSERT_EQ_INT(1, raw_list->count);
+  AS_VALUE *raw_value =
+      (AS_VALUE *)((AS_NODE *)raw_list->stmts[0]->lhs)->lhs;
+  ASSERT_EQ_INT(V_STR, raw_value->valtype);
+  ASSERT_TRUE(strcmp(raw_value->value.s,
+                     "one\\ntwo\n\"quoted\" C:\\temp") == 0);
+  as_delete(absyn);
+
+  const char raw_eof[] = "\"\"\"unterminated";
+  ParseInput raw_eof_input = {raw_eof, sizeof(raw_eof) - 1, "raw-eof.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&raw_eof_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_TRUE(absyn == NULL);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strcmp(errdetail, "EOF in raw string.") == 0);
+  free(errdetail);
+
   const char empty[] = "";
   ParseInput empty_input = {empty, 0, "empty.src"};
   absyn = NULL;
@@ -228,6 +258,46 @@ void test_parser_input_api(void) {
   ASSERT_TRUE(strcmp(errdetail, "Newline in string.") == 0);
   free(errdetail);
 
+  const char raw_code_source[] =
+      "target = code ( @x = \"\"\"left )\nright\"\"\"; return @x; );";
+  ParseInput raw_code_input = {raw_code_source, sizeof(raw_code_source) - 1,
+                               "raw-code-string.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&raw_code_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(absyn);
+  AS_STMTLIST *raw_code_list = (AS_STMTLIST *)absyn->lhs;
+  ASSERT_EQ_INT(1, raw_code_list->count);
+  AS_NODE *raw_assignment = raw_code_list->stmts[0];
+  ASSERT_EQ_INT(N_ASSITEM, raw_assignment->nodetype);
+  AS_NODE *raw_code = (AS_NODE *)raw_assignment->rhs;
+  ASSERT_EQ_INT(N_CODE, raw_code->nodetype);
+  AS_NODE *raw_code_body = (AS_NODE *)raw_code->rhs;
+  ASSERT_EQ_INT(N_VALUE, raw_code_body->nodetype);
+  AS_VALUE *raw_code_value = (AS_VALUE *)raw_code_body->lhs;
+  ASSERT_EQ_INT(V_STR, raw_code_value->valtype);
+  ASSERT_TRUE(strstr(raw_code_value->value.s,
+                     "\"\"\"left )\nright\"\"\"") != NULL);
+  ASSERT_TRUE(strstr(raw_code_value->value.s, "return @x;") != NULL);
+  as_delete(absyn);
+
+  const char raw_code_eof_source[] =
+      "target = code ( @x = \"\"\"unterminated";
+  ParseInput raw_code_eof_input = {
+      raw_code_eof_source, sizeof(raw_code_eof_source) - 1,
+      "raw-code-eof.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&raw_code_eof_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_TRUE(absyn == NULL);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strcmp(errdetail,
+                     "Unterminated raw string inside code(...) body.") == 0);
+  free(errdetail);
+
   const char crlf_error_source[] = "@x = 1;\r\n^;";
   ParseInput crlf_error_input = {crlf_error_source,
                                  sizeof(crlf_error_source) - 1,
@@ -269,6 +339,23 @@ void test_parser_input_api(void) {
   ASSERT_TRUE(strstr(errdetail, "String literal too long.") != NULL);
   free(errdetail);
   free(large_literal);
+
+  source_len = literal_len + 7;
+  char *large_raw = malloc(source_len + 1);
+  ASSERT_NOT_NULL(large_raw);
+  memcpy(large_raw, "\"\"\"", 3);
+  memset(large_raw + 3, 'x', literal_len);
+  memcpy(large_raw + 3 + literal_len, "\"\"\";", 4);
+  large_raw[source_len] = '\0';
+  ParseInput large_raw_input = {large_raw, source_len, "large-raw-string.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&large_raw_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strstr(errdetail, "String literal too long.") != NULL);
+  free(errdetail);
+  free(large_raw);
 }
 
 void test_parser_compound_spans_preserve_construct_start(void) {

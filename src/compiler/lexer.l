@@ -210,10 +210,12 @@
 
 %option noinput nounput noyywrap noyyalloc noyyrealloc noyyfree reentrant bison-bridge bison-locations case-insensitive extra-type="SCANNER_STATE_t *"
 %x STRINGLIT
+%x RAWSTRINGLIT
 %x CODE
 %x CODEBODY
 %x CODEPARAMS
 %x CODESTREMBED
+%x CODERAWSTREMBED
 %x COMMENT
 %x LAYERCTX
 
@@ -291,6 +293,19 @@ crlf        \r\n
                   strbuf_size = 0;
                   BEGIN(STRINGLIT);
                 }
+  \"\"\"          {
+                  strbuf_start_line = yylloc->first_line;
+                  strbuf_start_column = yylloc->first_column;
+                  strbuf_capacity = 4;
+                  strbuf = (char *)malloc((size_t)strbuf_capacity + 1U);
+                  if (!strbuf) {
+                    yylval->TSTRINGLIT = sin_strdup("Out of memory.");
+                    return TUNKNOWNCHAR;
+                  }
+                  strbuf_ptr = strbuf;
+                  strbuf_size = 0;
+                  BEGIN(RAWSTRINGLIT);
+                }
   {crlf}         ; // Inline whitespace handling
   [ \t\n]+      ; // Inline whitespace handling
   {float}       { yylval->TSTRINGLIT = sin_strdup(yytext); return TFLOAT; }
@@ -360,6 +375,29 @@ crlf        \r\n
   [^\\\n\"]+    { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
                                               &strbuf_capacity, yytext); }
 }
+<RAWSTRINGLIT>{
+  \"\"\"          {
+                  BEGIN(INITIAL);
+                  if (strbuf_size < 0) {
+                    yylval->TSTRINGLIT = strbuf_too_long_msg();
+                    free(strbuf);
+                    return TUNKNOWNCHAR;
+                  }
+                  *strbuf_ptr = '\0';
+                  yylval->TSTRINGLIT = sin_strdup(strbuf);
+                  free(strbuf);
+                  return TSTRINGLIT;
+                }
+  [^\"]+         {
+                  (void)str_append_bytes(&strbuf, &strbuf_ptr, &strbuf_size,
+                                         &strbuf_capacity, yytext,
+                                         (size_t)yyleng);
+                }
+  \"             {
+                  str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
+                                  &strbuf_capacity, '"');
+                }
+}
 <CODE>{
   "("           { code_paren = 1;
                   strbuf_capacity = 512;
@@ -418,6 +456,16 @@ crlf        \r\n
                                             &strbuf_capacity, '"');
                   BEGIN(CODESTREMBED);
                 }
+  \"\"\"          {
+                  // Raw strings protect all of their contents, including
+                  // parentheses and literal newlines, while code(...) is
+                  // being captured for its second compilation pass.
+                  strbuf_start_line = yylloc->first_line;
+                  strbuf_start_column = yylloc->first_column;
+                  (void)str_append_bytes(&strbuf, &strbuf_ptr, &strbuf_size,
+                                         &strbuf_capacity, yytext, (size_t)yyleng);
+                  BEGIN(CODERAWSTREMBED);
+                }
   {crlf}         { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
                                                 &strbuf_capacity, ' '); }
   [\t\n]        { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
@@ -454,6 +502,22 @@ crlf        \r\n
   [^\n\"]+      { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
                                               &strbuf_capacity, yytext); }
 }
+<CODERAWSTREMBED>{
+  \"\"\"          {
+                  (void)str_append_bytes(&strbuf, &strbuf_ptr, &strbuf_size,
+                                         &strbuf_capacity, yytext, (size_t)yyleng);
+                  BEGIN(CODEBODY);
+                }
+  [^\"]+         {
+                  (void)str_append_bytes(&strbuf, &strbuf_ptr, &strbuf_size,
+                                         &strbuf_capacity, yytext,
+                                         (size_t)yyleng);
+                }
+  \"             {
+                  str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
+                                  &strbuf_capacity, '"');
+                }
+}
 <COMMENT>{
   "*/"        { BEGIN(INITIAL); }
   {crlf}       { /* Eat CRLF as one newline. */ }
@@ -480,6 +544,17 @@ crlf        \r\n
   free(strbuf);
   return TUNKNOWNCHAR;
 }
+<RAWSTRINGLIT><<EOF>> {
+  BEGIN(INITIAL);
+  yylloc->first_line = strbuf_start_line;
+  yylloc->first_column = strbuf_start_column;
+  yylloc->last_line = strbuf_start_line;
+  yylloc->last_column = strbuf_start_column;
+  yylval->TSTRINGLIT = strbuf_size < 0 ? strbuf_too_long_msg() :
+      sin_strdup("EOF in raw string.");
+  free(strbuf);
+  return TUNKNOWNCHAR;
+}
 <CODEBODY><<EOF>> {
   BEGIN(INITIAL);
   yylval->TSTRINGLIT = strbuf_size < 0 ? strbuf_too_long_msg() :
@@ -491,6 +566,13 @@ crlf        \r\n
   BEGIN(INITIAL);
   yylval->TSTRINGLIT = strbuf_size < 0 ? strbuf_too_long_msg() :
       sin_strdup("Unterminated quoted string inside code(...) body.");
+  free(strbuf);
+  return TUNKNOWNCHAR;
+}
+<CODERAWSTREMBED><<EOF>> {
+  BEGIN(INITIAL);
+  yylval->TSTRINGLIT = strbuf_size < 0 ? strbuf_too_long_msg() :
+      sin_strdup("Unterminated raw string inside code(...) body.");
   free(strbuf);
   return TUNKNOWNCHAR;
 }

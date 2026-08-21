@@ -312,6 +312,24 @@ void test_sys_compile_libcall_runtime(void) {
   ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx),
                         "newline_source.bad") == NULL);
 
+  /* Raw strings are passed byte-for-byte to sys.compile, so the \n below is
+   * interpreted only by the compiler which consumes raw_source. */
+  assert_compile_success_bool(
+      "raw_source = \"\"\"sys.log{\"Hello\\n\"};\"\"\";");
+  ITEM_t *raw_source = assert_string_item("raw_source", NULL);
+  ASSERT_TRUE(strcmp(item_value(raw_source)->s,
+                     "sys.log{\"Hello\\n\"};") == 0);
+  assert_compile_stdout("sys.compile{raw_source};", "Hello\n");
+
+  /* A raw string inside code(...) must also protect parentheses and preserve
+   * literal newlines while the outer lexer captures the code body. */
+  assert_compile_success_bool(
+      "raw_code = code ( raw.result = \"\"\"left )\nright\\n\"\"\"; );");
+  assert_compile_success_bool("raw_code;");
+  ITEM_t *raw_result = assert_string_item("raw.result", NULL);
+  ASSERT_TRUE(strcmp(item_value(raw_result)->s,
+                     "left )\nright\\n") == 0);
+
   set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS, "stale error",
                  NULL);
   assert_compile_success_bool("prior_error_cleared = true;");

@@ -19,13 +19,22 @@ Token forms are:
 - An integer is `[0-9]+` and must have a value in `0..9223372036854775807`
   (`INT64_MAX`); a float is
   `[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?`.
-- A string is enclosed in double quotes. `\n`, `\t`, `\r`, `\b`, and `\f`
+- An escaped string is enclosed in double quotes. `\n`, `\t`, `\r`, `\b`, and `\f`
   produce their usual bytes; `\0nn` is an octal byte escape for values
   `1..077` (`nn` are two octal digits; `\000` is rejected), and a backslash
   followed by any other character quotes it. Source and string values cannot
   contain NUL bytes.
-  A newline or end-of-file before the closing quote is invalid. String
-  payloads are limited by `SIN_MAX_STRING_BYTES`.
+  A newline or end-of-file before the closing quote is invalid.
+- A raw string is enclosed in three double quotes (`"""`). Every byte between
+  the delimiters is copied to the string unchanged: backslashes do not
+  introduce escapes, and literal tabs and newlines are permitted and
+  preserved. The exact sequence `"""` terminates the raw string and therefore
+  cannot occur in its payload. As with escaped strings, NUL bytes are not
+  permitted.
+  Both escaped- and raw-string payloads are limited by
+  `SIN_MAX_STRING_BYTES`. Raw-string delimiters are recognised while a
+  `code(...)` body is being captured, so parentheses and whitespace inside
+  them remain part of the literal.
 
 Reserved words are `and`, `break`, `code`, `continue`, `do`, `else`, `elsif`,
 `endif`, `endfor`, `endwhile`, `foreach`, `if`, `in`, `nil`, `or`, `return`, `then`, `true`,
@@ -34,7 +43,7 @@ for libcall syntax. Punctuation tokens are `=`, `==`, `!`, `!=`, `<`, `<=`,
 `>`, `>=`, `++`, `+`, `--`, `-`, `*`, `%`, `/`, `(`, `)`, `,`, `{`, `}`, `;`,
 `.`, `#[`, `&`, `[` and `]`. Any character that does not begin one of these
 tokens is invalid input. Unterminated strings, code bodies, embedded quoted
-strings, and comments are rejected.
+strings (including raw strings), and comments are rejected.
 
 ## Implementation limits and failure behavior
 
