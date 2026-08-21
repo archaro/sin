@@ -755,6 +755,20 @@ item_assignment: expr { $$ = $1; }
                                parser_span_from_yy(&@$));
           if (!$$) YYERROR;
         }
+        | TCODE params TUNKNOWNCHAR {
+          as_delete($2);
+          $$ = NULL;
+          state->errnum = ERR_COMP_UNKNOWNCHAR;
+          state->errdetail = $3;
+          state->line = @3.first_line;
+          state->column = @3.first_column;
+          state->span = @3.last_column >= @3.first_column
+                            ? @3.last_column - @3.first_column + 1
+                            : 1;
+          free(state->offending_token);
+          state->offending_token = parser_strdup($3 ? $3 : "");
+          YYERROR;
+        }
         ;
 
 list: TLISTSTART TDEREFEND {

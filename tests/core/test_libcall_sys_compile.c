@@ -297,6 +297,21 @@ void test_sys_compile_libcall_runtime(void) {
   assert_compile_stdout("sys.log{\"Hello\\n\"};", "Hello\n");
   assert_only_temp_item_named(NULL);
 
+  /* Escaped \n remains valid source inside code(...). A literal LF inside a
+   * quoted code-body string must fail during parsing, not validation. */
+  assert_compile_success_bool(
+      "newline_source.ok = code ( sys.log{\"Hello\\n\"}; );");
+  assert_compile_stdout("newline_source.ok;", "Hello\n");
+
+  push_stack(config.vm->stack,
+             vstr("newline_source.bad = code ( sys.log{\"Hello\nworld\"}; );"));
+  (void)lc_sys_compile(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  assert_bool(pop_stack(config.vm->stack), 0);
+  assert_string_item("error.stage", "PARSE");
+  assert_string_item("error.msg", "Newline in string.");
+  ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx),
+                        "newline_source.bad") == NULL);
+
   set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS, "stale error",
                  NULL);
   assert_compile_success_bool("prior_error_cleared = true;");

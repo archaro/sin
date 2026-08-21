@@ -222,26 +222,11 @@ void test_parser_input_api(void) {
   absyn = NULL;
   errdetail = NULL;
   rc = parse_source(&crlf_embedded_string_input, &absyn, &errdetail);
-  ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
-  AS_STMTLIST *crlf_embedded_string_list = (AS_STMTLIST *)absyn->lhs;
-  ASSERT_EQ_INT(1, crlf_embedded_string_list->count);
-  AS_NODE *crlf_embedded_string_assignment =
-      crlf_embedded_string_list->stmts[0];
-  ASSERT_EQ_INT(N_ASSITEM, crlf_embedded_string_assignment->nodetype);
-  AS_NODE *crlf_embedded_string_code =
-      (AS_NODE *)crlf_embedded_string_assignment->rhs;
-  ASSERT_EQ_INT(N_CODE, crlf_embedded_string_code->nodetype);
-  AS_NODE *crlf_embedded_string_body =
-      (AS_NODE *)crlf_embedded_string_code->rhs;
-  ASSERT_EQ_INT(N_VALUE, crlf_embedded_string_body->nodetype);
-  AS_VALUE *crlf_embedded_string_value =
-      (AS_VALUE *)crlf_embedded_string_body->lhs;
-  ASSERT_EQ_INT(V_STR, crlf_embedded_string_value->valtype);
-  ASSERT_TRUE(strchr(crlf_embedded_string_value->value.s, '\r') == NULL);
-  ASSERT_TRUE(strcmp(crlf_embedded_string_value->value.s,
-                     " \"first\nsecond\" ") == 0);
-  as_delete(absyn);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_TRUE(absyn == NULL);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strcmp(errdetail, "Newline in string.") == 0);
+  free(errdetail);
 
   const char crlf_error_source[] = "@x = 1;\r\n^;";
   ParseInput crlf_error_input = {crlf_error_source,

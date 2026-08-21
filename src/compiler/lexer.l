@@ -412,6 +412,8 @@ crlf        \r\n
   "\""          {
                   // Begin an embedded string.  Copy the " then switch
                   // to another state to eat the rest of the string.
+                  strbuf_start_line = yylloc->first_line;
+                  strbuf_start_column = yylloc->first_column;
                   str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
                                             &strbuf_capacity, '"');
                   BEGIN(CODESTREMBED);
@@ -437,11 +439,19 @@ crlf        \r\n
                                             &strbuf_capacity, '"');
                   BEGIN(CODEBODY);
                 }
-  {crlf}         { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
-                                            &strbuf_capacity, '\n'); }
-  [\r\n]        { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
-                                              &strbuf_capacity, yytext); }
-  [^\r\n\"]+    { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
+  \n            {
+                  // Keep quoted strings inside code(...) consistent with
+                  // ordinary string literals: source newlines are forbidden.
+                  BEGIN(INITIAL);
+                  yylloc->first_line = strbuf_start_line;
+                  yylloc->first_column = strbuf_start_column;
+                  yylloc->last_line = strbuf_start_line;
+                  yylloc->last_column = strbuf_start_column;
+                  yylval->TSTRINGLIT = sin_strdup("Newline in string.");
+                  free(strbuf);
+                  return TUNKNOWNCHAR;
+                }
+  [^\n\"]+      { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
                                               &strbuf_capacity, yytext); }
 }
 <COMMENT>{
