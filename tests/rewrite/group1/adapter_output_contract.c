@@ -33,13 +33,17 @@ static void success_capture(void) {
 
 static void one_wrapper(void) {
   const char *self = getenv("TF_FRAMEWORK_SELF");
+  const char *first_result;
   char *args[] = {(char *)self, "--run", "tagged_result_record", NULL};
   TF_ProcessResult result;
   TF_ASSERT_TRUE(self && self[0]);
   run_process(args, 0, &result);
   TF_ASSERT_DIAGNOSTIC("TF|RESULT|tagged_result_record|PASS|", result.stdout_data);
   TF_ASSERT_DIAGNOSTIC("TF|TOTAL|selected|1|1|0", result.stdout_data);
-  TF_ASSERT_FALSE(strstr(text_or_empty(result.stdout_data), "|2|") != NULL);
+  first_result = strstr(text_or_empty(result.stdout_data), "TF|RESULT|");
+  TF_ASSERT_TRUE(first_result != NULL);
+  TF_ASSERT_FALSE(strstr(first_result + sizeof("TF|RESULT|") - 1,
+                         "TF|RESULT|") != NULL);
   destroy_process(&result);
 }
 
