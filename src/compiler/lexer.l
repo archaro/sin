@@ -133,7 +133,7 @@
   #define YY_USER_ACTION sin_update_location(yylloc, yyextra, yytext, yyleng);
 
   static bool str_append_bytes(char **buf, char **bufptr, int *len, int *max,
-                               const char *append, size_t append_len) {
+                               const void *append, size_t append_len) {
     // A helper function for string handling.
     // Should only be called from string-building lexer rules.
     if (*len < 0) return false;
@@ -173,7 +173,7 @@
   }
 
   void str_append_char(char **buf, char **bufptr,
-                      int *len, int *max, char append) {
+                      int *len, int *max, unsigned char append) {
     (void)str_append_bytes(buf, bufptr, len, max, &append, 1);
   }
 
@@ -201,7 +201,7 @@
       unsigned char c = src[i];
       // Branchless ASCII lowercase:
       // if ('A' <= c <= 'Z') -> c + 32
-      dst[i] = c + ((c >= 'A' && c <= 'Z') << 5);
+      dst[i] = (unsigned char)(c + ((c >= 'A' && c <= 'Z') << 5));
     }
     dst[n] = '\0';
     return d;
@@ -282,7 +282,7 @@ crlf        \r\n
                   strbuf_start_line = yylloc->first_line;
                   strbuf_start_column = yylloc->first_column;
                   strbuf_capacity = 4;
-                  strbuf = (char *)malloc(strbuf_capacity + 1);
+                  strbuf = (char *)malloc((size_t)strbuf_capacity + 1U);
                   if (!strbuf) {
                     yylval->TSTRINGLIT = sin_strdup("Out of memory.");
                     return TUNKNOWNCHAR;
@@ -343,7 +343,7 @@ crlf        \r\n
                     return TUNKNOWNCHAR;
                   }
                   str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
-                                                 &strbuf_capacity, (int)result);
+                                                 &strbuf_capacity, (unsigned char)result);
                 }
   \\n           { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
                                                 &strbuf_capacity, '\n'); }
@@ -356,14 +356,14 @@ crlf        \r\n
   \\f           { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
                                                 &strbuf_capacity, '\f'); }
   \\(.|\n)      { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
-                                           &strbuf_capacity, yytext[1]); }
+                                           &strbuf_capacity, (unsigned char)yytext[1]); }
   [^\\\n\"]+    { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
                                               &strbuf_capacity, yytext); }
 }
 <CODE>{
   "("           { code_paren = 1;
                   strbuf_capacity = 512;
-                  strbuf = (char *)malloc(strbuf_capacity + 1);
+                  strbuf = (char *)malloc((size_t)strbuf_capacity + 1U);
                   if (!strbuf) {
                     yylval->TSTRINGLIT = sin_strdup("Out of memory.");
                     return TUNKNOWNCHAR;
