@@ -4,9 +4,14 @@ For normative syntax, grammar, precedence, and evaluation order, see the
 [canonical language reference](../reference/language.md). This guide remains
 the practical introduction to concepts and runtime behaviour.
 
-The style of the language is something like the misbegotten offspring of Forth and Smalltalk.
+The style of the language is something like the misbegotten offspring of FORTH
+and Smalltalk.
 
-If you can't wait to start playing with your new toy, have a look at [the quickstart documentation](quickstart.md).  If it breaks, you get to keep all the pieces. A more detailed introduction (which you should probably only read after reading the other documents in this directory) can be found in [Your First World](first-world.md).
+You've probably already read the quickstart documentation, but if not you can
+find it here: [the quickstart documentation](quickstart.md).
+
+A more detailed introduction which walks through all the important bits of
+Sinistra is to be found in [Your First World](first-world.md).
 
 ## Items ##
 

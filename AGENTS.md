@@ -108,8 +108,9 @@ Use the smallest workflow that satisfies the task:
 
 ## Repository map
 
-Use `docs/architecture.md` for module ownership, dependency direction, and key
-entry points. Update it whenever source files are added, deleted, or relocated.
+Use `docs/internals/architecture.md` for module ownership, dependency direction,
+and key entry points. Update it whenever source files are added, deleted, or
+relocated.
 
 - `src/common/`: shared diagnostics, allocation, CLI, formatting, and utilities.
 - `src/bytecode/`: bytecode verification and disassembly support.
@@ -222,7 +223,7 @@ updates where applicable, and positive and negative tests.
 - Use existing registry patterns.
 - Test argument validation, truthiness and value conversion, ownership, returns,
   side effects, and error behavior as applicable.
-- Document user-visible behavior in `docs/libcalls.md`.
+- Document user-visible behavior in `docs/reference/libcalls.md`.
 
 ### Networking
 

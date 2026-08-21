@@ -1,6 +1,6 @@
 # Sinistra language reference
 
-This is the canonical reference for the Sinistra language language, frozen as of pre-release 0.8.0. “Canonical” means that this page is the normative description when other prose differs. The reference is derived from [`src/compiler/lexer.l`](../../src/compiler/lexer.l) and [`src/compiler/parser.y`](../../src/compiler/parser.y).
+This is the canonical reference for the Sinistra language.  The language-freeze is expected to happen with release 0.8, but as of now should be considered "pre-freeze". “Canonical” means that this page is the normative description when other prose differs. The reference is derived from [`src/compiler/lexer.l`](../../src/compiler/lexer.l) and [`src/compiler/parser.y`](../../src/compiler/parser.y).
 
 Library APIs remain in [`libcalls.md`](libcalls.md) and persistence in [`itemstore-format.md`](../internals/itemstore-format.md).
 
