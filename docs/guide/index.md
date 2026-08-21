@@ -1,4 +1,4 @@
-# How to be Sinister #
+# How to be Sinister - The Details
 
 For normative syntax, grammar, precedence, and evaluation order, see the
 [canonical language reference](../reference/language.md). This guide remains
@@ -8,7 +8,10 @@ The style of the language is something like the misbegotten offspring of FORTH
 and Smalltalk.
 
 You've probably already read the quickstart documentation, but if not you can
-find it here: [the quickstart documentation](quickstart.md).
+find it here: [quickstart](quickstart.md).
+
+If you haven't read it already, the overview documentation is a good place to
+go next: [overview](overview.md)
 
 A more detailed introduction which walks through all the important bits of
 Sinistra is to be found in [Your First World](first-world.md).
