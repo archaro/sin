@@ -11,6 +11,13 @@
 #include "runtime_frame.h"
 #include "stack.h"
 
+static void frame_initialize_nil_slots(STACK_t *stack, int32_t first,
+                                       int32_t count) {
+  for (int32_t offset = 0; offset < count; offset++) {
+    stack->stack[first + offset] = VALUE_NIL;
+  }
+}
+
 static bool frame_push_callstack(VM_t *vm, ITEM_t *item, uint8_t *nextop,
                                  uint8_t args, uint8_t locals,
                                  uint8_t *bytecode_start,
@@ -35,6 +42,8 @@ static bool frame_push_callstack(VM_t *vm, ITEM_t *item, uint8_t *nextop,
       vm->stack->params;
   vm->stack->base = vm->stack->current + 1 - args;
   vm->stack->current += (int32_t)locals - args;
+  frame_initialize_nil_slots(vm->stack, vm->stack->base + (int32_t)args,
+                             (int32_t)locals - (int32_t)args);
   vm->stack->locals = locals;
   vm->stack->params = args;
   return true;
@@ -78,6 +87,8 @@ bool runtime_frame_enter_initial(RuntimeContext *ctx, ITEM_t *item,
   }
   ctx->vm->stack->base = ctx->vm->stack->current + 1;
   ctx->vm->stack->current += (int32_t)locals;
+  frame_initialize_nil_slots(ctx->vm->stack, ctx->vm->stack->base,
+                             (int32_t)locals);
   ctx->vm->stack->locals = locals;
   ctx->vm->stack->params = params;
   item_enter_use(item);

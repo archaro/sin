@@ -248,7 +248,7 @@ void test_runtime_frame_direct_lifecycle_restores_state(void) {
   ITEM_t *caller = insert_frame_code("frames.api_caller",
                                      (uint8_t[]){0, 0, 'h'}, 3);
   ITEM_t *callee = insert_frame_code("frames.api_callee",
-                                     (uint8_t[]){3, 0, 'h'}, 3);
+                                     (uint8_t[]){4, 3, 'h'}, 3);
   RuntimeContext ctx;
   RuntimeFrameCheckpoint checkpoint;
   RuntimeFrameReturn returned;
@@ -257,10 +257,18 @@ void test_runtime_frame_direct_lifecycle_restores_state(void) {
   runtime_context_init(&ctx, config.vm);
   ctx.current_item = caller;
   ASSERT_TRUE(runtime_frame_checkpoint(&ctx, &checkpoint));
-  ASSERT_TRUE(runtime_frame_enter_initial(&ctx, caller, 1, 0));
+  ASSERT_TRUE(runtime_frame_enter_initial(&ctx, caller, 2, 1));
   ASSERT_TRUE(item_is_in_use(caller));
+  ASSERT_EQ_INT(1, config.vm->stack->current);
+  ASSERT_EQ_INT(0, config.vm->stack->base);
+  ASSERT_EQ_INT(2, config.vm->stack->locals);
+  ASSERT_EQ_INT(1, config.vm->stack->params);
+  ASSERT_EQ_INT(VALUE_nil,
+                config.vm->stack->stack[config.vm->stack->base].type);
+  ASSERT_EQ_INT(VALUE_nil,
+                config.vm->stack->stack[config.vm->stack->base + 1].type);
   value_replace(
-      &config.vm->stack->stack[config.vm->stack->base],
+      &config.vm->stack->stack[config.vm->stack->base + 1],
       concat_two_strings((VALUE_t){VALUE_str, {.s = strdup("caller")}},
                          (VALUE_t){VALUE_str, {.s = strdup(" local")}}));
   int32_t saved_current = config.vm->stack->current;
@@ -276,19 +284,24 @@ void test_runtime_frame_direct_lifecycle_restores_state(void) {
   ASSERT_EQ_INT(saved_params, config.vm->stack->params);
   ASSERT_TRUE(ctx.current_item == caller);
   ASSERT_EQ_INT(VALUE_str,
-                config.vm->stack->stack[saved_base].type);
-  ASSERT_TRUE(strcmp(config.vm->stack->stack[saved_base].s,
+                config.vm->stack->stack[saved_base + 1].type);
+  ASSERT_TRUE(strcmp(config.vm->stack->stack[saved_base + 1].s,
                      "caller local") == 0);
   ASSERT_TRUE(item_is_in_use(caller));
   size_t effective = 0u;
-  ASSERT_TRUE(runtime_frame_preflight_call(&ctx, 2, 3, 3, &effective));
+  ASSERT_TRUE(runtime_frame_preflight_call(&ctx, 2, 4, 3, &effective));
   ASSERT_EQ_INT(2, effective);
   push_stack(config.vm->stack, VALUE_TRUE);
   push_stack(config.vm->stack, VALUE_FALSE);
   ASSERT_TRUE(runtime_frame_prepare_call(
-      &ctx, caller, NULL, callee, 2, 3, 3, NULL, NULL, &discarded));
+      &ctx, caller, NULL, callee, 2, 4, 3, NULL, NULL, &discarded));
   ASSERT_EQ_INT(0, discarded);
-  ASSERT_EQ_INT(3, config.vm->stack->current);
+  ASSERT_EQ_INT(5, config.vm->stack->current);
+  ASSERT_EQ_INT(2, config.vm->stack->base);
+  ASSERT_EQ_INT(VALUE_nil,
+                config.vm->stack->stack[config.vm->stack->base + 2].type);
+  ASSERT_EQ_INT(VALUE_nil,
+                config.vm->stack->stack[config.vm->stack->base + 3].type);
   ASSERT_EQ_INT(0, config.vm->callstack->current);
   ASSERT_TRUE(item_is_in_use(callee));
   ASSERT_TRUE(runtime_frame_take_transfer(&ctx, &transfer));

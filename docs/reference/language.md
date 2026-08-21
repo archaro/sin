@@ -229,6 +229,16 @@ argument 2 to `@b`. The compiler's established encoded limits apply: the
 distinct local/parameter table and emitted parameter count are each limited to
 255 entries. No stronger limit rule is part of this reference.
 
+Each code-item invocation begins with deterministic local storage.
+Non-parameter locals are `nil` until an assignment executes. Parameter slots
+contain their bound argument, or `nil` when the corresponding argument is
+missing. Runtime facilities that execute a code item directly without an
+argument list likewise initialise all declared parameters to `nil`.
+
+Because locals have item-wide scope, if control flow skips the assignment that
+first defines a local, a later read of that local produces `nil` rather than a
+value left in the VM stack by an earlier invocation.
+
 In default mode, discarded arguments for excess-argument, value-item,
 missing-target, and invalid-target calls are silent and the call keeps its
 normal value (`nil` for the latter two). With `--strict-runtime-contracts`, the same arguments are
