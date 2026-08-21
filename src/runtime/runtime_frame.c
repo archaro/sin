@@ -72,11 +72,12 @@ bool runtime_frame_enter_initial(RuntimeContext *ctx, ITEM_t *item,
                                  uint8_t locals, uint8_t params) {
   if (!ctx || !ctx->vm || !ctx->vm->stack || !item || params > locals ||
       ctx->vm->stack->current >
-          ctx->vm->stack->max - (int32_t)(locals - params)) {
+          ctx->vm->stack->max - (int32_t)locals) {
     logerr("Unable to enter initial frame: insufficient VM stack capacity.\n");
     return false;
   }
-  ctx->vm->stack->current += (int32_t)locals - params;
+  ctx->vm->stack->base = ctx->vm->stack->current + 1;
+  ctx->vm->stack->current += (int32_t)locals;
   ctx->vm->stack->locals = locals;
   ctx->vm->stack->params = params;
   item_enter_use(item);

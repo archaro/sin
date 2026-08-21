@@ -259,6 +259,27 @@ void test_runtime_frame_direct_lifecycle_restores_state(void) {
   ASSERT_TRUE(runtime_frame_checkpoint(&ctx, &checkpoint));
   ASSERT_TRUE(runtime_frame_enter_initial(&ctx, caller, 1, 0));
   ASSERT_TRUE(item_is_in_use(caller));
+  value_replace(
+      &config.vm->stack->stack[config.vm->stack->base],
+      concat_two_strings((VALUE_t){VALUE_str, {.s = strdup("caller")}},
+                         (VALUE_t){VALUE_str, {.s = strdup(" local")}}));
+  int32_t saved_current = config.vm->stack->current;
+  int32_t saved_base = config.vm->stack->base;
+  uint8_t saved_locals = config.vm->stack->locals;
+  uint8_t saved_params = config.vm->stack->params;
+  VALUE_t nested_result = interpret(&ctx, caller);
+  ASSERT_EQ_INT(VALUE_nil, nested_result.type);
+  value_free(&nested_result);
+  ASSERT_EQ_INT(saved_current, config.vm->stack->current);
+  ASSERT_EQ_INT(saved_base, config.vm->stack->base);
+  ASSERT_EQ_INT(saved_locals, config.vm->stack->locals);
+  ASSERT_EQ_INT(saved_params, config.vm->stack->params);
+  ASSERT_TRUE(ctx.current_item == caller);
+  ASSERT_EQ_INT(VALUE_str,
+                config.vm->stack->stack[saved_base].type);
+  ASSERT_TRUE(strcmp(config.vm->stack->stack[saved_base].s,
+                     "caller local") == 0);
+  ASSERT_TRUE(item_is_in_use(caller));
   size_t effective = 0u;
   ASSERT_TRUE(runtime_frame_preflight_call(&ctx, 2, 3, 3, &effective));
   ASSERT_EQ_INT(2, effective);
