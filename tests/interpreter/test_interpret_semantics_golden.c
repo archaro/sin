@@ -1,5 +1,6 @@
 #include "item.h"
 #include "item_internal.h"
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -40,6 +41,7 @@ typedef struct {
   const char *fixture_path;
   const char *expected_code_items[8];
   unsigned runs;
+  bool allow_missing_itemstore;
 } InterpretGoldenCase;
 
 static void normalize_runtime_path(char *text, const char *path,
@@ -189,7 +191,9 @@ static void run_case(const InterpretGoldenCase *tc) {
   }
   ASSERT_EQ_INT(0, remove(generated_obj_path));
   assert_persisted_code_items(tc, itemstore_path);
-  ASSERT_EQ_INT(0, remove(itemstore_path));
+  if (remove(itemstore_path) != 0) {
+    ASSERT_TRUE(tc->allow_missing_itemstore && errno == ENOENT);
+  }
   remove_persisted_source_files(tc, srcroot_path);
   ASSERT_EQ_INT(0, rmdir(srcroot_path));
   ASSERT_EQ_INT(0, rmdir(run_dir));
@@ -203,22 +207,26 @@ static void run_case(const InterpretGoldenCase *tc) {
 void test_interpret_semantics_golden(void) {
   const InterpretGoldenCase cases[] = {
       {"chat_boot", "docs/guide/examples/chat-boot.src",
-       "tests/fixtures/interpret/chat-boot.expected.txt", {NULL, NULL}, 0},
+       "tests/fixtures/interpret/chat-boot.expected.txt", {NULL, NULL}, 0, false},
       {"chat_load", "docs/guide/examples/chat-load.src",
-       "tests/fixtures/interpret/chat-load.expected.txt", {"input", "docommand"}, 0},
+       "tests/fixtures/interpret/chat-load.expected.txt", {"input", "docommand"}, 0, false},
       {"echo_boot", "docs/guide/examples/echo-boot.src",
-       "tests/fixtures/interpret/echo-boot.expected.txt", {NULL, NULL}, 0},
+       "tests/fixtures/interpret/echo-boot.expected.txt", {NULL, NULL}, 0, false},
       {"echo_load", "docs/guide/examples/echo-load.src",
-       "tests/fixtures/interpret/echo-load.expected.txt", {"input", NULL}, 0},
+       "tests/fixtures/interpret/echo-load.expected.txt", {"input", NULL}, 0, false},
       {"break_log", "tests/fixtures/interpret/break-log.src",
-       "tests/fixtures/interpret/break-log.expected.txt", {NULL, NULL}, 0},
+       "tests/fixtures/interpret/break-log.expected.txt", {NULL, NULL}, 0, false},
       {"continue_log", "tests/fixtures/interpret/continue-log.src",
-       "tests/fixtures/interpret/continue-log.expected.txt", {NULL, NULL}, 0},
+       "tests/fixtures/interpret/continue-log.expected.txt", {NULL, NULL}, 0, false},
+      {"codeitem_compile_failure",
+       "tests/fixtures/interpret/codeitem-compile-failure.src",
+       "tests/fixtures/interpret/codeitem-compile-failure.expected.txt",
+       {NULL, NULL}, 0, true},
       {"list_itemref_persist", "tests/fixtures/interpret/list-itemref-persist.src",
-       "tests/fixtures/interpret/list-itemref-persist.expected.txt", {"target", "once"}, 2},
+       "tests/fixtures/interpret/list-itemref-persist.expected.txt", {"target", "once"}, 2, false},
       {"positive_core", "tests/fixtures/conformance/positive-core.src",
        "tests/fixtures/conformance/positive-core.expected.txt",
-       {"tick", "first", "second", "pair", "returner", "fallthrough", "bare", "dup"}, 0},
+       {"tick", "first", "second", "pair", "returner", "fallthrough", "bare", "dup"}, 0, false},
   };
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {

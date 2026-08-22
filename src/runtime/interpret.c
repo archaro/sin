@@ -937,8 +937,14 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     persist_codeitem_source(itemstore_root(ctx->itemstore), &itemname, &in, ctx ? ctx->srcroot : NULL);
     clear_error_item(itemstore_root(ctx->itemstore));
   } else {
-    logerr("Compilation failed.\n");
-    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, result, errdetail,
+    const char *detail = errdetail && errdetail[0]
+        ? errdetail
+        : (result >= 0 && result < MAXERRORS && errmsg[result]
+            ? errmsg[result]
+            : "unknown compiler error");
+    logerr("Compilation failed for item '%s': %s\n",
+           itemname.s, detail);
+    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, result, detail,
                            ctx ? ctx->current_item : NULL);
   }
 

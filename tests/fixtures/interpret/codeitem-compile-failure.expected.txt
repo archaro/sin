@@ -1,0 +1,9 @@
+===stdout===
+Using 'srcroot' as the source root.
+===stderr===
+Compilation failed for item 'broken': <memory>: syntax error
+Bootstrap interpreter validation failed.
+
+===exit===
+1
+

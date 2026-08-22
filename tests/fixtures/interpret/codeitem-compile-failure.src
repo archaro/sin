@@ -1,0 +1,4 @@
+broken = code (
+  sys.log{"This body is intentionally missing its semicolon."}
+);
+
