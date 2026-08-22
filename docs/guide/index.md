@@ -4,9 +4,6 @@ For normative syntax, grammar, precedence, and evaluation order, see the
 [canonical language reference](../reference/language.md). This guide remains
 the practical introduction to concepts and runtime behaviour.
 
-The style of the language is something like the misbegotten offspring of FORTH
-and Smalltalk.
-
 You've probably already read the quickstart documentation, but if not you can
 find it here: [quickstart](quickstart.md).
 

@@ -8,7 +8,8 @@ into memory, executes code against it, accepts external events, and writes the
 resulting state back to persistent storage.
 
 The language, compiler, bytecode VM, networking layer and persistence system
-all exist in service to this model.
+all exist in service to this model.  Think of it as the misbegotten offspring
+of FORTH and Smalltalk.
 
 ## An in-memory who of the what now?
 
