@@ -1,3 +1,2 @@
 /* Delete any old connection information that is still hanging around */
-sys.delete{"line"};
 sys.log{"Starting the chat server...\n"};
