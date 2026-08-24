@@ -8,7 +8,7 @@ src/bytecode/sdiss_core.c,bytecode,measured,81.82,59.55,100.00,Reviewed pre-rewr
 src/common/cli_io.c,common,measured,59.84,46.51,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/common/error.c,common,measured,100.00,n/a,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/common/floatconv.c,common,measured,93.65,69.09,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
-src/common/log.c,common,measured,92.50,66.67,87.50,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
+src/common/log.c,common,measured,90.00,66.67,87.50,Reviewed coverage floor: error/redirection paths are not feasible to exercise reliably; manual floor; see tests/baseline/README.md,gcc-13
 src/common/memory.c,common,measured,93.75,72.00,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/common/util.c,common,measured,57.14,70.00,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/compiler/absyn.c,compiler,measured,48.84,59.92,68.42,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13

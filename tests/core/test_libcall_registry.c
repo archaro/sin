@@ -11,6 +11,7 @@
 #include "compiler/compiler_pipeline.h"
 #include "error.h"
 #include "interpret.h"
+#include "log.h"
 #include "item.h"
 #include "test_assert.h"
 #include "test_helpers.h"
@@ -93,6 +94,70 @@ uint8_t *lc_str_padright(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 extern CONFIG_t config;
 
 #include "shared/test_libcall_support.h"
+
+static void assert_logging_controls_and_redirection(void) {
+  char base_path[96];
+  char log_path[104];
+  char err_path[104];
+  ASSERT_EQ_INT(0, test_make_temp_path("logging-contract", base_path,
+                                       sizeof(base_path)));
+  ASSERT_TRUE(snprintf(log_path, sizeof(log_path), "%s.log", base_path) > 0);
+  ASSERT_TRUE(snprintf(err_path, sizeof(err_path), "%s.err", base_path) > 0);
+
+  int saved_stdout = dup(STDOUT_FILENO);
+  int saved_stderr = dup(STDERR_FILENO);
+  ASSERT_TRUE(saved_stdout >= 0);
+  ASSERT_TRUE(saved_stderr >= 0);
+
+  LogLevel saved_level = log_get_level();
+  bool redirected = log_to_file(base_path);
+  if (redirected) {
+    log_set_level(LOG_LEVEL_QUIET);
+    ASSERT_EQ_INT(LOG_LEVEL_QUIET, log_get_level());
+    ASSERT_TRUE(!log_is_verbose());
+    logmsg("quiet-marker\n");
+    logverbose("quiet-verbose-marker\n");
+
+    log_set_level(LOG_LEVEL_VERBOSE);
+    ASSERT_EQ_INT(LOG_LEVEL_VERBOSE, log_get_level());
+    ASSERT_TRUE(log_is_verbose());
+    logmsg("normal-marker\n");
+    logverbose("verbose-marker\n");
+    logerr("error-marker\n");
+  }
+
+  fflush(stdout);
+  fflush(stderr);
+  ASSERT_TRUE(dup2(saved_stdout, STDOUT_FILENO) >= 0);
+  ASSERT_TRUE(dup2(saved_stderr, STDERR_FILENO) >= 0);
+  close(saved_stdout);
+  close(saved_stderr);
+  log_set_level(saved_level);
+
+  ASSERT_TRUE(redirected);
+
+  FILE *capture = fopen(log_path, "rb");
+  ASSERT_NOT_NULL(capture);
+  char buffer[256] = {0};
+  size_t n = fread(buffer, 1, sizeof(buffer) - 1, capture);
+  buffer[n] = '\0';
+  ASSERT_EQ_INT(0, fclose(capture));
+  ASSERT_TRUE(strstr(buffer, "normal-marker\n") != NULL);
+  ASSERT_TRUE(strstr(buffer, "quiet-marker\n") == NULL);
+
+  capture = fopen(err_path, "rb");
+  ASSERT_NOT_NULL(capture);
+  memset(buffer, 0, sizeof(buffer));
+  n = fread(buffer, 1, sizeof(buffer) - 1, capture);
+  buffer[n] = '\0';
+  ASSERT_EQ_INT(0, fclose(capture));
+  ASSERT_TRUE(strstr(buffer, "verbose-marker\n") != NULL);
+  ASSERT_TRUE(strstr(buffer, "error-marker\n") != NULL);
+  ASSERT_TRUE(strstr(buffer, "quiet-verbose-marker\n") == NULL);
+
+  ASSERT_EQ_INT(0, unlink(log_path));
+  ASSERT_EQ_INT(0, unlink(err_path));
+}
 
 static void assert_sys_log_output(VALUE_t out, const char *expected) {
   FILE *capture = tmpfile();
@@ -619,6 +684,7 @@ void test_libcall_output_formats_values(void) {
   } output_case_t;
 
   setup_libcall_runtime();
+  assert_logging_controls_and_redirection();
 
   const output_case_t sys_cases[] = {
     {(VALUE_t){VALUE_str, {.s = strdup("%s literal")}}, "%s literal"},
