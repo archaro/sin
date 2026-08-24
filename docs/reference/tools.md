@@ -127,6 +127,11 @@ loading, source-root selection, listener startup, connection changes, and
 shutdown. VM execution traces, boot return values, task return values, and
 runtime repair/coercion details are shown only with `--verbose`.
 
+If bootstrap execution finishes with a non-zero `error`, `sin` reports the
+outstanding `error.msg`, exits non-zero, and does not persist the itemstore.
+This is a runtime error left by the bootstrap, not an interpreter-validation
+failure.
+
 When `sin` shuts down safely, it saves the itemstore using the selected
 durability mode. `sys.abort` marks shutdown as unsafe, causing the runtime to
 exit without the normal itemstore save.

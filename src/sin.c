@@ -580,10 +580,22 @@ restart_boot:
     destroy_boot_runtime(state, false);
     goto restart_boot;
   }
-  ITEM_t *error_item = find_item(itemstore_root(state->boot_ctx.itemstore), "error");
+  ITEM_t *error_root = itemstore_root(state->boot_ctx.itemstore);
+  ITEM_t *error_item = find_item(error_root, "error");
   const VALUE_t *error_value = item_value(error_item);
   if (error_value && error_value->type == VALUE_int && error_value->i != 0) {
-    logerr("Bootstrap interpreter validation failed.\n");
+    ITEM_t *message_item = find_item(error_root, "error.msg");
+    const VALUE_t *message_value = item_value(message_item);
+    logerr("Bootstrap execution left an error:\n");
+    if (message_value && message_value->type == VALUE_str &&
+        message_value->s && message_value->s[0] != '\0') {
+      logerr("%s\n", message_value->s);
+    } else if (error_value->i >= 0 && error_value->i < MAXERRORS &&
+               errmsg[error_value->i]) {
+      logerr("%s\n", errmsg[error_value->i]);
+    } else {
+      logerr("No diagnostic message was provided.\n");
+    }
     goto boot_failure;
   }
   state->boot_completed = true;

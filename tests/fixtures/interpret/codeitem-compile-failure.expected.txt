@@ -2,7 +2,8 @@
 Using 'srcroot' as the source root.
 ===stderr===
 Compilation failed for item 'broken': <memory>: syntax error
-Bootstrap interpreter validation failed.
+Bootstrap execution left an error:
+Syntax error. (<memory>: syntax error)
 
 ===exit===
 1

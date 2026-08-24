@@ -391,6 +391,7 @@ rewrite.network.test_input_processor_missing_item_requests_unsafe_shutdown,api.n
 rewrite.network.test_input_processor_timer_is_nonblocking_and_sleepable,api.network.runtime-io
 rewrite.chat_smoke.examples_chat_flow,executable.sin.command-line;executable.sin.input-output;executable.sin.exit-status;executable.sin.errors
 rewrite.runtime.test_sin_boot_frees_aggregate_return_values,api.entrypoint.sin;executable.sin.command-line;executable.sin.input-output;executable.sin.exit-status;executable.sin.persistence;executable.sin.errors
+rewrite.runtime.test_sin_boot_reports_outstanding_runtime_error,api.entrypoint.sin;executable.sin.command-line;executable.sin.input-output;executable.sin.exit-status;executable.sin.persistence;executable.sin.errors
 rewrite.e2e.scomp_cli_contract_matrix,api.entrypoint.scomp;executable.scomp.command-line;executable.scomp.input-output;executable.scomp.exit-status;executable.scomp.persistence;executable.scomp.errors
 rewrite.e2e.sdiss_cli_contract_matrix,api.entrypoint.sdiss;executable.sdiss.command-line;executable.sdiss.input-output;executable.sdiss.exit-status;executable.sdiss.persistence;executable.sdiss.errors
 rewrite.e2e.sin_cli_contract_matrix,api.entrypoint.sin;executable.sin.command-line;executable.sin.input-output;executable.sin.exit-status;executable.sin.persistence;executable.sin.errors

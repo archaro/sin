@@ -305,3 +305,42 @@ void test_sin_boot_frees_aggregate_return_values(void) {
     ASSERT_EQ_INT(0, unlink(itemstore_path));
   }
 }
+
+void test_sin_boot_reports_outstanding_runtime_error(void) {
+  static const char source[] = "sys.delete{nil};";
+  char source_path[96], object_path[96], itemstore_path[96];
+  ASSERT_EQ_INT(0, test_make_temp_path("sin-boot-error-source", source_path,
+                                       sizeof(source_path)));
+  ASSERT_EQ_INT(0, test_make_temp_path("sin-boot-error-object", object_path,
+                                       sizeof(object_path)));
+  ASSERT_EQ_INT(0, test_make_temp_path("sin-boot-error-items", itemstore_path,
+                                       sizeof(itemstore_path)));
+
+  write_bytes(source_path, (const uint8_t *)source, strlen(source));
+  char *compile_argv[] = {TEST_SCOMP, source_path, object_path, NULL};
+  TestProcessResult result = {0};
+  ASSERT_EQ_INT(0, test_run_argv_capture(compile_argv, 0, &result));
+  ASSERT_EQ_INT(0, result.exit_code);
+  test_process_result_free(&result);
+
+  char *run_argv[] = {TEST_SIN, "--loadonly", "--itemstore", itemstore_path,
+                      "--srcroot", "tests/fixtures", "--object", object_path,
+                      NULL};
+  ASSERT_EQ_INT(0, test_run_argv_capture(run_argv, 0, &result));
+  ASSERT_EQ_INT(1, result.exit_code);
+  ASSERT_TRUE(strstr(result.stderr_text,
+                     "Bootstrap execution left an error:\n") != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text,
+                     "Invalid arguments to library call. "
+                     "(sys.delete item name must be a string or item reference)")
+              != NULL);
+  ASSERT_TRUE(strstr(result.stderr_text,
+                     "Bootstrap interpreter validation failed.") == NULL);
+  test_process_result_free(&result);
+
+  errno = 0;
+  ASSERT_EQ_INT(-1, access(itemstore_path, F_OK));
+  ASSERT_EQ_INT(ENOENT, errno);
+  ASSERT_EQ_INT(0, unlink(source_path));
+  ASSERT_EQ_INT(0, unlink(object_path));
+}
