@@ -1275,6 +1275,10 @@ void test_loaded_itemstore_mutation_roundtrip(void) {
 }
 
 void test_item_set_code_rejects_inuse_replacement(void) {
+  ITEM_MUTATION_RESULT_t invalid = item_set_code(NULL, "code", 0, NULL);
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_ARGUMENT, invalid.status);
+  ASSERT_TRUE(invalid.item == NULL);
+
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
 
