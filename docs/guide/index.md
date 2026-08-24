@@ -13,6 +13,9 @@ go next: [overview](overview.md)
 A more detailed introduction which walks through all the important bits of
 Sinistra is to be found in [Your First World](first-world.md).
 
+A brief introduction to the Sinistra runtime model will be found here:
+[runtime model](runtime-model.md).
+
 ## Items ##
 
 - [Items](items-and-the-tree.md): The core Sinistra concept.
