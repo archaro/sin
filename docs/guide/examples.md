@@ -119,10 +119,11 @@ new string is constructed which consists of the remainder of `input.text` after
 the initial `\`.  This is naive and there are better ways to do it, but it
 illustrates string manipulation quite well.
 
-Also in this section, the item `docommand` is executed.  If `docommand` were a
-simple variable, let's say a string, nothing would happen.  However, you will
-see later in the example that `docommand` is a code item, and therefore it
-will be executed, passing along `input.line` and `@cmd` as arguments.
+Also in this section, the item `docommand` is called. If `docommand` were a
+value item, no code would run: its stored value would simply be returned and,
+because this is an expression statement, discarded. However, you will see later
+in the example that `docommand` is a code item, so it executes synchronously
+with `input.line` and `@cmd` as arguments.
 
 ```sinistra
 docommand = code {@l, @cmd} (
@@ -176,7 +177,7 @@ sys.delete{wibble};
 You could try compiling this and running it with `sin --loadonly`.  You will
 see that rather than `wibble` being deleted, it is in fact executed!  But wait,
 there's more: `wibble` returns `nil` (the default value if no return is given),
-which means that 'sys.delete' is passed a `nil` argument.  Since `nil` is
+which means that `sys.delete` is passed a `nil` argument.  Since `nil` is
 neither an item name nor an item reference, it fails politely with an "invalid
 arguments" error.  Were you to run the code, you would see something like this:
 ```
@@ -372,7 +373,107 @@ greetings.hello{"George"};
 ```
 
 ## Walking the Item Tree
-TO BE EXPANDED
+With dynamic expansion of the world, there will come a time when you are not
+entirely sure just what is in your item tree.  There are four `sys` libcalls
+which will help in this situation.  The first two are demonstrated in the
+snippet below (which you could add to your First World if you still have it):
+```sinistra
+commands.rootname = code{@l, @args} (
+  @c = 0;
+  @count = sys.rootcount;
+  net.write{@l, "Root items:\n"};
+  while @c < @count do
+    @i = sys.rootname{@c};
+    net.write{@l, @i};
+    net.write{@l, "\n"};
+    @c++;
+  endwhile;
+  net.write{@l, "End of list\n"};
+  net.write{@l, "There are "};
+  net.write{@l, @count};
+  net.write{@l, " root items.\n"};
+);
+```
+Two libcalls are demonstrated here: `sys.rootcount`, which returns the number
+of root items (i.e. the top-level items in the root namespace), and
+`sys.rootname`, which returns the name of the root item at a given index.  In
+the first world, this will give an output similar to:
+```
+archaro@stick:~/sin$ telnet localhost 4001
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+Connected.
+Hello!  You are on line 0
+rootname
+Root items:
+error
+input
+docommand
+rooms
+commands
+greetings
+player
+End of list
+There are 7 root items.
+```
+*Important Note*: The precise order of the names is not significant and should
+not be relied upon across runtime restarts.
+
+The other two libcalls operate below the root level. sys.childcount returns the
+number of immediate children of a given item, while sys.nthname returns the
+layer name of the child at a given zero-based index. Together they perform the
+same job for an arbitrary item that sys.rootcount and sys.rootname perform for
+the root namespace.
+
+By combining these four libcalls it is relatively straightforward to walk the
+entire item tree recursively. This is left as an exercise to the reader.
+
+Kidding!  Here it is:
+```sinistra
+commands.rootname = code{@l, @args} (
+  @c = 0;
+  @count = sys.rootcount;
+  net.write{@l, "The Item Tree:\n"};
+  while @c < @count do
+    @i = sys.rootname{@c};
+    net.write{@l, @i};
+    net.write{@l, "\n"};
+    if sys.childcount{@i} > 0 then
+      walktree{@l, @i, 2};
+    endif;
+    @c++;
+  endwhile;
+  net.write{@l, "End of list\n"};
+  net.write{@l, "There are "};
+  net.write{@l, @count};
+  net.write{@l, " root items.\n"};
+);
+
+walktree = code {@l, @start, @indent} (
+  @c = 0;
+  @count = sys.childcount{@start};
+  while @c < @count do
+    @layer = sys.nthname{@start, @c};
+    @i = 0;
+    while @i < @indent do
+      net.write{@l, " "};
+      @i++;
+    endwhile;
+    net.write{@l, @layer};
+    net.write{@l, "\n"};
+    @item = @start + "." + @layer;
+    if sys.childcount{@item} > 0 then
+      walktree{@l, @item, @indent + 2};
+    endif;
+    @c++;
+  endwhile;
+);
+```
+This example also rather neatly demonstrates recursion.  Each call to
+`walktree` tests to see if the item under examination has any children.  If it
+does, the fully-qualified name of each item is constructed and passed
+recursively to `walktree` to examine the next layer down.
 
 ## Tasks
 Tasks schedule separate executions of Sinistra code through the event loop.
