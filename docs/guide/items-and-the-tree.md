@@ -17,6 +17,11 @@ Items are nominally hierarchical, although this is only an organisational strate
 `foo.bar.baz`  
 …although there is nothing can be inferred from `foo.bar` by its relationship with `foo`.
 
+Item names are case-insensitive. `player.name`, `Player.Name`, and
+`PLAYER.NAME` therefore refer to the same item; internally, item layer names
+are normalised to lower case. The same rule applies to local variable names
+and to Sinistra keywords.
+
 Item layer names are strings. Integer layer literals and integer-valued
 dereferences are converted to canonical base-10 integer text, so `foo.1` and
 `foo.[@i]` with `@i = 1` address the same item. Float values are not permitted

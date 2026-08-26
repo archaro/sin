@@ -45,6 +45,18 @@ for libcall syntax. Punctuation tokens are `=`, `==`, `!`, `!=`, `<`, `<=`,
 tokens is invalid input. Unterminated strings, code bodies, embedded quoted
 strings (including raw strings), and comments are rejected.
 
+### Case sensitivity
+
+Sinistra is case-insensitive for keywords, local names, and item layer names.
+They are normalised to lower case. Thus:
+
+- `foreach`, `FOREACH`, and `FoReAcH` are the same keyword;
+- `@name`, `@Name`, and `@NAME` refer to the same local;
+- `command`, `Command`, and `COMMAND` refer to the same item.
+
+Case is significant inside string values: `"Hello"` and `"hello"` are different
+strings.
+
 ## Implementation limits and failure behavior
 
 The following limits are normative for the reference implementation. Host-
