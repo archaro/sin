@@ -7,8 +7,10 @@ dangling reference re-resolution, nil elements, nested iteration, snapshot
 iteration under source rebinding, and the nil iterator result after zero
 iterations. The executable `positive-structures.src` witness covers loop
 control, increment/decrement, branch alternatives, relative layers, and item
-syntax. Persistence is covered by the existing `interpret/list-itemref-persist`
-fixture.
+syntax. The executable `positive-mixed-case.src` witness locks down ASCII
+case-insensitivity for compound control-flow keywords, local bindings, and item
+layer names (including lowercase canonical item references). Persistence is
+covered by the existing `interpret/list-itemref-persist` fixture.
 
 The negative fixtures each contain one independent rejection and are consumed
 by `test_pipeline_negative_matrix`:

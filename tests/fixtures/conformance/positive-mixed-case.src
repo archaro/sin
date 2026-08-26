@@ -1,0 +1,25 @@
+@CoUnTeR = 0;
+@BrAnCh = false;
+@SeEn = 0;
+wHiLe @cOuNtEr < 2 dO
+  @COUNTer++;
+eNdWhIlE;
+iF @counter == 2 tHeN
+  @bRaNcH = true;
+eLsIf false tHeN
+  @branch = false;
+eLsE
+  @branch = false;
+eNdIf;
+FoReAcH @eLeMeNt In #[1, 2] dO
+  @sEeN = @seen + @element;
+eNdFoR;
+
+MiXeD.Root = 4;
+mIxEd.rOoT = MIXED.ROOT + 1;
+sys.log{"CONF-mixed-case"};
+sys.log{#[@COUNTer == 2, @counter == 2, @CoUnTeR == 2,
+  @branch, @BrAnCh, @SeEn == 3,
+  mixed.root == 5, MIXED.rOoT == 5,
+  sys.fetch{&mIxEd.RoOt} == 5,
+  sys.itemname{&MIXED.root} == "mixed.root"]};

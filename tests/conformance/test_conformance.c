@@ -1264,6 +1264,7 @@ static void malformed_manifest_fails_closed(void) {
 
 static void conformance_positive_core(void) { run_case("positive-core"); }
 static void conformance_positive_structures(void) { run_case("positive-structures"); }
+static void conformance_positive_mixed_case(void) { run_case("positive-mixed-case"); }
 static void conformance_libcall_sys(void) { run_case("libcall-sys"); }
 static void conformance_libcall_list(void) { run_case("libcall-list"); }
 static void conformance_libcall_str(void) { run_case("libcall-str"); }
@@ -1283,6 +1284,7 @@ static const TF_TestDescriptor tests[] = {
   {"conformance.malformed-manifest", malformed_manifest_fails_closed, "conformance", 5000, "conformance.framework.manifest"},
   {"conformance.positive-core", conformance_positive_core, "conformance", 30000, "conformance.framework.pipeline"},
   {"conformance.positive-structures", conformance_positive_structures, "conformance", 30000, "conformance.framework.pipeline"},
+  {"conformance.positive-mixed-case", conformance_positive_mixed_case, "conformance", 30000, "conformance.framework.pipeline"},
   {"conformance.libcall-sys", conformance_libcall_sys, "conformance", 30000, "conformance.framework.libcall"},
   {"conformance.libcall-list", conformance_libcall_list, "conformance", 30000, "conformance.framework.libcall"},
   {"conformance.libcall-str", conformance_libcall_str, "conformance", 30000, "conformance.framework.libcall"},

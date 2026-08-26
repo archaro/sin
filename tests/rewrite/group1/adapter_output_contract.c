@@ -140,7 +140,7 @@ static void aggregate_success(void) {
   TF_ASSERT_TRUE(runner && runner[0] && self && self[0] &&
                  conformance && conformance[0]);
   run_process(args, 0, &result);
-  TF_ASSERT_DIAGNOSTIC("TF|TOTAL|all|32|32|0", result.stdout_data);
+  TF_ASSERT_DIAGNOSTIC("TF|TOTAL|all|33|33|0", result.stdout_data);
   TF_ASSERT_FALSE(strstr(text_or_empty(result.stdout_data), "|FAIL|") != NULL);
   TF_ASSERT_STR("", text_or_empty(result.stderr_data));
   destroy_process(&result);

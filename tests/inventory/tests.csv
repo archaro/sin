@@ -86,6 +86,7 @@ conformance.manifest,conformance.framework.manifest
 conformance.malformed-manifest,conformance.framework.manifest
 conformance.positive-core,conformance.framework.pipeline
 conformance.positive-structures,conformance.framework.pipeline
+conformance.positive-mixed-case,conformance.framework.pipeline
 conformance.libcall-sys,conformance.framework.libcall
 conformance.libcall-list,conformance.framework.libcall
 conformance.libcall-str,conformance.framework.libcall
