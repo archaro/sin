@@ -1,38 +1,58 @@
-## Values and operators ##
+# Expressions and Values
 
 The complete value model, truthiness rules, equality/ordering matrices, and
 arithmetic result contracts are maintained in the [canonical language
-reference](../reference/language.md#values-and-operator-semantics). The summary
-here is intentionally introductory: there are seven runtime value types, and
-`+`, `-`, `*`, `/`, `%`, comparisons, `!`, `and`, and `or` do not perform
-general string/numeric/boolean coercion. In particular, `+` has the documented
-`nil`-as-zero special case. Invalid `/` has a compatibility split: a pair with
-no float operand produces integer zero, while an invalid pair containing a
-float produces `nil`. Lists are interesting, too. See the documentation on [lists](lists.md) for more information.
+reference](../reference/language.md#values-and-operator-semantics).
 
-Arithmetic operators have the same precedence and left associativity as shown
-in the canonical reference. The unary postfix operators `++` and `--` operate
+## Operators and Values
+Sinistra has seven runtime value types: `nil`, Boolean, integer, float, string,
+item reference, and list. Operators have type-specific behaviour rather than
+performing general coercion between strings, numbers and Booleans.
+
+The arithmetic operators are `+`, `-`, `*`, `/`, and `%`. Comparisons use
+`==`, `!=`, `<`, `<=`, `>`, and `>=`. Boolean logic uses `and`, `or`, and `!`.
+
+One particularly useful Sinistra peculiarity is that `+` treats `nil` as
+integer zero.
+
+Lists are interesting, too. See the documentation on [lists](lists.md) for more information.
+
+Operators follow the precedence rules given in the
+[canonical language reference](../reference/language.md#precedence-and-associativity);
+parentheses may be used to override them.
+
+## Truthiness
+`nil`, `false`, integer zero, floating-point zero, the empty string, and the
+empty list are false. Non-zero numbers, non-empty strings and non-empty lists
+are true. Item references are true whether or not they currently resolve to an
+existing item.
+
+A full discussion of truthiness will be found in the
+[canonical language reference](../reference/language.md#truthiness).
+
+Examples:
+```sinistra
+is_wizard = true;
+is_guest = false;
+if is_wizard == true then ...; endif;
+if is_guest == false then ...; endif;
+```
+
+## Arithmetic and concatenation
+Binary arithmetic operators have the same precedence and left associativity as
+shown in the canonical reference.
+
+Strings may be concatenated with `+` only when both operands are strings.
+
+## Boolean Logic
+Boolean literals are `true` and `false`; `nil` is the explicit nil literal.
+
+The Boolean operators `and` and `or` short-circuit and return Boolean results.
+
+## Increment and Decrement operators
+The unary postfix operators `++` and `--` operate
 on local variables but not items, and are statements rather than expressions.
 Thus the following is invalid:
 
 `WHILE @a++ < 100 DO ...; ENDWHILE;`
 
-The usual boolean comparison operators are present; `||` and `&&` are not use
-`or` and `and`, which short-circuit and return normalized booleans.
-
-Boolean literals are `true` and `false`; `nil` is the explicit nil literal (all
-three are case-insensitive reserved words).
-
-Truthiness includes non-empty lists and all item references (resolved or not);
-empty lists are false. See the canonical truthiness table for float NaN,
-signed-zero, and malformed aggregate edge cases.
-
-Examples:
-`is_wizard = true;`
-`is_guest = false;`
-`if is_wizard == true then ...; endif;`
-`if is_guest == false then ...; endif;`
-
-Strings may be concatenated with `+` only when both operands are strings.
-
-The usual operator precedence applies, and (parentheses) can be used to change this.
