@@ -25,6 +25,7 @@ For normative language rules, see the
 
 ## When Things Go Wrong
 
+- [The Failure Model](failure-model.md)
 - [Troubleshooting](troubleshooting.md)
 
 For complete syntax and API details, see the

@@ -39,7 +39,8 @@ when code needs to clear or preserve a diagnostic deliberately.
 
 ## Logging
 
-`scomp` and `sin` support normal, quiet (`-q`), and verbose (`-v`) logging.
+`sin`, `scomp`, and `sconv` support normal, quiet (`-q`), and verbose (`-v`)
+logging.
 `sdiss` accepts `-q` to suppress progress messages and `-v` for parity, but
 `-v` currently produces no additional trace output. Normal output is written
 to standard output and errors to standard error; quiet mode suppresses
