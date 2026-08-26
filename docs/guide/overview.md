@@ -77,6 +77,10 @@ This will output the value of `greet.count` (initially 0), then execute `greet`
 and add it to the current value of `greet.count`.  When `greet.count` is
 output again, it will have the value 1.
 
+### A note about case
+Sinistra keywords, locals and item names are case-insensitive.
+
+
 ## Code starts as source, but is compiled to bytecode
 The bootstrap code (more later) is compiled separately using the `scomp` tool.
 Other code items may be compiled using this tool, or dynamically from within
@@ -117,8 +121,8 @@ invocation is executing, but it is not permanently pinned.
 
 Persistence means "memory first, disk second".  The full item tree is loaded
 into memory when the runtime starts up, and is saved on normal exit.  It may
-also be saved by calling the `sys.backup` libcall.  The on-disk store is
-called `items.dat`, and contains the persistent item tree, including values and
+also be saved by calling the `sys.save` libcall.  The on-disk store is called
+`items.dat`, and contains the persistent item tree, including values and
 compiled bytecode. The corresponding source text for code items is stored
 separately beneath `srcroot/`.
 
