@@ -88,8 +88,8 @@ the language by use of the `sys.compile` libcall.  The compilation process
 produces bytecode which is then executed by the VM within the Sinistra runtime
 (`sin`).
 
-Although the bootstrap code is always separate, other code items will be
-inserted into the item tree.
+Although the bootstrap code is always separate, other code items may be
+inserted into the item tree when the bootstrap code is executed.
 
 ## And the compiler is inside the runtime
 

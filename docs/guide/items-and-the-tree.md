@@ -1,20 +1,16 @@
-## The Item ##
+# Items and the Item Tree
 
-The fundamental unit in Sinistra is the *item*. An item can contain integers,
-floats, strings, Boolean values, `nil`, or code. The exact call, parameter,
-return, and side-effect rules are normative in the [canonical language
-reference](../reference/language.md#item-calls-and-code-item-execution). A
-value item is not executed: an item expression returns a clone of its stored
-value. A code item executes synchronously; a missing or invalid target returns
-`nil`. All items therefore produce a value, even when that value is `nil`.
+## Paths and Layers
+The fundamental unit in Sinistra is the item. An item's name consists of one or
+more layers, which together form its path.
 
-Items can contain various values, which are defined in the [canonical language
-reference](../reference/language.md#values-and-operator-semantics). Of particular note is the concept of a "code" item. These are special items, in that rather than holding a value they execute Sinistra code.  They may optionally return a result.  For more information, see the documentation on [code items](code-items.md).
-
-Items are nominally hierarchical, although this is only an organisational strategy – there is no inheritance.  Thus the following are items:  
-`foo`  
-`foo.bar`  
-`foo.bar.baz`  
+Items are nominally hierarchical, although this is only an organisational
+strategy – there is no inheritance.  Thus the following are items:
+```
+foo
+foo.bar
+foo.bar.baz
+```
 …although there is nothing can be inferred from `foo.bar` by its relationship with `foo`.
 
 Item names are case-insensitive. `player.name`, `Player.Name`, and
@@ -22,75 +18,143 @@ Item names are case-insensitive. `player.name`, `Player.Name`, and
 are normalised to lower case. The same rule applies to local variable names
 and to Sinistra keywords.
 
-Item layer names are strings. Integer layer literals and integer-valued
-dereferences are converted to canonical base-10 integer text, so `foo.1` and
-`foo.[@i]` with `@i = 1` address the same item. Float values are not permitted
-as layer names or as dereference results used to build a layer name: a literal
-such as `foo.1.0` is parsed as layers `foo`, `1`, and `0`, not as a float layer,
-and a runtime dereference that evaluates to a float makes item assembly fail and
-produce `nil`. Consequently `1`, `1.0`, and `1.00` do not have three
-float-derived item-name spellings: only integer `1` is supported as a numeric
-layer value, while the dotted forms are normal multi-layer string names if
-written explicitly. Likewise `+0.0` and `-0.0` have no item-name mapping, and
-NaN payloads are neither preserved nor normalized for item names because NaN
-float values are rejected rather than formatted.
+Each part of a path is called a layer. Layers may be written directly, as in
+`players.42.name`, or constructed dynamically using dereferencing, which we
+shall meet later.
 
-Item paths used by the runtime and itemstore APIs have at most eight non-root
-layers. Each layer is 1 to 32 bytes and may contain only ASCII letters, digits,
-and `_`; the complete non-root path is at most 263 bytes including dots. These
-checks apply before mutation as well as to lookup and deletion. When an API is
-given a non-root item as its starting pointer, that item's ancestor depth and
-path are included in the same limits. Invalid paths are rejected without
-partially creating a path. The v1 root-name exception remains: the root name
-is limited to 32 bytes but is not restricted to the non-root character set.
+Item paths may also be relative to the currently executing item's location by
+using the leading-dot form. The precise resolution rules are described in the
+Language Reference.  Thus:
+```sinistra
+add.first = 10;
+add.second = 5;
+add = code ( return .first + .second; );
+/* equivalent to */
+add = code ( return add.first + add.second; );
+```
 
-To assign an item, use the assignment operator, `=`.  If the item does not exist, it will be created (as will all of its parents, if it is a multi-layered item).  If the item exists, its value will be overwritten with the new value.  An item which does not exist has the default value of `nil`.  Thus:  
-`foo = 10;`  
-`bar = 10 * foo;`  
-(bar is now equal to 100)  
-`bar = 10 * wibble`  
-(wibble does not exist, and has the default value of `nil`.  `10 * nil` is `nil`, so the value of bar is also `nil`)
+Sinistra places limits on path depth, layer length and the characters which may
+appear in a layer. The exact limits are given in the
+[Language Reference](../reference/language.md).
 
-The examples above are examples of immediate execution.  Once executed, the result is given and the steps to create it are forgotten.  However, let’s instead make bar a code item.  Code items are evaluated each time they are called.
+## Value Items
+An item is either a value item or a code item. A value item may contain `nil`,
+a Boolean, integer, float, string, list, or item reference. A code item
+contains executable Sinistra bytecode.
 
-`bar = code ( return 10 * wibble; );`
-Now, bar is equal to `nil`, but if we define  
-`wibble = 7;`  
-then bar will be equal to 70.  If we redefine  
-`wibble = 3;`  
+A value item is not executed: an item expression returns a clone of its stored
+value. A code item executes synchronously; a missing or invalid target returns
+`nil`. All items therefore produce a value, even when that value is `nil`.
+
+## Code Items
+Of particular note is the concept of a "code" item. These are special items, in
+that rather than holding a value they execute Sinistra code.  They may
+optionally return a result, but if they do not they are deemed to return `nil`.
+
+## Assignment and Replacement of Items
+To assign an item, use the assignment operator, `=`.  If the item does not
+exist, it will be created (as will all of its parents, if it is a multi-layered
+item).  If the item exists, its value will be overwritten with the new value.
+An item which does not exist produces `nil`.  Thus:
+```sinistra
+foo = 10;
+bar = 10 * foo;
+```
+(bar is now equal to 100)
+```sinistra
+bar = 10 * wibble;
+```
+(`wibble` does not exist, and has the default value of `nil`.  `10 * nil` is
+`nil`, so the value of bar is also `nil`)
+
+The examples above are examples of immediate execution.  Once executed, the
+result is given and the steps to create it are forgotten.  However, let’s
+instead make bar a code item.  Code items are evaluated each time they are
+called.
+
+```sinistra
+bar = code ( return 10 * wibble; );
+```
+At this point, evaluating `bar` returns `nil`, because `wibble` does not yet
+exist. But if we now define `wibble`:
+```sinistra
+wibble = 7;
+```
+then bar will be equal to 70.  If we redefine
+```sinistra
+wibble = 3;
+```
 then bar will now return 30.
 
-Code items can contain local variables.  There is only one scope: the item.  Thus, a local variable is visible from the moment it is defined to the end of the item.  Local variables are defined by assignment.
-
-`dingdong = code ( @a = bar; @b = 100; return @a + @b; );`
-
-When `dingdong` is executed, it assigns the value of `bar` to local variable `@a`, the value of `100` to local variable `@b`, adds `@a` and `@b` together, and returns the result. `return expression;` evaluates its expression once and immediately exits the current code item; `return;` exits with `nil`. Every expression statement is evaluated and discarded, including the final one. Falling off the end of a code item returns `nil`; no residual expression value becomes an implicit result.
-
-When compiling code, if the parser doesn't like the source which it is chewing on, it will bail out and set `error` to an error number, and `error.msg` to the appropriate error message.  Thus an easy way to check if the code has compiled is to test these items.  A successful compilation will set these items to `nil`.
-
-You can pass parameters to items, too. Arguments evaluate left-to-right before
-the target is resolved. Parameters bind in declaration order; they are locals
-private to the invocation. If you pass too many arguments, only the first N
-distinct parameter slots are retained and the extras are ignored. Duplicate
-parameter names reuse the same slot, ordered by first occurrence. If you pass
-too few, trailing parameters receive `nil`. Here is an item which takes two
-arguments:
+Code items can contain local variables.  There is only one scope: the item.
+Thus, a local variable is visible from the moment it is defined to the end of
+the item.  Local variables are defined by assignment.
+```sinistra
+dingdong = code ( @a = bar; @b = 100; return @a + @b; );
 ```
-add = code {@a, @b} ( return @a + @b; );
-if error then
-  sys.log{"Compilation failed:\n"};
-  sys.log{error.msg};
-  sys.log{"\n"};
-endif;
+When `dingdong` is executed, it assigns the value of `bar` to local variable
+`@a`, the value of `100` to local variable `@b`, adds `@a` and `@b` together,
+and returns the result. `return expression;` evaluates its expression once and
+immediately exits the current code item; `return;` exits with `nil`.
+Every expression statement is evaluated and discarded, including the final one.
+Falling off the end of a code item returns `nil`; no residual expression value
+becomes an implicit result.
+
+## Item References
+When the bytecode interpreter encounters an item, it evaluates the item and
+uses the result.  This is almost always what you need.  However, there are some
+situations (for example constructing lists of items) where you need to refer
+to the item itself, not its value.  For these situations, you need to use an
+item reference.  The item reference operator is `&` prefixed to the item you
+need to refer to.  Thus:
+```sinistra
+wibble = 42;
+snap = wibble;
+crackle = &wibble; /* sys.fetch{crackle} would return 42 */
 ```
+In this example, `snap` contains the integer `42`, while `crackle` contains an
+item reference whose path is `wibble`. If `wibble` is later changed to `"abc"`,
+`snap` still contains `42` and `crackle` still contains the reference
+`&wibble`. To fetch the value currently found at that path, use
+`sys.fetch{crackle}`:
+```sinistra
+wibble = 42;
+crackle = &wibble;
+/* sys.fetch{crackle} would return 42 */
+wibble = "abc";
+/* sys.fetch{crackle} would return "abc" */
+```
+## Dynamic Items and Dereferencing
+In any non-trivial world, it will sometimes be necessary to refer to an item
+without knowing its exact path at compile time.  For this reason, item
+dereferencing was invented.  The dereferencing operator is `[...]`:
+```sinistra
+@room = player.[input.line].room;
+```
+The dereference operator means "evaluate this and substitute its value into the
+item path".  Both items and local variables can be dereferenced, and
+dereferences may be nested.
 
-If you call `add` with no arguments, you are effectively calling `add{nil, nil};`, and because `+` treats `nil` as integer `0`, the result is integer `0`. Calling `add{1};` is effectively `add{1, nil};` and returns `1`. Calling `add{1, 2, 3};` returns `3`, because the third argument is intentionally dropped. The same tolerant behavior applies when arguments are supplied to a missing item or to an expression that does not resolve to an item name; those calls return `nil`. Starting `sin` with `--strict-runtime-contracts` keeps executing with the same result behavior, but records `ERR_RUNTIME_INVALIDARGS` in `error`, writes a diagnostic in `error.msg`, and logs whenever a call has to discard arguments.
+The key distinction between `[...]` and `&` is that `[...]` is concerned with
+item-path construction.  In other words:
+- `&foo`: constructs an item reference value;
+- `foo.[@bar]`: dynamically constructs an item path by substituting a layer.
 
-Strict dropped-argument diagnostics are therefore opt-in. For example,
-`add{1, 2, 3};` still returns `3` in both modes, but strict mode also reports
-that one extra argument was discarded. Likewise, `missing.item{1};` still
-returns `nil`, but strict mode reports that the argument to the missing target
-was dropped. Run without `--strict-runtime-contracts` for normal live-update
-operation; run with it when you want these mismatches surfaced during testing
-or development. A value item is not executed and returns a clone of its value,
-regardless of supplied arguments.
+## Calling Items
+Code items may declare parameters:
+```sinistra
+add = code {@a, @b} (
+  return @a + @b;
+);
+```
+Arguments are supplied in braces:
+```sinistra
+result = add{2, 3};
+```
+Parameters are local to each invocation. If fewer arguments are supplied than
+there are parameters, the remaining parameters receive nil. Extra arguments are
+evaluated but ignored in normal operation.
+
+A value item is not executed when called; it simply yields a clone of its
+stored value. The complete call contract, including strict diagnostic
+behaviour, is described in the [Language Reference](../reference/language.md).
