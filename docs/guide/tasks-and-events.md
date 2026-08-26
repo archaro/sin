@@ -1,19 +1,46 @@
-## Tasks ##
+# Tasks and Events
 
-An important concept to remember when writing Sinistra code is *no perpetual loops, ever*. The engine is built around a run-loop, which responds to network events, input callbacks, and timer tasks. The input timer has a nominal 10ms interval, but eligibility is not a real-time guarantee: other callbacks or a long-running input item can delay it. Each `net.input` call handles at most one pending connection, disconnection, or complete-line event, so queued events are handled over later fair-queue turns.
+Sinistra can schedule code items to run once or repeatedly using the `task`
+library. Tasks run on the same event loop as the rest of the world: they are
+not threads, and task code executes synchronously. A task should therefore do
+its work and return promptly.
 
+For the relationship between tasks, network events, the `input` item, and the
+event loop, see the [Runtime Model](runtime-model.md).
+
+Remember that Sinistra is not a RTOS.  When scheduling tasks, the timer is
+a suggestion to the event loop, not a guarantee of periodicity.
+
+## Creating a Task
+
+## Repeating and One-shot Tasks
 `task.newgametask{item, start, repeat}` uses integer intervals in tenths of a
-second, converted to timer milliseconds. `start` is the delay before the first
-callback and `repeat` is the interval between later callbacks. A zero repeat
-interval makes the task one-shot; it retires automatically after its callback,
-including the `start = 0, repeat = 0` immediate case. A positive repeat
-interval keeps the task active until `task.killtask{id}` closes it. Intervals
-must be non-negative integers no greater than `INT64_MAX / 100`; a task also
-requires an initialized event loop and an existing item, and logs an error rather than executing when that item is not a code item.
+second.
+- `item` is either the item name as a string or a reference to the item which is
+being scheduled.
+- `start` is the delay before the first callback
+- `repeat` is the interval between later callbacks.
+A zero or negative repeat interval makes the task one-shot; it retires
+automatically after its callback.  Setting both `start` and `repeat` to `0`
+also invites the event loop to run the task as soon as it can.
+A positive `repeat` interval keeps the task active until it is cancelled.
 
-Within a timer task callback, `task.thisid` reports that task's id, including
-while synchronously called items execute and after the task asks to close itself.
+If the call to `task.newgametask` is successful, it returns a non-zero integer.
+This is the task id, and can be used to refer the the task later.
 
-Outside such a callback it returns `nil`. `task.exists{id}` checks whether an id
-is currently scheduled, and `task.count` reports how many scheduled tasks remain; a close request makes both observations change immediately.
+## Cancelling a Task
+`task.killtask{id}` takes an integer argument.  If a task is found with a
+matching id, that task is removed from the event loop.  Tasks may terminate
+themselves by calling `task.killtask` with their own id (obtained by calling
+`task.thisid`).  The task will run to its natural completion, but will be
+removed from the event loop.
+
+## The Current Task
+`task.thisid`, called from within an executing task, returns the id of the task.
+It returns `nil` if called from outside a running task.
+
+## Inspecting Scheduled Tasks
+- `task.exists{id}`: returns `true` if a task with that id is currently
+scheduled, otherwise `false`.
+- `task.count` reports how many scheduled tasks remain
 
