@@ -5,6 +5,7 @@
 #include "floatconv.h"
 #include "interpret.h"
 #include "item.h"
+#include "itemref.h"
 #include "libcall_common.h"
 #include "libcall_handlers.h"
 #include "log.h"
@@ -62,7 +63,7 @@ static uint8_t *lc_task_timer_setup_failed(RuntimeContext *ctx, uint8_t *nextop,
                                            TASK_t *task, VALUE_t *itemname,
                                            const char *detail) {
   if (task) destroy_task(task);
-  if (itemname) FREE_STR(*itemname);
+  if (itemname) value_free(itemname);
   push_stack(ctx->vm->stack, VALUE_NIL);
   set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_INVALIDARGS,
                          detail, ctx ? ctx->current_item : NULL);
@@ -83,26 +84,29 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   VALUE_t itemname = pop_stack(ctx->vm->stack);
   if (!lc_value_is_type(repeatin, VALUE_int)
    || !lc_value_is_type(startin, VALUE_int)
-   || !lc_value_is_type(itemname, VALUE_str)) {
+   || (itemname.type != VALUE_str && itemname.type != VALUE_itemref)) {
     // Invalid parameters.  Clean them up, set the error item,
     // and return.
     VALUE_t popped[] = {repeatin, startin, itemname};
     lc_cleanup_values(popped, 3);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
-        "task.newgametask expects string item name and integer start/repeat intervals; floats are invalid for intervals");
+        "task.newgametask expects string item name or item reference and integer start/repeat intervals; floats are invalid for intervals");
   }
   // Intervals are given in 10ths of a second, but we need milliseconds.
   if (startin.i < 0 || repeatin.i < 0 ||
       startin.i > (INT64_MAX / 100) || repeatin.i > (INT64_MAX / 100)) {
-    FREE_STR(itemname);
+    value_free(&itemname);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
         "task.newgametask intervals must be non-negative and within timer range");
   }
-  ITEM_t *taskitem = find_item(itemstore_root(ctx->itemstore), itemname.s);
+  const char *task_item_name = itemname.type == VALUE_itemref
+      ? sin_itemref_path(itemname.itemref) : itemname.s;
+  ITEM_t *taskitem = task_item_name
+      ? find_item(itemstore_root(ctx->itemstore), task_item_name) : NULL;
   if (!taskitem) {
     // If the task item doesn't exist, it can't be run.
     // Ownership: free itemname once on this error path before returning.
-    FREE_STR(itemname);
+    value_free(&itemname);
     push_stack(ctx->vm->stack, VALUE_NIL);
     set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_NOSUCHITEM,
                            NULL, ctx ? ctx->current_item : NULL);
@@ -111,9 +115,9 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   // We have the task item, and the validated start and repeat intervals.
   uint64_t start_ms = (uint64_t)startin.i * 100u;
   uint64_t repeat_ms = (uint64_t)repeatin.i * 100u;
-  TASK_t *newtask = make_task(itemname.s, repeat_ms);
+  TASK_t *newtask = make_task((char *)task_item_name, repeat_ms);
   if (!newtask) {
-    FREE_STR(itemname);
+    value_free(&itemname);
     push_stack(ctx->vm->stack, VALUE_NIL);
     set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_INVALIDARGS,
                            "Unable to allocate new game task.",
@@ -145,7 +149,7 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
                                       detail);
   }
   // Success path: this is the only free on this path (the !taskitem branch returns).
-  FREE_STR(itemname);
+  value_free(&itemname);
 
   // libcalls always return a value. In this case, the id of the task.
   VALUE_t ret = {VALUE_int, {(int64_t)newtask->id}};

@@ -12,6 +12,7 @@
 #include "error.h"
 #include "interpret.h"
 #include "item.h"
+#include "itemref.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 #include "task.h"
@@ -413,6 +414,42 @@ void test_newgametask_child_callback_uses_own_identity(void) {
 
   ASSERT_TRUE(request_task_close(child));
   destroy_task(creator);
+  finalise_tasks(&loop);
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
+  teardown_libcall_runtime();
+}
+
+void test_newgametask_itemref_creates_and_executes_one_shot(void) {
+  uv_loop_t loop;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  setup_libcall_runtime();
+  config.loop = &loop;
+  init_tasks();
+  insert_compiled_code(itemstore_root(config.itemstore_ctx), "task.itemref",
+                       "observed.itemref = 1;");
+
+  SIN_ITEMREF_t *ref = sin_itemref_create("task.itemref");
+  ASSERT_NOT_NULL(ref);
+  push_stack(config.vm->stack,
+      (VALUE_t){VALUE_itemref, {.itemref = ref}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  (void)lc_task_newgametask(test_ctx(), NULL,
+                            itemstore_root(config.itemstore_ctx));
+
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  uint64_t task_id = (uint64_t)result.i;
+  ASSERT_NOT_NULL(find_task_by_id(task_id));
+
+  (void)uv_run(&loop, UV_RUN_DEFAULT);
+  ITEM_t *observed = find_item(itemstore_root(config.itemstore_ctx),
+                               "observed.itemref");
+  ASSERT_NOT_NULL(observed);
+  ASSERT_EQ_INT(VALUE_int, item_value(observed)->type);
+  ASSERT_EQ_INT(1, item_value(observed)->i);
+  ASSERT_TRUE(find_task_by_id(task_id) == NULL);
+
   finalise_tasks(&loop);
   ASSERT_EQ_INT(0, uv_loop_close(&loop));
   teardown_libcall_runtime();
