@@ -151,7 +151,7 @@ void test_sys_itemref_dynamic_calls(void) {
       "  results.zero = sys.fetch{@z};"
       "  results.param_nil = sys.fetch{@o};"
       "  MiXeD.Target = code (return 19);"
-      "  results.mixed_call = mIxEd.tArGeT{};"
+      "  results.mixed_call = mIxEd.tArGeT{ };"
       "  @mixed_layer = \"TaRgEt\";"
       "  results.mixed_dynamic = MiXeD.[@mixed_layer];"
       "  @child_layer = \"ChIlD\";"
