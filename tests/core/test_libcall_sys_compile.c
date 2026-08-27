@@ -132,7 +132,6 @@ void test_sys_itemref_dynamic_calls(void) {
       "  @ordered = sys.itemref{\"ordered\"};"
       "  results.exact = sys.call{@ordered, #[1, 2, 3]};"
       "  results.missing = sys.call{@ordered, #[1]};"
-      "  results.excess = sys.call{@ordered, #[1, 2, 3, 4]};"
       "  @nested = sys.itemref{\"nested\"}; results.nested = sys.fetch{@nested};"
       "  results.order = 0;"
       "  @producer = sys.itemref{\"producer\"};"
@@ -158,6 +157,7 @@ void test_sys_itemref_dynamic_calls(void) {
       "  mixed_dynamic.[@child_layer] = 23;"
       "  results.mixed_child = MIXED_DYNAMIC.child;"
       "  results.ordinary_string = \"MiXeD.Value\";"
+      "  results.excess = sys.call{@ordered, #[1, 2, 3, 4]};"
       ");");
   ITEM_t *run = find_item(itemstore_root(config.itemstore_ctx), "run");
   ASSERT_NOT_NULL(run);
