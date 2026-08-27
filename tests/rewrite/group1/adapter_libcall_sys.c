@@ -2,6 +2,7 @@
 
 void test_sys_source_libcall(void);
 void test_sys_item_libcalls(void);
+void test_sys_delete_rejects_error_namespace(void);
 void test_sys_itemref_contracts(void);
 void test_sys_persistence_libcalls(void);
 void test_sys_introspection_libcalls(void);
@@ -9,6 +10,8 @@ void test_sys_wall_milliseconds_boundaries(void);
 void test_sys_caller_paramcount_libcalls(void);
 
 static const TF_TestDescriptor tests[] = {
+    {"rewrite.runtime.test_sys_delete_rejects_error_namespace", test_sys_delete_rejects_error_namespace,
+     "exclusive", 30000, "api.libcall.sys,api.itemstore.item-error"},
     {"rewrite.runtime.test_sys_item_libcalls", test_sys_item_libcalls,
      "exclusive", 30000,
      "api.libcall.sys,libcall.sys.exists,libcall.sys.delete,libcall.sys.nthname,libcall.sys.rootname,libcall.sys.itemtype,libcall.sys.childcount,libcall.sys.call"},

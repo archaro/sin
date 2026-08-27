@@ -22,6 +22,10 @@ typedef struct {
 
 void assignitem(ITEM_t *itemroot, VALUE_t *itemname, VALUE_t val);
 bool canonicalize_itemname(const char *assembled_name, ITEM_t *context_item, char *out_name);
+bool runtime_reject_error_namespace_mutation(ITEM_t *root,
+                                             const char *target,
+                                             const char *operation,
+                                             ITEM_t *current_item);
 bool decode_assigncode_params(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_INPUT_t *in);
 bool decode_assigncode_source(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_INPUT_t *in);
 int8_t compile_and_insert_codeitem(ITEM_t *itemroot, const VALUE_t *itemname, const CODEITEM_INPUT_t *in, char **errdetail);

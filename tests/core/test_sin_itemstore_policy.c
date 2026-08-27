@@ -318,11 +318,11 @@ void test_sin_boot_reports_outstanding_runtime_error(void) {
     },
     {
       "sys.delete{nil}; error.msg = \"\";",
-      "Invalid arguments to library call."
+      "error.msg' rejects value assignment"
     },
     {
       "sys.delete{nil}; error = 999; error.msg = nil;",
-      "No diagnostic message was provided."
+      "error.msg' rejects value assignment"
     }
   };
 

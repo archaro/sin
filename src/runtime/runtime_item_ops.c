@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "runtime_item_ops.h"
 #include "bytecode_wire.h"
@@ -62,6 +63,28 @@ void assignitem(ITEM_t *itemroot, VALUE_t *itemname, VALUE_t val) {
 bool canonicalize_itemname(const char *assembled_name, ITEM_t *context_item, char *out_name) {
   return item_path_canonicalize_relative(context_item, assembled_name,
                                          out_name);
+}
+
+bool runtime_reject_error_namespace_mutation(ITEM_t *root,
+                                             const char *target,
+                                             const char *operation,
+                                             ITEM_t *current_item) {
+  if (!item_path_is_error_namespace(target)) return false;
+
+  const char *op = operation ? operation : "mutation";
+  logerr("Rejected %s of protected runtime item '%s'.\n", op, target);
+
+  char detail[MAX_ITEM_NAME + 96u];
+  int written = snprintf(detail, sizeof(detail),
+                         "Protected runtime item '%s' rejects %s.",
+                         target, op);
+  if (written < 0 || (size_t)written >= sizeof(detail)) {
+    set_error_item(root, ERR_RUNTIME_INVALIDITEM,
+                   "Protected runtime item mutation rejected.", current_item);
+  } else {
+    set_error_item(root, ERR_RUNTIME_INVALIDITEM, detail, current_item);
+  }
+  return true;
 }
 
 bool decode_assigncode_params(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_INPUT_t *in) {

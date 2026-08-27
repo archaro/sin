@@ -856,6 +856,12 @@ uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
   char fullname[MAX_ITEM_NAME];
   if (lc_sys_resolve_itemname(ctx, item, &itemname, fullname)) {
+    if (runtime_reject_error_namespace_mutation(
+            itemstore_root(ctx->itemstore), fullname, "sys.delete",
+            ctx->current_item)) {
+      value_free(&itemname);
+      return lc_sys_return_nil(ctx, nextop);
+    }
     (void)item_delete(itemstore_root(ctx->itemstore), fullname);
   }
   value_free(&itemname);

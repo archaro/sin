@@ -122,8 +122,7 @@ static bool inspect_error_destinations(ITEM_t *root,
   destinations->complete = true;
   for (size_t i = 0; i < ERROR_FIELD_COUNT; i++) {
     ITEM_t *item = find_item_unchecked(root, error_fields[i]);
-    if (item &&
-        (item->type != ITEM_value || item->execution_pins != 0)) {
+    if (item && item->execution_pins != 0) {
       return false;
     }
     destinations->items[i] = item;
@@ -157,7 +156,7 @@ static void normalize_incomplete_error(
 static bool ensure_error_destinations(
     ITEM_t *root, ErrorDestinations *destinations) {
   for (size_t i = 0; i < ERROR_FIELD_COUNT; i++) {
-    if (!destinations->items[i]) {
+    if (!destinations->items[i] || destinations->items[i]->type != ITEM_value) {
       ITEM_MUTATION_RESULT_t result =
           item_set_value(root, error_fields[i], VALUE_NIL);
       if (!item_mutation_succeeded(result)) return false;

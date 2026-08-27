@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "config.h"
 #include "error.h"
@@ -2325,4 +2326,132 @@ void test_error_item_null_inputs_provenance_and_pins(void) {
 
   alloc_test_fail_after(-1);
   itemstore_destroy(store);
+}
+
+void test_runtime_error_namespace_mutations_are_rejected(void) {
+  setup_runtime();
+  ITEM_t *root = itemstore_root(config.itemstore_ctx);
+  RuntimeContext ctx;
+  runtime_context_init(&ctx, config.vm);
+  ctx.itemstore = config.itemstore_ctx;
+  uint8_t *malformed_payload = malloc(1u);
+  ASSERT_NOT_NULL(malformed_payload);
+  malformed_payload[0] = (uint8_t)'h';
+  ASSERT_NOT_NULL(test_item_set_code(root, "error.stage", 1u,
+                                     malformed_payload));
+  ASSERT_TRUE(runtime_init(&ctx, config.vm));
+  static const char *const error_fields[] = {
+    "error", "error.msg", "error.item", "error.code", "error.stage",
+    "error.file", "error.line", "error.column", "error.excerpt"
+  };
+  for (size_t i = 0; i < sizeof(error_fields) / sizeof(error_fields[0]); i++) {
+    ITEM_t *field = find_item(root, error_fields[i]);
+    ASSERT_NOT_NULL(field);
+    ASSERT_EQ_INT(ITEM_value, item_kind(field));
+    ASSERT_EQ_INT(VALUE_nil, item_value(field)->type);
+  }
+
+  ITEM_t *current = test_item_set_value(root, "runner", VALUE_NIL);
+  ASSERT_NOT_NULL(current);
+  ctx.current_item = current;
+
+  uint8_t *context_bytecode = malloc(3u);
+  ASSERT_NOT_NULL(context_bytecode);
+  context_bytecode[0] = 0;
+  context_bytecode[1] = 0;
+  context_bytecode[2] = (uint8_t)'h';
+  ITEM_t *error_context = test_item_set_code(root, "error.runner", 3u,
+                                             context_bytecode);
+  ASSERT_NOT_NULL(error_context);
+  ctx.current_item = error_context;
+
+  FILE *capture = tmpfile();
+  ASSERT_NOT_NULL(capture);
+  int saved_stderr = dup(STDERR_FILENO);
+  ASSERT_TRUE(saved_stderr >= 0);
+  ASSERT_TRUE(dup2(fileno(capture), STDERR_FILENO) >= 0);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("ErRoR")} });
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 99}});
+  (void)op_assignitem(&ctx, NULL, current);
+  fflush(stderr);
+  ASSERT_TRUE(dup2(saved_stderr, STDERR_FILENO) >= 0);
+  close(saved_stderr);
+  ASSERT_TRUE(fseek(capture, 0, SEEK_SET) == 0);
+  char log_text[512] = {0};
+  ASSERT_TRUE(fread(log_text, 1, sizeof(log_text) - 1u, capture) > 0);
+  ASSERT_TRUE(fclose(capture) == 0);
+  ASSERT_TRUE(strstr(log_text, "value assignment") != NULL);
+  ASSERT_TRUE(strstr(log_text, "error") != NULL);
+  assert_error_code_and_detail(ERR_RUNTIME_INVALIDITEM, "value assignment");
+  ASSERT_EQ_INT(ITEM_value, item_kind(find_item(root, "error")));
+  ASSERT_EQ_INT(VALUE_int, item_value(find_item(root, "error"))->type);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDITEM, item_value(find_item(root, "error"))->i);
+
+  /* Canonical/mixed-case error.msg remains a value item: the attempted int
+   * replacement is rejected while the guard publishes its own detail. */
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("ErRoR.MsG")} });
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 77}});
+  (void)op_assignitem(&ctx, NULL, current);
+  ASSERT_EQ_INT(ITEM_value, item_kind(find_item(root, "error.msg")));
+  ASSERT_EQ_INT(VALUE_str, item_value(find_item(root, "error.msg"))->type);
+  assert_error_code_and_detail(ERR_RUNTIME_INVALIDITEM, "error.msg");
+  assert_error_code_and_detail(ERR_RUNTIME_INVALIDITEM, "value assignment");
+
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("error.future.leaf")} });
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 17}});
+  (void)op_assignitem(&ctx, NULL, current);
+  ASSERT_TRUE(find_item(root, "error.future.leaf") == NULL);
+  assert_error_code_and_detail(ERR_RUNTIME_INVALIDITEM, "error.future.leaf");
+
+  const char source[] = "return 1;";
+  uint8_t code[64] = {0};
+  size_t code_len = 0;
+  code[code_len++] = 'P';
+  code[code_len++] = 0;
+  code[code_len++] = 0;
+  code[code_len++] = (uint8_t)(sizeof(source) - 1u);
+  code[code_len++] = 0;
+  memcpy(code + code_len, source, sizeof(source) - 1u);
+  code_len += sizeof(source) - 1u;
+  runtime_decoder_init(&ctx.decoder, code, code + code_len);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("eRrOr.Msg")} });
+  (void)op_assigncodeitem(&ctx, code, current);
+  assert_error_code_and_detail(ERR_RUNTIME_INVALIDITEM, "code assignment");
+  ASSERT_EQ_INT(ITEM_value, item_kind(find_item(root, "error.msg")));
+  ASSERT_EQ_INT(VALUE_str, item_value(find_item(root, "error.msg"))->type);
+
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup(".msg")} });
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 88}});
+  (void)op_assignitem(&ctx, NULL, error_context);
+  ASSERT_TRUE(find_item(root, "error.runner.msg") == NULL);
+  assert_error_code_and_detail(ERR_RUNTIME_INVALIDITEM, "error.runner.msg");
+
+  runtime_decoder_init(&ctx.decoder, code, code + code_len);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup(".code")} });
+  (void)op_assigncodeitem(&ctx, code, error_context);
+  ASSERT_TRUE(find_item(root, "error.runner.code") == NULL);
+  assert_error_code_and_detail(ERR_RUNTIME_INVALIDITEM, "error.runner.code");
+
+  ASSERT_NOT_NULL(test_item_set_value(root, "errors", (VALUE_t){VALUE_int, {.i = 7}}));
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("ErRoRs")} });
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 8}});
+  (void)op_assignitem(&ctx, NULL, current);
+  ASSERT_EQ_INT(8, item_value(find_item(root, "errors"))->i);
+
+  clear_error_item(root);
+  assert_error_nil();
+  CompilerDiagnostic diag = new_compiler_diagnostic();
+  set_compiler_error_item(root, &diag);
+  ASSERT_EQ_INT(ERR_COMP_TOOMANYLOCALS, item_value(find_item(root, "error"))->i);
+  clear_error_item(root);
+  assert_error_nil();
+  runtime_destroy(&ctx);
+  teardown_runtime();
 }

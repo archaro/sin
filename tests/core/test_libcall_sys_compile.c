@@ -707,9 +707,13 @@ void test_sys_compile_libcall_runtime(void) {
   push_stack(config.vm->stack,
              vstr("sys.exists{42}; error = nil; compiled_value = 91;"));
   (void)lc_sys_compile(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
-  assert_bool(pop_stack(config.vm->stack), 1);
+  assert_bool(pop_stack(config.vm->stack), 0);
   assert_int_item("compiled_value", 91);
-  assert_error_fields_nil();
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDITEM,
+                item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                     "error"))->i);
+  assert_string_item("error.msg", "error");
+  assert_string_item("error.msg", "value assignment");
   ASSERT_EQ_INT(baseline, config.vm->stack->current);
   ASSERT_EQ_INT(-1, config.vm->callstack->current);
   assert_only_temp_item_named(collision_name);
@@ -780,5 +784,43 @@ void test_sys_compile_libcall_runtime(void) {
   assert_compile_success_bool("node_budget_recovery = 456;");
   assert_int_item("node_budget_recovery", 456);
 
+  teardown_runtime();
+}
+
+void test_sys_compile_rejects_error_namespace_mutations(void) {
+  setup_runtime();
+  ITEM_t *root = itemstore_root(config.itemstore_ctx);
+
+  push_stack(config.vm->stack, vstr("error = 99;"));
+  (void)lc_sys_compile(test_ctx(), NULL, root);
+  assert_bool(pop_stack(config.vm->stack), 0);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDITEM, item_value(find_item(root, "error"))->i);
+  assert_string_item("error.msg", "error");
+  assert_string_item("error.msg", "value assignment");
+  ASSERT_TRUE(item_value(find_item(root, "error"))->i != 99);
+
+  push_stack(config.vm->stack,
+             vstr("error.msg = code ( return 1; );"));
+  (void)lc_sys_compile(test_ctx(), NULL, root);
+  assert_bool(pop_stack(config.vm->stack), 0);
+  ASSERT_EQ_INT(ITEM_value, item_kind(find_item(root, "error.msg")));
+  assert_string_item("error.msg", "code assignment");
+
+  /* A later runtime diagnostic can still publish through the privileged path. */
+  set_error_item(root, ERR_RUNTIME_INVALIDARGS, "after protected mutation", NULL);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(find_item(root, "error"))->i);
+  assert_string_item("error.msg", "after protected mutation");
+
+  /* Compiler diagnostics also replace the protected fields after rejection. */
+  push_stack(config.vm->stack,
+             vstr("bad = code ( sys.log{\"Hello\nworld\"}; );"));
+  (void)lc_sys_compile(test_ctx(), NULL, root);
+  assert_bool(pop_stack(config.vm->stack), 0);
+  ASSERT_TRUE(item_value(find_item(root, "error"))->i != ERR_RUNTIME_INVALIDITEM);
+  assert_string_item("error.stage", "PARSE");
+  assert_string_item("error.msg", "Newline in string.");
+
+  clear_error_item(root);
+  assert_error_fields_nil();
   teardown_runtime();
 }

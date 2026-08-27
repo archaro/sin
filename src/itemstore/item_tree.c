@@ -171,6 +171,11 @@ bool item_path_canonicalize_relative(const ITEM_t *context_item,
   return item_path_canonicalize(out_name, out_name);
 }
 
+bool item_path_is_error_namespace(const char *item_name) {
+  return item_name && (strcmp(item_name, "error") == 0 ||
+                       strncmp(item_name, "error.", 6u) == 0);
+}
+
 
 static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
                               VALUE_t value, uint8_t *bytecode, int len,

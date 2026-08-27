@@ -57,6 +57,7 @@ void test_error_item_oom_normalizes_incomplete_diagnostic(void);
 void test_compiler_error_item_oom_normalizes_incomplete_diagnostic(void);
 void test_clear_error_item_is_allocation_free_and_atomic(void);
 void test_error_item_null_inputs_provenance_and_pins(void);
+void test_runtime_error_namespace_mutations_are_rejected(void);
 
 static const TF_TestDescriptor tests[] = {
     {"rewrite.core.test_error_message_table_defines_active_errors",
@@ -175,6 +176,8 @@ static const TF_TestDescriptor tests[] = {
      "api.itemstore.item-error"},
     {"rewrite.runtime.test_error_item_null_inputs_provenance_and_pins", test_error_item_null_inputs_provenance_and_pins, "exclusive", 30000,
      "api.itemstore.item-error"},
+    {"rewrite.runtime.test_runtime_error_namespace_mutations_are_rejected", test_runtime_error_namespace_mutations_are_rejected, "exclusive", 30000,
+     "api.runtime.runtime-item-ops,api.runtime.opcode-handlers,api.itemstore.item-error"},
 };
 
 int main(int argc, char **argv) {

@@ -23,6 +23,12 @@ The runtime uses the `error` item and its children to record diagnostic state.
 Not every unsuccessful or exceptional-looking result sets `error`; whether an
 operation records a diagnostic is part of that operation's contract.
 
+The root `error` item and its entire descendant namespace are reserved and
+managed by the runtime. Sinistra value assignments, code replacements, and
+`sys.delete` attempts targeting `error` or any `error.*` path are rejected;
+the protected target and operation are logged and an `ERR_RUNTIME_INVALIDITEM`
+diagnostic is published.
+
 Important note: Success does not universally clear an earlier error.  Some
 calls deliberately preserve unrelated existing diagnostics. `sys.compile` is a
 notable exception: successful compilation/execution normalises `error` and all

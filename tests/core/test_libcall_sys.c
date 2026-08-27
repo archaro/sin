@@ -156,6 +156,17 @@ static void assert_persistence_error(const char *operation,
   ASSERT_TRUE(strcmp(item_value(provenance)->s, current_item) == 0);
 }
 
+static void assert_invalid_item_detail_contains(const char *expected) {
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(VALUE_int, item_value(error)->type);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDITEM, item_value(error)->i);
+  ITEM_t *message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_EQ_INT(VALUE_str, item_value(message)->type);
+  ASSERT_TRUE(strstr(item_value(message)->s, expected) != NULL);
+}
+
 static int persistence_sync_calls;
 static int persistence_directory_sync_calls;
 
@@ -264,6 +275,85 @@ void test_sys_item_libcalls(void) {
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
 
+  teardown_libcall_runtime();
+}
+
+void test_sys_delete_rejects_error_namespace(void) {
+  setup_libcall_runtime();
+  ITEM_t *root = itemstore_root(config.itemstore_ctx);
+  RuntimeContext *ctx = test_ctx();
+  ITEM_t *current = test_item_set_value(root, "runner", VALUE_NIL);
+  ASSERT_NOT_NULL(current);
+  ctx->current_item = current;
+  set_error_item(root, ERR_RUNTIME_INVALIDARGS, "before delete", current);
+  ASSERT_NOT_NULL(test_item_set_value(root, "error.future.leaf",
+                                      (VALUE_t){VALUE_int, {.i = 41}}));
+  uint8_t *context_bytecode = malloc(3u);
+  ASSERT_NOT_NULL(context_bytecode);
+  context_bytecode[0] = 0;
+  context_bytecode[1] = 0;
+  context_bytecode[2] = (uint8_t)'h';
+  ITEM_t *error_context = test_item_set_code(root, "error.runner", 3u,
+                                             context_bytecode);
+  ASSERT_NOT_NULL(error_context);
+  ctx->current_item = error_context;
+
+  FILE *capture = tmpfile();
+  ASSERT_NOT_NULL(capture);
+  int saved_stderr = dup(STDERR_FILENO);
+  ASSERT_TRUE(saved_stderr >= 0);
+  ASSERT_TRUE(dup2(fileno(capture), STDERR_FILENO) >= 0);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("ErRoR.FuTuRe")} });
+  (void)lc_sys_delete(ctx, NULL, current);
+  fflush(stderr);
+  ASSERT_TRUE(dup2(saved_stderr, STDERR_FILENO) >= 0);
+  close(saved_stderr);
+  ASSERT_TRUE(fseek(capture, 0, SEEK_SET) == 0);
+  char log_text[512] = {0};
+  ASSERT_TRUE(fread(log_text, 1, sizeof(log_text) - 1u, capture) > 0);
+  ASSERT_TRUE(fclose(capture) == 0);
+  ASSERT_TRUE(strstr(log_text, "sys.delete") != NULL);
+  ASSERT_TRUE(strstr(log_text, "error.future") != NULL);
+  ASSERT_EQ_INT(VALUE_nil, pop_stack(config.vm->stack).type);
+  ASSERT_NOT_NULL(find_item(root, "error.future.leaf"));
+  assert_invalid_item_detail_contains("error.future");
+
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("ERROR")} });
+  (void)lc_sys_delete(ctx, NULL, current);
+  ASSERT_EQ_INT(VALUE_nil, pop_stack(config.vm->stack).type);
+  ASSERT_NOT_NULL(find_item(root, "error"));
+  assert_invalid_item_detail_contains("error");
+
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("error.MSG")} });
+  (void)lc_sys_delete(ctx, NULL, current);
+  ASSERT_EQ_INT(VALUE_nil, pop_stack(config.vm->stack).type);
+  ASSERT_EQ_INT(ITEM_value, item_kind(find_item(root, "error.msg")));
+  ASSERT_NOT_NULL(find_item(root, "error.msg"));
+  assert_invalid_item_detail_contains("error.msg");
+
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup(".future")} });
+  (void)lc_sys_delete(ctx, NULL, error_context);
+  ASSERT_EQ_INT(VALUE_nil, pop_stack(config.vm->stack).type);
+  ASSERT_TRUE(find_item(root, "error.runner.future") == NULL);
+  assert_invalid_item_detail_contains("error.runner.future");
+
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("error.unknown.subtree")} });
+  (void)lc_sys_delete(ctx, NULL, current);
+  ASSERT_EQ_INT(VALUE_nil, pop_stack(config.vm->stack).type);
+  ASSERT_TRUE(find_item(root, "error.unknown.subtree") == NULL);
+  assert_invalid_item_detail_contains("error.unknown.subtree");
+
+  ASSERT_NOT_NULL(test_item_set_value(root, "errors", VALUE_TRUE));
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("errors")} });
+  (void)lc_sys_delete(ctx, NULL, current);
+  ASSERT_EQ_INT(VALUE_nil, pop_stack(config.vm->stack).type);
+  ASSERT_TRUE(find_item(root, "errors") == NULL);
   teardown_libcall_runtime();
 }
 

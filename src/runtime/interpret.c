@@ -107,6 +107,10 @@ bool runtime_init(RuntimeContext *ctx, VM_t *vm) {
     return false;
   }
   runtime_opcode_bind_table(ctx);
+  /* The diagnostic namespace is runtime-owned. Initialize it before exposing
+   * the context so all runtime paths can publish through the privileged
+   * item-error helpers. */
+  clear_error_item(itemstore_root(ctx->itemstore));
   ctx->initialized = true;
   return true;
 }
@@ -928,6 +932,11 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
                              ctx ? ctx->current_item : NULL);
       goto cleanup;
     }
+    if (runtime_reject_error_namespace_mutation(
+            ctx ? itemstore_root(ctx->itemstore) : NULL, fullname,
+            "code assignment", ctx ? ctx->current_item : NULL)) {
+      goto cleanup;
+    }
     free_runtime_string(itemname.s);
     itemname.s = strdup(fullname);
   }
@@ -969,6 +978,13 @@ uint8_t *op_assignitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (itemname.type == VALUE_str) {
     char fullname[MAX_ITEM_NAME];
     if (canonicalize_itemname(itemname.s, item, fullname)) {
+      if (runtime_reject_error_namespace_mutation(
+              itemstore_root(ctx->itemstore), fullname, "value assignment",
+              ctx->current_item)) {
+        FREE_STR(itemname);
+        FREE_STR(val);
+        return nextop;
+      }
       free_runtime_string(itemname.s);
       itemname.s = strdup(fullname);
     } else {

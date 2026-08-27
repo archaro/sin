@@ -56,6 +56,9 @@ bool item_mutation_succeeded(ITEM_MUTATION_RESULT_t result);
 bool item_path_canonicalize(const char *item_name, char *out_name);
 bool item_path_canonicalize_relative(const ITEM_t *context_item,
                                      const char *item_name, char *out_name);
+/* Returns true for the runtime-owned error item and every descendant. The
+ * input must already be canonical and root-relative. */
+bool item_path_is_error_namespace(const char *item_name);
 typedef enum {
   ITEMSTORE_DURABLE_FULL = 0,
   ITEMSTORE_DURABLE_FAST = 1
