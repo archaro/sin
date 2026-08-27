@@ -150,7 +150,7 @@ void test_sys_itemref_dynamic_calls(void) {
       "  sys.delete{@aggregate};"
       "  results.zero = sys.fetch{@z};"
       "  results.param_nil = sys.fetch{@o};"
-      "  MiXeD.Target = code (return 19);"
+      "  MiXeD.Target = code {@x} (return 19;);"
       "  results.mixed_call = mIxEd.tArGeT{nil};"
       "  @mixed_layer = \"TaRgEt\";"
       "  results.mixed_dynamic = MiXeD.[@mixed_layer];"
