@@ -172,7 +172,7 @@ void test_float_local_deref_layer_returns_nil_and_does_not_save_item(void) {
 void test_item_deref_value_layer_resolves_normally(void) {
   setup_runtime();
   VALUE_t result = compile_and_run("test.itemderefvalue",
-      "selector = \"branch\"; foo.[selector] = 7; return foo.branch;");
+      "selector = \"BrAnCh\"; FoO.[SeLeCtOr] = 7; return fOo.bRaNcH;");
   ASSERT_EQ_INT(VALUE_int, result.type);
   ASSERT_EQ_INT(7, result.i);
   value_free(&result);

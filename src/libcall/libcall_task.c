@@ -9,6 +9,7 @@
 #include "libcall_common.h"
 #include "libcall_handlers.h"
 #include "log.h"
+#include "runtime_item_ops.h"
 #include "stack.h"
 #include "task.h"
 
@@ -101,8 +102,16 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   }
   const char *task_item_name = itemname.type == VALUE_itemref
       ? sin_itemref_path(itemname.itemref) : itemname.s;
-  ITEM_t *taskitem = task_item_name
-      ? find_item(itemstore_root(ctx->itemstore), task_item_name) : NULL;
+  char canonical_name[MAX_ITEM_NAME];
+  if (!canonicalize_itemname(task_item_name, ctx->current_item,
+                             canonical_name)) {
+    value_free(&itemname);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    set_error_item(itemstore_root(ctx->itemstore), ERR_RUNTIME_NOSUCHITEM,
+                   NULL, ctx->current_item);
+    return nextop;
+  }
+  ITEM_t *taskitem = find_item(itemstore_root(ctx->itemstore), canonical_name);
   if (!taskitem) {
     // If the task item doesn't exist, it can't be run.
     // Ownership: free itemname once on this error path before returning.
@@ -115,7 +124,7 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   // We have the task item, and the validated start and repeat intervals.
   uint64_t start_ms = (uint64_t)startin.i * 100u;
   uint64_t repeat_ms = (uint64_t)repeatin.i * 100u;
-  TASK_t *newtask = make_task((char *)task_item_name, repeat_ms);
+  TASK_t *newtask = make_task(canonical_name, repeat_ms);
   if (!newtask) {
     value_free(&itemname);
     push_stack(ctx->vm->stack, VALUE_NIL);

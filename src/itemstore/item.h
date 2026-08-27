@@ -48,6 +48,13 @@ typedef struct {
 
 // item_mutation_succeeded is true only for CREATED, REPLACED, and DELETED.
 bool item_mutation_succeeded(ITEM_MUTATION_RESULT_t result);
+// Item paths use ASCII case-insensitive layer names. These helpers validate
+// a path and copy its canonical lower-case spelling to out_name, which must
+// provide MAX_ITEM_NAME bytes. The relative form resolves a leading '.' from
+// context_item; root store labels are never incorporated or canonicalized.
+bool item_path_canonicalize(const char *item_name, char *out_name);
+bool item_path_canonicalize_relative(const ITEM_t *context_item,
+                                     const char *item_name, char *out_name);
 typedef enum {
   ITEMSTORE_DURABLE_FULL = 0,
   ITEMSTORE_DURABLE_FAST = 1

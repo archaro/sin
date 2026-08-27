@@ -25,7 +25,9 @@ bool sin_itemref_allocation_bytes(size_t path_length, size_t *bytes) {
 SIN_ITEMREF_t *sin_itemref_create(const char *path) {
   size_t length;
   SIN_ITEMREF_t *ref;
-  if (!path || path[0] == '\0') return NULL;
+  char canonical_path[MAX_ITEM_NAME];
+  if (!item_path_canonicalize(path, canonical_path)) return NULL;
+  path = canonical_path;
   length = strlen(path);
   if (length >= MAX_ITEM_NAME) return NULL;
   if (length > SIZE_MAX - sizeof(*ref) - 1u) return NULL;

@@ -231,9 +231,13 @@ ITEM_t *find_item_cached(ITEM_t *root, const char *item_name, bool *found) {
   ITEMSTORE_CONTEXT_t *ctx = context_for_root(root);
   if (found) *found = false;
   if (!ctx) return find_item(root, item_name);
-  if (!validate_item_name_relative(root, item_name, "find_item_cached")) {
+  char canonical_name[MAX_ITEM_NAME];
+  if (!item_path_canonicalize(item_name, canonical_name) ||
+      !validate_item_name_relative(root, canonical_name,
+                                   "find_item_cached")) {
     return NULL;
   }
+  item_name = canonical_name;
 
   size_t item_name_len = strlen(item_name);
 
@@ -292,8 +296,10 @@ ITEM_t *find_item_unchecked(ITEM_t *root, const char *item_name) {
 
 ITEM_t *find_item(ITEM_t *root, const char *item_name) {
   // Function to dereference an item by a multi-layer item.
-  if (!validate_item_name_relative(root, item_name, "find_item")) {
+  char canonical_name[MAX_ITEM_NAME];
+  if (!root || !item_path_canonicalize(item_name, canonical_name) ||
+      !validate_item_name_relative(root, canonical_name, "find_item")) {
     return NULL;
   }
-  return find_item_unchecked(root, item_name);
+  return find_item_unchecked(root, canonical_name);
 }

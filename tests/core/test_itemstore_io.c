@@ -2100,6 +2100,22 @@ void test_load_itemstore_rejects_structural_corruption(void) {
   file = replace_fixture(path);
   put_header(file, WIRE_VERSION);
   put_nil_record_prefix(file, "root", 1);
+  put_nil_record_prefix(file, "MiXeD", 0);
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_nil_record_prefix(file, "root", 1);
+  put_record_prefix(file, "ref", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_ITEMREF);
+  put_u16_le(file, 3);
+  put_bytes(file, "A.B", 3);
+  put_u32_le(file, 0);
+  assert_fixture_rejected(file, path);
+
+  file = replace_fixture(path);
+  put_header(file, WIRE_VERSION);
+  put_nil_record_prefix(file, "root", 1);
   put_nil_record_prefix(file, "bad-name", 0);
   assert_fixture_rejected(file, path);
 

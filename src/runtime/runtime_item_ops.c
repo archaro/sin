@@ -60,30 +60,8 @@ void assignitem(ITEM_t *itemroot, VALUE_t *itemname, VALUE_t val) {
 }
 
 bool canonicalize_itemname(const char *assembled_name, ITEM_t *context_item, char *out_name) {
-  if (!assembled_name || assembled_name[0] == '\0') return false;
-
-  if (assembled_name[0] == '.') {
-    if (!context_item) {
-      logerr("Relative item name '%s' cannot be resolved without current item context.\n", assembled_name);
-      return false;
-    }
-    char parent[MAX_ITEM_NAME];
-    get_itemname(context_item, parent);
-    int written = snprintf(out_name, MAX_ITEM_NAME, "%s%s", parent,
-                           assembled_name);
-    if (written < 0 || (size_t)written >= MAX_ITEM_NAME) {
-      logerr("Resolved item name exceeds MAX_ITEM_NAME: %s%s\n", parent, assembled_name);
-      return false;
-    }
-    return true;
-  }
-
-  int written = snprintf(out_name, MAX_ITEM_NAME, "%s", assembled_name);
-  if (written < 0 || (size_t)written >= MAX_ITEM_NAME) {
-    logerr("Item name exceeds MAX_ITEM_NAME: %s\n", assembled_name);
-    return false;
-  }
-  return true;
+  return item_path_canonicalize_relative(context_item, assembled_name,
+                                         out_name);
 }
 
 bool decode_assigncode_params(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_INPUT_t *in) {

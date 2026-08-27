@@ -115,10 +115,20 @@ ITEM_t *itemstore_read_v1_record(FILE *file, ITEM_t *parent,
            "%zu.\n", ctx->filename, name, ctx->depth);
     return NULL;
   }
-  if (parent != NULL && item_children_lookup(parent->children, name) != NULL) {
-    logerr("Corrupt itemstore '%s': duplicate child name '%s' at depth %zu.\n",
-           ctx->filename, name, ctx->depth);
-    return NULL;
+  if (parent != NULL) {
+    char canonical_name[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
+    if (!item_path_canonicalize(name, canonical_name)) return NULL;
+    if (strcmp(name, canonical_name) != 0) {
+      logerr("Corrupt itemstore '%s': non-canonical item layer '%s' (expected "
+             "'%s') at depth %zu.\n", ctx->filename, name, canonical_name,
+             ctx->depth);
+      return NULL;
+    }
+    if (item_children_lookup(parent->children, name) != NULL) {
+      logerr("Corrupt itemstore '%s': duplicate child name '%s' at depth %zu.\n",
+             ctx->filename, name, ctx->depth);
+      return NULL;
+    }
   }
 
   if (!itemstore_read_u8(file, &item_tag, "item type tag")) return NULL;

@@ -15,8 +15,11 @@ foo.bar.baz
 
 Item names are case-insensitive. `player.name`, `Player.Name`, and
 `PLAYER.NAME` therefore refer to the same item; internally, item layer names
-are normalised to lower case. The same rule applies to local variable names
-and to Sinistra keywords.
+are normalised to lower case using ASCII `A`-`Z` folding. Dynamically assembled
+paths, relative paths, string-name libcalls, and item references use the same
+canonicalization. The root label and ordinary string payloads retain their
+original spelling. The same rule applies to local variable names and to
+Sinistra keywords.
 
 Each part of a path is called a layer. Layers may be written directly, as in
 `players.42.name`, or constructed dynamically using dereferencing, which we

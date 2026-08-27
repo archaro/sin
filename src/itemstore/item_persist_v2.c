@@ -230,6 +230,15 @@ static bool read_value(FILE *file, ITEMSTORE_READ_CTX_t *ctx, VALUE_t *out,
         logerr("Corrupt v2 item reference path.\n");
         goto fail_ref;
       }
+      char canonical_path[MAX_ITEM_NAME];
+      if (!item_path_canonicalize(path, canonical_path)) {
+        goto fail_ref;
+      }
+      if (strcmp(path, canonical_path) != 0) {
+        logerr("Corrupt v2 item reference path '%s' is non-canonical; "
+               "expected '%s'.\n", path, canonical_path);
+        goto fail_ref;
+      }
       out->itemref = sin_itemref_create(path);
       if (out->itemref == NULL) {
         goto fail_ref;
@@ -332,10 +341,21 @@ ITEM_t *itemstore_read_v2_record(FILE *file, ITEM_t *parent,
     return NULL;
   }
   name[name_length] = '\0';
-  if (parent != NULL && (!is_valid_layer(name) ||
-                         item_children_lookup(parent->children, name) != NULL)) {
-    logerr("Corrupt v2 item name or duplicate child '%s'.\n", name);
-    return NULL;
+  if (parent != NULL) {
+    char canonical_name[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
+    if (!is_valid_layer(name) || !item_path_canonicalize(name, canonical_name)) {
+      logerr("Corrupt v2 item name '%s'.\n", name);
+      return NULL;
+    }
+    if (strcmp(name, canonical_name) != 0) {
+      logerr("Corrupt v2 item name '%s' is non-canonical; expected '%s'.\n",
+             name, canonical_name);
+      return NULL;
+    }
+    if (item_children_lookup(parent->children, name) != NULL) {
+      logerr("Corrupt v2 duplicate child name '%s'.\n", name);
+      return NULL;
+    }
   }
   if (!itemstore_read_u8(file, &item_tag, "item type tag")) {
     return NULL;

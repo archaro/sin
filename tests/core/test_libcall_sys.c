@@ -182,7 +182,7 @@ void test_sys_item_libcalls(void) {
   ASSERT_NOT_NULL(test_item_set_value(itemstore_root(config.itemstore_ctx), "victim",
                               (VALUE_t){VALUE_bool, {.i = 1}}));
 
-  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("victim")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("ViCtIm")}});
   (void)lc_sys_exists(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
@@ -194,13 +194,13 @@ void test_sys_item_libcalls(void) {
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
 
-  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("victim")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("VICTIM")}});
   (void)lc_sys_delete(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_nil, ret.type);
   ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "victim") == NULL);
 
-  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("parent")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("PaReNt")}});
   push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
   (void)lc_sys_nthname(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
@@ -223,12 +223,18 @@ void test_sys_item_libcalls(void) {
   assert_invalid_args_detail_contains("sys.exists");
 
   /* Phase 7 reference conversion and weak resolution contract. */
-  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("parent.first")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("PaReNt.FiRsT")}});
   (void)lc_sys_itemref(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_itemref, ret.type);
   ASSERT_TRUE(strcmp(sin_itemref_path(ret.itemref), "parent.first") == 0);
   VALUE_t ref = ret;
+  SIN_ITEMREF_t *same_case = sin_itemref_create("parent.FIRST");
+  ASSERT_NOT_NULL(same_case);
+  ASSERT_TRUE(value_equal(&ref,
+                          &(VALUE_t){VALUE_itemref,
+                                     {.itemref = same_case}}));
+  sin_itemref_release(same_case);
   push_stack(config.vm->stack, value_clone(&ref));
   (void)lc_sys_itemname(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   VALUE_t name = pop_stack(config.vm->stack);
@@ -248,7 +254,7 @@ void test_sys_item_libcalls(void) {
   ASSERT_EQ_INT(VALUE_int, ret.type);
   ASSERT_EQ_INT(9, ret.i);
 
-  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("parent.first")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("PARENT.FIRST")}});
   (void)lc_sys_itemref(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ref = pop_stack(config.vm->stack);
   (void)item_delete(itemstore_root(config.itemstore_ctx), "parent.first");
@@ -279,7 +285,7 @@ void test_sys_itemref_contracts(void) {
   ASSERT_NOT_NULL(test_item_set_code(itemstore_root(config.itemstore_ctx),
                                      "scope.caller.fn", 3u, code));
   ctx->current_item = caller;
-  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(".target")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(".TaRgEt")}});
   (void)lc_sys_itemref(ctx, NULL, caller);
   VALUE_t ref = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_itemref, ref.type);
@@ -293,7 +299,7 @@ void test_sys_itemref_contracts(void) {
   ASSERT_NOT_NULL(error_item);
   ASSERT_EQ_INT(VALUE_str, item_value(error_item)->type);
   ctx->current_item = itemstore_root(config.itemstore_ctx);
-  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(".target")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(".TaRgEt")}});
   (void)lc_sys_exists(ctx, NULL, caller);
   VALUE_t relative = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, relative.type);
@@ -694,13 +700,13 @@ void test_sys_introspection_libcalls(void) {
     const char *name;
     const char *type;
   } type_cases[] = {
-    {"types.code", "code"},
-    {"types.nil", "nil"},
-    {"types.bool", "bool"},
-    {"types.int", "int"},
-    {"types.float", "float"},
-    {"types.string", "string"},
-    {".relative", "bool"},
+    {"TyPeS.CoDe", "code"},
+    {"TyPeS.NiL", "nil"},
+    {"TyPeS.BoOl", "bool"},
+    {"TyPeS.InT", "int"},
+    {"TyPeS.FlOaT", "float"},
+    {"TyPeS.StRiNg", "string"},
+    {".ReLaTiVe", "bool"},
   };
   for (size_t i = 0; i < sizeof(type_cases) / sizeof(type_cases[0]); i++) {
     result = call_sys_name(lc_sys_itemtype, &ctx,
@@ -719,12 +725,12 @@ void test_sys_introspection_libcalls(void) {
   ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM, item_value(error)->i);
 
   result = call_sys_name(lc_sys_childcount, &ctx,
-      (VALUE_t){VALUE_str, {.s = strdup("types")}});
+      (VALUE_t){VALUE_str, {.s = strdup("TyPeS")}});
   ASSERT_EQ_INT(VALUE_int, result.type);
   ASSERT_EQ_INT(6, result.i);
   int64_t type_child_count = result.i;
   result = call_sys_name(lc_sys_childcount, &ctx,
-      (VALUE_t){VALUE_str, {.s = strdup("types.nil")}});
+      (VALUE_t){VALUE_str, {.s = strdup("TyPeS.NiL")}});
   ASSERT_EQ_INT(VALUE_int, result.type);
   ASSERT_EQ_INT(0, result.i);
   result = call_sys_name(lc_sys_childcount, &ctx,
@@ -1059,7 +1065,7 @@ void test_sys_source_libcall(void) {
       (VALUE_t){VALUE_str, {.s = strdup(".target")}});
   VALUE_t owned_second = call_sys_name(lc_sys_source, &ctx,
       (VALUE_t){VALUE_str,
-                {.s = strdup("source.scope.runner.target")}});
+                {.s = strdup("SoUrCe.ScOpE.RuNnEr.TaRgEt")}});
   ASSERT_EQ_INT(VALUE_str, owned_first.type);
   ASSERT_EQ_INT(VALUE_str, owned_second.type);
   ASSERT_NOT_NULL(owned_first.s);
@@ -1071,7 +1077,7 @@ void test_sys_source_libcall(void) {
   value_free(&owned_second);
 
   push_stack(config.vm->stack,
-             (VALUE_t){VALUE_str, {.s = strdup("source.scope.runner.target")}});
+             (VALUE_t){VALUE_str, {.s = strdup("SoUrCe.ScOpE.RuNnEr.TaRgEt")}});
   (void)lc_sys_itemref(&ctx, NULL, runner);
   VALUE_t target_ref = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_itemref, target_ref.type);

@@ -137,6 +137,40 @@ bool validate_item_name(const char *item_name, const char *func_name) {
   return validate_item_name_relative(NULL, item_name, func_name);
 }
 
+bool item_path_canonicalize(const char *item_name, char *out_name) {
+  if (!out_name || !validate_item_name(item_name, "item_path_canonicalize")) {
+    return false;
+  }
+  size_t i = 0;
+  for (; item_name[i] != '\0'; i++) {
+    unsigned char character = (unsigned char)item_name[i];
+    out_name[i] = (char)(character >= 'A' && character <= 'Z'
+        ? character - 'A' + 'a' : character);
+  }
+  out_name[i] = '\0';
+  return true;
+}
+
+bool item_path_canonicalize_relative(const ITEM_t *context_item,
+                                     const char *item_name, char *out_name) {
+  if (!item_name || !out_name) return false;
+  if (item_name[0] != '.') return item_path_canonicalize(item_name, out_name);
+  if (!context_item || !context_item->parent) {
+    logerr("Relative item name '%s' cannot be resolved without a non-root item context.\n",
+           item_name);
+    return false;
+  }
+  char base[MAX_ITEM_NAME];
+  get_itemname((ITEM_t *)context_item, base);
+  int written = snprintf(out_name, MAX_ITEM_NAME, "%s%s", base, item_name);
+  if (written < 0 || (size_t)written >= MAX_ITEM_NAME) {
+    logerr("Resolved item name exceeds MAX_ITEM_NAME: %s%s\n", base,
+           item_name);
+    return false;
+  }
+  return item_path_canonicalize(out_name, out_name);
+}
+
 
 static ITEM_t *construct_item(const char *name, ITEM_t *parent, ITEM_e type,
                               VALUE_t value, uint8_t *bytecode, int len,
@@ -372,11 +406,14 @@ static ITEM_MUTATION_STATUS_e replace_item_code(ITEM_t *item, uint32_t len,
 ITEM_MUTATION_RESULT_t item_set_value(ITEM_t *root, const char *item_name,
                                       VALUE_t value) {
   ITEM_MUTATION_RESULT_t result = {ITEM_MUTATION_INVALID_ARGUMENT, NULL};
+  char canonical_name[MAX_ITEM_NAME];
   if (!root) return result;
-  if (!validate_item_name_relative(root, item_name, "item_set_value")) {
+  if (!item_path_canonicalize(item_name, canonical_name) ||
+      !validate_item_name_relative(root, canonical_name, "item_set_value")) {
     result.status = ITEM_MUTATION_INVALID_NAME;
     return result;
   }
+  item_name = canonical_name;
   ITEM_t *existing = find_item_unchecked(root, item_name);
   if (existing && value_aliases_code_payload(existing, &value)) {
     log_incompatible_payload_alias(existing);
@@ -415,11 +452,14 @@ ITEM_MUTATION_RESULT_t item_set_value(ITEM_t *root, const char *item_name,
 ITEM_MUTATION_RESULT_t item_set_code(ITEM_t *root, const char *item_name,
                                      uint32_t len, uint8_t *bytecode) {
   ITEM_MUTATION_RESULT_t result = {ITEM_MUTATION_INVALID_ARGUMENT, NULL};
+  char canonical_name[MAX_ITEM_NAME];
   if (!root) return result;
-  if (!validate_item_name_relative(root, item_name, "item_set_code")) {
+  if (!item_path_canonicalize(item_name, canonical_name) ||
+      !validate_item_name_relative(root, canonical_name, "item_set_code")) {
     result.status = ITEM_MUTATION_INVALID_NAME;
     return result;
   }
+  item_name = canonical_name;
   ITEM_t *existing = find_item_unchecked(root, item_name);
   if (existing && bytecode_aliases_value_payload(existing, bytecode)) {
     log_incompatible_payload_alias(existing);
@@ -460,12 +500,15 @@ static bool item_subtree_has_execution_pins(const ITEM_t *item) {
 
 ITEM_MUTATION_RESULT_t item_delete(ITEM_t *root, const char *item_name) {
   ITEM_MUTATION_RESULT_t result = {ITEM_MUTATION_INVALID_ARGUMENT, NULL};
-  if (!root) return result;
+  char canonical_name[MAX_ITEM_NAME];
   // Find an item and then delete it and all of its children.
-  if (!validate_item_name_relative(root, item_name, "item_delete")) {
+  if (!root) return result;
+  if (!item_path_canonicalize(item_name, canonical_name) ||
+      !validate_item_name_relative(root, canonical_name, "item_delete")) {
     result.status = ITEM_MUTATION_INVALID_NAME;
     return result;
   }
+  item_name = canonical_name;
   ITEM_t *item = find_item_unchecked(root, item_name);
   if (item) {
     bool subtree_in_use = item_subtree_has_execution_pins(item);

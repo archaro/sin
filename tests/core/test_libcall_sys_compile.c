@@ -150,6 +150,13 @@ void test_sys_itemref_dynamic_calls(void) {
       "  sys.delete{@aggregate};"
       "  results.zero = sys.fetch{@z};"
       "  results.param_nil = sys.fetch{@o};"
+      "  MiXeD.Target = code (return 19);"
+      "  results.mixed_call = mIxEd.tArGeT{};"
+      "  @mixed_name = \"MiXeD.TaRgEt\";"
+      "  results.mixed_dynamic = [@mixed_name];"
+      "  mixed_dynamic.[\"ChIlD\"] = 23;"
+      "  results.mixed_child = MIXED_DYNAMIC.child;"
+      "  results.ordinary_string = \"MiXeD.Value\";"
       ");");
   ITEM_t *run = find_item(itemstore_root(config.itemstore_ctx), "run");
   ASSERT_NOT_NULL(run);
@@ -219,6 +226,12 @@ void test_sys_itemref_dynamic_calls(void) {
   ASSERT_TRUE(strcmp(sin_itemref_path(sin_list_get(item_value(stored)->list, 2)->itemref), "zero") == 0);
   assert_int_item("results.zero", 7);
   assert_nil_item("results.param_nil");
+  assert_int_item("results.mixed_call", 19);
+  assert_int_item("results.mixed_dynamic", 19);
+  assert_int_item("results.mixed_child", 23);
+  ITEM_t *ordinary_string = assert_string_item("results.ordinary_string",
+                                               "MiXeD.Value");
+  ASSERT_TRUE(strcmp(item_value(ordinary_string)->s, "MiXeD.Value") == 0);
   ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "source.value") == NULL);
   ASSERT_EQ_INT(-1, config.vm->stack->current);
   ASSERT_EQ_INT(-1, config.vm->callstack->current);

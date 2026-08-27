@@ -15,7 +15,9 @@ a suggestion to the event loop, not a guarantee of periodicity.
 `task.newgametask{item, start, repeat}` uses integer intervals in tenths of a
 second.
 - `item` is either the item name as a string or an item reference to the item
-which is being scheduled.
+  which is being scheduled. String paths and references are resolved with
+  ASCII case folding and stored as canonical lower-case paths; this does not
+  change ordinary string values.
 - `start` is the delay before the first callback
 - `repeat` is the interval between later callbacks.
 When calling `task.newgametask`, both `start` and `repeat` must be non-negative.
@@ -57,4 +59,3 @@ ordinary non-task context.
 - `task.exists{id}`: returns `true` if a task with that id is currently
 scheduled, otherwise `false`.
 - `task.count` reports how many scheduled tasks remain.
-

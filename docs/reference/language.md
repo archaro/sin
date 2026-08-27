@@ -57,6 +57,11 @@ They are normalised to lower case. Thus:
 Case is significant inside string values: `"Hello"` and `"hello"` are different
 strings.
 
+Item paths are folded with ASCII `A`-`Z` to `a`-`z` at every runtime boundary,
+including dynamically assembled paths and item references. Canonical paths are
+therefore lower case; this rule applies to path syntax only, never to ordinary
+string payloads or itemstore root labels.
+
 ## Implementation limits and failure behavior
 
 The following limits are normative for the reference implementation. Host-

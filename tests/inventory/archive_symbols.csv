@@ -181,6 +181,8 @@ item_layer_char_is_allowed,item_tree.o,itemstore,src/itemstore/item_tree.c:30: i
 item_layer_name,item_registry.o,itemstore,src/itemstore/item_registry.c:124: item_layer_name definition/provenance,api.itemstore.registry-and-lookup
 item_leave_use,item_registry.o,itemstore,src/itemstore/item_registry.c:147: item_leave_use definition/provenance,api.itemstore.registry-and-lookup
 item_mutation_succeeded,item_tree.o,itemstore,src/itemstore/item_tree.c:320: item_mutation_succeeded definition/provenance,api.itemstore.tree-and-values
+item_path_canonicalize,item_tree.o,itemstore,src/itemstore/item_tree.c:140: item_path_canonicalize definition/provenance,api.itemstore.tree-and-values
+item_path_canonicalize_relative,item_tree.o,itemstore,src/itemstore/item_tree.c:155: item_path_canonicalize_relative definition/provenance,api.itemstore.tree-and-values
 item_parent,item_registry.o,itemstore,src/itemstore/item_registry.c:125: item_parent definition/provenance,api.itemstore.registry-and-lookup
 item_set_code,item_tree.o,itemstore,src/itemstore/item_tree.c:415: item_set_code definition/provenance,api.itemstore.tree-and-values
 item_set_value,item_tree.o,itemstore,src/itemstore/item_tree.c:372: item_set_value definition/provenance,api.itemstore.tree-and-values

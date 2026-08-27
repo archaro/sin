@@ -134,7 +134,9 @@ Source sidecars belong only to code items: `save_itemsource` rejects NULL and
 value items before creating or modifying a sidecar, and
 `read_itemsource_in_srcroot` rejects them before opening a sidecar (reporting
 `source item is not a code item` for an existing value item). Both helpers
-borrow their item and source text only for the duration of the call. A failed
+derive each directory component from the item's canonical lower-case path and
+never alter the root label or source text. They borrow their item and source
+text only for the duration of the call. A failed
 `itemstore_load()` returns `NULL` after discarding any
 partially loaded data; a successful load returns a store whose root remains
 borrowed until the store is destroyed.

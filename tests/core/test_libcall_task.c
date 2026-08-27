@@ -388,7 +388,7 @@ void test_newgametask_child_callback_uses_own_identity(void) {
   creator_ctx->itemstore = config.itemstore_ctx;
   creator_ctx->loop = &loop;
   creator_ctx->current_task_id = creator->id;
-  push_stack(creator->vm->stack, (VALUE_t){VALUE_str, {.s = strdup("task.child")}});
+  push_stack(creator->vm->stack, (VALUE_t){VALUE_str, {.s = strdup("TaSk.ChIlD")}});
   push_stack(creator->vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
   push_stack(creator->vm->stack, (VALUE_t){VALUE_int, {.i = 1}});
   (void)lc_task_newgametask(creator_ctx, NULL, itemstore_root(config.itemstore_ctx));
@@ -428,7 +428,7 @@ void test_newgametask_itemref_creates_and_executes_one_shot(void) {
   insert_compiled_code(itemstore_root(config.itemstore_ctx), "task.itemref",
                        "observed.itemref = 1;");
 
-  SIN_ITEMREF_t *ref = sin_itemref_create("task.itemref");
+  SIN_ITEMREF_t *ref = sin_itemref_create("TaSk.ItEmReF");
   ASSERT_NOT_NULL(ref);
   push_stack(config.vm->stack,
       (VALUE_t){VALUE_itemref, {.itemref = ref}});
