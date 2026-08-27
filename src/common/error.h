@@ -30,6 +30,7 @@
 #define ERR_RUNTIME_SOURCE        29
 
 #define ERR_NETWORK_ERROR         30
+#define ERR_RUNTIME_INUSE         31
 
 extern const char *errmsg[];
 

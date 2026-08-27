@@ -846,7 +846,6 @@ uint8_t *lc_sys_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 }
 
 uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
-  (void)item;
   VALUE_t itemname = pop_stack(ctx->vm->stack);
   if (itemname.type != VALUE_str && itemname.type != VALUE_itemref) {
     value_free(&itemname);
@@ -855,17 +854,35 @@ uint8_t *lc_sys_delete(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   char fullname[MAX_ITEM_NAME];
+  ITEM_MUTATION_STATUS_e status = ITEM_MUTATION_INVALID_NAME;
   if (lc_sys_resolve_itemname(ctx, item, &itemname, fullname)) {
     if (runtime_reject_error_namespace_mutation(
             itemstore_root(ctx->itemstore), fullname, "sys.delete",
             ctx->current_item)) {
       value_free(&itemname);
-      return lc_sys_return_nil(ctx, nextop);
+      return lc_sys_return_false(ctx, nextop);
     }
-    (void)item_delete(itemstore_root(ctx->itemstore), fullname);
+    status = item_delete(itemstore_root(ctx->itemstore), fullname).status;
+    if (status == ITEM_MUTATION_IN_USE) {
+      char detail[MAX_ITEM_NAME + 128u];
+      int written = snprintf(
+          detail, sizeof(detail),
+          "sys.delete refused for '%s': target or a descendant is "
+          "execution-pinned.",
+          fullname);
+      if (written < 0 || (size_t)written >= sizeof(detail)) {
+        set_error_item(itemstore_root(ctx->itemstore), ERR_RUNTIME_INUSE,
+                       "sys.delete target or descendant is execution-pinned.",
+                       ctx->current_item);
+      } else {
+        set_error_item(itemstore_root(ctx->itemstore), ERR_RUNTIME_INUSE,
+                       detail, ctx->current_item);
+      }
+    }
   }
   value_free(&itemname);
-  return lc_sys_return_nil(ctx, nextop);
+  return lc_sys_return(ctx, nextop,
+                       status == ITEM_MUTATION_DELETED ? VALUE_TRUE : VALUE_FALSE);
 }
 
 uint8_t *lc_sys_nthname(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {

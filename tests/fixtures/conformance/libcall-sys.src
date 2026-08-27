@@ -1,7 +1,9 @@
 sys.log{"CONF-libcall-sys"};
+delete.witness = true;
 sys.log{#[
   sys.exists{"missing"} == false,
-  sys.delete{"missing"} == nil,
+  sys.delete{"missing"} == false,
+  sys.delete{"delete.witness"} == true,
   sys.nthname{"missing", 0} == nil,
   sys.rootname{0} != nil,
   sys.thisitem != nil,

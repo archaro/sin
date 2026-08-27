@@ -331,8 +331,9 @@ rewrite.runtime.test_net_ditch_invalid_line_returns_nil,api.libcall.net;libcall.
 rewrite.runtime.test_net_echo_negotiates_current_line_and_consumes_values,libcall.net.echo
 rewrite.runtime.test_net_echo_ignores_unavailable_current_line,test.runtime.test_net_echo_ignores_unavailable_current_line
 rewrite.runtime.test_net_connecting_line_operation_contracts,test.runtime.test_net_connecting_line_operation_contracts
+rewrite.runtime.test_sys_delete_result_contract,api.libcall.sys;libcall.sys.delete;api.itemstore.item-error
 rewrite.runtime.test_sys_item_libcalls,api.libcall.sys;libcall.sys.exists;libcall.sys.delete;libcall.sys.nthname;libcall.sys.rootname;libcall.sys.itemtype;libcall.sys.childcount;libcall.sys.call
-rewrite.runtime.test_sys_delete_rejects_error_namespace,api.libcall.sys;api.itemstore.item-error
+rewrite.runtime.test_sys_delete_rejects_error_namespace,api.libcall.sys;api.itemstore.item-error;libcall.sys.delete
 rewrite.runtime.test_sys_compile_rejects_error_namespace_mutations,api.libcall.sys;api.runtime.runtime-item-ops;api.itemstore.item-error
 rewrite.runtime.test_sys_itemref_contracts,libcall.sys.thisitem;libcall.sys.parentitem;libcall.sys.itemref;libcall.sys.itemname;libcall.sys.fetch
 rewrite.runtime.test_sys_persistence_libcalls,language.item-syntax.item-save;api.libcall.sys;libcall.sys.backup;libcall.sys.save

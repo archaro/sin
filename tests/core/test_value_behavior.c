@@ -95,6 +95,7 @@ void test_error_message_table_defines_active_errors(void) {
   init_errmsg();
   ASSERT_EQ_INT(28, ERR_RUNTIME_PERSISTENCE);
   ASSERT_EQ_INT(29, ERR_RUNTIME_SOURCE);
+  ASSERT_EQ_INT(31, ERR_RUNTIME_INUSE);
 
   int active_errors[] = {
       ERR_NOERROR,
@@ -117,6 +118,7 @@ void test_error_message_table_defines_active_errors(void) {
       ERR_RUNTIME_PERSISTENCE,
       ERR_RUNTIME_SOURCE,
       ERR_NETWORK_ERROR,
+      ERR_RUNTIME_INUSE,
   };
 
   for (size_t i = 0; i < sizeof(active_errors) / sizeof(active_errors[0]); i++) {

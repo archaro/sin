@@ -27,4 +27,5 @@ void init_errmsg(void) {
   errmsg[ERR_RUNTIME_PERSISTENCE] = "Itemstore persistence failed.";
   errmsg[ERR_RUNTIME_SOURCE] = "Item source is unavailable.";
   errmsg[ERR_NETWORK_ERROR] = "Network error.";
+  errmsg[ERR_RUNTIME_INUSE] = "Item or descendant is execution-pinned; cannot delete.";
 }

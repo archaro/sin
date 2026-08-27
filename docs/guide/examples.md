@@ -172,14 +172,15 @@ an expression statement, so whatever value results is simply discarded.
 But what happens when we do this?
 ```sinistra
 wibble = code ( sys.log{"Wibble!\n"}; );
-sys.delete{wibble};
+@deleted = sys.delete{wibble};
 ```
 You could try compiling this and running it with `sin --loadonly`.  You will
 see that rather than `wibble` being deleted, it is in fact executed!  But wait,
 there's more: `wibble` returns `nil` (the default value if no return is given),
 which means that `sys.delete` is passed a `nil` argument.  Since `nil` is
-neither an item name nor an item reference, it fails politely with an "invalid
-arguments" error.  Were you to run the code, you would see something like this:
+neither an item name nor an item reference, it returns `nil` and records an
+"invalid arguments" error.  Were you to run the code, you would see something
+like this:
 ```
 Wibble!
 Bootstrap execution left an error:
@@ -192,8 +193,11 @@ not "whatever this item happens to do".  For that, we require the reference
 operator, `&`.  This code works exactly as expected:
 ```sinistra
 wibble = code ( sys.log{"Wibble!\n"}; );
-sys.delete{&wibble};
+@deleted = sys.delete{&wibble};
 ```
+Here `deleted` is `true` because the referenced item was removed.  `sys.delete`
+returns `false` when a valid target is absent, or when deletion is refused for
+an execution-pinned or protected target.
 Some libcalls specifically require an item-reference, while others accept
 either an item-reference or a string containing an item name. Check the
 reference manual for the specifics of each call.
@@ -480,4 +484,3 @@ Tasks schedule separate executions of Sinistra code through the event loop.
 They do not create threads: Sinistra code remains serialised on the single
 event-loop thread. To prevent this document from becoming unwieldy, the full
 discussion of tasks is [here](tasks-and-events.md).
-

@@ -167,6 +167,25 @@ static void assert_invalid_item_detail_contains(const char *expected) {
   ASSERT_TRUE(strstr(item_value(message)->s, expected) != NULL);
 }
 
+static void assert_delete_error(int expected_code, const char *detail,
+                                const char *provenance) {
+  ITEM_t *root = itemstore_root(config.itemstore_ctx);
+  ITEM_t *error = find_item(root, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(VALUE_int, item_value(error)->type);
+  ASSERT_EQ_INT(expected_code, item_value(error)->i);
+  ITEM_t *message = find_item(root, "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_EQ_INT(VALUE_str, item_value(message)->type);
+  ASSERT_TRUE(strstr(item_value(message)->s, detail) != NULL);
+  if (provenance) {
+    ITEM_t *item = find_item(root, "error.item");
+    ASSERT_NOT_NULL(item);
+    ASSERT_EQ_INT(VALUE_str, item_value(item)->type);
+    ASSERT_TRUE(strcmp(item_value(item)->s, provenance) == 0);
+  }
+}
+
 static int persistence_sync_calls;
 static int persistence_directory_sync_calls;
 
@@ -208,7 +227,8 @@ void test_sys_item_libcalls(void) {
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("VICTIM")}});
   (void)lc_sys_delete(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
   ret = pop_stack(config.vm->stack);
-  ASSERT_EQ_INT(VALUE_nil, ret.type);
+  ASSERT_EQ_INT(VALUE_bool, ret.type);
+  ASSERT_EQ_INT(1, ret.i);
   ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "victim") == NULL);
 
   push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup("PaReNt")}});
@@ -278,6 +298,87 @@ void test_sys_item_libcalls(void) {
   teardown_libcall_runtime();
 }
 
+void test_sys_delete_result_contract(void) {
+  setup_libcall_runtime();
+  ITEM_t *root = itemstore_root(config.itemstore_ctx);
+  RuntimeContext *ctx = test_ctx();
+  ITEM_t *runner = test_item_set_value(root, "runner", VALUE_NIL);
+  ASSERT_NOT_NULL(runner);
+  ctx->current_item = runner;
+
+  ASSERT_NOT_NULL(test_item_set_value(root, "branch.leaf",
+                                      (VALUE_t){VALUE_int, {.i = 1}}));
+  ASSERT_NOT_NULL(test_item_set_value(root, "branch.sibling",
+                                      (VALUE_t){VALUE_int, {.i = 2}}));
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("BrAnCh")} });
+  (void)lc_sys_delete(ctx, NULL, runner);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, result.type);
+  ASSERT_EQ_INT(1, result.i);
+  ASSERT_TRUE(find_item(root, "branch") == NULL);
+
+  set_error_item(root, ERR_RUNTIME_INVALIDARGS, "prior delete error", runner);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("missing")} });
+  (void)lc_sys_delete(ctx, NULL, runner);
+  result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, result.type);
+  ASSERT_EQ_INT(0, result.i);
+  assert_delete_error(ERR_RUNTIME_INVALIDARGS, "prior delete error", "runner");
+
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("malformed..name")} });
+  (void)lc_sys_delete(ctx, NULL, runner);
+  result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, result.type);
+  ASSERT_EQ_INT(0, result.i);
+  assert_delete_error(ERR_RUNTIME_INVALIDARGS, "prior delete error", "runner");
+
+  ASSERT_NOT_NULL(test_item_set_value(root, "pinned.leaf",
+                                      (VALUE_t){VALUE_int, {.i = 3}}));
+  ITEM_t *pinned_leaf = find_item(root, "pinned.leaf");
+  ASSERT_NOT_NULL(pinned_leaf);
+  item_enter_use(pinned_leaf);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("pinned.leaf")} });
+  (void)lc_sys_delete(ctx, NULL, runner);
+  result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, result.type);
+  ASSERT_EQ_INT(0, result.i);
+  ASSERT_TRUE(find_item(root, "pinned.leaf") == pinned_leaf);
+  assert_delete_error(ERR_RUNTIME_INUSE, "sys.delete", "runner");
+  assert_delete_error(ERR_RUNTIME_INUSE, "pinned.leaf", "runner");
+  assert_delete_error(ERR_RUNTIME_INUSE, "execution-pinned", "runner");
+  item_leave_use(pinned_leaf);
+
+  ASSERT_NOT_NULL(test_item_set_value(root, "atomic.pinned",
+                                      (VALUE_t){VALUE_int, {.i = 4}}));
+  ASSERT_NOT_NULL(test_item_set_value(root, "atomic.sibling",
+                                      (VALUE_t){VALUE_int, {.i = 5}}));
+  ITEM_t *pinned_descendant = find_item(root, "atomic.pinned");
+  ASSERT_NOT_NULL(pinned_descendant);
+  item_enter_use(pinned_descendant);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("atomic")} });
+  (void)lc_sys_delete(ctx, NULL, runner);
+  result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, result.type);
+  ASSERT_EQ_INT(0, result.i);
+  ASSERT_NOT_NULL(find_item(root, "atomic.pinned"));
+  ASSERT_NOT_NULL(find_item(root, "atomic.sibling"));
+  assert_delete_error(ERR_RUNTIME_INUSE, "atomic", "runner");
+  item_leave_use(pinned_descendant);
+
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 9}});
+  (void)lc_sys_delete(ctx, NULL, runner);
+  result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_invalid_args_detail_contains("sys.delete item name");
+
+  teardown_libcall_runtime();
+}
+
 void test_sys_delete_rejects_error_namespace(void) {
   setup_libcall_runtime();
   ITEM_t *root = itemstore_root(config.itemstore_ctx);
@@ -315,21 +416,27 @@ void test_sys_delete_rejects_error_namespace(void) {
   ASSERT_TRUE(fclose(capture) == 0);
   ASSERT_TRUE(strstr(log_text, "sys.delete") != NULL);
   ASSERT_TRUE(strstr(log_text, "error.future") != NULL);
-  ASSERT_EQ_INT(VALUE_nil, pop_stack(config.vm->stack).type);
+  VALUE_t protected_result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, protected_result.type);
+  ASSERT_EQ_INT(0, protected_result.i);
   ASSERT_NOT_NULL(find_item(root, "error.future.leaf"));
   assert_invalid_item_detail_contains("error.future");
 
   push_stack(config.vm->stack,
              (VALUE_t){VALUE_str, {.s = strdup("ERROR")} });
   (void)lc_sys_delete(ctx, NULL, current);
-  ASSERT_EQ_INT(VALUE_nil, pop_stack(config.vm->stack).type);
+  protected_result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, protected_result.type);
+  ASSERT_EQ_INT(0, protected_result.i);
   ASSERT_NOT_NULL(find_item(root, "error"));
   assert_invalid_item_detail_contains("error");
 
   push_stack(config.vm->stack,
              (VALUE_t){VALUE_str, {.s = strdup("error.MSG")} });
   (void)lc_sys_delete(ctx, NULL, current);
-  ASSERT_EQ_INT(VALUE_nil, pop_stack(config.vm->stack).type);
+  protected_result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, protected_result.type);
+  ASSERT_EQ_INT(0, protected_result.i);
   ASSERT_EQ_INT(ITEM_value, item_kind(find_item(root, "error.msg")));
   ASSERT_NOT_NULL(find_item(root, "error.msg"));
   assert_invalid_item_detail_contains("error.msg");
@@ -337,14 +444,18 @@ void test_sys_delete_rejects_error_namespace(void) {
   push_stack(config.vm->stack,
              (VALUE_t){VALUE_str, {.s = strdup(".future")} });
   (void)lc_sys_delete(ctx, NULL, error_context);
-  ASSERT_EQ_INT(VALUE_nil, pop_stack(config.vm->stack).type);
+  protected_result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, protected_result.type);
+  ASSERT_EQ_INT(0, protected_result.i);
   ASSERT_TRUE(find_item(root, "error.runner.future") == NULL);
   assert_invalid_item_detail_contains("error.runner.future");
 
   push_stack(config.vm->stack,
              (VALUE_t){VALUE_str, {.s = strdup("error.unknown.subtree")} });
   (void)lc_sys_delete(ctx, NULL, current);
-  ASSERT_EQ_INT(VALUE_nil, pop_stack(config.vm->stack).type);
+  protected_result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, protected_result.type);
+  ASSERT_EQ_INT(0, protected_result.i);
   ASSERT_TRUE(find_item(root, "error.unknown.subtree") == NULL);
   assert_invalid_item_detail_contains("error.unknown.subtree");
 
@@ -352,7 +463,9 @@ void test_sys_delete_rejects_error_namespace(void) {
   push_stack(config.vm->stack,
              (VALUE_t){VALUE_str, {.s = strdup("errors")} });
   (void)lc_sys_delete(ctx, NULL, current);
-  ASSERT_EQ_INT(VALUE_nil, pop_stack(config.vm->stack).type);
+  protected_result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, protected_result.type);
+  ASSERT_EQ_INT(1, protected_result.i);
   ASSERT_TRUE(find_item(root, "errors") == NULL);
   teardown_libcall_runtime();
 }
@@ -457,7 +570,8 @@ void test_sys_itemref_contracts(void) {
   push_stack(config.vm->stack, value_clone(&fnref));
   (void)lc_sys_delete(ctx, NULL, caller);
   invalid = pop_stack(config.vm->stack);
-  ASSERT_EQ_INT(VALUE_nil, invalid.type);
+  ASSERT_EQ_INT(VALUE_bool, invalid.type);
+  ASSERT_EQ_INT(1, invalid.i);
   ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx), "scope.caller.to_delete") == NULL);
   value_free(&fnref);
   value_free(&ref);
