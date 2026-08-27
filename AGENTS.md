@@ -19,68 +19,87 @@ idiomatic changes that fit nearby code; avoid broad cleanup during feature work.
 
 ## Multi-agent implementation policy
 
-The root agent owns requirements, architecture, task decomposition, acceptance
-criteria, final validation, and the final answer. It is always the final
-reviewer and must not accept a worker's summary without inspecting the diff and
-test evidence.
+Use a small, stable team for non-trivial code changes:
+
+- The root orchestrator owns requirements, architecture, task decomposition,
+  acceptance criteria, diff review, integration decisions, and the final
+  answer. It audits the work directly rather than delegating routine final
+  review.
+- Use one implementation agent to write code and make corrections. Reuse that
+  agent for the bounded task rather than starting fresh implementation agents.
+- Use one low-capability, read-only agent for repository searches and test
+  execution. It may report findings and exact failures, but it never edits
+  files, diagnoses failures, or proposes fixes.
+
+When using OpenAI models, use the Model-specific in `OPENAI.md` to select the
+models and reasoning levels for these roles. The root remains the final
+reviewer and must inspect the diff and test evidence rather than accepting an
+agent's summary alone.
 
 ### Isolated handoffs
 
-For every native implementation, correction, or review agent:
+For every implementation, search, or test handoff:
 
 - Never pass the root conversation history: provide the minimum context
   necessary to implement the requested task.
-- Run tests with a low-capability, read-only agent. Return the results to the
-  orchestrator; include errors verbatim. That agent executes and reports only;
-  it never edits files or diagnoses failures.
-- Do not repeat tests unnecessarily: if an agent runs a test suite successfully
-  to completion and the root agent does not make further changes, it is not
-  necessary for the root agent to repeat the same tests.
-
-For every implementation, correction, or review handoff:
-
 - Send a focused, self-contained handoff rather than transcripts, raw context
   dumps, or unrelated findings.
-- Include the bounded task, acceptance criteria, relevant decisions and files,
-  current tree state when relevant, tests to run, pertinent failures or review
-  findings, and the expected deliverable.
+- Include only what the recipient needs: the bounded task or question, relevant
+  acceptance criteria, decisions and files, necessary tree state, pertinent
+  failures or review findings, and the expected deliverable.
 - Summarize prior work. Include raw output only when a short excerpt is needed
   to diagnose a specific failure.
 - Remind implementation agents that the workspace is shared and that they must
   preserve unrelated changes. Never run two implementation agents concurrently
   against the same working tree.
 
-### Implementation and escalation
+Keep discovery handoffs narrow: ask concrete questions and name likely paths
+when known. Return only the findings needed for the orchestrator to make the
+next decision. The orchestrator should use those findings without repeating
+the same searches unless the tree changed or the result is incomplete.
 
-Consider first the model-specific guidance (for example, in CODEX.md), but if
-this does not provide sufficient direction then use the following pattern for
-non-trivial code changes:
+### Test ownership and reuse
+
+The read-only test agent owns test execution. The orchestrator defines the
+proportionate test plan, evaluates the evidence, and decides whether failures
+require another implementation iteration.
+
+- Run narrow tests while iterating only when their result can affect the next
+  code change. Run the planned final gates once after the candidate is stable.
+- A successful test result remains valid while the tested code, build inputs,
+  fixtures, and test configuration remain unchanged. Auditing the diff,
+  reviewing output, or integrating the result does not invalidate it.
+- Do not hand off for "final testing" and then rerun the same coverage as an
+  "integration test" when no relevant changes occurred. The orchestrator's
+  integration responsibility is review and evaluation, not duplicate execution.
+- After a correction, rerun only tests whose result could be affected, then run
+  any remaining planned gates that have not yet completed against that revision.
+- Repeat a successful test only when relevant inputs changed, the earlier run
+  was incomplete or unreliable, or a higher-priority instruction explicitly
+  requires an independent run. State the reason when repeating it.
+- Return concise results to the orchestrator, with exact command lines and
+  errors verbatim. Do not transfer bulky successful logs unless requested.
+
+### Implementation and correction
+
+Use the following pattern for non-trivial code changes:
 
 1. Inspect enough of the repository to define a bounded task, explicit
-   acceptance criteria, affected subsystems, constraints, and tests.
-2. Give the first implementation attempt to a medium-capability agent.
-3. Review its diff and test evidence yourself.
+   acceptance criteria, affected subsystems, constraints, and a proportionate
+   test plan. Delegate repository discovery to the read-only agent where useful.
+2. Give the implementation to the designated implementation agent.
+3. Review its diff directly, then have the read-only test agent run the checks
+   that are useful at this revision.
 4. If the result fails a check, is incomplete, violates an acceptance
    criterion, requires substantial correction, or leaves an unresolved
    certainty, refer back to the implementation agent for correction, with
    detailed and bounded instructions on what is wrong and what needs to be
    fixed.
 
-Escalation is bounded. Count the initial implementation as attempt 1:
-
-- Attempts 1 through 5 belong to the medium-capability implementation agent.
-  Repeat step 4 for each correction.
-- If attempt 5 still fails root review, hand the task to a high-capability
-  review agent with a fresh, self-contained handoff stating what the
-  implementation agent produced, which acceptance criteria remain unmet, and
-  the specific failures. Do not forward the implementation agent's transcript.
-- The high-capability review agent gets at most two attempts, reviewed against
-  the same criteria.
-- If the review agent's second attempt still fails, the root implements the
-  fix itself.
-
-Never restart the ladder for the same bounded task; re-scoping a failed task
-does not reset the count. A task that reaches the root stays with the root.
+Keep corrections with the same implementation agent. If repeated corrections
+do not converge, the root must reassess the requirements, scope, and acceptance
+criteria before deciding how to proceed; do not silently add implementation or
+review agents.
 
 The root may make tiny mechanical edits. Substantive implementation follows
 the pattern of an implementation agent as code-monkey, irrespective of what
@@ -90,8 +109,9 @@ the orchestration model is.
 
 Use the smallest workflow that satisfies the task:
 
-- One bounded task normally needs one implementation process plus root review
-  and validation. Do not automatically add both task and whole-branch reviewers.
+- One bounded task normally needs the root orchestrator, one implementation
+  agent, and one read-only search/test agent. Do not add routine task or
+  whole-branch reviewers; the root owns audit and integration.
 - Add one independent reviewer only for unusual risk, cross-subsystem work,
   multiple independently implemented tasks, specialist needs, or an explicit
   user request. For a single-task branch, that reviewer should cover both
