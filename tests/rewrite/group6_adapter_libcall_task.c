@@ -10,6 +10,11 @@ void test_task_thisid_in_callback_survives_self_close(void);
 void test_task_callback_frees_aggregate_return_values(void);
 void test_newgametask_child_callback_uses_own_identity(void);
 void test_newgametask_itemref_creates_and_executes_one_shot(void);
+void test_newgametask_copies_canonical_target_and_defers_zero_delay(void);
+void test_newgametask_deleted_target_retires_one_shot(void);
+void test_newgametask_resolves_target_on_each_firing(void);
+void test_task_callback_pins_target_during_execution(void);
+void test_tasks_are_runtime_only_across_sys_save_and_load(void);
 
 static const TF_TestDescriptor tests[] = {
     {"rewrite.runtime.test_newgametask_rejects_invalid_intervals_before_timer_start", test_newgametask_rejects_invalid_intervals_before_timer_start, "exclusive", 30000, "api.libcall.task,api.runtime.task,libcall.task.newgametask"},
@@ -22,6 +27,11 @@ static const TF_TestDescriptor tests[] = {
     {"rewrite.runtime.test_task_callback_frees_aggregate_return_values", test_task_callback_frees_aggregate_return_values, "exclusive", 30000, "test.runtime.test_task_callback_frees_aggregate_return_values"},
     {"rewrite.runtime.test_newgametask_child_callback_uses_own_identity", test_newgametask_child_callback_uses_own_identity, "exclusive", 30000, "libcall.task.newgametask"},
     {"rewrite.runtime.test_newgametask_itemref_creates_and_executes_one_shot", test_newgametask_itemref_creates_and_executes_one_shot, "exclusive", 30000, "libcall.task.newgametask"},
+    {"rewrite.runtime.test_newgametask_copies_canonical_target_and_defers_zero_delay", test_newgametask_copies_canonical_target_and_defers_zero_delay, "exclusive", 30000, "test.runtime.test_newgametask_copies_canonical_target_and_defers_zero_delay"},
+    {"rewrite.runtime.test_newgametask_deleted_target_retires_one_shot", test_newgametask_deleted_target_retires_one_shot, "exclusive", 30000, "test.runtime.test_newgametask_deleted_target_retires_one_shot"},
+    {"rewrite.runtime.test_newgametask_resolves_target_on_each_firing", test_newgametask_resolves_target_on_each_firing, "exclusive", 30000, "test.runtime.test_newgametask_resolves_target_on_each_firing"},
+    {"rewrite.runtime.test_task_callback_pins_target_during_execution", test_task_callback_pins_target_during_execution, "exclusive", 30000, "test.runtime.test_task_callback_pins_target_during_execution"},
+    {"rewrite.runtime.test_tasks_are_runtime_only_across_sys_save_and_load", test_tasks_are_runtime_only_across_sys_save_and_load, "exclusive", 30000, "test.runtime.test_tasks_are_runtime_only_across_sys_save_and_load"},
 };
 
 int main(int argc, char **argv) {

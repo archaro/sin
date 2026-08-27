@@ -76,8 +76,8 @@ uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item)
   // name of the item to execute, time until first execution, and
   // time between executions.  The intervals are in 10ths of a second.
   // The item must exist, both time values must be >=0, and if both
-  // intervals are 0 then the item is executed once immediately, and
-  // not again.
+  // intervals are 0 then the item is scheduled once at zero delay. It runs
+  // on a later eligible event-loop turn, never synchronously in this call.
   // Validate the parameters before creating the task.
   (void)item;
   VALUE_t repeatin = pop_stack(ctx->vm->stack);

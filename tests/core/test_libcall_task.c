@@ -100,6 +100,185 @@ static ITEM_t *insert_compiled_code(ITEM_t *root, const char *name,
   return item;
 }
 
+static uint64_t schedule_task(const char *name, int64_t start, int64_t repeat) {
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup(name)}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = start}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = repeat}});
+  (void)lc_task_newgametask(test_ctx(), NULL,
+                            itemstore_root(config.itemstore_ctx));
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_TRUE(result.i > 0);
+  return (uint64_t)result.i;
+}
+
+void test_newgametask_copies_canonical_target_and_defers_zero_delay(void) {
+  uv_loop_t loop;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  setup_libcall_runtime();
+  config.loop = &loop;
+  init_tasks();
+  insert_compiled_code(itemstore_root(config.itemstore_ctx),
+                       "owned.target", "observed.owned = 1;");
+
+  uint64_t id = schedule_task("OwNeD.TaRgEt", 0, 0);
+  TASK_t *task = find_task_by_id(id);
+  ASSERT_NOT_NULL(task);
+  ASSERT_TRUE(strcmp(task->itemname, "owned.target") == 0);
+  ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx),
+                        "observed.owned") == NULL);
+
+  (void)uv_run(&loop, UV_RUN_DEFAULT);
+  ITEM_t *observed = find_item(itemstore_root(config.itemstore_ctx),
+                               "observed.owned");
+  ASSERT_NOT_NULL(observed);
+  ASSERT_EQ_INT(VALUE_int, item_value(observed)->type);
+  ASSERT_EQ_INT(1, item_value(observed)->i);
+  ASSERT_TRUE(find_task_by_id(id) == NULL);
+
+  finalise_tasks(&loop);
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
+  teardown_libcall_runtime();
+}
+
+void test_newgametask_deleted_target_retires_one_shot(void) {
+  uv_loop_t loop;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  setup_libcall_runtime();
+  config.loop = &loop;
+  init_tasks();
+  insert_compiled_code(itemstore_root(config.itemstore_ctx),
+                       "deleted.before.fire", "observed.deleted = 1;");
+
+  uint64_t id = schedule_task("deleted.before.fire", 0, 0);
+  ASSERT_NOT_NULL(find_task_by_id(id));
+  ASSERT_EQ_INT(ITEM_MUTATION_DELETED,
+                item_delete(itemstore_root(config.itemstore_ctx),
+                            "deleted.before.fire").status);
+  (void)uv_run(&loop, UV_RUN_DEFAULT);
+  ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx),
+                        "observed.deleted") == NULL);
+  ASSERT_TRUE(find_task_by_id(id) == NULL);
+  ASSERT_EQ_INT(0, uv_loop_alive(&loop));
+
+  finalise_tasks(&loop);
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
+  teardown_libcall_runtime();
+}
+
+void test_newgametask_resolves_target_on_each_firing(void) {
+  uv_loop_t loop;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  setup_libcall_runtime();
+  config.loop = &loop;
+  init_tasks();
+  insert_compiled_code(itemstore_root(config.itemstore_ctx), "dynamic.target",
+                       "observed.dynamic = 1;");
+  uint64_t id = schedule_task("DYNAMIC.TARGET", 0, 1);
+  ASSERT_NOT_NULL(find_task_by_id(id));
+
+  (void)uv_run(&loop, UV_RUN_ONCE);
+  ASSERT_EQ_INT(1, item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                        "observed.dynamic"))->i);
+
+  insert_compiled_code(itemstore_root(config.itemstore_ctx), "dynamic.target",
+                       "observed.dynamic = 2;");
+  (void)uv_run(&loop, UV_RUN_ONCE);
+  ASSERT_EQ_INT(2, item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                        "observed.dynamic"))->i);
+
+  ASSERT_EQ_INT(ITEM_MUTATION_DELETED,
+                item_delete(itemstore_root(config.itemstore_ctx),
+                            "dynamic.target").status);
+  (void)uv_run(&loop, UV_RUN_ONCE);
+  ASSERT_EQ_INT(2, item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                        "observed.dynamic"))->i);
+  ASSERT_NOT_NULL(find_task_by_id(id));
+
+  insert_compiled_code(itemstore_root(config.itemstore_ctx), "dynamic.target",
+                       "observed.dynamic = 3;");
+  (void)uv_run(&loop, UV_RUN_ONCE);
+  ASSERT_EQ_INT(3, item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                        "observed.dynamic"))->i);
+  ASSERT_TRUE(request_task_close(find_task_by_id(id)));
+
+  finalise_tasks(&loop);
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
+  teardown_libcall_runtime();
+}
+
+void test_task_callback_pins_target_during_execution(void) {
+  uv_loop_t loop;
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  setup_libcall_runtime();
+  config.loop = &loop;
+  init_tasks();
+  insert_compiled_code(itemstore_root(config.itemstore_ctx), "pinned.target",
+      "observed.pin_replace = sys.compile{\"pinned.target = code ( observed.pin_replaced = 1; );\"};"
+      "observed.pin_delete = sys.delete{&pinned.target};");
+  uint64_t id = schedule_task("pinned.target", 0, 0);
+  (void)uv_run(&loop, UV_RUN_DEFAULT);
+
+  ITEM_t *target = find_item(itemstore_root(config.itemstore_ctx),
+                             "pinned.target");
+  ASSERT_NOT_NULL(target);
+  ASSERT_EQ_INT(ITEM_code, item_kind(target));
+  ASSERT_TRUE(find_item(itemstore_root(config.itemstore_ctx),
+                        "observed.pin_replaced") == NULL);
+  ITEM_t *replace_result = find_item(itemstore_root(config.itemstore_ctx),
+                                     "observed.pin_replace");
+  ITEM_t *delete_result = find_item(itemstore_root(config.itemstore_ctx),
+                                    "observed.pin_delete");
+  ASSERT_NOT_NULL(replace_result);
+  ASSERT_NOT_NULL(delete_result);
+  ASSERT_EQ_INT(VALUE_bool, item_value(replace_result)->type);
+  ASSERT_EQ_INT(VALUE_bool, item_value(delete_result)->type);
+  ASSERT_EQ_INT(0, item_value(replace_result)->i);
+  ASSERT_EQ_INT(0, item_value(delete_result)->i);
+  ASSERT_TRUE(find_task_by_id(id) == NULL);
+
+  finalise_tasks(&loop);
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
+  teardown_libcall_runtime();
+}
+
+void test_tasks_are_runtime_only_across_sys_save_and_load(void) {
+  uv_loop_t loop;
+  char store_path[128];
+  ASSERT_EQ_INT(0, uv_loop_init(&loop));
+  setup_libcall_runtime();
+  config.loop = &loop;
+  init_tasks();
+  ASSERT_EQ_INT(0, test_make_temp_path("sin-task-runtime-only", store_path,
+                                      sizeof(store_path)));
+  insert_compiled_code(itemstore_root(config.itemstore_ctx), "persist.target",
+                       "observed.persist = 1;");
+  uint64_t id = schedule_task("persist.target", 100, 100);
+  RuntimeContext *ctx = test_ctx();
+  ctx->itemstore_filename = store_path;
+  (void)lc_sys_save(ctx, NULL, itemstore_root(config.itemstore_ctx));
+  assert_bool_return(pop_stack(config.vm->stack), 1);
+  ASSERT_NOT_NULL(find_task_by_id(id));
+  ASSERT_EQ_INT(1, (int)task_list_count());
+  finalise_tasks(&loop);
+  init_tasks();
+  ASSERT_EQ_INT(0, (int)task_list_count());
+  ASSERT_TRUE(find_task_by_id(id) == NULL);
+  ITEM_t *loaded = load_itemstore(store_path);
+  ASSERT_NOT_NULL(loaded);
+  ASSERT_NOT_NULL(find_item(loaded, "persist.target"));
+  ASSERT_TRUE(find_item(loaded, "observed.persist") == NULL);
+  ASSERT_EQ_INT(0, (int)task_list_count());
+  ASSERT_TRUE(find_task_by_id(id) == NULL);
+  destroy_item(loaded);
+  ASSERT_EQ_INT(0, unlink(store_path));
+
+  finalise_tasks(&loop);
+  ASSERT_EQ_INT(0, uv_loop_close(&loop));
+  teardown_libcall_runtime();
+}
+
 static void assert_newgametask_invalid_interval_returns_nil(int64_t start_value,
                                                             int64_t repeat_value) {
   static int task_suffix = 0;
@@ -440,7 +619,9 @@ void test_newgametask_itemref_creates_and_executes_one_shot(void) {
   VALUE_t result = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_int, result.type);
   uint64_t task_id = (uint64_t)result.i;
-  ASSERT_NOT_NULL(find_task_by_id(task_id));
+  TASK_t *task = find_task_by_id(task_id);
+  ASSERT_NOT_NULL(task);
+  ASSERT_TRUE(strcmp(task->itemname, "task.itemref") == 0);
 
   (void)uv_run(&loop, UV_RUN_DEFAULT);
   ITEM_t *observed = find_item(itemstore_root(config.itemstore_ctx),

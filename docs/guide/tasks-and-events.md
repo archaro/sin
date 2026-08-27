@@ -2,8 +2,8 @@
 
 Sinistra can schedule code items to run once or repeatedly using the `task`
 library. Tasks run on the same event loop as the rest of the world: they are
-not threads, and task code executes synchronously. A task should therefore do
-its work and return promptly.
+not threads, and task code executes synchronously once its callback begins. A
+task should therefore do its work and return promptly.
 
 For the relationship between tasks, network events, the `input` item, and the
 event loop, see the [Runtime Model](runtime-model.md).
@@ -33,13 +33,15 @@ is stored, not a frozen copy of the item as it existed when the task was
 created. The target code item may therefore be replaced between runs, and the
 new version will execute next time the task fires. It may also be deleted; if
 it is later recreated at the same path, the task will resolve that path afresh.
-An item cannot, of course, replace or delete itself while it is executing
-because it is pinned.
+Scheduling does not pin the target. Only the target resolved for an actively
+executing callback is pinned, so that callback cannot replace or delete itself;
+the target may be replaced, deleted, or recreated between callbacks.
 
 ## Repeating and One-shot Tasks
 A zero repeat interval makes the task one-shot; it retires automatically after
-its callback. Setting both `start` and `repeat` to `0` also invites the event
-loop to run the task as soon as it can.  A positive `repeat` interval keeps the
+its callback. Setting both `start` and `repeat` to `0` schedules the task at
+zero delay, and the callback runs on a later eligible event-loop turn, never
+synchronously inside `task.newgametask`. A positive `repeat` interval keeps the
 task active until it is cancelled.
 
 ## Cancelling a Task
@@ -54,6 +56,11 @@ The id is assigned when the task is created and does not change. While a task
 callback is executing, task.thisid continues to return that id even if the task
 has asked to cancel itself; it returns nil once execution has returned to an
 ordinary non-task context.
+
+Tasks and IDs are runtime-only and ephemeral: itemstore save/load, including
+`sys.save`, does not persist or recreate them. Initializing the task subsystem
+clears its registry and resets ID allocation, and a retired or restarted task
+ID may be reused.
 
 ## Inspecting Scheduled Tasks
 - `task.exists{id}`: returns `true` if a task with that id is currently

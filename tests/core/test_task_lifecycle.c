@@ -164,3 +164,26 @@ void test_task_finalise_handles_active_and_closing(void) {
   finalise_tasks(&loop);
   ASSERT_EQ_INT(0, uv_loop_close(&loop));
 }
+
+void test_task_initialization_resets_registry_and_id_allocator(void) {
+  uv_loop_t loop;
+  TASK_t *task;
+  uint64_t initial_id;
+
+  setup_task_loop(&loop);
+  task = make_task("before_reset", 1000);
+  ASSERT_NOT_NULL(task);
+  initial_id = task->id;
+  ASSERT_EQ_INT(1, (int)task_list_count());
+  ASSERT_TRUE(request_task_close(task));
+  ASSERT_EQ_INT(0, (int)task_list_count());
+  finalise_tasks(&loop);
+  init_tasks();
+  ASSERT_EQ_INT(0, (int)task_list_count());
+  task = make_task("after_reset", 1000);
+  ASSERT_NOT_NULL(task);
+  ASSERT_EQ_INT(initial_id, task->id);
+  ASSERT_EQ_INT(1, (int)task_list_count());
+  destroy_task(task);
+  teardown_task_loop(&loop);
+}
