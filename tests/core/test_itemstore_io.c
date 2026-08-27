@@ -476,8 +476,9 @@ void test_itemstore_v2_lists_and_itemrefs_roundtrip(void) {
   ASSERT_NOT_NULL(test_item_set_value(
       root, "shared", (VALUE_t){VALUE_list, {.list = shared_slice}}));
   sin_list_release(shared_source);
-  SIN_ITEMREF_t *ref = sin_itemref_create("foo.bar");
+  SIN_ITEMREF_t *ref = sin_itemref_create("FoO.BaR");
   ASSERT_NOT_NULL(ref);
+  ASSERT_TRUE(strcmp("foo.bar", sin_itemref_path(ref)) == 0);
   ASSERT_NOT_NULL(test_item_set_value(
       root, "ref", (VALUE_t){VALUE_itemref, {.itemref = ref}}));
   ASSERT_TRUE(save_itemstore(path, root));
@@ -1699,6 +1700,12 @@ void test_itemstore_item_name_contract_boundaries_roundtrip(void) {
   ASSERT_NOT_NULL(root);
   ASSERT_NOT_NULL(test_item_set_value(root, "a",
                               (VALUE_t){.type = VALUE_int, .i = 1}));
+  ITEM_t *mixed = test_item_set_value(root, "MiXeD.Layer",
+                                      (VALUE_t){.type = VALUE_int, .i = 9});
+  ASSERT_NOT_NULL(mixed);
+  char mixed_name[MAX_ITEM_NAME] = {0};
+  get_itemname(mixed, mixed_name);
+  ASSERT_TRUE(strcmp(mixed_name, "mixed.layer") == 0);
 
   char max_layer[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
   memset(max_layer, 'b', ITEM_MAX_LAYER_NAME_LENGTH);
@@ -1727,6 +1734,9 @@ void test_itemstore_item_name_contract_boundaries_roundtrip(void) {
   ITEM_t *loaded = load_itemstore(path);
   ASSERT_NOT_NULL(loaded);
   ASSERT_EQ_INT(1, find_item(loaded, "a")->value.i);
+  ASSERT_EQ_INT(9, find_item(loaded, "MIXED.LAYER")->value.i);
+  get_itemname(find_item(loaded, "mixed.layer"), mixed_name);
+  ASSERT_TRUE(strcmp(mixed_name, "mixed.layer") == 0);
   ASSERT_EQ_INT(32, find_item(loaded, max_layer)->value.i);
   ASSERT_EQ_INT(263, find_item(loaded, max_path)->value.i);
   ASSERT_EQ_INT(ITEM_code,
@@ -1781,6 +1791,12 @@ void test_itemstore_item_name_rejection_is_atomic(void) {
 void test_itemstore_item_name_relative_depth_contract(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
+  ITEM_t *boot = make_item("BoOt", NULL, ITEM_code, VALUE_NIL, NULL, 0);
+  ASSERT_NOT_NULL(boot);
+  char boot_child[MAX_ITEM_NAME] = {0};
+  ASSERT_TRUE(canonicalize_itemname(".ChIlD", boot, boot_child));
+  ASSERT_TRUE(strcmp(boot_child, "boot.child") == 0);
+  destroy_item(boot);
   ITEM_t *parent = test_item_set_value(root, "a.b.c.d.e.f.g",
                                (VALUE_t){.type = VALUE_nil, .i = 0});
   ASSERT_NOT_NULL(parent);
@@ -1814,6 +1830,22 @@ void test_save_itemstore_rejects_manually_invalid_item_names(void) {
   ASSERT_NOT_NULL(make_item("bad-name", root, ITEM_value,
                             VALUE_NIL, NULL, 0));
   ASSERT_TRUE(!save_itemstore(path, root));
+  destroy_item(root);
+
+  root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  ASSERT_NOT_NULL(make_item("MiXeD", root, ITEM_value, VALUE_NIL, NULL, 0));
+  file = fopen(path, "wb");
+  ASSERT_NOT_NULL(file);
+  ASSERT_EQ_INT(8, fwrite("sentinel", 1, 8, file));
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_TRUE(!save_itemstore(path, root));
+  file = fopen(path, "rb");
+  ASSERT_NOT_NULL(file);
+  char sentinel[8] = {0};
+  ASSERT_EQ_INT(8, fread(sentinel, 1, sizeof sentinel, file));
+  ASSERT_TRUE(memcmp(sentinel, "sentinel", sizeof sentinel) == 0);
+  ASSERT_EQ_INT(0, fclose(file));
   destroy_item(root);
 
   root = make_root_item("root");

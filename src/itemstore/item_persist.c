@@ -362,6 +362,15 @@ bool write_item(FILE *file, ITEM_t *item, size_t *aggregate_budget) {
            item->name);
     return false;
   }
+  if (item->parent != NULL) {
+    char canonical_name[ITEM_MAX_LAYER_NAME_LENGTH + 1u];
+    if (!item_path_canonicalize(item->name, canonical_name)) return false;
+    if (strcmp(item->name, canonical_name) != 0) {
+      logerr("Failed to write itemstore item: non-canonical layer '%s' "
+             "(expected '%s').\n", item->name, canonical_name);
+      return false;
+    }
+  }
   if (!itemstore_write_u8(file, (uint8_t)name_len, "item name length")
       || !itemstore_write_bytes(file, item->name, name_len, "item name")) {
     return false;

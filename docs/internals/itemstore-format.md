@@ -119,9 +119,10 @@ the bytecode limit. Exceeding the budget is rejected deterministically.
 Non-root names must contain between 1 and 32 bytes and consist only of ASCII
 letters, digits, and underscore. Names may not contain an embedded NUL.
 Non-root layers are stored in canonical ASCII lower case. v1 and v2 readers
-reject non-canonical mixed-case layers and item-reference paths atomically; the
-diagnostic includes the original and expected spelling. Sibling names must be
-unique. The root name is also limited to 32 bytes and
+reject non-canonical mixed-case layers atomically; the diagnostic includes the
+original and expected spelling. v2 readers also reject non-canonical
+item-reference paths. Sibling names must be unique. The root name is also
+limited to 32 bytes and
 may not contain an embedded NUL, but it is not subject to the non-root character
 set restriction.
 

@@ -155,8 +155,8 @@ bool item_path_canonicalize_relative(const ITEM_t *context_item,
                                      const char *item_name, char *out_name) {
   if (!item_name || !out_name) return false;
   if (item_name[0] != '.') return item_path_canonicalize(item_name, out_name);
-  if (!context_item || !context_item->parent) {
-    logerr("Relative item name '%s' cannot be resolved without a non-root item context.\n",
+  if (!context_item) {
+    logerr("Relative item name '%s' cannot be resolved without an item context.\n",
            item_name);
     return false;
   }
