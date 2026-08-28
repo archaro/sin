@@ -8,7 +8,7 @@ consume the argument values, set `error` to `ERR_RUNTIME_INVALIDARGS`, set
 documented invalid-argument value. Current invalid-argument return shapes are
 `false` for `sys.compile{source}`, `sys.exists{name}`, `str.contains`,
 `str.startswith`, `str.endswith`, and `str.eqcasei`; `nil` for other sys,
-task, network, and string libcalls.
+task, network, string, and list libcalls.
 Failures that are not invalid arguments keep their own contract; for example a
 missing task item sets the no-such-item error, an unknown task id returns
 `false` without changing `error`, `net.write` to an inactive line returns `nil`
@@ -35,4 +35,3 @@ Examples:
 - [net](libcalls-net.md) - network operations
 - [list](libcalls-list.md) - list comprehension
 - [task](libcalls-task.md) - task handling
-

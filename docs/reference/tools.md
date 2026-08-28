@@ -32,6 +32,11 @@ including legacy libcall tokens and relocated jumps. Conversion prepares all
 code items before publication, so a failed item leaves an existing output
 unchanged even with `--replace`.
 
+When converting a v1 store, an embedded NUL in a string value is truncated at
+the first NUL. Conversion can still succeed, but emits a warning identifying
+the affected item; retain the v1 source store so the original value is not
+lost.
+
 ## `scomp`
 
 `scomp` compiles Sinistra source text to Sinistra bytecode/object data. It is
@@ -128,13 +133,15 @@ shutdown. VM execution traces, boot return values, task return values, and
 runtime repair/coercion details are shown only with `--verbose`.
 
 If bootstrap execution finishes with a non-zero `error`, `sin` reports the
-outstanding `error.msg`, exits non-zero, and does not persist the itemstore.
-This is a runtime error left by the bootstrap, not an interpreter-validation
-failure.
+outstanding `error.msg`, exits non-zero, and does not perform the normal
+shutdown save. Any earlier explicit `sys.save` or `sys.backup` call remains
+effective. This is a runtime error left by the bootstrap, not an
+interpreter-validation failure.
 
-When `sin` shuts down safely, it saves the itemstore using the selected
-durability mode. `sys.abort` marks shutdown as unsafe, causing the runtime to
-exit without the normal itemstore save.
+When `sin` shuts down safely, it attempts the normal itemstore save using the
+selected durability mode. A save failure can make the process exit
+unsuccessfully. `sys.abort` marks shutdown as unsafe, causing the runtime to
+exit without attempting the normal itemstore save.
 
 `--help` and `--version` print their output and exit successfully even when
 options before them have already loaded an itemstore or redirected logging.
