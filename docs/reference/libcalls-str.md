@@ -1,5 +1,8 @@
 # The str library
 
+[Reference Manual](README.md) · [Libcall index](libcalls.md) ·
+[Error Reference](errors.md)
+
 String manipulation
 
 | Libcall | Library | Call | Arity | Argument expectations | Return value | Side effects | Failure behaviour | Example |

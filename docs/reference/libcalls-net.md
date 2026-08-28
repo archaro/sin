@@ -1,5 +1,8 @@
 # The net library
 
+[Reference Manual](README.md) · [Libcall index](libcalls.md) ·
+[Error Reference](errors.md)
+
 This library handles interactions with telnet connections.
 
 ## Network line contracts

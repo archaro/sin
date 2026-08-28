@@ -1,5 +1,8 @@
 # The list library
 
+[Reference Manual](README.md) · [Libcall index](libcalls.md) ·
+[Error Reference](errors.md)
+
 All things list-comprehension.
 
 Note that lists are immutable.  Combine list libcalls with `sys.itemref`,

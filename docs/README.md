@@ -15,5 +15,5 @@ The world is fundamentally an item tree. Items contain values or executable code
 - [I can't wait.  Tell me the bare minimum.](guide/quickstart.md): How to compile Sinistra and run a basic chat server.
 - [I want to try it out](guide/overview.md): What is Sinistra and how to use it for your pleasure.
 - [I want more details](guide/index.md): More in-depth discussion on Sinistra concepts.
-- [I want to know more about the language specifics](reference/language.md): The canonical reference manual.
+- [I want the complete Reference Manual](reference/README.md): Language, errors, tools, and library-call contracts.
 - [I want to hack the engine](internals): Information for people who want to hack the language.

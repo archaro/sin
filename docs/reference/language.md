@@ -1,5 +1,8 @@
 # Sinistra language reference
 
+[Reference Manual](README.md) · [Error Reference](errors.md) ·
+[Libcalls](libcalls.md) · [Tool Reference](tools.md)
+
 This page is authoritative for Sinistra syntax and language-level value,
 operator, and execution semantics. Libcall APIs are authoritative in
 [`libcalls.md`](libcalls.md), tool behavior in [`tools.md`](tools.md), and

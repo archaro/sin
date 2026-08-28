@@ -1,5 +1,8 @@
 # The sys library
 
+[Reference Manual](README.md) · [Libcall index](libcalls.md) ·
+[Error Reference](errors.md)
+
 This library contains essential functions for managing a Sinistra instance and other useful system functions.
 
 | Libcall | Library | Call | Arity | Argument expectations | Return value | Side effects | Failure behaviour | Example |

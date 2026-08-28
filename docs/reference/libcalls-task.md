@@ -1,5 +1,8 @@
 # The task library
 
+[Reference Manual](README.md) · [Libcall index](libcalls.md) ·
+[Error Reference](errors.md)
+
 Task management is handled here.
 
 | Libcall | Library | Call | Arity | Argument expectations | Return value | Side effects | Failure behaviour | Example |

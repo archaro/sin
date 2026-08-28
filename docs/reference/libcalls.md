@@ -1,5 +1,8 @@
 # Libraries and Libcalls
 
+[Reference Manual](README.md) · [Language Reference](language.md) ·
+[Error Reference](errors.md) · [Tool Reference](tools.md)
+
 ## Invalid argument policy
 
 Most libcalls that receive an argument with an invalid type, range, or value

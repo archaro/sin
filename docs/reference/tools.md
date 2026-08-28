@@ -1,5 +1,8 @@
 # Sinistra Tool Reference
 
+[Reference Manual](README.md) · [Language Reference](language.md) ·
+[Error Reference](errors.md) · [Libcalls](libcalls.md)
+
 This page documents the command-line tools built by the top-level `Makefile`:
 `sin`, `scomp`, `sdiss`, and `sconv`.
 
