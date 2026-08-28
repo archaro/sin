@@ -42,7 +42,9 @@ dependencies to the framework.
 Keep IDs stable once they are in `tests/inventory/tests.csv`. Add a contract
 edge for each observable behavior. Tag tests that mutate process-global hooks,
 fixed paths, use libuv/network resources, or run benchmarks as `exclusive`;
-network tests also use `network`, and opt-in measurements use `benchmark`.
+network tests also use `network`. The `benchmark` tag serializes benchmark
+descriptors; it does not make them opt-in or exclude them from `make test`
+runs. Extended measurements are opt-in via `SIN_EXTENDED_BENCH=1`.
 Every descriptor needs a timeout appropriate to its slowest child operation.
 
 White-box tests may include a production `.c` file only when private state or

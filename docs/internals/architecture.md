@@ -68,8 +68,9 @@ output, timeout/process-group cleanup, fixture cleanup, and resettable
 allocation/itemstore hooks. `test_runner.c` discovers descriptors from each
 executable's `--list` output and invokes them through `--run ID`; it runs
 serially by default and uses positive `TEST_JOBS` values for non-exclusive
-batches. Build artifacts for `make test` remain in the active
-variant's `obj/<build>-<compiler>/tests/framework/` directory.
+batches. Build artifacts for `make test` remain under the active variant's
+`obj/<build>-<compiler>/tests/` tree, including its `framework/`,
+`conformance/`, `rewrite/`, and `objects/` directories.
 Successful captured output is suppressed by default; setting `TF_VERBOSE=1`
 replays it for diagnostics.
 
@@ -114,7 +115,8 @@ variant's `obj/` output directory.
 
 The runtime adapters are kept under `tests/rewrite/` in
 `group4_adapter_*.c`. They cover stack/frame transitions, immutable lists,
-interpreter execution, stress cleanup, and the opt-in runtime benchmark. The
+interpreter execution, stress cleanup, and the runtime benchmark descriptor.
+The descriptor's extended measurements are opt-in. The
 existing `group1/adapter_value_behavior.c` owns all value-behavior descriptors
 for its native translation unit, including the two diagnostic descriptors
 reused from Group 1. Each adapter has one active-variant binary and is

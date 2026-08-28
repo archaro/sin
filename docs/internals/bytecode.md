@@ -4,8 +4,10 @@ This document is the canonical human-readable reference for Sinistra bytecode.  
 
 Newly compiled code uses bytecode format v1. Bytecode v1 and later versions are
 retained as the compatibility contract. The unversioned 0.7.1 little-endian
-layout is supported only as a one-time migration bridge in `sconv`; it has no
-ongoing compatibility promise.
+layout remains accepted and executable by the runtime/interpreter and bytecode
+APIs when embedded as a code-item payload. The `sin` CLI bootstrap requires
+versioned v1 input; `sconv` remains the explicit migration path for legacy
+stores and code.
 
 ## v1 compatibility contract
 
@@ -123,15 +125,15 @@ error. Malformed or truncated encodings are verifier errors.
 | `d` | `IR_OP_DIV` | none | Pop two numeric values, divide the previous value by the top value, and push the result. Integer-only divide by zero substitutes zero; integer overflow, including `INT64_MIN / -1`, pushes `nil`. Float division follows IEEE 754 after int-to-float promotion. Invalid operands produce `nil` or the integer-zero result for non-float invalid division. |
 | `%` | `IR_OP_MOD` | none | Pop two values and push remainder. Integer zero divisor pushes `nil`; `INT64_MIN % -1` is zero. Float operands promote to binary64 and use `fmod()` (floating zero divisor yields NaN). Invalid non-numeric operands push `nil`. |
 | `e` | `IR_OP_LOAD_LOCAL` | `u8 local_index` | Push a copy of the addressed local value. |
-| `f` | `IR_OP_INC_LOCAL` | `u8 local_index` | Increment an integer local; report an error for non-integers. |
-| `g` | `IR_OP_DEC_LOCAL` | `u8 local_index` | Decrement an integer local; report an error for non-integers. |
+| `f` | `IR_OP_INC_LOCAL` | `u8 local_index` | Increment an integer local; integer overflow stores `nil`; noninteger operands remain unchanged and emit a verbose log. |
+| `g` | `IR_OP_DEC_LOCAL` | `u8 local_index` | Decrement an integer local; integer overflow stores `nil`; noninteger operands remain unchanged and emit a verbose log. |
 | `h` | `IR_OP_HALT` | none | Stop the current code item and return `nil`. |
 | `Q` | `IR_OP_RETURN` | none | Pop exactly one explicit value and stop the current code item, returning that value. |
 | `j` | `IR_OP_JUMP` | `i16 relative_offset` | Unconditionally jump by the signed relative offset. |
 | `k` | `IR_OP_JUMP_IF_FALSE` | `i16 relative_offset` | Pop the top value. Jump by the signed relative offset when it is falsey; otherwise continue with the next instruction. |
 | `l` | `IR_OP_PUSH_STRING` | `u16 length`, bytes | Push a string literal. |
 | `m` | `IR_OP_MUL` | none | Pop two numeric values, multiply them, and push the result. Integer-only multiplication returns an integer unless it would overflow, in which case it pushes `nil`; any float operand promotes the operation to binary64. Invalid operands produce `nil`. |
-| `n` | `IR_OP_NEG` | none | Pop an integer or float, negate it, and push it back. Unary negation of integer `INT64_MIN` pushes `nil`. Invalid operands are left to the VM error path. |
+| `n` | `IR_OP_NEG` | none | Pop an integer or float, negate it, and push it back. Unary negation of integer `INT64_MIN` pushes `nil`. Nonnumeric operands remain unchanged and emit a verbose log; no VM error path is used. |
 | `o` | `IR_OP_EQ` | none | Pop two values, compare equality, and push a boolean. |
 | `p` | `IR_OP_PUSH_INT` | `i64 value` | Push a 64-bit integer. |
 | `P` | `IR_OP_PUSH_FLOAT` | 8-byte binary64 payload | Push an IEEE 754 binary64 float whose raw bits are stored in the immediate payload. |
@@ -200,7 +202,8 @@ string on top of the stack.
 The shared primitive canonicalizes the item name in the current item context,
 then behaves as follows:
 
-* If the target is a value item, it pushes a copy of the value.
+* If the target is a value item, it discards all supplied arguments and pushes
+  a copy of the value.
 * If the target is a code item, it normalizes the supplied argument count to the
   callee parameter count by discarding extra arguments or pushing `nil` for
   missing arguments, saves the caller continuation, and transfers execution to
@@ -213,7 +216,8 @@ running worlds tolerate live code updates while callers and callees are being
 brought back into agreement after a parameter-list change. When the runtime is
 started with `--strict-runtime-contracts`, the `F` primitive still performs the
 same stack normalization and return-value behavior, but each discarded argument
-caused by an over-arity code-item call, invalid item name, or missing target item
+caused by an over-arity code-item call, a value-item target, invalid item name,
+or missing target item
 sets `error` to `ERR_RUNTIME_INVALIDARGS` and writes a diagnostic to `error.msg`.
 This option is separate from `--strict-validation`, which optionally validates
 persisted code while loading itemstores; mandatory executable bytecode
@@ -251,4 +255,3 @@ change set:
    changed rows, then include those commands in the change summary.
 5. Treat v1 bytecode as portable; legacy unversioned input remains a
    pre-v1 little-endian migration format.
-

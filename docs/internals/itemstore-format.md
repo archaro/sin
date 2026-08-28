@@ -199,10 +199,11 @@ does not rewrite embedded bytecode. A future incompatible layout must use a
 new header version and update this document.
 
 The itemstore version describes the container's wire structure, not the
-compatibility of bytecode payloads stored in code items. Prerelease bytecode is
-release-local and may be rejected by a newer runtime even when the surrounding
-itemstore remains structurally valid version 2. Retain source and recompile code
-items for the current build; the runtime does not migrate embedded bytecode.
+compatibility of bytecode payloads stored in code items. Version 2 stores
+payload bytes unchanged. The frozen v1 bytecode ABI is portable, and legacy
+unversioned 0.7.1 blocks may execute when embedded. Runtime loading does not
+auto-migrate embedded bytecode; the `sin` bootstrap requires versioned v1 input,
+and `sconv` remains the explicit migration path when conversion is needed.
 Version 2 values may be recursive lists and item references, for example
 `#[1, #[2], &player]`; references store canonical paths and do not execute on
 load. Migration is explicit: run `sconv` to a new output path, validate with a

@@ -5,14 +5,19 @@ the itemstore, and native library-call handlers.
 
 ## Flow of Operations ##
 
-When the runtime engine starts up, it first loads and executes the bootstrap code (which is separately compiled).  The engine is event-driven and this code sets things up ready for the game to run, including setting up the main game tasks. Tasks are attached to the runloop and are called as necessary. There are three kinds:
-- Network tasks: the listener, and any player connections created by it.  These tasks run outside the game and interact in limited ways with *Sinistra* code, and their purpose is to manage input from and output to connected players.
-- Timer tasks: these are managed by *Sinistra* code (for example, the bootstrap code).  Each time the timer expires, the specified code is run.
-- Input task: this is the most important task. `sin` invokes the configured
-  input item from a repeating libuv timer with a nominal 10ms interval. The
-  callback runs on the event-loop thread, so it is serialized with network and
-  other timer callbacks; a busy loop can delay it. The input item should call
-  `net.input` to process network activity.
+When the runtime engine starts up, it first loads and executes the bootstrap code
+(which is separately compiled). The event-driven engine then sets up the game.
+These mechanisms are distinct:
+
+- Game tasks are `TASK_t` timer-backed game callbacks managed by Sinistra code;
+  see `src/runtime/task.h`. Each timer expiry runs the task's specified code.
+- Network handles are the listener and player connections owned by
+  `NetworkRuntime`. They run outside the game and interact with Sinistra code in
+  limited ways to manage input from and output to connected players.
+- The input scheduler is a separate repeating `uv_timer_t` owned by `sin`, with
+  a nominal 10ms interval. Its callback runs on the event-loop thread, so it is
+  serialized with network callbacks and game-task callbacks; a busy loop can
+  delay it. The input item should call `net.input` to process network activity.
 
 ## Runtime context and interpreter
 
@@ -40,8 +45,9 @@ item executes on the event-loop thread, and `net.input` processes at most one
 fair-queue network event per invocation. The timer is stopped and closed by the
 centralized startup cleanup path on both partial startup failure and shutdown.
 
-`interpret(ctx, item)` returns a `VALUE_t` by value. The caller owns that returned
-value and must free any string payload in it when the value is no longer needed.
+`interpret(ctx, item)` returns a `VALUE_t` by value. The caller owns the whole
+returned value and must call `value_free(&result)` when it is no longer needed;
+this releases owned string, list, and item-reference payloads as applicable.
 The interpreter borrows and mutates `ctx->vm`: it uses the existing VM stack and
 call stack, pushes and pops values while executing, and returns the top-level
 return value after popping it from the stack. It does not create an isolated VM
@@ -199,9 +205,12 @@ compiler diagnostics from valid `sys.compile` source strings, continue to use
 their own documented errors or non-error return values.
 
 Runtime bytecode-shape failures use `ERR_RUNTIME_BYTECODE`, including malformed
-embedded code-assignment payloads. Runtime item-name failures use
-`ERR_RUNTIME_INVALIDITEM` when an opcode receives a target name that is not a
-string or cannot be resolved. Internal runtime invariants that are not caused by
+embedded code-assignment payloads. Ordinary invalid or missing fetch/call names
+return `nil`; strict runtime contracts may additionally diagnose discarded
+arguments with `ERR_RUNTIME_INVALIDARGS`. Value assignments whose canonical
+item name is invalid are discarded without mutation. Invalid code-assignment
+names and attempts to mutate the protected `error` namespace use
+`ERR_RUNTIME_INVALIDITEM`. Internal runtime invariants that are not caused by
 Sinistra source or bytecode use `ERR_RUNTIME_INTERNAL`.
 
 Runtime errors also set `error.item` to the full name of the code item executing

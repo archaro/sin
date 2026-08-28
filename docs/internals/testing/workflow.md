@@ -14,7 +14,7 @@ focused descriptor while iterating, then run `make test` once on the final tree.
    timeout, and tags.
 3. Add/update the `tests/inventory/tests.csv` and relevant API/catalog edge.
 4. Build and focus it, for example:
-   `./obj/debug-gcc/tests/rewrite/test_semant --run rewrite.compiler.case`.
+   `./obj/debug-gcc/tests/rewrite/test_semant --run rewrite.core.test_sem_foreach_semantics`.
 
 ### Conformance case
 
