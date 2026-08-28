@@ -1,8 +1,16 @@
 # Sinistra language reference
 
-This is the canonical reference for the Sinistra language.  The language-freeze is expected to happen with release 0.8, but as of now should be considered "pre-freeze". “Canonical” means that this page is the normative description when other prose differs. The reference is derived from [`src/compiler/lexer.l`](../../src/compiler/lexer.l) and [`src/compiler/parser.y`](../../src/compiler/parser.y).
-
-Library APIs remain in [`libcalls.md`](libcalls.md) and persistence in [`itemstore-format.md`](../internals/itemstore-format.md).
+This page is authoritative for Sinistra syntax and language-level value,
+operator, and execution semantics. Libcall APIs are authoritative in
+[`libcalls.md`](libcalls.md), tool behavior in [`tools.md`](tools.md), and
+persistence format in [`itemstore-format.md`](../internals/itemstore-format.md).
+Observable reference-implementation limits are collected in the
+[implementation-limits section](#implementation-limits-and-failure-behavior);
+subsystem-internal implementation details and limits remain authoritative in
+the designated internal references, including [`bytecode.md`](../internals/bytecode.md)
+and [`runtime.md`](../internals/runtime.md). The reference is derived from
+[`src/compiler/lexer.l`](../../src/compiler/lexer.l) and
+[`src/compiler/parser.y`](../../src/compiler/parser.y).
 
 ## Lexical structure
 
@@ -150,8 +158,12 @@ Here `local` is the local token, `library` is one of `list`, `net`, `str`,
 `sys`, or `task`, and `identifier-layer` is a layer token. `code-body` is the
 raw text between the balanced parentheses after `code`; nested parentheses
 delimit the body, while quoted strings protect embedded parentheses. During
-capture, tabs and newlines become spaces. Comment markers in this captured body
-remain raw body text rather than starting comments in the outer lexing pass.
+capture, tabs and newlines outside embedded strings normalize to spaces.
+Ordinary embedded strings retain normal string rules, notably that a literal
+newline is invalid. Triple-quoted raw strings preserve their literal payload
+bytes, including tabs and newlines, during capture. Comment markers in this
+captured body remain raw body text rather than starting comments in the outer
+lexing pass.
 Every statement in a statement list ends with `;`. A code value is
 an expression only in the item-assignment form shown above.
 
@@ -172,11 +184,14 @@ advance). Both are valid in a `FOREACH` body and affect no enclosing loop.
 The iterator is an ordinary local: Sinistra has item-wide, not block, scope, so
 it is visible from its definition through the rest of the code item, including
 after `ENDFOR`. The sequence is analyzed before the iterator is defined, so an
-already-defined local may be used as both sequence and iterator. Each nested
-`FOREACH` level reserves three hidden locals; sequential loops reuse those
-slots. The ordinary limit of 255 distinct locals, including these hidden
-locals and parameters, applies. Compilation fails with a `foreach nesting
-exceeds the local budget` diagnostic when another nested level cannot fit.
+already-defined local may be used as both sequence and iterator. In the current
+reference compiler, each nested `FOREACH` level uses exactly three hidden
+locals, named `seq`, `idx`, and `len` (qualified by nesting level), and
+sequential loops reuse those slots. These names and slot-reuse rules are
+implementation details, not frozen language semantics. The observable limit
+of 255 distinct locals, including hidden locals and parameters, still applies.
+Compilation fails with a `foreach nesting exceeds the local budget` diagnostic
+when another nested level cannot fit.
 
 ## Precedence and associativity
 
@@ -242,6 +257,12 @@ relative to the executing item using the ordinary item-name rules.
   invalid value produces `nil`. It is not an execution failure at the language
   level.
 
+Each active code-item frame pins its target item. Assigning a value to an
+execution-pinned target is refused, leaves the target unchanged, and is logged
+under the current silent assignment semantics. Assigning replacement code is
+refused with `ERR_COMP_INUSE` and also leaves the target unchanged. A pin exists
+only for its active invocation/frame and is released on return or unwind.
+
 For a code item, arguments bind to parameters in declaration order. Parameters
 are locals for that invocation and do not share storage with a caller's locals.
 The call contract is deliberately tolerant: with fewer arguments, trailing
@@ -293,7 +314,7 @@ a code item.
 
 The runtime has exactly seven value types: `nil`, boolean, signed 64-bit
 integer, IEEE-754 binary64 float, byte string, item reference, and list. The
-tables below are normative for the implemented 0.7.2 language. Results of
+tables below are normative for the current reference implementation. Results of
 comparisons and logical operators are always canonical booleans (`true` or
 `false`). `I`, `F`, `S`, `N`, `B`, `R`, and `L` abbreviate integer, float,
 string, nil, boolean, item reference, and list.
@@ -401,6 +422,17 @@ are unsupported and produce the normal invalid-comparison result. An empty
 list is false and every non-empty list is true.
 
 ### Item references
+
+Item references are values and are not directly callable syntax. The syntax
+`&item{...}` is not direct callable syntax, and a stored reference cannot be
+called with an argument block. Use the reference-consuming APIs [`sys.fetch`](libcalls-sys.md),
+[`sys.call`](libcalls-sys.md), and
+[`task.newgametask`](libcalls-task.md) instead: `sys.fetch` resolves a
+reference and clones value targets or invokes code targets with zero-argument
+padding; `sys.call` resolves and invokes only code targets using a list of
+arguments; and `task.newgametask` schedules the canonical target path, executing
+it on each firing only when it is a code item. Their API pages define the
+remaining argument and failure behavior.
 
 `&item` evaluates the item path and creates a reference containing its
 canonical root-relative path. A relative path is resolved against the current
