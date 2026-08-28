@@ -175,33 +175,36 @@ void test_newgametask_resolves_target_on_each_firing(void) {
   init_tasks();
   insert_compiled_code(itemstore_root(config.itemstore_ctx), "dynamic.target",
                        "observed.dynamic = 1;");
-  uint64_t id = schedule_task("DYNAMIC.TARGET", 0, 1);
-  ASSERT_NOT_NULL(find_task_by_id(id));
+  uint64_t id = schedule_task("DYNAMIC.TARGET", 1000000, 1);
+  TASK_t *task = find_task_by_id(id);
+  ASSERT_NOT_NULL(task);
+  ASSERT_TRUE(strcmp(task->itemname, "dynamic.target") == 0);
 
-  (void)uv_run(&loop, UV_RUN_ONCE);
+  execute_task_cb(task->timer);
   ASSERT_EQ_INT(1, item_value(find_item(itemstore_root(config.itemstore_ctx),
                                         "observed.dynamic"))->i);
 
   insert_compiled_code(itemstore_root(config.itemstore_ctx), "dynamic.target",
                        "observed.dynamic = 2;");
-  (void)uv_run(&loop, UV_RUN_ONCE);
+  execute_task_cb(task->timer);
   ASSERT_EQ_INT(2, item_value(find_item(itemstore_root(config.itemstore_ctx),
                                         "observed.dynamic"))->i);
 
   ASSERT_EQ_INT(ITEM_MUTATION_DELETED,
                 item_delete(itemstore_root(config.itemstore_ctx),
                             "dynamic.target").status);
-  (void)uv_run(&loop, UV_RUN_ONCE);
+  execute_task_cb(task->timer);
   ASSERT_EQ_INT(2, item_value(find_item(itemstore_root(config.itemstore_ctx),
                                         "observed.dynamic"))->i);
   ASSERT_NOT_NULL(find_task_by_id(id));
+  ASSERT_EQ_INT(TASK_ACTIVE, task->state);
 
   insert_compiled_code(itemstore_root(config.itemstore_ctx), "dynamic.target",
                        "observed.dynamic = 3;");
-  (void)uv_run(&loop, UV_RUN_ONCE);
+  execute_task_cb(task->timer);
   ASSERT_EQ_INT(3, item_value(find_item(itemstore_root(config.itemstore_ctx),
                                         "observed.dynamic"))->i);
-  ASSERT_TRUE(request_task_close(find_task_by_id(id)));
+  ASSERT_TRUE(request_task_close(task));
 
   finalise_tasks(&loop);
   ASSERT_EQ_INT(0, uv_loop_close(&loop));
