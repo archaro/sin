@@ -32,6 +32,25 @@ the line and makes the slot reusable; close completion and pending writes are
 settled before this event. Repeating `net.ditch` on an already
 disconnecting or empty line returns `false` and sets the network error item.
 
+### Current reference-implementation limits
+
+The current reference implementation uses a 65,536-byte aggregate input
+buffer and a 4,096-byte input-line limit. Input that exceeds either limit is
+discarded and the connection enters the disconnecting state. Output has a
+65,536-byte buffer limit, a 65,536-byte in-flight-write limit, and a 131,072-
+byte total pending-output limit. These are current reference-implementation
+limits, not frozen language or API guarantees. Programs must query
+`net.maxlines` for the configured/current connection-slot limit.
+
+`net.write` rejects output immediately when rendering or an output limit check
+fails, returning `false`; no later asynchronous disconnect is implied by that
+return alone. Internal output processing that encounters an over-limit buffer
+or write disconnects the line asynchronously. A write that was accepted can
+still fail during transport, and a line held stalled or backpressured for more
+than 128 maintenance ticks is disconnected asynchronously. The later
+disconnect is reported by `net.input`, not by the earlier `net.write` return
+value.
+
 | Libcall | Library | Call | Arity | Argument expectations | Return value | Side effects | Failure behaviour | Example |
 | --- | --- | --- | ---: | --- | --- | --- | --- | --- |
 | `net.input` | `net` | `input` | 0 | None. | Integer activity code: `0` for no activity, `1` for a new connection, `2` for a disconnection, or `3` for received input data. | Advances the fair-queue connection cursor.  For connection, disconnection, and data events, best-effort publishes the configured input line item, normally `input.line`, with the zero-based line number.  For data events, it also best-effort publishes the complete received line of text, without its terminating newline, to the configured input text item, normally `input.text`.  A disconnection event destroys the line and returns the slot to the reusable state before returning. | Publication failures are not reported to Sinistra code: the network event is still consumed and its activity code is returned. No activity returns `0`. | `@event = net.input;` |

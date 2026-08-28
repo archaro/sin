@@ -88,13 +88,14 @@ configured network and CLI limits are documented separately by their options.
 | AST at most 1,000,000 nodes and traversal depth 4,096 | Node count during parsing; depth before semantic analysis | Stable `AST node budget exceeded` or `AST traversal depth budget exceeded` diagnostic; rejected trees are cleaned up iteratively without further allocation |
 | Decimal binary64 literals | Float conversion | Correctly rounded IEEE-754 values; underflow/subnormal results and overflow to infinity are accepted |
 | At most 255 distinct locals (including parameters); at most 255 parameter slots | Semantic analysis and bytecode header | Compile diagnostic |
-| Item-call arity at most 65,535 (`u16`); literal item-layer length at most 255 bytes (`u8`) | Lowering/emission and verifier | Compile diagnostic or bytecode rejection |
+| Item-call arity at most 65,535 (`u16`) | Lowering/emission and verifier | Compile diagnostic or bytecode rejection |
+| Item-layer bytecode field at most 255 bytes (`u8`) | Bytecode emission | Encoding can carry an item-layer field up to 255 bytes; this is not a semantic path-validity limit. A source-level layer longer than 32 bytes cannot form a valid item path. |
 | Branch displacement `-32,768..32,767` (signed `i16`); item-expression nesting 8 | Bytecode emission/verifier | Compile diagnostic or bytecode rejection |
 | Emitted block length at most 4,294,967,295 bytes (`u32`) | Bytecode emission and `sys.compile` | Compile/runtime failure; no installed partial item |
 | Verifier operand stack capacity 1024 (locals, parameters, temporaries included) | Static bytecode verification | Bytecode rejection before execution |
 | Runtime value stack 1024; call stack 1024 | VM execution | `SIGUSR1` interruption; boot restarts, live runtime shuts down, and `sys.compile` returns `false`, setting `ERR_RUNTIME_SIGUSR1` when no more specific runtime error is already present |
 | List has at most 1,048,576 elements and nesting depth 64 | List operations and itemstore encoding | List libcalls return their documented `nil` value; load rejects atomically; source literals also face the 1024-slot verifier limit |
-| Item paths: 8 non-root layers, 32 bytes/layer, 263-byte complete non-root path; no NUL | Item path validation | Invalid lookup/fetch/call/reference assembly yields `nil` (`sys.exists` yields `false`); value assignment is discarded without mutation, code assignment reports `ERR_RUNTIME_INVALIDITEM`, and direct item mutation is atomic. The root `error` item and every `error.*` descendant are runtime-reserved: Sinistra value/code assignment and `sys.delete` attempts are rejected and diagnosed with `ERR_RUNTIME_INVALIDITEM`. |
+| Item paths: 8 non-root layers, 32 bytes per semantic layer, 263-byte complete non-root path; no NUL | Item path validation | A layer longer than 32 bytes is not a valid item path. Invalid lookup/fetch/call/reference assembly yields `nil` (`sys.exists` yields `false`); value assignment is discarded without mutation, code assignment reports `ERR_RUNTIME_INVALIDITEM`, and direct item mutation is atomic. The root `error` item and every `error.*` descendant are runtime-reserved: Sinistra value/code assignment and `sys.delete` attempts are rejected and diagnosed with `ERR_RUNTIME_INVALIDITEM`. |
 | At most 250 persisted children/item; code payload at most 64 MiB | Itemstore save/load | Save reports failure; load rejects atomically |
 | V2 aggregate list-element budget 1,048,576 | Itemstore save/load stream | Save failure or atomic load rejection |
 | Itemstore file records 65,536 (root included) and 256 MiB cumulative requested decode bytes | Itemstore load/conversion | Atomic rejection with a record- or allocation-budget diagnostic |
@@ -391,7 +392,7 @@ operator's result shown in the final column, not a generic conversion rule.
 | `*` | `I*I` -> `I`; any `I`/`F` or `F`/`F` -> `F` | all other pairs -> `nil` |
 | `/` | `I/I` -> `I` (`x/0` is integer `0`); any `I`/`F` or `F`/`F` -> `F` with IEEE-754 division | invalid pair with no `F` operand -> integer `0`; invalid pair with an `F` operand -> `nil` (VM compatibility split) |
 | `%` | `I%I` -> `I` (zero divisor -> `nil`); any `I`/`F` or `F`/`F` -> `F` using `fmod` | all other pairs -> `nil` |
-| unary `-` | integer or float -> same type, negated | other types are left unchanged (the VM reports failure but keeps the value) |
+| unary `-` | integer or float -> same type, negated | non-numeric operands remain unchanged; with verbose logging enabled, the VM may emit a diagnostic, but it does not set a runtime error item |
 
 Integer `+`, `-`, `*`, `/`, and unary `-` detect signed 64-bit overflow and
 return `nil`; `INT64_MIN / -1` is therefore `nil`. Integer remainder truncates
@@ -403,7 +404,7 @@ produces NaN.
 ## Lists and item references
 
 This section defines observable value semantics. List libcall signatures and
-failure details remain authoritative in [`libcalls.md`](libcalls.md), while
+failure details remain authoritative in [`libcalls-list.md`](libcalls-list.md), while
 persistence encoding remains authoritative in
 [`itemstore-format.md`](../internals/itemstore-format.md).
 
