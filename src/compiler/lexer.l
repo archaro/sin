@@ -370,7 +370,7 @@ crlf        \r\n
                                                 &strbuf_capacity, '\b'); }
   \\f           { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
                                                 &strbuf_capacity, '\f'); }
-  \\(.|\n)      { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
+  \\[^\n]       { str_append_char(&strbuf, &strbuf_ptr, &strbuf_size,
                                            &strbuf_capacity, (unsigned char)yytext[1]); }
   [^\\\n\"]+    { str_append_str(&strbuf, &strbuf_ptr, &strbuf_size,
                                               &strbuf_capacity, yytext); }

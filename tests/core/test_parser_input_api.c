@@ -101,6 +101,84 @@ void test_parser_input_api(void) {
   ASSERT_EQ_INT('\0', escape_value->value.s[1]);
   as_delete(absyn);
 
+  const char bare_string_newline[] = "\"first\nsecond\";";
+  ParseInput bare_string_newline_input = {
+      bare_string_newline, sizeof(bare_string_newline) - 1,
+      "bare-string-newline.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&bare_string_newline_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_TRUE(absyn == NULL);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strcmp(errdetail, "Newline in string.") == 0);
+  free(errdetail);
+
+  const char escaped_string_newline[] = "\"first\\\nsecond\";";
+  ParseInput escaped_string_newline_input = {
+      escaped_string_newline, sizeof(escaped_string_newline) - 1,
+      "escaped-string-newline.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&escaped_string_newline_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_TRUE(absyn == NULL);
+  ASSERT_NOT_NULL(errdetail);
+  ASSERT_TRUE(strcmp(errdetail, "Newline in string.") == 0);
+  free(errdetail);
+
+  const char text_newline_escape[] = "\"first\\nsecond\";";
+  ParseInput text_newline_escape_input = {
+      text_newline_escape, sizeof(text_newline_escape) - 1,
+      "text-newline-escape.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&text_newline_escape_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(absyn);
+  AS_STMTLIST *text_newline_escape_list = (AS_STMTLIST *)absyn->lhs;
+  AS_VALUE *text_newline_escape_value =
+      (AS_VALUE *)((AS_NODE *)text_newline_escape_list->stmts[0]->lhs)->lhs;
+  ASSERT_EQ_INT(V_STR, text_newline_escape_value->valtype);
+  ASSERT_TRUE(strcmp(text_newline_escape_value->value.s, "first\nsecond") == 0);
+  as_delete(absyn);
+
+  const char unknown_string_escape[] = "\"first\\qsecond\";";
+  ParseInput unknown_string_escape_input = {
+      unknown_string_escape, sizeof(unknown_string_escape) - 1,
+      "unknown-string-escape.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&unknown_string_escape_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(absyn);
+  AS_STMTLIST *unknown_string_escape_list = (AS_STMTLIST *)absyn->lhs;
+  AS_VALUE *unknown_string_escape_value =
+      (AS_VALUE *)((AS_NODE *)unknown_string_escape_list->stmts[0]->lhs)->lhs;
+  ASSERT_EQ_INT(V_STR, unknown_string_escape_value->valtype);
+  ASSERT_TRUE(strcmp(unknown_string_escape_value->value.s, "firstqsecond") == 0);
+  as_delete(absyn);
+
+  const char raw_physical_newline[] = "\"\"\"first\n"
+                                      "second\"\"\";";
+  ParseInput raw_physical_newline_input = {
+      raw_physical_newline, sizeof(raw_physical_newline) - 1,
+      "raw-physical-newline.src"};
+  absyn = NULL;
+  errdetail = NULL;
+  rc = parse_source(&raw_physical_newline_input, &absyn, &errdetail);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_NOT_NULL(absyn);
+  AS_STMTLIST *raw_physical_newline_list = (AS_STMTLIST *)absyn->lhs;
+  AS_VALUE *raw_physical_newline_value =
+      (AS_VALUE *)((AS_NODE *)raw_physical_newline_list->stmts[0]->lhs)->lhs;
+  ASSERT_EQ_INT(V_STR, raw_physical_newline_value->valtype);
+  ASSERT_TRUE(strcmp(raw_physical_newline_value->value.s, "first\nsecond") == 0);
+  as_delete(absyn);
+
   const char raw_source[] =
       "\"\"\"one\\ntwo\n"
       "\"quoted\" C:\\temp\"\"\";";

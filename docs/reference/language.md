@@ -34,8 +34,10 @@ Token forms are:
   produce their usual bytes; `\0nn` is an octal byte escape for values
   `1..077` (`nn` are two octal digits; `\000` is rejected), and a backslash
   followed by any other character quotes it. Source and string values cannot
-  contain NUL bytes.
-  A newline or end-of-file before the closing quote is invalid.
+  contain NUL bytes. A physical newline before the closing quote is invalid,
+  including when it immediately follows a backslash; the two source characters
+  `\n` are the escape that produces a newline byte. End-of-file before the
+  closing quote is also invalid.
 - A raw string is enclosed in three double quotes (`"""`). Every byte between
   the delimiters is copied to the string unchanged: backslashes do not
   introduce escapes, and literal tabs and newlines are permitted and
