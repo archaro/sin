@@ -440,7 +440,9 @@ runtime_frame_take_transfer,runtime_frame.o,runtime,src/runtime/runtime_frame.c:
 runtime_frame_unwind,runtime_frame.o,runtime,src/runtime/runtime_frame.c:242: runtime_frame_unwind definition/provenance,api.runtime.runtime-frame
 runtime_init,interpret.o,runtime,src/runtime/interpret.c:88: runtime_init definition/provenance,api.runtime.interpreter
 runtime_opcode_bind_table,runtime_opcode.o,runtime,src/runtime/runtime_opcode.c:46: runtime_opcode_bind_table definition/provenance,api.runtime.runtime-opcode
+runtime_report_call_capacity_failure,interpret.o,runtime,src/runtime/interpret.c:334: runtime_report_call_capacity_failure definition/provenance,api.runtime.interpreter
 runtime_verify_cache_clear_for_tests,interpret.o,runtime,src/runtime/interpret.c:323: runtime_verify_cache_clear_for_tests definition/provenance,api.runtime.interpreter
+runtime_verify_code_header,interpret.o,runtime,src/runtime/interpret.c:323: runtime_verify_code_header definition/provenance,api.runtime.interpreter
 runtime_verify_invocations_for_tests,interpret.o,runtime,src/runtime/interpret.c:319: runtime_verify_invocations_for_tests definition/provenance,api.runtime.interpreter
 runtime_verify_invocations_reset_for_tests,interpret.o,runtime,src/runtime/interpret.c:327: runtime_verify_invocations_reset_for_tests definition/provenance,api.runtime.interpreter
 save_itemsource,item_source_persist.o,itemstore,src/itemstore/item_source_persist.c:143: save_itemsource definition/provenance,api.itemstore.source-persistence

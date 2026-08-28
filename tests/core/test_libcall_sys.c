@@ -19,6 +19,8 @@
 #include "memory.h"
 #include "runtime_value.h"
 #include "itemref.h"
+#include "list.h"
+#include "runtime_frame.h"
 #include "string_limits.h"
 #include "version.h"
 #include "bytecode_format.h"
@@ -186,6 +188,68 @@ static void assert_delete_error(int expected_code, const char *detail,
   }
 }
 
+static const char *error_namespace_fields[] = {
+  "error", "error.msg", "error.item", "error.code", "error.stage",
+  "error.file", "error.line", "error.column", "error.excerpt"
+};
+
+typedef struct {
+  VALUE_t values[sizeof(error_namespace_fields) /
+                 sizeof(error_namespace_fields[0])];
+} ErrorNamespaceSnapshot;
+
+static void snapshot_error_namespace(ITEM_t *root,
+                                     ErrorNamespaceSnapshot *snapshot) {
+  memset(snapshot, 0, sizeof *snapshot);
+  for (size_t i = 0; i < sizeof(error_namespace_fields) /
+                           sizeof(error_namespace_fields[0]); i++) {
+    ITEM_t *field = find_item(root, error_namespace_fields[i]);
+    ASSERT_NOT_NULL(field);
+    const VALUE_t *value = item_value(field);
+    ASSERT_NOT_NULL(value);
+    ASSERT_TRUE(value_clone_fallible(value, &snapshot->values[i]));
+  }
+}
+
+static void assert_error_namespace(ITEM_t *root,
+                                   const ErrorNamespaceSnapshot *snapshot) {
+  for (size_t i = 0; i < sizeof(error_namespace_fields) /
+                           sizeof(error_namespace_fields[0]); i++) {
+    ITEM_t *field = find_item(root, error_namespace_fields[i]);
+    ASSERT_NOT_NULL(field);
+    const VALUE_t *value = item_value(field);
+    ASSERT_NOT_NULL(value);
+    ASSERT_TRUE(value_equal(value, &snapshot->values[i]));
+  }
+}
+
+static void release_error_namespace(ErrorNamespaceSnapshot *snapshot) {
+  for (size_t i = 0; i < sizeof(error_namespace_fields) /
+                           sizeof(error_namespace_fields[0]); i++) {
+    value_free(&snapshot->values[i]);
+  }
+}
+
+static void assert_replaced_runtime_error(int expected_code,
+                                          const char *prior_message,
+                                          const char *provenance) {
+  ITEM_t *root = itemstore_root(config.itemstore_ctx);
+  ITEM_t *error = find_item(root, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(VALUE_int, item_value(error)->type);
+  ASSERT_EQ_INT(expected_code, item_value(error)->i);
+  ITEM_t *message = find_item(root, "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_EQ_INT(VALUE_str, item_value(message)->type);
+  ASSERT_NOT_NULL(item_value(message)->s);
+  ASSERT_TRUE(item_value(message)->s[0] != '\0');
+  ASSERT_TRUE(strcmp(item_value(message)->s, prior_message) != 0);
+  ITEM_t *error_item = find_item(root, "error.item");
+  ASSERT_NOT_NULL(error_item);
+  ASSERT_EQ_INT(VALUE_str, item_value(error_item)->type);
+  ASSERT_TRUE(strcmp(item_value(error_item)->s, provenance) == 0);
+}
+
 static int persistence_sync_calls;
 static int persistence_directory_sync_calls;
 
@@ -294,6 +358,265 @@ void test_sys_item_libcalls(void) {
   ret = pop_stack(config.vm->stack);
   ASSERT_EQ_INT(VALUE_bool, ret.type);
   ASSERT_EQ_INT(0, ret.i);
+
+  teardown_libcall_runtime();
+}
+
+void test_sys_fetch_and_call_semantic_misses_preserve_prior_error(void) {
+  setup_libcall_runtime();
+  ITEM_t *root = itemstore_root(config.itemstore_ctx);
+  ITEM_t *caller = test_item_set_value(root, "semantic.caller", VALUE_NIL);
+  ASSERT_NOT_NULL(caller);
+  ASSERT_NOT_NULL(test_item_set_value(root, "semantic.value",
+                                      (VALUE_t){VALUE_int, {.i = 7}}));
+  RuntimeContext *ctx = test_ctx();
+  ctx->current_item = caller;
+  const char *prior_message = "semantic miss must preserve this";
+  set_error_item(root, ERR_RUNTIME_INVALIDARGS, prior_message, caller);
+  ErrorNamespaceSnapshot prior_error;
+  snapshot_error_namespace(root, &prior_error);
+
+  SIN_ITEMREF_t *missing_fetch = sin_itemref_create("semantic.missing.fetch");
+  ASSERT_NOT_NULL(missing_fetch);
+  VALUE_t result = call_sys_name(lc_sys_fetch, ctx,
+                                 (VALUE_t){VALUE_itemref,
+                                           {.itemref = missing_fetch}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error_namespace(root, &prior_error);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+
+  SIN_ITEMREF_t *missing_call = sin_itemref_create("semantic.missing.call");
+  ASSERT_NOT_NULL(missing_call);
+  SIN_LIST_t *empty_args = sin_list_build_owned(NULL, 0);
+  ASSERT_NOT_NULL(empty_args);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_itemref, {.itemref = missing_call}});
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_list, {.list = empty_args}});
+  (void)lc_sys_call(ctx, NULL, caller);
+  result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error_namespace(root, &prior_error);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+
+  SIN_ITEMREF_t *value_call = sin_itemref_create("semantic.value");
+  ASSERT_NOT_NULL(value_call);
+  empty_args = sin_list_build_owned(NULL, 0);
+  ASSERT_NOT_NULL(empty_args);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_itemref, {.itemref = value_call}});
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_list, {.list = empty_args}});
+  (void)lc_sys_call(ctx, NULL, caller);
+  result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error_namespace(root, &prior_error);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+
+  release_error_namespace(&prior_error);
+  teardown_libcall_runtime();
+}
+
+void test_sys_fetch_and_call_malformed_code_abort_and_diagnose(void) {
+  setup_libcall_runtime();
+  ITEM_t *root = itemstore_root(config.itemstore_ctx);
+  ITEM_t *caller = test_item_set_value(root, "malformed.caller", VALUE_NIL);
+  ASSERT_NOT_NULL(caller);
+  ASSERT_NOT_NULL(test_item_set_code(root, "malformed.fetch", 0, NULL));
+  uint8_t *short_bytecode = malloc(1u);
+  ASSERT_NOT_NULL(short_bytecode);
+  short_bytecode[0] = 0;
+  ASSERT_NOT_NULL(test_item_set_code(root, "malformed.call", 1,
+                                     short_bytecode));
+  RuntimeContext *ctx = test_ctx();
+  ctx->current_item = caller;
+  uint8_t nextop_marker = 0;
+
+  set_error_item(root, ERR_RUNTIME_INVALIDARGS, "prior malformed error", caller);
+  SIN_ITEMREF_t *fetch_ref = sin_itemref_create("malformed.fetch");
+  ASSERT_NOT_NULL(fetch_ref);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_itemref, {.itemref = fetch_ref}});
+  ASSERT_TRUE(lc_sys_fetch(ctx, &nextop_marker, caller) == NULL);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  ASSERT_TRUE(runtime_frame_pending_transfer(ctx) == NULL);
+  ASSERT_TRUE(!item_is_in_use(find_item(root, "malformed.fetch")));
+  assert_replaced_runtime_error(ERR_RUNTIME_BYTECODE,
+                                "prior malformed error", "malformed.caller");
+
+  set_error_item(root, ERR_RUNTIME_INVALIDARGS, "prior malformed error", caller);
+  SIN_ITEMREF_t *call_ref = sin_itemref_create("malformed.call");
+  ASSERT_NOT_NULL(call_ref);
+  SIN_LIST_t *empty_args = sin_list_build_owned(NULL, 0);
+  ASSERT_NOT_NULL(empty_args);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_itemref, {.itemref = call_ref}});
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_list, {.list = empty_args}});
+  ASSERT_TRUE(lc_sys_call(ctx, &nextop_marker, caller) == NULL);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  ASSERT_TRUE(runtime_frame_pending_transfer(ctx) == NULL);
+  ASSERT_TRUE(!item_is_in_use(find_item(root, "malformed.call")));
+  assert_replaced_runtime_error(ERR_RUNTIME_BYTECODE,
+                                "prior malformed error", "malformed.caller");
+
+  teardown_libcall_runtime();
+}
+
+void test_sys_call_capacity_failure_aborts_and_unwinds(void) {
+  setup_libcall_runtime();
+  ITEM_t *root = itemstore_root(config.itemstore_ctx);
+  ITEM_t *caller = test_item_set_value(root, "capacity.caller", VALUE_NIL);
+  ASSERT_NOT_NULL(caller);
+  uint8_t *bytecode = malloc(3u);
+  ASSERT_NOT_NULL(bytecode);
+  bytecode[0] = 1;
+  bytecode[1] = 1;
+  bytecode[2] = (uint8_t)'h';
+  ITEM_t *target = test_item_set_code(root, "capacity.target", 3u, bytecode);
+  ASSERT_NOT_NULL(target);
+  RuntimeContext *ctx = test_ctx();
+  ctx->current_item = caller;
+  set_error_item(root, ERR_RUNTIME_INVALIDARGS, "prior capacity error", caller);
+  SIN_ITEMREF_t *ref = sin_itemref_create("capacity.target");
+  ASSERT_NOT_NULL(ref);
+  SIN_LIST_t *empty_args = sin_list_build_owned(NULL, 0);
+  ASSERT_NOT_NULL(empty_args);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_itemref, {.itemref = ref}});
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_list, {.list = empty_args}});
+  config.vm->callstack->current = config.vm->callstack->max;
+  uint8_t nextop_marker = 0;
+  ASSERT_TRUE(lc_sys_call(ctx, &nextop_marker, caller) == NULL);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(config.vm->callstack->max, config.vm->callstack->current);
+  ASSERT_TRUE(runtime_frame_pending_transfer(ctx) == NULL);
+  ASSERT_TRUE(!item_is_in_use(target));
+  assert_replaced_runtime_error(ERR_RUNTIME_BYTECODE,
+                                "prior capacity error", "capacity.caller");
+  ITEM_t *message = find_item(root, "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_TRUE(strstr(item_value(message)->s, "capacity") != NULL);
+  ASSERT_TRUE(!ctx->interrupted);
+  config.vm->callstack->current = -1;
+
+  uint8_t *stack_bytecode = malloc(3u);
+  ASSERT_NOT_NULL(stack_bytecode);
+  stack_bytecode[0] = 2;
+  stack_bytecode[1] = 0;
+  stack_bytecode[2] = (uint8_t)'h';
+  ITEM_t *stack_target = test_item_set_code(root, "capacity.stack.target", 3u,
+                                            stack_bytecode);
+  ASSERT_NOT_NULL(stack_target);
+  set_error_item(root, ERR_RUNTIME_INVALIDARGS, "prior stack capacity error",
+                 caller);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 4242}});
+  SIN_ITEMREF_t *stack_ref = sin_itemref_create("capacity.stack.target");
+  ASSERT_NOT_NULL(stack_ref);
+  SIN_LIST_t *stack_args = sin_list_build_owned(NULL, 0);
+  ASSERT_NOT_NULL(stack_args);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_itemref, {.itemref = stack_ref}});
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_list, {.list = stack_args}});
+  int32_t saved_stack_max = config.vm->stack->max;
+  config.vm->stack->max = 1;
+  ASSERT_TRUE(lc_sys_call(ctx, &nextop_marker, caller) == NULL);
+  ASSERT_EQ_INT(0, config.vm->stack->current);
+  ASSERT_EQ_INT(VALUE_int, config.vm->stack->stack[0].type);
+  ASSERT_EQ_INT(4242, config.vm->stack->stack[0].i);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  ASSERT_TRUE(runtime_frame_pending_transfer(ctx) == NULL);
+  ASSERT_TRUE(!item_is_in_use(stack_target));
+  assert_replaced_runtime_error(ERR_RUNTIME_BYTECODE,
+                                "prior stack capacity error",
+                                "capacity.caller");
+  message = find_item(root, "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_TRUE(strstr(item_value(message)->s, "capacity") != NULL);
+  ASSERT_TRUE(!ctx->interrupted);
+  config.vm->stack->max = saved_stack_max;
+  VALUE_t sentinel = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_int, sentinel.type);
+  ASSERT_EQ_INT(4242, sentinel.i);
+
+  teardown_libcall_runtime();
+}
+
+void test_sys_fetch_and_call_clone_failures_abort_and_clean_inputs(void) {
+  setup_libcall_runtime();
+  ITEM_t *root = itemstore_root(config.itemstore_ctx);
+  ITEM_t *caller = test_item_set_value(root, "clone.caller", VALUE_NIL);
+  ASSERT_NOT_NULL(caller);
+  ASSERT_NOT_NULL(test_item_set_value(root, "clone.value",
+                                      (VALUE_t){VALUE_str,
+                                                {.s = strdup("owned")}}));
+  uint8_t *bytecode = malloc(3u);
+  ASSERT_NOT_NULL(bytecode);
+  bytecode[0] = 2;
+  bytecode[1] = 2;
+  bytecode[2] = (uint8_t)'h';
+  ASSERT_NOT_NULL(test_item_set_code(root, "clone.target", 3u, bytecode));
+  RuntimeContext *ctx = test_ctx();
+  ctx->current_item = caller;
+  uint8_t nextop_marker = 0;
+
+  set_error_item(root, ERR_RUNTIME_INVALIDARGS, "prior clone error", caller);
+  ErrorNamespaceSnapshot prior_error;
+  snapshot_error_namespace(root, &prior_error);
+  SIN_ITEMREF_t *fetch_ref = sin_itemref_create("clone.value");
+  ASSERT_NOT_NULL(fetch_ref);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_itemref, {.itemref = fetch_ref}});
+  alloc_test_fail_after(0);
+  uint8_t *fetch_transfer = lc_sys_fetch(ctx, &nextop_marker, caller);
+  alloc_test_fail_after(-1);
+  ASSERT_TRUE(fetch_transfer == NULL);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  ASSERT_TRUE(runtime_frame_pending_transfer(ctx) == NULL);
+  ASSERT_TRUE(!item_is_in_use(find_item(root, "clone.value")));
+  assert_error_namespace(root, &prior_error);
+  release_error_namespace(&prior_error);
+
+  set_error_item(root, ERR_RUNTIME_INVALIDARGS, "prior clone error", caller);
+  snapshot_error_namespace(root, &prior_error);
+  SIN_ITEMREF_t *call_ref = sin_itemref_create("clone.target");
+  ASSERT_NOT_NULL(call_ref);
+  VALUE_t first_argument = {VALUE_int, {.i = 17}};
+  VALUE_t second_argument = {VALUE_str, {.s = strdup("argument")}};
+  ASSERT_NOT_NULL(second_argument.s);
+  VALUE_t values[] = {first_argument, second_argument};
+  SIN_LIST_t *args = sin_list_build_owned(values, 2);
+  ASSERT_NOT_NULL(args);
+  SIN_LIST_t *args_borrow = sin_list_retain(args);
+  ASSERT_NOT_NULL(args_borrow);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_itemref, {.itemref = call_ref}});
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_list, {.list = args}});
+  alloc_test_fail_after(0);
+  uint8_t *call_transfer = lc_sys_call(ctx, &nextop_marker, caller);
+  alloc_test_fail_after(-1);
+  ASSERT_TRUE(call_transfer == NULL);
+  ASSERT_EQ_INT(-1, config.vm->stack->current);
+  ASSERT_EQ_INT(-1, config.vm->callstack->current);
+  ASSERT_TRUE(runtime_frame_pending_transfer(ctx) == NULL);
+  ASSERT_TRUE(!item_is_in_use(find_item(root, "clone.target")));
+  assert_error_namespace(root, &prior_error);
+  ASSERT_EQ_INT(VALUE_int, sin_list_get(args_borrow, 0)->type);
+  ASSERT_EQ_INT(17, sin_list_get(args_borrow, 0)->i);
+  ASSERT_EQ_INT(VALUE_str, sin_list_get(args_borrow, 1)->type);
+  ASSERT_TRUE(strcmp(sin_list_get(args_borrow, 1)->s, "argument") == 0);
+  sin_list_release(args_borrow);
+  release_error_namespace(&prior_error);
 
   teardown_libcall_runtime();
 }

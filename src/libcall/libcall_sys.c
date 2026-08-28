@@ -510,17 +510,22 @@ static ITEM_t *lc_sys_reference_target(RuntimeContext *ctx, ITEM_t *item,
   return find_item(itemstore_root(ctx->itemstore), fullname);
 }
 
-static bool lc_sys_schedule_code_call(RuntimeContext *ctx, uint8_t *nextop,
-                                       ITEM_t *target, size_t supplied) {
-  if (!ctx || !target || item_kind(target) != ITEM_code) return false;
-  const uint8_t *bytecode = item_bytecode(target);
-  uint32_t bytecode_len = item_bytecode_length(target);
-  BC_FormatHeader header;
-  if (!bytecode || bc_decode_header(bytecode, bytecode_len, &header) != BC_FORMAT_OK) return false;
-  return runtime_frame_prepare_call(
-      ctx, ctx->current_item, nextop, target, supplied, header.locals,
-      header.params, (uint8_t *)ctx->decoder.frame_start,
-      (uint8_t *)ctx->decoder.frame_end, NULL);
+static void lc_sys_report_internal_failure(RuntimeContext *ctx,
+                                           const char *detail) {
+  logerr("sys target invocation failed: %s.\n",
+         detail ? detail : "internal failure");
+  set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL,
+                 ERR_RUNTIME_INTERNAL, detail,
+                 ctx ? ctx->current_item : NULL);
+}
+
+static void lc_sys_restore_staged_stack(RuntimeContext *ctx,
+                                        int32_t staging_stack_depth) {
+  if (!ctx || !ctx->vm || !ctx->vm->stack) return;
+  while (ctx->vm->stack->current > staging_stack_depth) {
+    VALUE_t staged = pop_stack(ctx->vm->stack);
+    value_free(&staged);
+  }
 }
 
 uint8_t *lc_sys_itemref(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -568,12 +573,28 @@ uint8_t *lc_sys_fetch(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t result = VALUE_NIL;
   if (target && item_kind(target) == ITEM_value) {
     const VALUE_t *stored = item_value(target);
-    if (stored) (void)value_clone_fallible(stored, &result);
-  } else if (target && item_kind(target) == ITEM_code) {
-    if (lc_sys_schedule_code_call(ctx, nextop, target, 0u)) {
+    if (!stored || !value_clone_fallible(stored, &result)) {
+      lc_sys_report_internal_failure(ctx,
+          "sys.fetch value result could not be cloned");
       value_free(&ref);
       return NULL;
     }
+  } else if (target && item_kind(target) == ITEM_code) {
+    BC_FormatHeader header;
+    if (!runtime_verify_code_header(ctx, target, &header)) {
+      value_free(&ref);
+      return NULL;
+    }
+    if (!runtime_frame_prepare_call(
+            ctx, ctx->current_item, nextop, target, 0u, header.locals,
+            header.params, (uint8_t *)ctx->decoder.frame_start,
+            (uint8_t *)ctx->decoder.frame_end, NULL)) {
+      runtime_report_call_capacity_failure(ctx);
+      value_free(&ref);
+      return NULL;
+    }
+    value_free(&ref);
+    return NULL;
   }
   value_free(&ref);
   return lc_sys_return(ctx, nextop, result);
@@ -596,23 +617,26 @@ uint8_t *lc_sys_call(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t result = VALUE_NIL;
   if (prepared) {
     /* List order is preserved by pushing each element from left to right. */
+    int32_t staging_stack_depth = ctx->vm->stack->current;
     size_t pushed = 0;
-    const uint8_t *bytecode = item_bytecode(target);
     BC_FormatHeader header;
-    bool header_ok = bytecode &&
-        bc_decode_header(bytecode, item_bytecode_length(target), &header) == BC_FORMAT_OK;
     size_t effective = 0u;
-    prepared = header_ok && runtime_frame_preflight_call(
+    bool clone_failed = false;
+    if (!runtime_verify_code_header(ctx, target, &header)) {
+      value_free(&ref);
+      value_free(&arguments);
+      return NULL;
+    }
+    prepared = runtime_frame_preflight_call(
         ctx, count, header.locals, header.params, &effective);
+    if (!prepared) {
+      runtime_report_call_capacity_failure(ctx);
+    }
     while (prepared && pushed < effective) {
       const VALUE_t *source = sin_list_get(arguments.list, pushed);
       VALUE_t clone = VALUE_NIL;
       if (!source || !value_clone_fallible(source, &clone)) {
-        while (pushed > 0u) {
-          VALUE_t dropped = pop_stack(ctx->vm->stack);
-          value_free(&dropped);
-          pushed--;
-        }
+        clone_failed = true;
         prepared = false;
         break;
       }
@@ -624,14 +648,21 @@ uint8_t *lc_sys_call(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         lc_sys_report_strict_contract(ctx,
             "sys.call discarded extra argument for target item");
       }
-      prepared = lc_sys_schedule_code_call(ctx, nextop, target, effective);
+      prepared = runtime_frame_prepare_call(
+          ctx, ctx->current_item, nextop, target, effective, header.locals,
+          header.params, (uint8_t *)ctx->decoder.frame_start,
+          (uint8_t *)ctx->decoder.frame_end, NULL);
+      if (!prepared) runtime_report_call_capacity_failure(ctx);
     }
     if (!prepared) {
-      while (pushed > 0u) {
-        VALUE_t dropped = pop_stack(ctx->vm->stack);
-        value_free(&dropped);
-        pushed--;
+      lc_sys_restore_staged_stack(ctx, staging_stack_depth);
+      if (clone_failed) {
+        lc_sys_report_internal_failure(ctx,
+            "sys.call argument result could not be cloned");
       }
+      value_free(&ref);
+      value_free(&arguments);
+      return NULL;
     } else {
       value_free(&ref);
       value_free(&arguments);

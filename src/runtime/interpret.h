@@ -7,6 +7,7 @@
 #include "item.h"
 #include "value.h"
 #include "runtime_context.h"
+#include "bytecode_format.h"
 
 void init_interpreter(RuntimeContext *ctx);
 
@@ -24,3 +25,9 @@ void init_interpreter(RuntimeContext *ctx);
 // restored around the call, but the VM stack and callstack remain shared and are
 // therefore intentionally affected by nested execution.
 VALUE_t interpret(RuntimeContext *ctx, ITEM_t *item);
+
+/* Shared by item-fetch and sys target invocation so executable validation and
+ * runtime bytecode diagnostics remain one policy. */
+bool runtime_verify_code_header(RuntimeContext *ctx, ITEM_t *item,
+                                BC_FormatHeader *header);
+void runtime_report_call_capacity_failure(RuntimeContext *ctx);

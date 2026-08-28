@@ -2,6 +2,10 @@
 
 void test_sys_source_libcall(void);
 void test_sys_item_libcalls(void);
+void test_sys_fetch_and_call_semantic_misses_preserve_prior_error(void);
+void test_sys_fetch_and_call_malformed_code_abort_and_diagnose(void);
+void test_sys_call_capacity_failure_aborts_and_unwinds(void);
+void test_sys_fetch_and_call_clone_failures_abort_and_clean_inputs(void);
 void test_sys_delete_result_contract(void);
 void test_sys_delete_rejects_error_namespace(void);
 void test_sys_itemref_contracts(void);
@@ -18,6 +22,14 @@ static const TF_TestDescriptor tests[] = {
     {"rewrite.runtime.test_sys_item_libcalls", test_sys_item_libcalls,
      "exclusive", 30000,
      "api.libcall.sys,libcall.sys.exists,libcall.sys.delete,libcall.sys.nthname,libcall.sys.rootname,libcall.sys.itemtype,libcall.sys.childcount,libcall.sys.call"},
+    {"rewrite.runtime.test_sys_fetch_and_call_semantic_misses_preserve_prior_error", test_sys_fetch_and_call_semantic_misses_preserve_prior_error,
+     "exclusive", 30000, "test.runtime.test_sys_fetch_and_call_semantic_misses_preserve_prior_error"},
+    {"rewrite.runtime.test_sys_fetch_and_call_malformed_code_abort_and_diagnose", test_sys_fetch_and_call_malformed_code_abort_and_diagnose,
+     "exclusive", 30000, "test.runtime.test_sys_fetch_and_call_malformed_code_abort_and_diagnose"},
+    {"rewrite.runtime.test_sys_call_capacity_failure_aborts_and_unwinds", test_sys_call_capacity_failure_aborts_and_unwinds,
+     "exclusive", 30000, "test.runtime.test_sys_call_capacity_failure_aborts_and_unwinds"},
+    {"rewrite.runtime.test_sys_fetch_and_call_clone_failures_abort_and_clean_inputs", test_sys_fetch_and_call_clone_failures_abort_and_clean_inputs,
+     "exclusive", 30000, "test.runtime.test_sys_fetch_and_call_clone_failures_abort_and_clean_inputs"},
     {"rewrite.runtime.test_sys_itemref_contracts", test_sys_itemref_contracts,
      "exclusive", 30000,
      "libcall.sys.thisitem,libcall.sys.parentitem,libcall.sys.itemref,libcall.sys.itemname,libcall.sys.fetch"},

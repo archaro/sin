@@ -320,6 +320,22 @@ static bool verify_runtime_bytecode(RuntimeContext *ctx, ITEM_t *item) {
   return false;
 }
 
+bool runtime_verify_code_header(RuntimeContext *ctx, ITEM_t *item,
+                                BC_FormatHeader *header) {
+  if (!verify_runtime_bytecode(ctx, item)) return false;
+  if (!header || !runtime_code_header(item, header)) {
+    set_runtime_bytecode_error(ctx, NULL, 0,
+        "invalid executable code header");
+    return false;
+  }
+  return true;
+}
+
+void runtime_report_call_capacity_failure(RuntimeContext *ctx) {
+  set_runtime_bytecode_error(ctx, NULL, 0,
+      "unable to enter call frame: VM capacity exhausted");
+}
+
 uint64_t runtime_verify_invocations_for_tests(const RuntimeContext *ctx) {
   return ctx ? ctx->verifier_invocations_for_tests : 0u;
 }
@@ -1041,20 +1057,18 @@ uint8_t *op_fetchitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         VALUE_t v = iv ? value_clone(iv) : VALUE_NIL;
         push_stack(VM->stack, v);
       } else {
-        if (!verify_runtime_bytecode(ctx, i)) {
+        BC_FormatHeader iheader;
+        if (!runtime_verify_code_header(ctx, i, &iheader)) {
           FREE_STR(itemname);
           return NULL;
         }
-        BC_FormatHeader iheader;
-        if (!runtime_code_header(i, &iheader)) { FREE_STR(itemname); return NULL; }
         size_t discarded_args = 0u;
         if (!runtime_frame_prepare_call(ctx, item, nextop, i, arg_count,
                                         iheader.locals, iheader.params,
                                         (uint8_t *)ctx->decoder.frame_start,
                                         (uint8_t *)ctx->decoder.frame_end,
                                         &discarded_args)) {
-          set_runtime_bytecode_error(ctx, NULL, 0,
-              "unable to enter call frame: VM capacity exhausted");
+          runtime_report_call_capacity_failure(ctx);
           FREE_STR(itemname);
           return NULL;
         }
