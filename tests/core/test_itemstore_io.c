@@ -1072,6 +1072,27 @@ void test_itemstore_v1_lossy_path_budget_aborts_record(void) {
   ASSERT_EQ_INT(0, unlink(path));
 }
 
+void test_itemstore_v1_rejects_invalid_boolean_payload(void) {
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path,
+                                      "sin-itemstore-v1-bool"));
+  FILE *file = new_fixture(path);
+  put_header(file, 1);
+  put_record_prefix(file, "root", WIRE_ITEM_VALUE);
+  put_u8(file, WIRE_VALUE_BOOL);
+  put_u8(file, 2);
+  put_u32_le(file, 0);
+  ASSERT_EQ_INT(0, fclose(file));
+  file = fopen(path, "rb");
+  ASSERT_NOT_NULL(file);
+  uint8_t header[10];
+  ASSERT_EQ_INT(sizeof header, fread(header, 1, sizeof header, file));
+  ITEMSTORE_READ_CTX_t ctx = itemstore_read_context(path, 0);
+  ASSERT_TRUE(itemstore_read_record_for_version(1, file, NULL, &ctx) == NULL);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
 void test_itemstore_rejects_production_record_limit(void) {
   char path[4096];
   ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-record-limit"));
@@ -1666,6 +1687,13 @@ void test_itemstore_path_creation_rolls_back_on_failure(void) {
   destroy_item(root);
 }
 
+void test_itemstore_boot_rejects_overlong_root_name(void) {
+  char overlong[ITEM_MAX_LAYER_NAME_LENGTH + 2u];
+  memset(overlong, 'x', sizeof overlong - 1u);
+  overlong[sizeof overlong - 1u] = '\0';
+  ASSERT_TRUE(itemstore_create_boot(overlong, NULL, 0) == NULL);
+}
+
 void test_itemstore_nested_depth_roundtrip(void) {
   char path[4096];
   ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-depth"));
@@ -1813,6 +1841,28 @@ void test_itemstore_item_name_relative_depth_contract(void) {
   ASSERT_EQ_INT(payload, get_itemstore_payload_revision());
   ASSERT_TRUE(find_item(deep_parent, "i") == NULL);
   ASSERT_TRUE(find_item(root, "a.b.c.d.e.f.g.i") == NULL);
+
+  char relative[MAX_ITEM_NAME];
+  ASSERT_TRUE(!item_path_canonicalize_relative(NULL, NULL, relative));
+  ASSERT_TRUE(!item_path_canonicalize_relative(NULL, ".child", NULL));
+  ASSERT_TRUE(!item_path_canonicalize_relative(NULL, ".child", relative));
+  ASSERT_TRUE(item_path_is_error_namespace(NULL) == false);
+  ASSERT_TRUE(item_path_is_error_namespace("error"));
+  ASSERT_TRUE(item_path_is_error_namespace("error.child"));
+  ASSERT_TRUE(!item_path_is_error_namespace("errors"));
+
+  char max_path[MAX_ITEM_NAME];
+  build_max_item_path(max_path);
+  ITEM_t *deepest = test_item_set_value(
+      root, max_path, (VALUE_t){.type = VALUE_int, .i = 10});
+  ASSERT_NOT_NULL(deepest);
+  ASSERT_TRUE(!item_path_canonicalize_relative(deepest, ".child", relative));
+
+  ITEM_t *malformed_parent = make_item("bad-name", root, ITEM_value,
+                                       VALUE_NIL, NULL, 0);
+  ASSERT_NOT_NULL(malformed_parent);
+  ASSERT_TRUE(!validate_item_name_relative(malformed_parent, "leaf",
+                                           "test_item_name_relative"));
 
   test_item_delete(parent, "h");
   ASSERT_TRUE(find_item(parent, "h") == NULL);

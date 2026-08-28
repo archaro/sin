@@ -179,6 +179,25 @@ static void test_sin_cli_contract_matrix(void) {
   free(source_after);
   free(object_after);
 
+  char *fast_durability[] = {TEST_SIN, "--loadonly", "--quiet",
+                             "--itemstore", itemstore_path,
+                             "--itemstore-durability", "fast", "--srcroot",
+                             "tests/fixtures", "--object", object_path,
+                             NULL};
+  run_process(fast_durability, 0, NULL, NULL, true, true);
+  char *invalid_durability[] = {TEST_SIN, "--loadonly", "--quiet",
+                                "--itemstore-durability", "invalid", NULL};
+  run_process(invalid_durability, 1, NULL, "Invalid itemstore durability",
+              true, false);
+  char *input_without_itemstore[] = {TEST_SIN, "--loadonly", "--input",
+                                     "missing", NULL};
+  run_process(input_without_itemstore, 1, NULL, "-i option must be given",
+              true, false);
+  char *missing_input[] = {TEST_SIN, "--loadonly", "--quiet", "--itemstore",
+                           itemstore_path, "--input", "missing", NULL};
+  run_process(missing_input, 1, NULL, "does not exist, or is not a code item",
+              true, false);
+
   char *help[] = {TEST_SIN, "--help", NULL};
   run_process(help, 0, "Syntax:", NULL, false, true);
   char *version[] = {TEST_SIN, "--version", NULL};

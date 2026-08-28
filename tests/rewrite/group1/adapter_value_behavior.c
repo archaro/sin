@@ -52,6 +52,7 @@ void test_runtime_bytecode_safety_rejects_null_bytecode(void);
 void test_error_item_oom_preserves_existing_diagnostic(void);
 void test_compiler_error_item_oom_preserves_existing_diagnostic(void);
 void test_error_item_oom_without_previous_diagnostic(void);
+void test_error_item_rejects_destination_pinned_during_publish(void);
 void test_compiler_error_item_oom_without_previous_diagnostic(void);
 void test_error_item_oom_normalizes_incomplete_diagnostic(void);
 void test_compiler_error_item_oom_normalizes_incomplete_diagnostic(void);
@@ -166,6 +167,8 @@ static const TF_TestDescriptor tests[] = {
      "test.runtime.test_compiler_error_item_oom_preserves_existing_diagnostic"},
     {"rewrite.runtime.test_error_item_oom_without_previous_diagnostic", test_error_item_oom_without_previous_diagnostic, "exclusive", 30000,
      "test.runtime.test_error_item_oom_without_previous_diagnostic"},
+    {"rewrite.runtime.test_error_item_rejects_destination_pinned_during_publish", test_error_item_rejects_destination_pinned_during_publish, "exclusive", 30000,
+     "api.itemstore.item-error"},
     {"rewrite.runtime.test_compiler_error_item_oom_without_previous_diagnostic", test_compiler_error_item_oom_without_previous_diagnostic, "exclusive", 30000,
      "test.runtime.test_compiler_error_item_oom_without_previous_diagnostic"},
     {"rewrite.runtime.test_error_item_oom_normalizes_incomplete_diagnostic", test_error_item_oom_normalizes_incomplete_diagnostic, "exclusive", 30000,

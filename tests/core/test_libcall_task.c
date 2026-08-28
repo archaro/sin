@@ -317,6 +317,18 @@ void test_newgametask_rejects_invalid_intervals_before_timer_start(void) {
   assert_newgametask_invalid_interval_returns_nil((INT64_MAX / 100) + 1, 1);
   assert_newgametask_invalid_interval_returns_nil(1, (INT64_MAX / 100) + 1);
 
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup("not-valid")}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 0}});
+  (void)lc_task_newgametask(test_ctx(), NULL,
+                            itemstore_root(config.itemstore_ctx));
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_NOSUCHITEM,
+                item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                     "error"))->i);
+
   teardown_libcall_runtime();
 }
 

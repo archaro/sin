@@ -1,4 +1,5 @@
 #include "item.h"
+#include "item_internal.h"
 #include <stdint.h>
 #include "test_helpers.h"
 #include <math.h>
@@ -1074,6 +1075,10 @@ void test_value_itemref_lifecycle_and_contract(void) {
   memset(overlong, 'x', sizeof(overlong));
   overlong[sizeof(overlong) - 1u] = '\0';
   ASSERT_TRUE(sin_itemref_create(overlong) == NULL);
+  size_t itemref_bytes = 0;
+  ASSERT_TRUE(!sin_itemref_allocation_bytes(SIZE_MAX, &itemref_bytes));
+  ASSERT_TRUE(!sin_itemref_allocation_bytes(SIZE_MAX - 1u, &itemref_bytes));
+
   VALUE_t malformed = {VALUE_itemref, {.itemref = NULL}};
   ASSERT_TRUE(!value_equal(&malformed, &malformed));
 }
@@ -1776,6 +1781,16 @@ typedef struct {
   char strings[ERROR_TEST_FIELD_COUNT][ERROR_TEST_TEXT_CAPACITY];
 } ErrorItemSnapshot;
 
+static ITEM_t *publish_hook_root;
+
+static bool pin_error_stage_during_publish(const char *name) {
+  if (publish_hook_root && strcmp(name, "error") == 0) {
+    ITEM_t *stage = find_item(publish_hook_root, "error.stage");
+    if (stage) item_enter_use(stage);
+  }
+  return false;
+}
+
 static CompilerDiagnostic old_compiler_diagnostic(void) {
   return (CompilerDiagnostic){
     .code = ERR_COMP_UNKNOWNCHAR,
@@ -2119,6 +2134,29 @@ void test_error_item_oom_without_previous_diagnostic(void) {
     if (succeeded) break;
   }
   ASSERT_TRUE(succeeded);
+}
+
+void test_error_item_rejects_destination_pinned_during_publish(void) {
+  init_errmsg();
+  ITEMSTORE_t *store = itemstore_create("root");
+  ASSERT_NOT_NULL(store);
+  ITEM_t *root = itemstore_root(store);
+  set_error_item(root, ERR_NETWORK_ERROR, NULL, NULL);
+
+  publish_hook_root = root;
+  itemstore_set_item_creation_failure_hook_for_tests(
+      pin_error_stage_during_publish);
+  set_error_item(root, ERR_RUNTIME_INVALIDARGS, "publish race", NULL);
+  itemstore_set_item_creation_failure_hook_for_tests(NULL);
+  publish_hook_root = NULL;
+
+  ITEM_t *stage = find_item(root, "error.stage");
+  ASSERT_NOT_NULL(stage);
+  ASSERT_TRUE(item_is_in_use(stage));
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR,
+                item_value(find_item(root, "error"))->i);
+  item_leave_use(stage);
+  itemstore_destroy(store);
 }
 
 void test_compiler_error_item_oom_without_previous_diagnostic(void) {
