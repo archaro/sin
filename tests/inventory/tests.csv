@@ -260,7 +260,7 @@ rewrite.core.test_item_value_accessor_rejects_code_items,api.itemstore.tree-and-
 rewrite.core.test_itemstore_v2_lists_and_itemrefs_roundtrip,api.itemstore.persistence-format
 rewrite.core.test_itemstore_public_mutation_payload_rejections_are_atomic,api.itemstore.tree-and-values;api.itemstore.persistence-save
 rewrite.core.test_itemstore_public_mutation_aggregate_list_budget_is_atomic,api.itemstore.tree-and-values;api.itemstore.persistence-save
-rewrite.core.test_itemstore_public_mutation_child_limit_is_atomic,api.itemstore.tree-and-values;api.itemstore.persistence-save
+rewrite.core.test_itemstore_public_mutation_children_roundtrip,api.itemstore.tree-and-values;api.itemstore.persistence-save
 rewrite.core.test_itemstore_v2_all_values_fixture,api.itemstore.persistence-format
 rewrite.core.test_itemstore_v2_malformed_value_table,api.itemstore.persistence-format
 rewrite.core.test_itemstore_v2_budget_and_malformed_save,api.itemstore.persistence-save
@@ -268,7 +268,7 @@ rewrite.core.test_itemstore_whole_file_budgets,api.itemstore.persistence-load
 rewrite.core.test_itemstore_decode_budget_allocation_boundaries,api.itemstore.persistence-load
 rewrite.core.test_itemstore_v1_lossy_path_budget_aborts_record,api.itemstore.persistence-load
 rewrite.core.test_itemstore_v1_rejects_invalid_boolean_payload,api.itemstore.persistence-load
-rewrite.core.test_itemstore_rejects_production_record_limit,api.itemstore.persistence-load
+rewrite.core.test_itemstore_loads_above_legacy_record_limit,api.itemstore.persistence-load
 rewrite.core.test_itemstore_save_preflight_budget_boundaries,api.itemstore.persistence-save
 rewrite.core.test_loaded_itemstore_mutation_roundtrip,api.itemstore.tree-and-values
 rewrite.core.test_load_itemstore_handles_constructor_failure_with_children,api.itemstore.persistence-load

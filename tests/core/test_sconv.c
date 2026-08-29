@@ -107,6 +107,7 @@ void test_sconv_conversion_work_budget_is_atomic(void) {
   char input[4096], output[4096];
   temp_path(input, sizeof input, "sconv-budget");
   temp_path(output, sizeof output, "sconv-budget-out");
+  ASSERT_EQ_INT(512u * 1024u * 1024u, ITEMSTORE_MAX_CONVERSION_BYTES);
   FILE *f = fopen(input, "wb");
   ASSERT_NOT_NULL(f);
   ASSERT_EQ_INT(8, fwrite("SINITEM\0", 1, 8, f));

@@ -96,20 +96,31 @@ A code item contains a four-byte `uint32` bytecode length followed by exactly
 that many bytecode bytes. The bytecode itself is defined in
 [`bytecode.md`](bytecode.md).
 
-## Validation limits
+## Wire maxima and implementation safety ceilings
 
-The v2 reader and writer enforce these limits (v1 uses the scalar subset and
-is retained only for internal conversion decoding):
+The child-count field is a four-byte unsigned integer, so the format can
+represent 0 through 4,294,967,295 (`UINT32_MAX`) children for one item. This
+is a structural wire maximum, not an independent per-item resource policy.
+The v2 reader and writer also enforce implementation safety ceilings (v1 uses
+the scalar subset and is retained only for internal conversion decoding):
 
 | Property | Limit |
 | --- | ---: |
 | Item depth | Root is depth 0; maximum record depth is 8 |
 | Name length | 32 bytes per layer |
-| Children of one item | 250 |
+| Child count field | 4,294,967,295 (`uint32` maximum; wire representation) |
 | String payload | 65,535 bytes (`SIN_MAX_STRING_BYTES`) |
 | Bytecode payload | 64 MiB (`64 * 1024 * 1024` bytes) |
-| Records in one file (root included) | 65,536 |
-| Cumulative requested decode heap bytes | 256 MiB (`256 * 1024 * 1024` bytes) |
+| Records in one file (root included) | 1,048,576 |
+| Cumulative requested decode heap bytes | 512 MiB (`512 * 1024 * 1024` bytes) |
+
+The string, bytecode, record, and cumulative decode-heap values are default
+implementation safety ceilings, not structural v2 limits. The default
+1,048,576-record budget means a root can have at most 1,048,575 direct
+children in a store today (with no records used by descendants); the decode-
+byte and other safety budgets also apply. These safety ceilings may be raised
+in a future implementation without changing the itemstore version; changing
+a wire field's width or encoding would require a new version.
 
 Strict bytecode verification uses a separate 16 MiB analysis-memory budget.
 Instruction metadata is stored per decoded top-level instruction and boundary
@@ -135,7 +146,8 @@ The record and cumulative decode-heap limits apply to every v2 load and to the
 v1 conversion reader. A record is reserved before its payload is decoded, and
 requested allocation sizes are charged cumulatively, including temporary list
 and conversion-path storage; released temporary allocations are not refunded.
-Conversion staging has a separate 256 MiB work budget. Budget failures reject
+Conversion staging has a separate 512 MiB work budget, independent of the
+512 MiB cumulative decode-heap budget. Budget failures reject
 the complete load or conversion, and save performs the same admissibility
 preflight before publishing a destination.
 

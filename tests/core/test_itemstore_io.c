@@ -62,7 +62,7 @@ enum {
 
 #define WIRE_VERSION 2u
 #define WIRE_MAX_DEPTH ITEM_MAX_DEPTH
-#define WIRE_MAX_CHILDREN 250u
+#define WIRE_MAX_CHILDREN UINT32_MAX
 #define WIRE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
 
 void test_get_itemname_root_item(void) {
@@ -659,36 +659,50 @@ void test_itemstore_public_mutation_aggregate_list_budget_is_atomic(void) {
   ASSERT_EQ_INT(0, unlink(path));
 }
 
-void test_itemstore_public_mutation_child_limit_is_atomic(void) {
+void test_itemstore_public_mutation_children_roundtrip(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  for (unsigned i = 0; i < ITEMSTORE_MAX_CHILDREN_PER_ITEM; ++i) {
-    char name[16];
-    ASSERT_TRUE(snprintf(name, sizeof name, "child_%03u", i) > 0);
-    ASSERT_NOT_NULL(make_item(name, root, ITEM_value, VALUE_NIL, NULL, 0));
-  }
-  ASSERT_EQ_INT(ITEMSTORE_MAX_CHILDREN_PER_ITEM, item_child_count(root));
   uint64_t topology = get_itemstore_topology_revision();
   uint64_t payload = get_itemstore_payload_revision();
-  char *rejected_payload = strdup("caller-owned");
-  ASSERT_NOT_NULL(rejected_payload);
+  for (unsigned i = 0; i < 250u; ++i) {
+    char name[16];
+    ASSERT_TRUE(snprintf(name, sizeof name, "child_%03u", i) > 0);
+    ITEM_MUTATION_RESULT_t result = item_set_value(
+        root, name, (VALUE_t){VALUE_int, {.i = (int64_t)i}});
+    ASSERT_EQ_INT(ITEM_MUTATION_CREATED, result.status);
+    ASSERT_NOT_NULL(result.item);
+    ASSERT_EQ_INT(VALUE_int, result.item->value.type);
+    ASSERT_EQ_INT((int64_t)i, result.item->value.i);
+    ASSERT_EQ_INT(topology + 1u, get_itemstore_topology_revision());
+    ASSERT_EQ_INT(payload, get_itemstore_payload_revision());
+    topology++;
+  }
+  char *sentinel_payload = strdup("caller-owned");
+  ASSERT_NOT_NULL(sentinel_payload);
   ITEM_MUTATION_RESULT_t result = item_set_value(
-      root, "child_250", (VALUE_t){VALUE_str, {.s = rejected_payload}});
-  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_PAYLOAD, result.status);
-  ASSERT_TRUE(result.item == NULL);
-  ASSERT_TRUE(find_item(root, "child_250") == NULL);
-  ASSERT_EQ_INT(ITEMSTORE_MAX_CHILDREN_PER_ITEM, item_child_count(root));
-  ASSERT_EQ_INT(topology, get_itemstore_topology_revision());
+      root, "child_250", (VALUE_t){VALUE_str, {.s = sentinel_payload}});
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, result.status);
+  ASSERT_NOT_NULL(result.item);
+  ASSERT_TRUE(result.item->value.s == sentinel_payload);
+  ASSERT_EQ_INT(topology + 1u, get_itemstore_topology_revision());
   ASSERT_EQ_INT(payload, get_itemstore_payload_revision());
-  ASSERT_TRUE(strcmp(rejected_payload, "caller-owned") == 0);
-  free(rejected_payload);
+  topology++;
+  ASSERT_EQ_INT(251, item_child_count(root));
 
   char path[4096];
   ASSERT_EQ_INT(0, test_temp_template(path, sizeof path,
-                                      "sin-itemstore-child-limit"));
+                                      "sin-itemstore-many-children"));
   FILE *file = new_fixture(path);
   ASSERT_EQ_INT(0, fclose(file));
   ASSERT_TRUE(save_itemstore(path, root));
+  ITEM_t *loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  ASSERT_EQ_INT(251, item_child_count(loaded));
+  ITEM_t *sentinel = find_item(loaded, "child_250");
+  ASSERT_NOT_NULL(sentinel);
+  ASSERT_EQ_INT(VALUE_str, sentinel->value.type);
+  ASSERT_TRUE(strcmp(sentinel->value.s, "caller-owned") == 0);
+  destroy_item(loaded);
   ASSERT_EQ_INT(0, unlink(path));
   destroy_item(root);
 }
@@ -1115,6 +1129,8 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
 void test_itemstore_whole_file_budgets(void) {
   char path[4096];
   ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-whole-budget"));
+  ASSERT_EQ_INT(512u * 1024u * 1024u, ITEMSTORE_MAX_DECODE_BYTES);
+  ASSERT_EQ_INT(512u * 1024u * 1024u, ITEMSTORE_MAX_CONVERSION_BYTES);
   FILE *file = new_fixture(path);
   put_header(file, 2);
   put_nil_record_prefix(file, "root", 0);
@@ -1271,9 +1287,10 @@ void test_itemstore_v1_rejects_invalid_boolean_payload(void) {
   ASSERT_EQ_INT(0, unlink(path));
 }
 
-void test_itemstore_rejects_production_record_limit(void) {
+void test_itemstore_loads_above_legacy_record_limit(void) {
   char path[4096];
   ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-record-limit"));
+  ASSERT_EQ_INT(1048576u, ITEMSTORE_MAX_RECORDS);
   FILE *file = new_fixture(path);
   put_header(file, 2);
   put_nil_record_prefix(file, "root", 250);
@@ -1294,7 +1311,18 @@ void test_itemstore_rejects_production_record_limit(void) {
     }
   }
   ASSERT_EQ_INT(0, fclose(file));
-  ASSERT_TRUE(load_itemstore(path) == NULL);
+  ITEM_t *loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  ASSERT_EQ_INT(250, item_child_count(loaded));
+  ITEM_t *first = find_item(loaded, "f000");
+  ASSERT_NOT_NULL(first);
+  ASSERT_EQ_INT(250, item_child_count(first));
+  ITEM_t *nested = find_item(loaded, "f000.n000_000");
+  ASSERT_NOT_NULL(nested);
+  ASSERT_EQ_INT(250, item_child_count(nested));
+  ASSERT_NOT_NULL(find_item(loaded, "f000.n000_000.g000"));
+  ASSERT_NOT_NULL(find_item(loaded, "f249.n249_249"));
+  destroy_item(loaded);
   ASSERT_EQ_INT(0, unlink(path));
 }
 
@@ -2420,7 +2448,7 @@ void test_load_itemstore_rejects_resource_limit_violations(void) {
 
   file = replace_fixture(path);
   put_header(file, WIRE_VERSION);
-  put_nil_record_prefix(file, "root", WIRE_MAX_CHILDREN + 1u);
+  put_nil_record_prefix(file, "root", WIRE_MAX_CHILDREN);
   assert_fixture_rejected(file, path);
 
   file = replace_fixture(path);
@@ -2450,17 +2478,6 @@ void test_save_itemstore_preserves_existing_file_on_failure(void) {
                             NULL, 1));
   ASSERT_TRUE(!save_itemstore(path, invalid));
   destroy_item(invalid);
-
-  ITEM_t *too_many_children = make_root_item("root");
-  ASSERT_NOT_NULL(too_many_children);
-  for (int i = 0; i < 251; i++) {
-    char name[16];
-    ASSERT_TRUE(snprintf(name, sizeof(name), "child_%03d", i) > 0);
-    ASSERT_NOT_NULL(make_item(name, too_many_children, ITEM_value, VALUE_NIL,
-                              NULL, 0));
-  }
-  ASSERT_TRUE(!save_itemstore(path, too_many_children));
-  destroy_item(too_many_children);
 
   ITEM_t *loaded = load_itemstore(path);
   ASSERT_NOT_NULL(loaded);

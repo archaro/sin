@@ -34,10 +34,16 @@ allocation, name, payload-limit, alias, and pin checks happen before a
 successful result. The prospective whole owning store must also be
 representable in the current v2 format under the default policy: value tags and
 payloads must be valid, list elements must stay within the aggregate limit,
-and the record, per-item child, and decode-allocation limits must hold. This
-check is read-only and occurs before allocation or ownership transfer. The
-custom limits accepted by `save_itemstore_with_limits()` apply only to that
-save call and do not change this mutation invariant.
+and the child-count wire field, record, and decode-allocation limits must hold.
+This check is read-only and occurs before allocation or ownership transfer. A
+child count must fit the v2 `uint32` wire field; the default whole-file record
+and cumulative decode-byte ceilings provide the resource policy. The default
+record budget of 1,048,576 therefore permits at most 1,048,575 direct children
+under one root today (with no records used by descendants); the decode-byte and
+other safety budgets also apply. The custom limits accepted by
+`save_itemstore_with_limits()` apply only to that save call and do not change
+this mutation invariant. These safety ceilings can be raised without changing
+the itemstore version.
 
 On `CREATED` or `REPLACED`, `result.item` is the borrowed resulting leaf and
 the store owns the supplied payload. On every failure the tree and revisions
@@ -100,8 +106,8 @@ failure without claiming the destination is unchanged. Mutations become durable
 only after a successful save boundary.
 
 `sconv` is the explicit migration boundary for legacy itemstores. Conversion is
-staged and validated before publication; normal runtime loading does not
-perform automatic format conversion.
+staged and validated before publication under its separate 512 MiB work
+ceiling; normal runtime loading does not perform automatic format conversion.
 
 Source sidecars are independent files under `srcroot/<canonical path>/source.sin`.
 Only code items may have sidecars. Save/read helpers borrow the item and source

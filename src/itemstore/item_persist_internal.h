@@ -5,11 +5,13 @@
 
 #include "item_internal.h"
 
-#define ITEMSTORE_MAX_CHILDREN_PER_ITEM 250u
+/* The child-count field is a uint32 on the wire.  Resource safety is
+ * enforced by the whole-file record and decode-byte budgets below. */
+#define ITEMSTORE_MAX_CHILDREN_PER_ITEM UINT32_MAX
 #define ITEMSTORE_MAX_BYTECODE_LEN (64u * 1024u * 1024u)
-#define ITEMSTORE_MAX_RECORDS 65536u
-#define ITEMSTORE_MAX_DECODE_BYTES (256u * 1024u * 1024u)
-#define ITEMSTORE_MAX_CONVERSION_BYTES (256u * 1024u * 1024u)
+#define ITEMSTORE_MAX_RECORDS (1024u * 1024u)
+#define ITEMSTORE_MAX_DECODE_BYTES (512u * 1024u * 1024u)
+#define ITEMSTORE_MAX_CONVERSION_BYTES (512u * 1024u * 1024u)
 
 #define ITEMSTORE_V1_FORMAT_VERSION UINT16_C(1)
 #define ITEMSTORE_V2_FORMAT_VERSION UINT16_C(2)

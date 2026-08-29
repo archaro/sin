@@ -96,10 +96,17 @@ configured network and CLI limits are documented separately by their options.
 | Runtime value stack 1024; call stack 1024 | VM execution | `SIGUSR1` interruption; boot restarts, live runtime shuts down, and `sys.compile` returns `false`, setting `ERR_RUNTIME_SIGUSR1` when no more specific runtime error is already present |
 | List has at most 1,048,576 elements and nesting depth 64 | List operations and itemstore encoding | List libcalls return their documented `nil` value; load rejects atomically; source literals also face the 1024-slot verifier limit |
 | Item paths: 8 non-root layers, 32 bytes per semantic layer, 263-byte complete non-root path; no NUL | Item path validation | A layer longer than 32 bytes is not a valid item path. Invalid lookup/fetch/call/reference assembly yields `nil` (`sys.exists` yields `false`); value assignment is discarded without mutation, code assignment reports `ERR_RUNTIME_INVALIDITEM`, and direct item mutation is atomic. The root `error` item and every `error.*` descendant are runtime-reserved: Sinistra value/code assignment and `sys.delete` attempts are rejected and diagnosed with `ERR_RUNTIME_INVALIDITEM`. |
-| At most 250 persisted children/item; code payload at most 64 MiB | Itemstore save/load | Save reports failure; load rejects atomically |
+| V2 child-count field at most 4,294,967,295 (`uint32`) | Itemstore wire encoding | Child counts above the wire maximum cannot be represented; default record/decode budgets additionally provide resource safety |
+| Itemstore code payload at most 64 MiB | Itemstore save/load safety ceiling | Save reports failure; load rejects atomically |
 | V2 aggregate list-element budget 1,048,576 | Itemstore save/load stream | Save failure or atomic load rejection |
-| Itemstore file records 65,536 (root included) and 256 MiB cumulative requested decode bytes | Itemstore load/conversion | Atomic rejection with a record- or allocation-budget diagnostic |
-| Itemstore conversion staging work 256 MiB | `sconv` conversion staging | Destination is not published on budget exhaustion |
+| Itemstore file records 1,048,576 (root included) and 512 MiB cumulative requested decode bytes | Itemstore load/conversion safety ceilings | Atomic rejection with a record- or allocation-budget diagnostic; the record budget permits at most 1,048,575 direct children under one root today, subject also to decode-byte and other budgets |
+| Itemstore conversion staging work 512 MiB | `sconv` conversion staging safety ceiling | Destination is not published on budget exhaustion; this is separate from the 512 MiB cumulative decode-heap ceiling |
+
+The itemstore child-count maximum is a structural `uint32` wire maximum. The
+record, decode-byte, bytecode, and conversion-work values above are
+implementation safety ceilings and may be raised without changing the
+itemstore version. The decode-heap and conversion-work ceilings are separate
+budgets, even though both default to 512 MiB.
 
 Compilation and loading either produce a complete result or fail without
 exposing a partial result. Limits enforced by mutation APIs are checked before

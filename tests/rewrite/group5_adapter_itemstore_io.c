@@ -7,7 +7,7 @@ void test_item_value_accessor_rejects_code_items(void);
 void test_itemstore_v2_lists_and_itemrefs_roundtrip(void);
 void test_itemstore_public_mutation_payload_rejections_are_atomic(void);
 void test_itemstore_public_mutation_aggregate_list_budget_is_atomic(void);
-void test_itemstore_public_mutation_child_limit_is_atomic(void);
+void test_itemstore_public_mutation_children_roundtrip(void);
 void test_itemstore_v2_all_values_fixture(void);
 void test_itemstore_v2_malformed_value_table(void);
 void test_itemstore_v2_budget_and_malformed_save(void);
@@ -15,7 +15,7 @@ void test_itemstore_whole_file_budgets(void);
 void test_itemstore_decode_budget_allocation_boundaries(void);
 void test_itemstore_v1_lossy_path_budget_aborts_record(void);
 void test_itemstore_v1_rejects_invalid_boolean_payload(void);
-void test_itemstore_rejects_production_record_limit(void);
+void test_itemstore_loads_above_legacy_record_limit(void);
 void test_itemstore_save_preflight_budget_boundaries(void);
 void test_loaded_itemstore_mutation_roundtrip(void);
 void test_load_itemstore_handles_constructor_failure_with_children(void);
@@ -51,7 +51,7 @@ static const TF_TestDescriptor tests[] = {
     {"rewrite.core.test_itemstore_v2_lists_and_itemrefs_roundtrip", test_itemstore_v2_lists_and_itemrefs_roundtrip, "exclusive", 30000, "api.itemstore.persistence-format"},
     {"rewrite.core.test_itemstore_public_mutation_payload_rejections_are_atomic", test_itemstore_public_mutation_payload_rejections_are_atomic, "exclusive", 30000, "api.itemstore.tree-and-values,api.itemstore.persistence-save"},
     {"rewrite.core.test_itemstore_public_mutation_aggregate_list_budget_is_atomic", test_itemstore_public_mutation_aggregate_list_budget_is_atomic, "exclusive", 30000, "api.itemstore.tree-and-values,api.itemstore.persistence-save"},
-    {"rewrite.core.test_itemstore_public_mutation_child_limit_is_atomic", test_itemstore_public_mutation_child_limit_is_atomic, "exclusive", 30000, "api.itemstore.tree-and-values,api.itemstore.persistence-save"},
+    {"rewrite.core.test_itemstore_public_mutation_children_roundtrip", test_itemstore_public_mutation_children_roundtrip, "exclusive", 30000, "api.itemstore.tree-and-values,api.itemstore.persistence-save"},
     {"rewrite.core.test_itemstore_v2_all_values_fixture", test_itemstore_v2_all_values_fixture, "exclusive", 30000, "api.itemstore.persistence-format"},
     {"rewrite.core.test_itemstore_v2_malformed_value_table", test_itemstore_v2_malformed_value_table, "exclusive", 30000, "api.itemstore.persistence-format"},
     {"rewrite.core.test_itemstore_v2_budget_and_malformed_save", test_itemstore_v2_budget_and_malformed_save, "exclusive", 30000, "api.itemstore.persistence-save"},
@@ -59,7 +59,7 @@ static const TF_TestDescriptor tests[] = {
     {"rewrite.core.test_itemstore_decode_budget_allocation_boundaries", test_itemstore_decode_budget_allocation_boundaries, "exclusive", 30000, "api.itemstore.persistence-load"},
     {"rewrite.core.test_itemstore_v1_lossy_path_budget_aborts_record", test_itemstore_v1_lossy_path_budget_aborts_record, "exclusive", 30000, "api.itemstore.persistence-load"},
     {"rewrite.core.test_itemstore_v1_rejects_invalid_boolean_payload", test_itemstore_v1_rejects_invalid_boolean_payload, "exclusive", 30000, "api.itemstore.persistence-load"},
-    {"rewrite.core.test_itemstore_rejects_production_record_limit", test_itemstore_rejects_production_record_limit, "exclusive", 30000, "api.itemstore.persistence-load"},
+    {"rewrite.core.test_itemstore_loads_above_legacy_record_limit", test_itemstore_loads_above_legacy_record_limit, "exclusive", 30000, "api.itemstore.persistence-load"},
     {"rewrite.core.test_itemstore_save_preflight_budget_boundaries", test_itemstore_save_preflight_budget_boundaries, "exclusive", 30000, "api.itemstore.persistence-save"},
     {"rewrite.core.test_loaded_itemstore_mutation_roundtrip", test_loaded_itemstore_mutation_roundtrip, "exclusive", 30000, "api.itemstore.tree-and-values"},
     {"rewrite.core.test_load_itemstore_handles_constructor_failure_with_children", test_load_itemstore_handles_constructor_failure_with_children, "exclusive", 30000, "api.itemstore.persistence-load"},
