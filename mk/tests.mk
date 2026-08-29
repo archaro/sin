@@ -172,7 +172,7 @@ _coverage-inventory:
 	@PYTHONDONTWRITEBYTECODE=1 python3 tests/coverage/coverage_gate.py --build-dir "$(COVERAGE_OBJ_DIR)" --compiler "$(CC)" --archive "$(COVERAGE_LIB_DIR)/libsinshared.a" --gcov "$(GCOV)" --llvm-cov "$(LLVM_COV)" --llvm-profdata "$(LLVM_PROFDATA)" $(COVERAGE_COLLECT_ARGS)
 
 _bench: $(REWRITE_GROUP2_BINS)
-	@SIN_EXTENDED_BENCH=1 SIN_BENCH_REPORT=1 ./$(OBJ_DIR)/$(REWRITE_DIR)/test_runtime_benchmark
+	@SIN_EXTENDED_BENCH=1 SIN_BENCH_REPORT=1 ./$(OBJ_DIR)/$(REWRITE_DIR)/test_runtime_benchmark --run rewrite.runtime.test_runtime_benchmark_optin
 $(TEST_OBJECT_DIR)/%.o: %.c $(PARSER_H)
 	@mkdir -p $(@D)
 	$(CC) -c $(TEST_CPPFLAGS) $(TEST_CFLAGS) -MMD -MP -MF $(@:.o=.d) $< -o $@

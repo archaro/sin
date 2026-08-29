@@ -13,7 +13,21 @@ and serializes them. They are regression checks for deterministic counters and
 invariants, not portable elapsed-time promises. The item-cache descriptor is
 also exercised by the normal test suite.
 
-## Opt-in measurements
+## Release benchmark entry point
+
+Run the supported release benchmark target from the repository root:
+
+```sh
+make bench
+```
+
+The target delegates to the release build, selects the
+`rewrite.runtime.test_runtime_benchmark_optin` descriptor, and sets/retains
+the existing `SIN_EXTENDED_BENCH=1 SIN_BENCH_REPORT=1` environment contract.
+`SIN_EXTENDED_BENCH=1` enables the extended matrix for this entry point;
+benchmark stdout may be captured by the caller.
+
+## Focused selection and opt-in measurements
 
 Build the release benchmark binary, then select its descriptor directly:
 
@@ -29,11 +43,6 @@ item references/syscalls, runtime verification, and string-registry samples).
 `SIN_STRICT_BENCH=1` additionally enforces the small deterministic threshold
 checks in the descriptor. Without the extended flag, the descriptor still
 runs its baseline deterministic measurements.
-
-The top-level `make bench` target currently invokes `_bench` without the
-required `--run` selector, so it exits with framework usage rather than running
-the descriptor. This page intentionally retains the known-good direct command
-above; fixing the build rule is a separate change.
 
 ## Adding evidence
 

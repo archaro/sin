@@ -131,6 +131,20 @@ static void make_failure(void) {
   tf_fixture_cleanup(&fixture);
 }
 
+static void bench_target_contract(void) {
+  char *args[] = {"make", "--no-print-directory", "-n", "bench", NULL};
+  TF_ProcessResult result;
+  TF_ASSERT_TRUE(tf_process_run(args, 30000, &result) == 0);
+  TF_ASSERT_PROCESS(&result, 0);
+  TF_ASSERT_DIAGNOSTIC("SIN_EXTENDED_BENCH=1", result.stdout_data);
+  TF_ASSERT_DIAGNOSTIC("SIN_BENCH_REPORT=1", result.stdout_data);
+  TF_ASSERT_DIAGNOSTIC("test_runtime_benchmark", result.stdout_data);
+  TF_ASSERT_DIAGNOSTIC(
+      "--run rewrite.runtime.test_runtime_benchmark_optin",
+      result.stdout_data);
+  destroy_process(&result);
+}
+
 static void aggregate_success(void) {
   const char *runner = getenv("TF_FRAMEWORK_RUNNER");
   const char *self = getenv("TF_FRAMEWORK_SELF");
@@ -199,6 +213,9 @@ static const TF_TestDescriptor tests[] = {
     {"rewrite.output_contract.quiet_runner.make_failure",
      make_failure, "exclusive", 30000,
      "test.output_contract.quiet_runner.make_failure"},
+    {"rewrite.output_contract.quiet_runner.bench_target",
+     bench_target_contract, "exclusive", 30000,
+     "test.output_contract.quiet_runner.bench_target"},
     {"rewrite.output_contract.quiet_runner.aggregate_success",
      aggregate_success, "exclusive", 30000,
      "test.output_contract.quiet_runner.aggregate_success"},

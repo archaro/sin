@@ -2,6 +2,7 @@ test_id,contract_ids
 rewrite.output_contract.quiet_runner.abnormal_exit,test.output_contract.quiet_runner.abnormal_exit
 rewrite.output_contract.quiet_runner.aggregate_failure,test.output_contract.quiet_runner.aggregate_failure
 rewrite.output_contract.quiet_runner.aggregate_success,test.output_contract.quiet_runner.aggregate_success
+rewrite.output_contract.quiet_runner.bench_target,test.output_contract.quiet_runner.bench_target
 rewrite.output_contract.quiet_runner.controlled_failure,test.output_contract.quiet_runner.controlled_failure
 rewrite.output_contract.quiet_runner.make_failure,test.output_contract.quiet_runner.make_failure
 rewrite.output_contract.quiet_runner.make_success,test.output_contract.quiet_runner.make_success

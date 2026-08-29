@@ -25,14 +25,16 @@ interval.
 ## Tasks and callback lifetime
 
 `TASK_t` objects move through `ALLOCATED -> INITIALIZED -> ACTIVE -> CLOSING ->
-DESTROYED`. Each active task owns a VM, runtime context, timer allocation, and
-task-list node while borrowing the loop, itemstore, and code item. A timer
-callback executes the selected item on the loop thread; one-shot tasks request
-close after execution. Closing unlinks the task and retires its ID immediately,
-stops the timer, calls `uv_close`, and defers VM/context/timer/node destruction
-to the close callback. `finalise_tasks()` requests all closes and drains the
-loop before freeing task-ID storage. No task object may be freed while its
-libuv timer callback can still run.
+DESTROYED`. Each active task owns a VM, runtime context, timer allocation,
+task-list node, and a copied canonical target path in its fixed `itemname`
+buffer. It owns no code item between callbacks: each timer callback resolves
+that path afresh from the current itemstore, and an execution pin exists only
+while `interpret()` is running. The task borrows the loop and itemstore. A
+one-shot task requests close after execution. Closing unlinks the task and
+retires its ID immediately, stops the timer, calls `uv_close`, and defers
+VM/context/timer/node destruction to the close callback. `finalise_tasks()`
+requests all closes and drains the loop before freeing task-ID storage. No task
+object may be freed while its libuv timer callback can still run.
 
 ## Network ownership and fair polling
 
