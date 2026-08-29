@@ -29,25 +29,17 @@ static void set_pipeline_startup_diag(CompilerDiagnostic *diag, int8_t code,
   if (diag) compiler_diag_set(diag, code, phase, message);
 }
 
-/*
- * All public entry points use this runner.  Passing a NULL diagnostic keeps
- * the legacy API's detail strings, while the stage implementations still
- * share the exact same parse, semantic, lower, validate, and emit sequence.
- */
+/* All public entry points use this runner and share one structured diagnostic. */
 static int8_t compile_pipeline_run(const ParseInput *input,
                                    const char **params, size_t param_count,
-                                   OUTPUT_t **out, char **errdetail,
-                                   CompilerDiagnostic *diag,
+                                   OUTPUT_t **out, CompilerDiagnostic *diag,
                                    size_t ast_node_limit) {
   CompilerContext ctx;
   SCANNER_STATE_t parse_state = {0};
-  char *local_errdetail = NULL;
-  char **pipeline_errdetail = errdetail ? errdetail : &local_errdetail;
   int8_t rc = ERR_NOERROR;
   const char *source_name = default_source_name(input);
 
   if (out) *out = NULL;
-  compdiag_reset_detail(pipeline_errdetail);
   if (diag) compiler_diag_reset(diag);
   compiler_context_init(&ctx, input ? input->data : NULL,
                         input ? input->len : 0);
@@ -69,27 +61,14 @@ static int8_t compile_pipeline_run(const ParseInput *input,
   ctx.sem_ctx = sem_create_ctx();
   if (!ctx.sem_ctx) {
     rc = ERR_COMP_UNKNOWN;
-    if (diag) {
-      set_pipeline_startup_diag(diag, rc, DIAG_PHASE_COMPILE,
-                                "compile: semantic context allocation failed");
-    } else {
-      compdiag_set_once(&rc, pipeline_errdetail, ERR_COMP_UNKNOWN, "compile",
-                        "semantic context allocation failed");
-    }
+    set_pipeline_startup_diag(diag, rc, DIAG_PHASE_COMPILE,
+                              "compile: semantic context allocation failed");
     goto done;
   }
 
   ParseInput parse_input = {ctx.source, ctx.source_len, source_name};
-  rc = parse_source_diag_with_node_limit(&parse_input, &ctx.ast_root,
-                                         pipeline_errdetail, &parse_state,
-                                         ast_node_limit);
-  if (rc != ERR_NOERROR && diag) {
-    compiler_diag_set(diag, rc, DIAG_PHASE_PARSE,
-                      *pipeline_errdetail ? *pipeline_errdetail : "");
-    compiler_diag_set_source_name(diag, source_name);
-    compiler_diag_set_location(diag, parse_state.line, parse_state.column,
-                               parse_state.span);
-  }
+  rc = parse_source_diag_with_node_limit(&parse_input, &ctx.ast_root, diag,
+                                         &parse_state, ast_node_limit);
   if (rc != ERR_NOERROR) goto done;
 
   AS_BUDGET_RESULT budget = as_check_budget(ctx.ast_root);
@@ -99,33 +78,28 @@ static int8_t compile_pipeline_run(const ParseInput *input,
                              : budget == AS_BUDGET_DEPTH_LIMIT
                                  ? "AST traversal depth budget exceeded"
                                  : "AST budget allocation failed";
-    compdiag_set_once_diag(&rc, pipeline_errdetail, diag, ERR_COMP_SYNTAX,
-                           DIAG_PHASE_COMPILE, "compile", detail);
+    compdiag_set_once_diag(&rc, diag, ERR_COMP_SYNTAX, DIAG_PHASE_COMPILE,
+                           "compile", detail);
     goto done;
   }
 
   rc = sem_seed_params(ctx.sem_ctx, params, param_count);
   if (rc != ERR_NOERROR) {
-    compdiag_reset_detail(pipeline_errdetail);
-    *pipeline_errdetail = compdiag_copy_detail(ctx.sem_ctx->errdetail);
-    if (diag) {
+    if (diag && diag->phase == DIAG_PHASE_NONE)
       compiler_diag_set(diag, rc, DIAG_PHASE_SEMANT,
-                        ctx.sem_ctx->errdetail ? ctx.sem_ctx->errdetail
-                                                : "semant: parameter seeding failed");
-    }
+                        ctx.sem_ctx->diagnostic.message
+                            ? ctx.sem_ctx->diagnostic.message
+                            : "semant: parameter seeding failed");
     goto done;
   }
 
-  rc = sem_check_locals_diag(ctx.ast_root, pipeline_errdetail, diag,
-                             ctx.sem_ctx);
+  rc = sem_check_locals_diag(ctx.ast_root, diag, ctx.sem_ctx);
   if (rc != ERR_NOERROR) goto done;
 
-  rc = lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ctx.ir_unit,
-                            pipeline_errdetail, diag);
+  rc = lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ctx.ir_unit, diag);
   if (rc != ERR_NOERROR) goto done;
 
-  rc = ir_validate_diag(ctx.ir_unit, ctx.sem_ctx->count, pipeline_errdetail,
-                        diag);
+  rc = ir_validate_diag(ctx.ir_unit, ctx.sem_ctx->count, diag);
   if (rc != ERR_NOERROR) goto done;
 
   uint32_t emitted_param_count = 0;
@@ -134,16 +108,14 @@ static int8_t compile_pipeline_run(const ParseInput *input,
   }
 
   if (ctx.sem_ctx->count > UINT8_MAX) {
-    compdiag_setf_once_diag(&rc, pipeline_errdetail, diag,
-                            ERR_COMP_TOOMANYLOCALS, DIAG_PHASE_SEMANT,
+    compdiag_setf_once_diag(&rc, diag, ERR_COMP_TOOMANYLOCALS, DIAG_PHASE_SEMANT,
                             "compile", "locals+params exceeds u8 max: %u",
                             ctx.sem_ctx->count);
     goto done;
   }
 
   if (emitted_param_count > UINT8_MAX) {
-    compdiag_setf_once_diag(&rc, pipeline_errdetail, diag,
-                            ERR_COMP_TOOMANYPARAMS, DIAG_PHASE_SEMANT,
+    compdiag_setf_once_diag(&rc, diag, ERR_COMP_TOOMANYPARAMS, DIAG_PHASE_SEMANT,
                             "compile", "param count exceeds u8 max: %u",
                             emitted_param_count);
     goto done;
@@ -151,7 +123,7 @@ static int8_t compile_pipeline_run(const ParseInput *input,
 
   rc = emit_bytecode_diag(ctx.ir_unit, (uint8_t)ctx.sem_ctx->count,
                           (uint8_t)emitted_param_count, ctx.bytecode_out,
-                          pipeline_errdetail, diag);
+                          diag);
   if (rc != ERR_NOERROR) goto done;
 
   *out = ctx.bytecode_out;
@@ -175,30 +147,15 @@ done:
   }
 
   free(parse_state.offending_token);
-  compdiag_reset_detail(&local_errdetail);
   compiler_context_destroy(&ctx);
   return rc;
 }
 
-int8_t compile_source_to_bytecode_with_params(const char *source, size_t len,
-                                              const char **params,
-                                              size_t param_count,
-                                              OUTPUT_t **out,
-                                              char **errdetail) {
+int8_t compile_source_to_bytecode_diag_with_params(
+    const char *source, size_t len, const char **params, size_t param_count,
+    OUTPUT_t **out, CompilerDiagnostic *diag) {
   ParseInput input = make_default_parse_input(source, len);
-  return compile_pipeline_run(&input, params, param_count, out, errdetail,
-                              NULL, 0);
-}
-
-int8_t compile_source_to_bytecode(const char *source, size_t len,
-                                  OUTPUT_t **out, char **errdetail) {
-  return compile_source_to_bytecode_with_params(source, len, NULL, 0, out,
-                                                 errdetail);
-}
-
-int8_t compile_parse_input_to_bytecode(const ParseInput *input, OUTPUT_t **out,
-                                       char **errdetail) {
-  return compile_pipeline_run(input, NULL, 0, out, errdetail, NULL, 0);
+  return compile_pipeline_run(&input, params, param_count, out, diag, 0);
 }
 
 static char *source_line(const char *source, size_t len, int line_number) {
@@ -232,19 +189,18 @@ static char *source_line(const char *source, size_t len, int line_number) {
 int8_t compile_parse_input_to_bytecode_diag(const ParseInput *input,
                                             OUTPUT_t **out,
                                             CompilerDiagnostic *out_diag) {
-  return compile_pipeline_run(input, NULL, 0, out, NULL, out_diag, 0);
+  return compile_pipeline_run(input, NULL, 0, out, out_diag, 0);
 }
 
 int8_t compile_parse_input_to_bytecode_diag_with_node_limit(
     const ParseInput *input, size_t ast_node_limit, OUTPUT_t **out,
     CompilerDiagnostic *out_diag) {
-  return compile_pipeline_run(input, NULL, 0, out, NULL, out_diag,
-                              ast_node_limit);
+  return compile_pipeline_run(input, NULL, 0, out, out_diag, ast_node_limit);
 }
 
 int8_t compile_source_to_bytecode_diag(const char *source, size_t len,
                                        OUTPUT_t **out,
                                        CompilerDiagnostic *out_diag) {
-  ParseInput input = make_default_parse_input(source, len);
-  return compile_parse_input_to_bytecode_diag(&input, out, out_diag);
+  return compile_source_to_bytecode_diag_with_params(source, len, NULL, 0,
+                                                     out, out_diag);
 }

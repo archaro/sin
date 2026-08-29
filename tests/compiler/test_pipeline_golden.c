@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "bytecode_verify.h"
+#include "compiler/compdiag.h"
 #include "error.h"
 #include "compiler/lower.h"
 #include "compiler/semant.h"
@@ -18,15 +19,16 @@ static void run_ast_case(const PipelineGoldenCase *tc) {
 
   SEM_CTX *sem = sem_create_ctx();
   ASSERT_NOT_NULL(sem);
-  char *errdetail = NULL;
-  int8_t rc = sem_check_locals(root, &errdetail, sem);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = sem_check_locals_diag(root, &diag, sem);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   IR_Unit *ir = NULL;
-  rc = lower_ast_to_ir(root, sem, &ir, &errdetail);
+  rc = lower_ast_to_ir_diag(root, sem, &ir, &diag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_NOT_NULL(ir);
 
   OUTPUT_t out = {0};
@@ -35,12 +37,12 @@ static void run_ast_case(const PipelineGoldenCase *tc) {
   out.nextbyte = out.bytecode;
   ASSERT_NOT_NULL(out.bytecode);
 
-  rc = t_emit_bytecode(ir, (uint8_t)sem->count, 0, &out, &errdetail);
+  rc = t_emit_bytecode_diag(ir, (uint8_t)sem->count, 0, &out, &diag);
   if (rc != ERR_NOERROR) {
     TEST_FAILF("pipeline case %s failed emission: %s", tc->name,
-               errdetail ? errdetail : "<no diagnostic>");
+               diag.message ? diag.message : "<no diagnostic>");
   }
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   size_t actual_len = (size_t)(out.nextbyte - out.bytecode);
   size_t expected_len = 0;
@@ -52,6 +54,7 @@ static void run_ast_case(const PipelineGoldenCase *tc) {
   ir_destroy_unit(ir);
   sem_delete_ctx(sem);
   as_delete(root);
+  compiler_diag_reset(&diag);
 }
 
 static AS_NODE *build_many_locals_with_duplicate_program(void) {
@@ -84,10 +87,11 @@ void test_pipeline_large_local_lookup_duplicate(void) {
 
   SEM_CTX *sem = sem_create_ctx();
   ASSERT_NOT_NULL(sem);
-  char *errdetail = NULL;
-  int8_t rc = sem_check_locals(root, &errdetail, sem);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = sem_check_locals_diag(root, &diag, sem);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_EQ_INT(120, (int)sem->count);
 
   uint8_t idx = 255;
@@ -97,9 +101,9 @@ void test_pipeline_large_local_lookup_duplicate(void) {
   ASSERT_EQ_INT(119, (int)idx);
 
   IR_Unit *ir = NULL;
-  rc = lower_ast_to_ir(root, sem, &ir, &errdetail);
+  rc = lower_ast_to_ir_diag(root, sem, &ir, &diag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_NOT_NULL(ir);
 
   OUTPUT_t out = {0};
@@ -108,9 +112,9 @@ void test_pipeline_large_local_lookup_duplicate(void) {
   out.nextbyte = out.bytecode;
   ASSERT_NOT_NULL(out.bytecode);
 
-  rc = t_emit_bytecode(ir, (uint8_t)sem->count, 0, &out, &errdetail);
+  rc = t_emit_bytecode_diag(ir, (uint8_t)sem->count, 0, &out, &diag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   size_t bytecode_len = (size_t)(out.nextbyte - out.bytecode);
   ASSERT_TRUE(bytecode_len >= 19);
@@ -133,4 +137,5 @@ void test_pipeline_large_local_lookup_duplicate(void) {
   ir_destroy_unit(ir);
   sem_delete_ctx(sem);
   as_delete(root);
+  compiler_diag_reset(&diag);
 }

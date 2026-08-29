@@ -21,7 +21,6 @@ typedef struct {
   IR_Unit *ir_unit;
   OUTPUT_t *bytecode_out;
 
-  char *diagnostic;
 } CompilerContext;
 
 void compiler_context_init(CompilerContext *ctx, const char *source, size_t source_len);

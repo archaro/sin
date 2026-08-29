@@ -22,7 +22,7 @@ typedef enum {
   CASE_BUILDER,
 } CASE_KIND;
 
-typedef int8_t (*builder_fn)(char **errdetail);
+typedef int8_t (*builder_fn)(CompilerDiagnostic *diag);
 
 typedef struct {
   const char *name;
@@ -35,7 +35,7 @@ typedef struct {
   uint8_t deterministic_runs;
 } NEG_CASE;
 
-static int8_t run_compile_case_too_many_params(char **errdetail) {
+static int8_t run_compile_case_too_many_params(CompilerDiagnostic *diag) {
   const size_t param_count = UINT8_MAX + 1u;
   const char **params = calloc(param_count, sizeof(char *));
   char **owned = calloc(param_count, sizeof(char *));
@@ -49,7 +49,8 @@ static int8_t run_compile_case_too_many_params(char **errdetail) {
   }
 
   OUTPUT_t *out = NULL;
-  int8_t rc = compile_source_to_bytecode_with_params("1;", 2, params, param_count, &out, errdetail);
+  int8_t rc = compile_source_to_bytecode_diag_with_params(
+      "1;", 2, params, param_count, &out, diag);
   ASSERT_TRUE(out == NULL);
   for (size_t i = 0; i < param_count; i++) free(owned[i]);
   free(owned);
@@ -57,7 +58,7 @@ static int8_t run_compile_case_too_many_params(char **errdetail) {
   return rc;
 }
 
-static int8_t run_compile_case_libcall_256_args(char **errdetail) {
+static int8_t run_compile_case_libcall_256_args(CompilerDiagnostic *diag) {
   const size_t arg_count = (size_t)UINT8_MAX + 1u;
   const size_t source_len = strlen("sys.backup{");
   const size_t suffix_len = strlen("};");
@@ -73,7 +74,7 @@ static int8_t run_compile_case_libcall_256_args(char **errdetail) {
   source[offset] = '\0';
 
   OUTPUT_t *out = NULL;
-  int8_t rc = compile_source_to_bytecode(source, offset, &out, errdetail);
+  int8_t rc = compile_source_to_bytecode_diag(source, offset, &out, diag);
   ASSERT_TRUE(out == NULL);
   free(source);
   return rc;
@@ -112,13 +113,14 @@ void test_pipeline_negative_matrix(void) {
 
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
     const NEG_CASE *tc = &cases[i];
-    char *errdetail = NULL;
     OUTPUT_t *out = NULL;
     int8_t rc = ERR_NOERROR;
 
     uint8_t runs = tc->deterministic_runs ? tc->deterministic_runs : 1;
-    char *baseline_errdetail = NULL;
+    char *baseline_message = NULL;
     for (uint8_t run = 0; run < runs; run++) {
+      CompilerDiagnostic diag;
+      compiler_diag_init(&diag);
       if (tc->source_or_builder == CASE_SOURCE || tc->source_or_builder == CASE_FIXTURE) {
         char *fixture_source = NULL;
         const char *source = tc->source;
@@ -127,7 +129,8 @@ void test_pipeline_negative_matrix(void) {
           ASSERT_NOT_NULL(fixture_source);
           source = fixture_source;
         }
-        rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+        rc = compile_source_to_bytecode_diag(source, strlen(source), &out,
+                                             &diag);
         free(fixture_source);
         if (tc->expected_code == ERR_NOERROR) {
           ASSERT_NOT_NULL(out);
@@ -135,20 +138,20 @@ void test_pipeline_negative_matrix(void) {
           ASSERT_TRUE(out == NULL);
         }
       } else {
-        rc = tc->builder(&errdetail);
+        rc = tc->builder(&diag);
       }
 
       ASSERT_EQ_INT(tc->expected_code, rc);
       if (tc->expected_code == ERR_NOERROR) {
-        ASSERT_TRUE(errdetail == NULL);
+        ASSERT_EQ_INT(DIAG_PHASE_NONE, diag.phase);
       } else {
-        ASSERT_NOT_NULL(errdetail);
-        ASSERT_TRUE(strstr(errdetail, tc->expected_substring) != NULL);
-        if (baseline_errdetail == NULL) {
-          baseline_errdetail = strdup(errdetail);
-          ASSERT_NOT_NULL(baseline_errdetail);
+        ASSERT_NOT_NULL(diag.message);
+        ASSERT_TRUE(strstr(diag.message, tc->expected_substring) != NULL);
+        if (baseline_message == NULL) {
+          baseline_message = strdup(diag.message);
+          ASSERT_NOT_NULL(baseline_message);
         } else {
-          ASSERT_TRUE(strcmp(baseline_errdetail, errdetail) == 0);
+          ASSERT_TRUE(strcmp(baseline_message, diag.message) == 0);
         }
       }
 
@@ -157,12 +160,9 @@ void test_pipeline_negative_matrix(void) {
         free(out);
         out = NULL;
       }
-      if (errdetail) {
-        free(errdetail);
-        errdetail = NULL;
-      }
+      compiler_diag_reset(&diag);
     }
-    if (baseline_errdetail) free(baseline_errdetail);
+    if (baseline_message) free(baseline_message);
 
     switch (tc->expected_stage) {
       case STAGE_PARSER:
@@ -204,7 +204,6 @@ void test_pipeline_ast_budget_subprocess(void) {
   }
   shallow[shallow_len] = '\0';
   OUTPUT_t *out = NULL;
-  char *errdetail = NULL;
   ParseInput shallow_input = {shallow, shallow_len, "node-budget.sin"};
   CompilerDiagnostic shallow_diag;
   compiler_diag_init(&shallow_diag);
@@ -246,9 +245,12 @@ void test_pipeline_ast_budget_subprocess(void) {
   unlink(shallow_outname);
   unlink(logname);
 
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   ASSERT_EQ_INT(ERR_NOERROR,
-                compile_source_to_bytecode("1;", 2, &out, &errdetail));
+                compile_source_to_bytecode_diag("1;", 2, &out, &diag));
   ASSERT_NOT_NULL(out);
   free(out->bytecode);
   free(out);
+  compiler_diag_reset(&diag);
 }

@@ -54,9 +54,10 @@ void t_bind(IR_Unit *unit, int32_t label_id) {
   (void)ir_bind_label(unit, label_id);
 }
 
-int8_t t_emit_bytecode(IR_Unit *unit, uint8_t local_count, uint8_t param_count,
-                       OUTPUT_t *out, char **errdetail) {
-  return emit_bytecode(unit, local_count, param_count, out, errdetail);
+int8_t t_emit_bytecode_diag(IR_Unit *unit, uint8_t local_count,
+                            uint8_t param_count, OUTPUT_t *out,
+                            CompilerDiagnostic *diag) {
+  return emit_bytecode_diag(unit, local_count, param_count, out, diag);
 }
 
 
@@ -163,11 +164,13 @@ void assert_file_bytes_equal(const char *expected_path, const char *actual_path,
 }
 
 void compile_source_and_assert_hex(const char *source, const char *fixture_path) {
-  char *errdetail = NULL;
   OUTPUT_t *out = NULL;
-  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = compile_source_to_bytecode_diag(source, strlen(source), &out,
+                                              &diag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(ERR_NOERROR, diag.code);
   ASSERT_NOT_NULL(out);
 
   size_t expected_len = 0;
@@ -178,6 +181,7 @@ void compile_source_and_assert_hex(const char *source, const char *fixture_path)
   free(expected);
   free(out->bytecode);
   free(out);
+  compiler_diag_reset(&diag);
 }
 
 char *test_read_text_file(const char *path) {

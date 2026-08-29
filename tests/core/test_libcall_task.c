@@ -84,11 +84,12 @@ extern CONFIG_t config;
 static ITEM_t *insert_compiled_code(ITEM_t *root, const char *name,
                                     const char *source) {
   OUTPUT_t *out = NULL;
-  char *errdetail = NULL;
-  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out,
-                                         &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = compile_source_to_bytecode_diag(source, strlen(source), &out,
+                                              &diag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(ERR_NOERROR, diag.code);
   ASSERT_NOT_NULL(out);
   size_t length = (size_t)(out->nextbyte - out->bytecode);
   ASSERT_TRUE(length <= UINT32_MAX);
@@ -97,6 +98,7 @@ static ITEM_t *insert_compiled_code(ITEM_t *root, const char *name,
   ITEM_t *item = test_item_set_code(root, name, (uint32_t)length, bytecode);
   ASSERT_NOT_NULL(item);
   free(out);
+  compiler_diag_reset(&diag);
   return item;
 }
 

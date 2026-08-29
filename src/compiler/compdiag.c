@@ -23,11 +23,7 @@ static void compiler_diag_free(char *s) {
   free(s);
 }
 
-char *compdiag_copy_detail(const char *errdetail) {
-  return errdetail ? compiler_diag_strdup(errdetail) : NULL;
-}
-
-static char *compdiag_alloc_detail(const char *phase, const char *msg) {
+static char *compdiag_format_message(const char *phase, const char *msg) {
   const char *safe_phase = phase ? phase : "comp";
   const char *safe_msg = msg ? msg : "unknown";
 
@@ -41,43 +37,23 @@ static char *compdiag_alloc_detail(const char *phase, const char *msg) {
   return buf;
 }
 
-bool compdiag_set_once(int8_t *current_errnum, char **errdetail,
-                       int8_t new_errnum, const char *phase,
-                       const char *detail) {
+bool compdiag_set_once_diag(int8_t *current_errnum, CompilerDiagnostic *diag,
+                            int8_t new_errnum, DiagPhase diag_phase,
+                            const char *phase, const char *message) {
   if (!current_errnum || *current_errnum != ERR_NOERROR) return false;
 
   *current_errnum = new_errnum;
-  if (errdetail) {
-    compdiag_reset_detail(errdetail);
-    *errdetail = compdiag_alloc_detail(phase, detail);
-  }
-  return true;
-}
-
-
-bool compdiag_set_once_diag(int8_t *current_errnum, char **errdetail,
-                            CompilerDiagnostic *diag, int8_t new_errnum,
-                            DiagPhase diag_phase, const char *phase,
-                            const char *detail) {
-  if (!current_errnum || *current_errnum != ERR_NOERROR) return false;
-
-  *current_errnum = new_errnum;
-  char *formatted = compdiag_alloc_detail(phase, detail);
-  if (errdetail) {
-    compdiag_reset_detail(errdetail);
-    *errdetail = formatted;
-  }
+  char *formatted = compdiag_format_message(phase, message);
   if (diag) {
-    compiler_diag_set(diag, new_errnum, diag_phase, formatted ? formatted : detail);
+    compiler_diag_set(diag, new_errnum, diag_phase,
+                     formatted ? formatted : message);
   }
-  if (!errdetail && formatted) {
-    compiler_diag_free(formatted);
-  }
+  compiler_diag_free(formatted);
   return true;
 }
-bool compdiag_setf_once(int8_t *current_errnum, char **errdetail,
-                        int8_t new_errnum, const char *phase,
-                        const char *fmt, ...) {
+bool compdiag_setf_once_diag(int8_t *current_errnum, CompilerDiagnostic *diag,
+                             int8_t new_errnum, DiagPhase diag_phase,
+                             const char *phase, const char *fmt, ...) {
   if (!current_errnum || *current_errnum != ERR_NOERROR) return false;
 
   va_list args;
@@ -85,64 +61,25 @@ bool compdiag_setf_once(int8_t *current_errnum, char **errdetail,
   int needed = vsnprintf(NULL, 0, fmt, args);
   va_end(args);
   if (needed < 0) {
-    return compdiag_set_once(current_errnum, errdetail, new_errnum, phase,
-                             "formatting error");
+    return compdiag_set_once_diag(current_errnum, diag, new_errnum, diag_phase,
+                                  phase, "formatting error");
   }
 
   char *msg = malloc((size_t)needed + 1);
   if (!msg) {
-    return compdiag_set_once(current_errnum, errdetail, new_errnum, phase,
-                             "out of memory");
+    return compdiag_set_once_diag(current_errnum, diag, new_errnum, diag_phase,
+                                  phase, "out of memory");
   }
 
   va_start(args, fmt);
   vsnprintf(msg, (size_t)needed + 1, fmt, args);
   va_end(args);
 
-  bool recorded = compdiag_set_once(current_errnum, errdetail, new_errnum, phase, msg);
+  bool recorded = compdiag_set_once_diag(current_errnum, diag, new_errnum,
+                                         diag_phase, phase, msg);
   compiler_diag_free(msg);
   return recorded;
 }
-
-
-bool compdiag_setf_once_diag(int8_t *current_errnum, char **errdetail,
-                             CompilerDiagnostic *diag, int8_t new_errnum,
-                             DiagPhase diag_phase, const char *phase,
-                             const char *fmt, ...) {
-  if (!current_errnum || *current_errnum != ERR_NOERROR) return false;
-
-  va_list args;
-  va_start(args, fmt);
-  int needed = vsnprintf(NULL, 0, fmt, args);
-  va_end(args);
-  if (needed < 0) {
-    return compdiag_set_once_diag(current_errnum, errdetail, diag, new_errnum,
-                                  diag_phase, phase, "formatting error");
-  }
-
-  char *msg = malloc((size_t)needed + 1);
-  if (!msg) {
-    return compdiag_set_once_diag(current_errnum, errdetail, diag, new_errnum,
-                                  diag_phase, phase, "out of memory");
-  }
-
-  va_start(args, fmt);
-  vsnprintf(msg, (size_t)needed + 1, fmt, args);
-  va_end(args);
-
-  bool recorded = compdiag_set_once_diag(current_errnum, errdetail, diag,
-                                         new_errnum, diag_phase, phase, msg);
-  compiler_diag_free(msg);
-  return recorded;
-}
-void compdiag_reset_detail(char **errdetail) {
-  if (!errdetail || !*errdetail) return;
-
-  compiler_diag_free(*errdetail);
-  *errdetail = NULL;
-}
-
-
 void compiler_diag_init(CompilerDiagnostic *d) {
   if (!d) return;
   d->code = 0;

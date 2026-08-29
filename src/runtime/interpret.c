@@ -900,7 +900,8 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   CODEITEM_INPUT_t in = {0};
   VALUE_t itemname = VALUE_NIL;
   int8_t result = ERR_COMP_UNKNOWN;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
 
   RuntimeDecodeStatus marker_status = require_bytes(
       ctx ? &ctx->decoder : NULL, nextop, 1, "OP_ASSIGNCODEITEM");
@@ -957,24 +958,30 @@ uint8_t *op_assigncodeitem(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     itemname.s = strdup(fullname);
   }
 
-  result = compile_and_insert_codeitem(itemstore_root(ctx->itemstore), &itemname, &in, &errdetail);
+  result = compile_and_insert_codeitem(itemstore_root(ctx->itemstore), &itemname,
+                                       &in, &diag);
   if (result == 0) {
     persist_codeitem_source(itemstore_root(ctx->itemstore), &itemname, &in, ctx ? ctx->srcroot : NULL);
     clear_error_item(itemstore_root(ctx->itemstore));
   } else {
-    const char *detail = errdetail && errdetail[0]
-        ? errdetail
+    const char *detail = diag.message
+        ? diag.message
         : (result >= 0 && result < MAXERRORS && errmsg[result]
             ? errmsg[result]
             : "unknown compiler error");
     logerr("Compilation failed for item '%s': %s\n",
            itemname.s, detail);
-    set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, result, detail,
-                           ctx ? ctx->current_item : NULL);
+    if (diag.phase != DIAG_PHASE_NONE) {
+      set_compiler_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL,
+                              &diag);
+    } else {
+      set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, result, detail,
+                     ctx ? ctx->current_item : NULL);
+    }
   }
 
 cleanup:
-  if (errdetail) free(errdetail);
+  compiler_diag_reset(&diag);
   if (in.source) free(in.source);
   if (in.params) {
     for (size_t pc = 0; pc < in.param_count; pc++) {

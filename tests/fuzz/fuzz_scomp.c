@@ -25,13 +25,14 @@ int LLVMFuzzerInitialize(int *argc, char ***argv) {
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   OUTPUT_t *out = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
 
   if (!data || size == 0 || size > kMaxFuzzSourceSize) {
     return 0;
   }
 
-  (void)compile_source_to_bytecode((const char *)data, size, &out, &errdetail);
+  (void)compile_source_to_bytecode_diag((const char *)data, size, &out, &diag);
 
   if (out) {
     if (out->bytecode) {
@@ -39,7 +40,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     }
     free(out);
   }
-  free(errdetail);
+  compiler_diag_reset(&diag);
 
   return 0;
 }

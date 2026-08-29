@@ -14,12 +14,13 @@
 static void assert_validate_error(IR_Unit *unit, uint32_t local_count,
                                   int8_t expected_code,
                                   const char *expected_substring) {
-  char *errdetail = NULL;
-  int8_t rc = ir_validate(unit, local_count, &errdetail);
+  CompilerDiagnostic errdiag;
+  compiler_diag_init(&errdiag);
+  int8_t rc = ir_validate_diag(unit, local_count, &errdiag);
   ASSERT_EQ_INT(expected_code, rc);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, expected_substring) != NULL);
-  free(errdetail);
+  ASSERT_NOT_NULL(errdiag.message);
+  ASSERT_TRUE(strstr(errdiag.message, expected_substring) != NULL);
+  compiler_diag_reset(&errdiag);
 }
 
 static void test_ir_validate_ok_case(void) {
@@ -35,9 +36,10 @@ static void test_ir_validate_ok_case(void) {
   t_bind(unit, done);
   t_emit(unit, (IR_Inst){.op = IR_OP_LABEL, .a = done});
 
-  char *errdetail = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, ir_validate(unit, 2, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
+  CompilerDiagnostic errdiag;
+  compiler_diag_init(&errdiag);
+  ASSERT_EQ_INT(ERR_NOERROR, ir_validate_diag(unit, 2, &errdiag));
+  ASSERT_TRUE(errdiag.message == NULL);
 
   ir_destroy_unit(unit);
 }
@@ -85,21 +87,24 @@ static void test_ir_validate_negative_arity_rejected(void) {
   ir_destroy_unit(unit);
 }
 
+static void test_ir_op_name_known_and_unknown(void) {
+  ASSERT_TRUE(strcmp("HALT", ir_op_name(IR_OP_HALT)) == 0);
+  ASSERT_TRUE(strcmp("<unknown>", ir_op_name((IR_Op)-1)) == 0);
+}
+
 static void test_ir_validate_preserves_instruction_provenance(void) {
   IR_Unit *unit = t_new_unit();
   CompilerDiagnostic diag;
-  char *errdetail = NULL;
   compiler_diag_init(&diag);
   t_emit(unit, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = 2,
                          .span = {4, 3, 1}});
 
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF,
-                ir_validate_diag(unit, 2, &errdetail, &diag));
+                ir_validate_diag(unit, 2, &diag));
   ASSERT_TRUE(diag.has_loc);
   ASSERT_EQ_INT(4, diag.line);
   ASSERT_EQ_INT(3, diag.column);
   ASSERT_EQ_INT(1, diag.span);
-  free(errdetail);
   compiler_diag_reset(&diag);
   ir_destroy_unit(unit);
 }
@@ -107,24 +112,22 @@ static void test_ir_validate_preserves_instruction_provenance(void) {
 static void test_validation_and_emission_location_lifecycle(void) {
   IR_Unit *unit = t_new_unit();
   CompilerDiagnostic diag;
-  char *errdetail = NULL;
   compiler_diag_init(&diag);
   t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 1,
                          .span = {4, 3, 1}});
 
   ASSERT_EQ_INT(ERR_NOERROR,
-                ir_validate_diag(unit, 0, &errdetail, &diag));
+                ir_validate_diag(unit, 0, &diag));
   ASSERT_TRUE(!diag.has_loc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   OUTPUT_t output = {0};
   alloc_test_fail_after(1);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX,
-                emit_bytecode_diag(unit, 0, 0, &output, &errdetail, &diag));
+                emit_bytecode_diag(unit, 0, 0, &output, &diag));
   ASSERT_EQ_INT(DIAG_PHASE_EMITBC, diag.phase);
   ASSERT_TRUE(!diag.has_loc);
   alloc_test_fail_after(-1);
-  free(errdetail);
   free(output.bytecode);
   compiler_diag_reset(&diag);
   ir_destroy_unit(unit);
@@ -133,16 +136,16 @@ static void test_validation_and_emission_location_lifecycle(void) {
   t_emit(unit, (IR_Inst){.op = IR_OP_PUSH_INT, .imm = 1,
                          .span = {9, 5, 1}});
   output = (OUTPUT_t){0};
-  errdetail = NULL;
+  compiler_diag_reset(&diag);
   alloc_test_fail_after(3);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX,
-                emit_bytecode_diag(unit, 0, 0, &output, &errdetail, &diag));
+                emit_bytecode_diag(unit, 0, 0, &output, &diag));
   ASSERT_EQ_INT(DIAG_PHASE_EMITBC, diag.phase);
   ASSERT_TRUE(diag.has_loc);
   ASSERT_EQ_INT(9, diag.line);
   ASSERT_EQ_INT(5, diag.column);
   alloc_test_fail_after(-1);
-  free(errdetail);
+  compiler_diag_reset(&diag);
   free(output.bytecode);
   compiler_diag_reset(&diag);
   ir_destroy_unit(unit);
@@ -151,17 +154,15 @@ static void test_validation_and_emission_location_lifecycle(void) {
 static void test_lower_and_emit_preserve_provenance(void) {
   AS_NODE *root = t_stmtlist_with_one(t_node(N_VALUE, NULL, NULL));
   IR_Unit *ir = NULL;
-  char *errdetail = NULL;
   CompilerDiagnostic diag;
   compiler_diag_init(&diag);
   AS_STMTLIST *list = (AS_STMTLIST *)root->lhs;
   list->stmts[0]->span = (CompilerSourceSpan){6, 2, 1};
   ASSERT_EQ_INT(ERR_COMP_SYNTAX,
-                lower_ast_to_ir_diag(root, NULL, &ir, &errdetail, &diag));
+                lower_ast_to_ir_diag(root, NULL, &ir, &diag));
   ASSERT_TRUE(diag.has_loc);
   ASSERT_EQ_INT(6, diag.line);
   ASSERT_EQ_INT(2, diag.column);
-  free(errdetail);
   compiler_diag_reset(&diag);
   as_delete(root);
 
@@ -169,13 +170,12 @@ static void test_lower_and_emit_preserve_provenance(void) {
   t_emit(ir, (IR_Inst){.op = IR_OP_STORE_LOCAL, .a = 2,
                        .span = {8, 4, 1}});
   OUTPUT_t output = {0};
-  errdetail = NULL;
+  compiler_diag_reset(&diag);
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF,
-                emit_bytecode_diag(ir, 2, 0, &output, &errdetail, &diag));
+                emit_bytecode_diag(ir, 2, 0, &output, &diag));
   ASSERT_TRUE(diag.has_loc);
   ASSERT_EQ_INT(8, diag.line);
   ASSERT_EQ_INT(4, diag.column);
-  free(errdetail);
   compiler_diag_reset(&diag);
   free(output.bytecode);
   ir_destroy_unit(ir);
@@ -193,9 +193,10 @@ static void test_lower_restores_parent_provenance_after_recursion(void) {
   list->stmts[0]->span = (CompilerSourceSpan){11, 2, 5};
 
   IR_Unit *ir = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic errdiag;
+  compiler_diag_init(&errdiag);
   ASSERT_EQ_INT(ERR_NOERROR,
-                lower_ast_to_ir(root, NULL, &ir, &errdetail));
+                lower_ast_to_ir_diag(root, NULL, &ir, &errdiag));
   ASSERT_NOT_NULL(ir);
   ASSERT_EQ_INT(IR_OP_PUSH_INT, ir->function.code[0].op);
   ASSERT_EQ_INT(11, ir->function.code[0].span.line);
@@ -204,7 +205,7 @@ static void test_lower_restores_parent_provenance_after_recursion(void) {
   ASSERT_EQ_INT(6, ir->function.code[1].span.column);
   ASSERT_EQ_INT(IR_OP_ADD, ir->function.code[2].op);
   ASSERT_EQ_INT(2, ir->function.code[2].span.column);
-  free(errdetail);
+  compiler_diag_reset(&errdiag);
   ir_destroy_unit(ir);
   as_delete(root);
 
@@ -220,39 +221,41 @@ static void test_lower_restores_parent_provenance_after_recursion(void) {
   list = (AS_STMTLIST *)root->lhs;
   list->stmts[0]->span = loop->span;
   ir = NULL;
-  errdetail = NULL;
+  compiler_diag_reset(&errdiag);
   ASSERT_EQ_INT(ERR_NOERROR,
-                lower_ast_to_ir(root, NULL, &ir, &errdetail));
+                lower_ast_to_ir_diag(root, NULL, &ir, &errdiag));
   ASSERT_NOT_NULL(ir);
   ASSERT_EQ_INT(IR_OP_JUMP_IF_FALSE, ir->function.code[2].op);
   ASSERT_EQ_INT(1, ir->function.code[2].span.column);
   ASSERT_EQ_INT(IR_OP_JUMP, ir->function.code[4].op);
   ASSERT_EQ_INT(1, ir->function.code[4].span.column);
-  free(errdetail);
+  compiler_diag_reset(&errdiag);
   ir_destroy_unit(ir);
   as_delete(root);
 }
 
 static void assert_lower_local_error(AS_NODE *root, const char *expected_name) {
   IR_Unit *ir = NULL;
-  char *errdetail = NULL;
-  int8_t rc = lower_ast_to_ir(root, NULL, &ir, &errdetail);
+  CompilerDiagnostic errdiag;
+  compiler_diag_init(&errdiag);
+  int8_t rc = lower_ast_to_ir_diag(root, NULL, &ir, &errdiag);
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
   ASSERT_TRUE(ir == NULL);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, expected_name) != NULL);
-  free(errdetail);
+  ASSERT_NOT_NULL(errdiag.message);
+  ASSERT_TRUE(strstr(errdiag.message, expected_name) != NULL);
+  compiler_diag_reset(&errdiag);
 }
 
 static void test_lower_float_value_emits_push_float(void) {
   const uint64_t bits = UINT64_C(0x7ff8000000000042);
   AS_NODE *root = t_node(N_EXPRSTMT, t_node(N_VALUE, as_new_value(V_FLOAT, bits, NULL), NULL), NULL);
   IR_Unit *ir = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic errdiag;
+  compiler_diag_init(&errdiag);
 
-  int8_t rc = lower_ast_to_ir(root, NULL, &ir, &errdetail);
+  int8_t rc = lower_ast_to_ir_diag(root, NULL, &ir, &errdiag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(errdiag.message == NULL);
   ASSERT_NOT_NULL(ir);
   ASSERT_EQ_INT(3, (int)ir->function.count);
   ASSERT_EQ_INT(IR_OP_PUSH_FLOAT, ir->function.code[0].op);
@@ -264,13 +267,36 @@ static void test_lower_float_value_emits_push_float(void) {
   as_delete(root);
 }
 
+static void test_lower_deref_payload_emits_item_deref(void) {
+  AS_NODE *payload = t_node(N_DEREF, t_int(7), NULL);
+  AS_NODE *root = t_stmtlist_with_one(
+      t_node(N_EXPRSTMT, payload, NULL));
+  IR_Unit *ir = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+
+  ASSERT_EQ_INT(ERR_NOERROR,
+                lower_ast_to_ir_diag(root, NULL, &ir, &diag));
+  ASSERT_NOT_NULL(ir);
+  ASSERT_EQ_INT(4, (int)ir->function.count);
+  ASSERT_EQ_INT(IR_OP_PUSH_INT, ir->function.code[0].op);
+  ASSERT_EQ_INT(IR_OP_ITEM_DEREF, ir->function.code[1].op);
+  ASSERT_EQ_INT(IR_OP_DISCARD, ir->function.code[2].op);
+  ASSERT_EQ_INT(IR_OP_HALT, ir->function.code[3].op);
+
+  compiler_diag_reset(&diag);
+  ir_destroy_unit(ir);
+  as_delete(root);
+}
+
 static void test_lower_nil_value_emits_push_nil(void) {
   AS_NODE *root = t_node(N_RETURN,
                          t_node(N_VALUE, as_new_value(V_NIL, 0, NULL), NULL), NULL);
   IR_Unit *ir = NULL;
-  char *errdetail = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, lower_ast_to_ir(root, NULL, &ir, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
+  CompilerDiagnostic errdiag;
+  compiler_diag_init(&errdiag);
+  ASSERT_EQ_INT(ERR_NOERROR, lower_ast_to_ir_diag(root, NULL, &ir, &errdiag));
+  ASSERT_TRUE(errdiag.message == NULL);
   ASSERT_NOT_NULL(ir);
   ASSERT_EQ_INT(3, (int)ir->function.count);
   ASSERT_EQ_INT(IR_OP_PUSH_NIL, ir->function.code[0].op);
@@ -278,7 +304,7 @@ static void test_lower_nil_value_emits_push_nil(void) {
   ASSERT_EQ_INT(IR_OP_HALT, ir->function.code[2].op);
   ir_destroy_unit(ir);
   as_delete(root);
-  free(errdetail);
+  compiler_diag_reset(&errdiag);
 }
 
 static void test_lower_returns_and_discards_expression_statements(void) {
@@ -287,10 +313,11 @@ static void test_lower_returns_and_discards_expression_statements(void) {
   root = as_stmtlist_append(root, t_node(N_RETURN, t_int(2), NULL));
   root = as_stmtlist_append(root, t_node(N_RETURN, NULL, NULL));
   IR_Unit *ir = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic errdiag;
+  compiler_diag_init(&errdiag);
 
-  ASSERT_EQ_INT(ERR_NOERROR, lower_ast_to_ir(root, NULL, &ir, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(ERR_NOERROR, lower_ast_to_ir_diag(root, NULL, &ir, &errdiag));
+  ASSERT_TRUE(errdiag.message == NULL);
   ASSERT_NOT_NULL(ir);
   ASSERT_EQ_INT(6, (int)ir->function.count);
   ASSERT_EQ_INT(IR_OP_PUSH_INT, ir->function.code[0].op);
@@ -328,14 +355,15 @@ static void test_lower_control_flow_outside_loop_rejected(void) {
   for (int nodetype = N_BREAK; nodetype <= N_CONTINUE; nodetype++) {
     AS_NODE *root = t_stmtlist_with_one(t_node((ENUM_NODE)nodetype, NULL, NULL));
     IR_Unit *ir = NULL;
-    char *errdetail = NULL;
+    CompilerDiagnostic errdiag;
+    compiler_diag_init(&errdiag);
     ASSERT_EQ_INT(ERR_COMP_SYNTAX,
-                  lower_ast_to_ir(root, NULL, &ir, &errdetail));
+                  lower_ast_to_ir_diag(root, NULL, &ir, &errdiag));
     ASSERT_TRUE(ir == NULL);
-    ASSERT_NOT_NULL(errdetail);
-    ASSERT_TRUE(strstr(errdetail, nodetype == N_BREAK ? "BREAK outside loop"
+    ASSERT_NOT_NULL(errdiag.message);
+    ASSERT_TRUE(strstr(errdiag.message, nodetype == N_BREAK ? "BREAK outside loop"
                                                        : "CONTINUE outside loop") != NULL);
-    free(errdetail);
+    compiler_diag_reset(&errdiag);
     as_delete(root);
   }
 }
@@ -346,8 +374,9 @@ static void test_lower_short_circuit_uses_balanced_control_flow(void) {
     AS_NODE *expr = t_node((ENUM_NODE)nodes[n], t_int(0), t_int(1));
     AS_NODE *root = t_stmtlist_with_one(t_node(N_RETURN, expr, NULL));
     IR_Unit *ir = NULL;
-    char *errdetail = NULL;
-    ASSERT_EQ_INT(ERR_NOERROR, lower_ast_to_ir(root, NULL, &ir, &errdetail));
+    CompilerDiagnostic errdiag;
+    compiler_diag_init(&errdiag);
+    ASSERT_EQ_INT(ERR_NOERROR, lower_ast_to_ir_diag(root, NULL, &ir, &errdiag));
     ASSERT_NOT_NULL(ir);
     size_t jumps = 0;
     size_t labels = 0;
@@ -362,7 +391,7 @@ static void test_lower_short_circuit_uses_balanced_control_flow(void) {
     ASSERT_EQ_INT(nodes[n] == N_OR ? 4 : 3, (int)jumps);
     ASSERT_EQ_INT(nodes[n] == N_OR ? 3 : 2, (int)labels);
     ASSERT_EQ_INT(nodes[n] == N_OR ? 3 : 2, (int)bools);
-    free(errdetail);
+    compiler_diag_reset(&errdiag);
     ir_destroy_unit(ir);
     as_delete(root);
   }
@@ -396,11 +425,13 @@ void test_ir_validate(void) {
   test_ir_validate_invalid_label_ids_rejected();
   test_ir_validate_local_index_out_of_range_rejected();
   test_ir_validate_negative_arity_rejected();
+  test_ir_op_name_known_and_unknown();
   test_ir_validate_preserves_instruction_provenance();
   test_validation_and_emission_location_lifecycle();
   test_lower_and_emit_preserve_provenance();
   test_lower_restores_parent_provenance_after_recursion();
   test_lower_float_value_emits_push_float();
+  test_lower_deref_payload_emits_item_deref();
   test_lower_nil_value_emits_push_nil();
   test_lower_returns_and_discards_expression_statements();
   test_lower_local_resolution_errors_consistent();

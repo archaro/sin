@@ -277,10 +277,13 @@ static ITEM_t *compile_result_semantics_item_named(const char *label,
                                                    const char *source,
                                                    const char *requested_name) {
   OUTPUT_t *out = NULL;
-  char *errdetail = NULL;
-  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = compile_source_to_bytecode_diag(source, strlen(source), &out,
+                                              &diag);
   if (rc != ERR_NOERROR) {
-    fprintf(stderr, "[%s] compile failed: %s\n", label, errdetail ? errdetail : "<no detail>");
+    fprintf(stderr, "[%s] compile failed: %s\n", label,
+            diag.message ? diag.message : "<no detail>");
   }
   ASSERT_EQ_INT(ERR_NOERROR, rc);
   ASSERT_NOT_NULL(out);
@@ -303,7 +306,7 @@ static ITEM_t *compile_result_semantics_item_named(const char *label,
   ASSERT_NOT_NULL(item);
 
   free(out);
-  free(errdetail);
+  compiler_diag_reset(&diag);
   return item;
 }
 
@@ -1149,10 +1152,11 @@ void test_interpret_embedded_code_boundary_lengths(void) {
     output.bytecode = malloc(output.maxsize);
     output.nextbyte = output.bytecode;
     ASSERT_NOT_NULL(output.bytecode);
-    char *errdetail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
     ASSERT_EQ_INT(ERR_NOERROR,
-                  t_emit_bytecode(unit, 0, 0, &output, &errdetail));
-    ASSERT_TRUE(errdetail == NULL);
+                  t_emit_bytecode_diag(unit, 0, 0, &output, &diag));
+    ASSERT_TRUE(diag.message == NULL);
     size_t output_len = (size_t)(output.nextbyte - output.bytecode);
     ASSERT_TRUE(output_len <= UINT32_MAX);
 
@@ -1161,6 +1165,7 @@ void test_interpret_embedded_code_boundary_lengths(void) {
         output.bytecode);
     ASSERT_NOT_NULL(outer);
     output.bytecode = NULL;
+    compiler_diag_reset(&diag);
 
     RuntimeContext assign_ctx;
     runtime_context_init(&assign_ctx, config.vm);
@@ -1185,7 +1190,6 @@ void test_interpret_embedded_code_boundary_lengths(void) {
 
     ir_destroy_unit(unit);
     free(source);
-    free(errdetail);
   }
 
   teardown_result_semantics_runtime();
@@ -1375,10 +1379,11 @@ static ITEM_t *build_direct_runtime_opcode_witness(
   output.bytecode = malloc(output.maxsize);
   output.nextbyte = output.bytecode;
   ASSERT_NOT_NULL(output.bytecode);
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   ASSERT_EQ_INT(ERR_NOERROR,
-                t_emit_bytecode(unit, 0, 0, &output, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
+                t_emit_bytecode_diag(unit, 0, 0, &output, &diag));
+  ASSERT_TRUE(diag.message == NULL);
   size_t output_len = (size_t)(output.nextbyte - output.bytecode);
   ASSERT_TRUE(output_len <= UINT32_MAX);
   ITEM_t *item = test_item_set_code(itemstore_root(config.itemstore_ctx),
@@ -1386,7 +1391,7 @@ static ITEM_t *build_direct_runtime_opcode_witness(
                                     output.bytecode);
   ASSERT_NOT_NULL(item);
   output.bytecode = NULL;
-  free(errdetail);
+  compiler_diag_reset(&diag);
   ir_destroy_unit(unit);
   free(output.bytecode);
   return item;

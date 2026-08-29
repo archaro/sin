@@ -522,15 +522,16 @@ void test_bytecode_verify_compiler_emitted_bytecode(void) {
   };
   for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
     OUTPUT_t *out = NULL;
-    char *errdetail = NULL;
-    int8_t rc = compile_source_to_bytecode(sources[i], strlen(sources[i]), &out,
-                                           &errdetail);
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    int8_t rc = compile_source_to_bytecode_diag(sources[i], strlen(sources[i]),
+                                                &out, &diag);
     ASSERT_EQ_INT(ERR_NOERROR, rc);
     ASSERT_NOT_NULL(out);
     BC_VerifyResult result = bc_verify_bytecode(
         out->bytecode, (uint32_t)(out->nextbyte - out->bytecode), sources[i], NULL);
     ASSERT_EQ_INT(BC_VERIFY_OK, result.status);
-    free(errdetail);
+    compiler_diag_reset(&diag);
     free(out->bytecode);
     free(out);
   }

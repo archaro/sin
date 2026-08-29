@@ -36,19 +36,17 @@ typedef struct {
   uint32_t loop_depth;
   uint32_t foreach_depth;
   int8_t errnum;
-  char *errdetail;
+  CompilerDiagnostic diagnostic;
   CompilerSourceSpan error_span;
 } SEM_CTX;
 
 SEM_CTX *sem_create_ctx(void);
 void sem_delete_ctx(SEM_CTX *ctx);
 
-// Reusable per context:
-// - preserves discovered locals in ctx
-// - resets ctx error state on each call
-// - if errdetail is non-NULL, returns an owned heap copy (caller frees)
-int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic *diag, SEM_CTX *ctx);
-int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx);
+// Reusable per context: preserves discovered locals in ctx and resets
+// diagnostic state on each call.
+int8_t sem_check_locals_diag(AS_NODE *root, CompilerDiagnostic *diag,
+                             SEM_CTX *ctx);
 bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out);
 int8_t sem_seed_params(SEM_CTX *ctx, const char **params, size_t count);
 

@@ -130,11 +130,14 @@ bool decode_assigncode_source(RuntimeContext *ctx, uint8_t **opcodep, CODEITEM_I
   return true;
 }
 
-int8_t compile_and_insert_codeitem(ITEM_t *itemroot, const VALUE_t *itemname, const CODEITEM_INPUT_t *in, char **errdetail) {
+int8_t compile_and_insert_codeitem(ITEM_t *itemroot, const VALUE_t *itemname,
+                                   const CODEITEM_INPUT_t *in,
+                                   CompilerDiagnostic *diag) {
   ITEM_t *testitem = find_item(itemroot, itemname->s);
   if (testitem && item_is_in_use(testitem)) return ERR_COMP_INUSE;
   OUTPUT_t *out = NULL;
-  int8_t rc = compile_source_to_bytecode_with_params(in->source, in->source_len, in->params, in->param_count, &out, errdetail);
+  int8_t rc = compile_source_to_bytecode_diag_with_params(
+      in->source, in->source_len, in->params, in->param_count, &out, diag);
   if (rc == 0 && out) {
     ptrdiff_t raw_len = out->nextbyte - out->bytecode;
     if (raw_len < 0 || (uint64_t)raw_len > UINT32_MAX) {

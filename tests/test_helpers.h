@@ -62,8 +62,9 @@ IR_Unit *t_new_unit(void);
 void t_emit(IR_Unit *unit, IR_Inst inst);
 void t_bind(IR_Unit *unit, int32_t label_id);
 
-int8_t t_emit_bytecode(IR_Unit *unit, uint8_t local_count, uint8_t param_count,
-                       OUTPUT_t *out, char **errdetail);
+int8_t t_emit_bytecode_diag(IR_Unit *unit, uint8_t local_count,
+                             uint8_t param_count, OUTPUT_t *out,
+                             CompilerDiagnostic *diag);
 
 uint8_t hex_nibble(char c);
 uint8_t *load_hex_fixture(const char *path, size_t *out_len);

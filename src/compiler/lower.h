@@ -15,7 +15,7 @@ typedef struct {
   SEM_CTX *sem;
   IR_Unit *ir;
   int8_t errnum;
-  char *errdetail;
+  CompilerDiagnostic diagnostic;
   int32_t break_label;
   int32_t continue_label;
   uint32_t foreach_depth;
@@ -23,5 +23,5 @@ typedef struct {
   CompilerSourceSpan current_span;
 } LOWER_CTX;
 
-int8_t lower_ast_to_ir_diag(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **errdetail, CompilerDiagnostic *diag);
-int8_t lower_ast_to_ir(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir, char **errdetail);
+int8_t lower_ast_to_ir_diag(AS_NODE *root, SEM_CTX *sem, IR_Unit **out_ir,
+                            CompilerDiagnostic *diag);

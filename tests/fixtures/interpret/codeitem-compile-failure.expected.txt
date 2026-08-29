@@ -3,8 +3,7 @@ Using 'srcroot' as the source root.
 ===stderr===
 Compilation failed for item 'broken': <memory>: syntax error
 Bootstrap execution left an error:
-Syntax error. (<memory>: syntax error)
+SIN-PARSE-0001 stage=PARSE file=<memory> line=1 column=64 message=<memory>: syntax error excerpt=   sys.log{"This body is intentionally missing its semicolon."}
 
 ===exit===
 1
-

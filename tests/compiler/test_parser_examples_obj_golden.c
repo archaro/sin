@@ -50,11 +50,12 @@ static void run_case(const ParserObjGoldenCase *tc) {
   size_t src_len = 0;
   char *source = load_file_text(tc->src_path, &src_len);
 
-  char *errdetail = NULL;
   OUTPUT_t *out = NULL;
-  int8_t rc = compile_source_to_bytecode(source, src_len, &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = compile_source_to_bytecode_diag(source, src_len, &out, &diag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(ERR_NOERROR, diag.code);
   ASSERT_NOT_NULL(out);
 
   write_output_file(tc->out_path, out);
@@ -71,6 +72,7 @@ static void run_case(const ParserObjGoldenCase *tc) {
   free(source);
   free(out->bytecode);
   free(out);
+  compiler_diag_reset(&diag);
   remove(tc->reference_obj_out_path);
   remove(tc->out_path);
 }

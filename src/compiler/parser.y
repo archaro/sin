@@ -27,7 +27,7 @@
 
   typedef struct {
     int8_t errnum;
-    char *errdetail;
+    char *error_message;
     AS_NODE *absyn;
     const char *source_name;
     int line;
@@ -43,13 +43,13 @@
     uint64_t ast_node_limit;
   } SCANNER_STATE_t;
 
-  int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail);
-  int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, SCANNER_STATE_t *out_state);
+  int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn,
+                           CompilerDiagnostic *diag,
+                           SCANNER_STATE_t *out_state);
   int8_t parse_source_diag_with_node_limit(const ParseInput *input, AS_NODE **absyn,
-                                           char **errdetail,
+                                           CompilerDiagnostic *diag,
                                            SCANNER_STATE_t *out_state,
                                            size_t ast_node_limit);
-  int8_t parse_source_compiler_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, CompilerDiagnostic *diag, SCANNER_STATE_t *out_state);
 }
 
 %{
@@ -93,8 +93,8 @@ static void parser_set_failure(SCANNER_STATE_t *state, const char *detail) {
   size_t len = strlen(message);
   size_t size = 0;
   if (!alloc_add_overflow(len, 1, &size)) {
-    state->errdetail = malloc(size);
-    if (state->errdetail) memcpy(state->errdetail, message, size);
+    state->error_message = malloc(size);
+    if (state->error_message) memcpy(state->error_message, message, size);
   }
 }
 
@@ -384,21 +384,21 @@ void yyerror(YYLTYPE *locp, yyscan_t scanner, SCANNER_STATE_t *state, char const
     // This might have been set already so don't clobber it if it has
     state->errnum = ERR_COMP_SYNTAX;
   }
-  if (state->errdetail == NULL) {
+  if (state->error_message == NULL) {
     if (state->source_name) {
       size_t n = strlen(state->source_name) + strlen(s) + 3;
-      state->errdetail = malloc(n);
-      if (state->errdetail) {
-        snprintf(state->errdetail, n, "%s: %s", state->source_name, s);
+      state->error_message = malloc(n);
+      if (state->error_message) {
+        snprintf(state->error_message, n, "%s: %s", state->source_name, s);
       }
     } else {
-      state->errdetail = parser_strdup(s);
+      state->error_message = parser_strdup(s);
     }
   }
 }
 
 int8_t parse_source_diag_with_node_limit(const ParseInput *input,
-                                         AS_NODE **absyn, char **errdetail,
+                                         AS_NODE **absyn, CompilerDiagnostic *diag,
                                          SCANNER_STATE_t *out_state,
                                          size_t ast_node_limit) {
   // Compile the given string.
@@ -408,34 +408,60 @@ int8_t parse_source_diag_with_node_limit(const ParseInput *input,
   // Wrap all these bits of state up into a nice package
   // for ease of transport
   if (absyn) *absyn = NULL;
-  if (errdetail) *errdetail = NULL;
+  if (diag) compiler_diag_reset(diag);
   if (out_state) {
     memset(out_state, 0, sizeof *out_state);
     out_state->line = 1;
     out_state->column = 1;
     out_state->span = 1;
   }
-  if (!input || !input->data || !absyn || !errdetail) {
+  if (!input || !input->data || !absyn) {
     if (out_state) {
       out_state->errnum = ERR_COMP_SYNTAX;
       out_state->line = 1;
       out_state->column = 1;
       out_state->span = 1;
     }
+    if (diag) {
+      compiler_diag_set(diag, ERR_COMP_SYNTAX, DIAG_PHASE_PARSE,
+                        "parser: invalid input");
+      compiler_diag_set_source_name(
+          diag, input && input->source_name ? input->source_name : "<memory>");
+      compiler_diag_set_location(diag, 1, 1, 1);
+    }
     return ERR_COMP_SYNTAX;
   }
   if (input->len > (size_t)INT_MAX) {
     if (out_state) out_state->errnum = ERR_COMP_SYNTAX;
+    if (diag) {
+      compiler_diag_set(diag, ERR_COMP_SYNTAX, DIAG_PHASE_PARSE,
+                        "parser: source is too large");
+      compiler_diag_set_source_name(diag, input->source_name);
+      compiler_diag_set_location(diag, 1, 1, 1);
+    }
     return ERR_COMP_SYNTAX;
   }
   if (memchr(input->data, '\0', input->len) != NULL) {
     if (out_state) out_state->errnum = ERR_COMP_SYNTAX;
-    *errdetail = parser_strdup("parser: NUL byte in source is not allowed");
+    if (diag) {
+      compiler_diag_set(diag, ERR_COMP_SYNTAX, DIAG_PHASE_PARSE,
+                        "parser: NUL byte in source is not allowed");
+      compiler_diag_set_source_name(diag, input->source_name);
+      compiler_diag_set_location(diag, 1, 1, 1);
+    }
     return ERR_COMP_SYNTAX;
   }
 
   SCANNER_STATE_t *scanner_state = alloc_calloc(1, sizeof *scanner_state);
-  if (!scanner_state) return ERR_COMP_SYNTAX;
+  if (!scanner_state) {
+    if (diag) {
+      compiler_diag_set(diag, ERR_COMP_SYNTAX, DIAG_PHASE_PARSE,
+                        "parser: scanner allocation failed");
+      compiler_diag_set_source_name(diag, input->source_name);
+      compiler_diag_set_location(diag, 1, 1, 1);
+    }
+    return ERR_COMP_SYNTAX;
+  }
   scanner_state->line = 1;
   scanner_state->column = 1;
   scanner_state->span = 1;
@@ -485,10 +511,18 @@ int8_t parse_source_diag_with_node_limit(const ParseInput *input,
       parser_set_failure(scanner_state, "parser: parsing failed");
     }
   }
-  *errdetail = scanner_state->errdetail;
-  scanner_state->errdetail = NULL;
-
   int8_t result = scanner_state->errnum;
+  if (result != ERR_NOERROR && diag) {
+    compiler_diag_set(diag, result, DIAG_PHASE_PARSE,
+                      scanner_state->error_message
+                          ? scanner_state->error_message
+                          : "parser: parsing failed");
+    compiler_diag_set_source_name(diag, input->source_name);
+    compiler_diag_set_location(diag, scanner_state->line,
+                               scanner_state->column, scanner_state->span);
+  }
+  free(scanner_state->error_message);
+  scanner_state->error_message = NULL;
   if (out_state) *out_state = *scanner_state;
   else free(scanner_state->offending_token);
   free(scanner_state);
@@ -496,30 +530,9 @@ int8_t parse_source_diag_with_node_limit(const ParseInput *input,
 }
 
 int8_t parse_source_diag(const ParseInput *input, AS_NODE **absyn,
-                         char **errdetail, SCANNER_STATE_t *out_state) {
-  return parse_source_diag_with_node_limit(input, absyn, errdetail, out_state,
+                         CompilerDiagnostic *diag, SCANNER_STATE_t *out_state) {
+  return parse_source_diag_with_node_limit(input, absyn, diag, out_state,
                                            0);
-}
-
-int8_t parse_source_compiler_diag(const ParseInput *input, AS_NODE **absyn, char **errdetail, CompilerDiagnostic *diag, SCANNER_STATE_t *out_state) {
-  SCANNER_STATE_t state = {0};
-  if (diag) compiler_diag_reset(diag);
-  int8_t rc = parse_source_diag(input, absyn, errdetail, &state);
-  if (rc != ERR_NOERROR && diag) {
-    compiler_diag_set(diag, rc, DIAG_PHASE_PARSE, errdetail && *errdetail ? *errdetail : "");
-    compiler_diag_set_source_name(diag, input && input->source_name ? input->source_name : "<memory>");
-    compiler_diag_set_location(diag, state.line, state.column, state.span);
-  }
-  if (out_state) *out_state = state;
-  else free(state.offending_token);
-  return rc;
-}
-
-int8_t parse_source(const ParseInput *input, AS_NODE **absyn, char **errdetail) {
-  SCANNER_STATE_t state = {0};
-  int8_t rc = parse_source_diag(input, absyn, errdetail, &state);
-  free(state.offending_token);
-  return rc;
 }
 
 %}
@@ -680,7 +693,7 @@ expr:     TLOCAL { $$ = parser_new_value_loc(state, V_LOCAL, $1, parser_span_fro
         | libcall { $$ = $1; }
         | TUNKNOWNCHAR { $$ = NULL;
                          state->errnum = ERR_COMP_UNKNOWNCHAR;
-                         state->errdetail = $1;
+                         state->error_message = $1;
                          state->line = @1.first_line;
                          state->column = @1.first_column;
                          state->span = @1.last_column >= @1.first_column ? @1.last_column - @1.first_column + 1 : 1;
@@ -759,7 +772,7 @@ item_assignment: expr { $$ = $1; }
           as_delete($2);
           $$ = NULL;
           state->errnum = ERR_COMP_UNKNOWNCHAR;
-          state->errdetail = $3;
+          state->error_message = $3;
           state->line = @3.first_line;
           state->column = @3.first_column;
           state->span = @3.last_column >= @3.first_column

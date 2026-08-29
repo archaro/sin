@@ -31,31 +31,21 @@ typedef struct {
   bool has_loc;
 } CompilerDiagnostic;
 
-bool compdiag_set_once(int8_t *current_errnum, char **errdetail,
-                       int8_t new_errnum, const char *phase,
-                       const char *detail);
-bool compdiag_set_once_diag(int8_t *current_errnum, char **errdetail,
-                            CompilerDiagnostic *diag, int8_t new_errnum,
-                            DiagPhase diag_phase, const char *phase,
-                            const char *detail);
+bool compdiag_set_once_diag(int8_t *current_errnum, CompilerDiagnostic *diag,
+                            int8_t new_errnum, DiagPhase diag_phase,
+                            const char *phase, const char *message);
 #if defined(__GNUC__) || defined(__clang__)
 #define SIN_COMPD_PRINTF_FORMAT(format_index, argument_index) \
   __attribute__((format(printf, format_index, argument_index)))
 #else
 #define SIN_COMPD_PRINTF_FORMAT(format_index, argument_index)
 #endif
-bool compdiag_setf_once(int8_t *current_errnum, char **errdetail,
-                        int8_t new_errnum, const char *phase,
-                        const char *fmt, ...)
-    SIN_COMPD_PRINTF_FORMAT(5, 6);
-bool compdiag_setf_once_diag(int8_t *current_errnum, char **errdetail,
+bool compdiag_setf_once_diag(int8_t *current_errnum,
                              CompilerDiagnostic *diag, int8_t new_errnum,
                              DiagPhase diag_phase, const char *phase,
                              const char *fmt, ...)
-    SIN_COMPD_PRINTF_FORMAT(7, 8);
+    SIN_COMPD_PRINTF_FORMAT(6, 7);
 #undef SIN_COMPD_PRINTF_FORMAT
-char *compdiag_copy_detail(const char *errdetail);
-void compdiag_reset_detail(char **errdetail);
 
 void compiler_diag_init(CompilerDiagnostic *d);
 void compiler_diag_reset(CompilerDiagnostic *d);

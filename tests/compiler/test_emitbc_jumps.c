@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "error.h"
+#include "compiler/compdiag.h"
 #include "compiler/ir.h"
 #include "test_assert.h"
 #include "test_helpers.h"
@@ -35,10 +36,11 @@ static void test_emitbc_jump_forward_offsets(void) {
   t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
 
   OUTPUT_t out = t_out();
-  char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, 0, 0, &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = t_emit_bytecode_diag(unit, 0, 0, &out, &diag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   ASSERT_EQ_INT('j', out.bytecode[8]);
   ASSERT_EQ_INT(0x0B, out.bytecode[9]);
@@ -49,6 +51,7 @@ static void test_emitbc_jump_forward_offsets(void) {
   ASSERT_EQ_INT(0x00, out.bytecode[24]);
 
   free(out.bytecode);
+  compiler_diag_reset(&diag);
   ir_destroy_unit(unit);
 }
 
@@ -64,48 +67,49 @@ static void test_emitbc_jump_backward_offset_negative(void) {
   t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
 
   OUTPUT_t out = t_out();
-  char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, 0, 0, &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = t_emit_bytecode_diag(unit, 0, 0, &out, &diag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   ASSERT_EQ_INT('k', out.bytecode[17]);
   ASSERT_EQ_INT(0xF6, out.bytecode[18]);
   ASSERT_EQ_INT(0xFF, out.bytecode[19]);
 
   free(out.bytecode);
+  compiler_diag_reset(&diag);
   ir_destroy_unit(unit);
 }
 
 static void test_emitbc_jump_label_errors(void) {
   IR_Unit *unit = t_new_unit();
   OUTPUT_t out = t_out();
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
 
   t_emit(unit, (IR_Inst){.op = IR_OP_JUMP, .a = -1});
-  ASSERT_TRUE(t_emit_bytecode(unit, 0, 0, &out, &errdetail) != ERR_NOERROR);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "jump invalid label id") != NULL);
-  free(errdetail);
-  errdetail = NULL;
+  ASSERT_TRUE(t_emit_bytecode_diag(unit, 0, 0, &out, &diag) != ERR_NOERROR);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, "jump invalid label id") != NULL);
+  compiler_diag_reset(&diag);
   ir_destroy_unit(unit);
 
   unit = t_new_unit();
   t_emit(unit, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = 999});
-  ASSERT_TRUE(t_emit_bytecode(unit, 0, 0, &out, &errdetail) != ERR_NOERROR);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "jump invalid label id") != NULL);
-  free(errdetail);
-  errdetail = NULL;
+  ASSERT_TRUE(t_emit_bytecode_diag(unit, 0, 0, &out, &diag) != ERR_NOERROR);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, "jump invalid label id") != NULL);
+  compiler_diag_reset(&diag);
   ir_destroy_unit(unit);
 
   unit = t_new_unit();
   int32_t unbound = ir_new_label(unit);
   t_emit(unit, (IR_Inst){.op = IR_OP_JUMP, .a = unbound});
-  ASSERT_TRUE(t_emit_bytecode(unit, 0, 0, &out, &errdetail) != ERR_NOERROR);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "jump unbound label") != NULL);
-  free(errdetail);
+  ASSERT_TRUE(t_emit_bytecode_diag(unit, 0, 0, &out, &diag) != ERR_NOERROR);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, "jump unbound label") != NULL);
+  compiler_diag_reset(&diag);
 
   free(out.bytecode);
   ir_destroy_unit(unit);
@@ -125,11 +129,12 @@ static void test_emitbc_jump_offset_out_of_range(void) {
   t_emit(unit, (IR_Inst){.op = IR_OP_LABEL, .a = far});
 
   OUTPUT_t out = t_out();
-  char *errdetail = NULL;
-  ASSERT_TRUE(t_emit_bytecode(unit, 0, 0, &out, &errdetail) != ERR_NOERROR);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "jump offset out of range") != NULL);
-  free(errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  ASSERT_TRUE(t_emit_bytecode_diag(unit, 0, 0, &out, &diag) != ERR_NOERROR);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, "jump offset out of range") != NULL);
+  compiler_diag_reset(&diag);
   free(out.bytecode);
   ir_destroy_unit(unit);
 
@@ -144,12 +149,12 @@ static void test_emitbc_jump_offset_out_of_range(void) {
   t_emit(unit, (IR_Inst){.op = IR_OP_JUMP_IF_FALSE, .a = start});
 
   out = t_out();
-  errdetail = NULL;
-  ASSERT_TRUE(t_emit_bytecode(unit, 0, 0, &out, &errdetail) != ERR_NOERROR);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "jump offset out of range") != NULL);
+  compiler_diag_reset(&diag);
+  ASSERT_TRUE(t_emit_bytecode_diag(unit, 0, 0, &out, &diag) != ERR_NOERROR);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, "jump offset out of range") != NULL);
 
-  free(errdetail);
+  compiler_diag_reset(&diag);
   free(out.bytecode);
   ir_destroy_unit(unit);
 }

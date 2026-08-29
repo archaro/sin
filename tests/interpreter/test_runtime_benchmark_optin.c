@@ -80,12 +80,13 @@ static ITEM_t *bench_compile_item(ITEMSTORE_t *store, const char *name,
                                   const char *source, const char **params,
                                   size_t param_count) {
   OUTPUT_t *output = NULL;
-  char *errdetail = NULL;
-  int8_t rc = compile_source_to_bytecode_with_params(
-      source, strlen(source), params, param_count, &output, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = compile_source_to_bytecode_diag_with_params(
+      source, strlen(source), params, param_count, &output, &diag);
   if (rc != ERR_NOERROR) {
     fprintf(stderr, "[benchmark compile] %s: %s\n", name,
-            errdetail == NULL ? "<no detail>" : errdetail);
+            diag.message == NULL ? "<no detail>" : diag.message);
   }
   ASSERT_EQ_INT(ERR_NOERROR, rc);
   ASSERT_NOT_NULL(output);
@@ -97,7 +98,7 @@ static ITEM_t *bench_compile_item(ITEMSTORE_t *store, const char *name,
   ITEM_t *item = item_set_code(itemstore_root(store), name,
                                (uint32_t)length, bytecode).item;
   free(output);
-  free(errdetail);
+  compiler_diag_reset(&diag);
   ASSERT_NOT_NULL(item);
   return item;
 }

@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "error.h"
+#include "compiler/compdiag.h"
 #include "compiler/ir.h"
 #include "test_assert.h"
 #include "test_helpers.h"
@@ -17,18 +18,19 @@ static void assert_emission_failure(IR_Unit *unit, uint8_t local_count,
   out.nextbyte = out.bytecode;
   ASSERT_NOT_NULL(out.bytecode);
 
-  char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, local_count, param_count, &out,
-                              &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = t_emit_bytecode_diag(unit, local_count, param_count, &out,
+                                   &diag);
   if (rc == ERR_NOERROR) {
     TEST_FAILF("expected emission failure containing: %s", expected_detail);
   }
   ASSERT_EQ_INT(expected_code, rc);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, expected_origin) != NULL);
-  ASSERT_TRUE(strstr(errdetail, expected_detail) != NULL);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, expected_origin) != NULL);
+  ASSERT_TRUE(strstr(diag.message, expected_detail) != NULL);
 
-  free(errdetail);
+  compiler_diag_reset(&diag);
   free(out.bytecode);
   ir_destroy_unit(unit);
 }

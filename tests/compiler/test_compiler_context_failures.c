@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "compiler/compiler_context.h"
+#include "compiler/compdiag.h"
 #include "error.h"
 #include "compiler/ir.h"
 #include "compiler/lower.h"
@@ -16,23 +17,25 @@ enum { LOWER_ALLOC_FAILURE_TRIAL_LIMIT = 256 };
 
 static void test_context_parse_failure_cleanup(void) {
   CompilerContext ctx;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   compiler_context_init(&ctx, "^;", 2);
   ASSERT_EQ_INT(0, compiler_context_prepare_bytecode_output(&ctx, 64));
   ctx.sem_ctx = sem_create_ctx();
 
   ParseInput input = {ctx.source, ctx.source_len, "<test>"};
-  int8_t rc = parse_source(&input, &ctx.ast_root, &errdetail);
+  int8_t rc = parse_source_diag(&input, &ctx.ast_root, &diag, NULL);
   ASSERT_TRUE(rc != ERR_NOERROR);
-  ASSERT_NOT_NULL(errdetail);
+  ASSERT_NOT_NULL(diag.message);
 
-  free(errdetail);
+  compiler_diag_reset(&diag);
   compiler_context_destroy(&ctx);
 }
 
 static void test_context_semant_failure_cleanup(void) {
   CompilerContext ctx;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   const char *src = "@x;";
   compiler_context_init(&ctx, src, strlen(src));
   ASSERT_EQ_INT(0, compiler_context_prepare_bytecode_output(&ctx, 64));
@@ -40,18 +43,19 @@ static void test_context_semant_failure_cleanup(void) {
   ParseInput input = {ctx.source, ctx.source_len, "<test>"};
 
   ASSERT_EQ_INT(ERR_NOERROR,
-                parse_source(&input, &ctx.ast_root, &errdetail));
-  int8_t rc = sem_check_locals(ctx.ast_root, &errdetail, ctx.sem_ctx);
+                parse_source_diag(&input, &ctx.ast_root, &diag, NULL));
+  int8_t rc = sem_check_locals_diag(ctx.ast_root, &diag, ctx.sem_ctx);
   ASSERT_TRUE(rc != ERR_NOERROR);
-  ASSERT_NOT_NULL(errdetail);
+  ASSERT_NOT_NULL(diag.message);
 
-  free(errdetail);
+  compiler_diag_reset(&diag);
   compiler_context_destroy(&ctx);
 }
 
 static void test_context_lower_failure_cleanup(void) {
   CompilerContext ctx;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   const char *src = "@x;";
   compiler_context_init(&ctx, src, strlen(src));
   ASSERT_EQ_INT(0, compiler_context_prepare_bytecode_output(&ctx, 64));
@@ -59,19 +63,21 @@ static void test_context_lower_failure_cleanup(void) {
   ParseInput input = {ctx.source, ctx.source_len, "<test>"};
 
   ASSERT_EQ_INT(ERR_NOERROR,
-                parse_source(&input, &ctx.ast_root, &errdetail));
+                parse_source_diag(&input, &ctx.ast_root, &diag, NULL));
 
-  int8_t rc = lower_ast_to_ir(ctx.ast_root, ctx.sem_ctx, &ctx.ir_unit, &errdetail);
+  int8_t rc = lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ctx.ir_unit,
+                                   &diag);
   ASSERT_TRUE(rc != ERR_NOERROR);
-  ASSERT_NOT_NULL(errdetail);
+  ASSERT_NOT_NULL(diag.message);
 
-  free(errdetail);
+  compiler_diag_reset(&diag);
   compiler_context_destroy(&ctx);
 }
 
 static void test_context_emit_failure_cleanup(void) {
   CompilerContext ctx;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   compiler_context_init(&ctx, NULL, 0);
   ASSERT_EQ_INT(0, compiler_context_prepare_bytecode_output(&ctx, 64));
 
@@ -80,17 +86,18 @@ static void test_context_emit_failure_cleanup(void) {
   ir_emit(ctx.ir_unit, (IR_Inst){.op = IR_OP_JUMP, .a = 999});
   ir_emit(ctx.ir_unit, (IR_Inst){.op = IR_OP_HALT});
 
-  int8_t rc = emit_bytecode(ctx.ir_unit, 0, 0, ctx.bytecode_out, &errdetail);
+  int8_t rc = emit_bytecode_diag(ctx.ir_unit, 0, 0, ctx.bytecode_out, &diag);
   ASSERT_TRUE(rc != ERR_NOERROR);
-  ASSERT_NOT_NULL(errdetail);
+  ASSERT_NOT_NULL(diag.message);
 
-  free(errdetail);
+  compiler_diag_reset(&diag);
   compiler_context_destroy(&ctx);
 }
 
 static void assert_lower_allocation_failures(const char *source) {
   CompilerContext ctx;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   IR_Unit *ir = NULL;
   bool saw_failure = false;
   bool saw_success_after_failure = false;
@@ -100,27 +107,25 @@ static void assert_lower_allocation_failures(const char *source) {
   ASSERT_NOT_NULL(ctx.sem_ctx);
   ParseInput input = {ctx.source, ctx.source_len, "<test>"};
   ASSERT_EQ_INT(ERR_NOERROR,
-                parse_source(&input, &ctx.ast_root, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
+                parse_source_diag(&input, &ctx.ast_root, &diag, NULL));
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_EQ_INT(ERR_NOERROR,
-                sem_check_locals(ctx.ast_root, &errdetail, ctx.sem_ctx));
-  ASSERT_TRUE(errdetail == NULL);
+                sem_check_locals_diag(ctx.ast_root, &diag, ctx.sem_ctx));
+  ASSERT_TRUE(diag.message == NULL);
 
   alloc_test_fail_after(-1);
   ASSERT_EQ_INT(ERR_NOERROR,
-                lower_ast_to_ir(ctx.ast_root, ctx.sem_ctx, &ir, &errdetail));
+                lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ir, &diag));
   ASSERT_NOT_NULL(ir);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ir_destroy_unit(ir);
 
   for (long fail_at = 0; fail_at < LOWER_ALLOC_FAILURE_TRIAL_LIMIT; fail_at++) {
-    CompilerDiagnostic diag;
-    compiler_diag_init(&diag);
     ir = NULL;
-    errdetail = NULL;
+    compiler_diag_reset(&diag);
     alloc_test_fail_after(fail_at);
     int8_t rc = lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ir,
-                                     &errdetail, &diag);
+                                     &diag);
     if (rc == ERR_NOERROR) {
       ASSERT_NOT_NULL(ir);
       ir_destroy_unit(ir);
@@ -132,11 +137,9 @@ static void assert_lower_allocation_failures(const char *source) {
     saw_failure = true;
     ASSERT_TRUE(ir == NULL);
     ASSERT_EQ_INT(ERR_COMP_UNKNOWN, rc);
-    ASSERT_NOT_NULL(errdetail);
     ASSERT_EQ_INT(DIAG_PHASE_LOWER, diag.phase);
     ASSERT_NOT_NULL(diag.message);
     ASSERT_TRUE(strstr(diag.message, "lower:") != NULL);
-    free(errdetail);
     compiler_diag_reset(&diag);
   }
 
@@ -167,7 +170,8 @@ static void test_lower_control_flow_allocation_failure_preserves_provenance(void
   const char source[] = "while 1 do 2; endwhile;";
   CompilerContext ctx;
   ParseInput input;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   AS_STMTLIST *statements;
   AS_NODE *loop;
   AS_NODE *condition;
@@ -183,12 +187,12 @@ static void test_lower_control_flow_allocation_failure_preserves_provenance(void
   ASSERT_NOT_NULL(ctx.sem_ctx);
   input = (ParseInput){ctx.source, ctx.source_len, "lower-control-flow.src"};
   ASSERT_EQ_INT(ERR_NOERROR,
-                parse_source(&input, &ctx.ast_root, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
+                parse_source_diag(&input, &ctx.ast_root, &diag, NULL));
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_NOT_NULL(ctx.ast_root);
   ASSERT_EQ_INT(ERR_NOERROR,
-                sem_check_locals(ctx.ast_root, &errdetail, ctx.sem_ctx));
-  ASSERT_TRUE(errdetail == NULL);
+                sem_check_locals_diag(ctx.ast_root, &diag, ctx.sem_ctx));
+  ASSERT_TRUE(diag.message == NULL);
 
   statements = (AS_STMTLIST *)ctx.ast_root->lhs;
   ASSERT_EQ_INT(1, (int)statements->count);
@@ -206,12 +210,9 @@ static void test_lower_control_flow_allocation_failure_preserves_provenance(void
 
   for (long fail_at = 0; fail_at < LOWER_ALLOC_FAILURE_TRIAL_LIMIT; fail_at++) {
     IR_Unit *ir = NULL;
-    char *lower_errdetail = NULL;
-    CompilerDiagnostic diag;
-    compiler_diag_init(&diag);
     alloc_test_fail_after(fail_at);
     int8_t rc = lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ir,
-                                     &lower_errdetail, &diag);
+                                     &diag);
     alloc_test_fail_after(-1);
 
     if (rc == ERR_NOERROR) {
@@ -232,7 +233,6 @@ static void test_lower_control_flow_allocation_failure_preserves_provenance(void
                   span_matches(body_statement->span, &diag));
       saw_provenance = true;
     }
-    free(lower_errdetail);
     compiler_diag_reset(&diag);
   }
 
@@ -241,14 +241,11 @@ static void test_lower_control_flow_allocation_failure_preserves_provenance(void
 
   {
     IR_Unit *ir = NULL;
-    char *final_errdetail = NULL;
-    CompilerDiagnostic diag;
-    compiler_diag_init(&diag);
     ASSERT_EQ_INT(ERR_NOERROR,
                   lower_ast_to_ir_diag(ctx.ast_root, ctx.sem_ctx, &ir,
-                                       &final_errdetail, &diag));
+                                       &diag));
     ASSERT_NOT_NULL(ir);
-    ASSERT_TRUE(final_errdetail == NULL);
+    ASSERT_TRUE(diag.message == NULL);
     ASSERT_TRUE(!diag.has_loc);
     ir_destroy_unit(ir);
     compiler_diag_reset(&diag);
@@ -315,10 +312,11 @@ void test_compiler_context_failures(void) {
     IR_Unit *u = ir_create_unit();
     ASSERT_NOT_NULL(u);
     ir_emit(u, (IR_Inst){.op=IR_OP_PUSH_INT,.imm=1});
-    char *err = NULL;
-    int8_t rc = emit_bytecode(u, 0, 0, &out, &err);
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    int8_t rc = emit_bytecode_diag(u, 0, 0, &out, &diag);
     ASSERT_TRUE(rc != ERR_NOERROR);
-    if (err) free(err);
+    compiler_diag_reset(&diag);
     ir_destroy_unit(u);
     free(out.bytecode);
   }

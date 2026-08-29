@@ -38,10 +38,6 @@ void compiler_context_reset(CompilerContext *ctx) {
     free(ctx->bytecode_out);
     ctx->bytecode_out = NULL;
   }
-  if (ctx->diagnostic) {
-    free(ctx->diagnostic);
-    ctx->diagnostic = NULL;
-  }
 }
 
 void compiler_context_destroy(CompilerContext *ctx) {

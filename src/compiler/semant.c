@@ -67,8 +67,9 @@ static bool sem_find_local_index_slot(SEM_CTX *ctx, const char *name,
 static void sem_set_oom_error(SEM_CTX *ctx, const char *what,
                               CompilerSourceSpan span) {
   if (!ctx) return;
-  compdiag_set_once(&ctx->errnum, &ctx->errdetail, ERR_COMP_UNKNOWN,
-                    "semant", what ? what : "out of memory");
+  compdiag_set_once_diag(&ctx->errnum, &ctx->diagnostic, ERR_COMP_UNKNOWN,
+                         DIAG_PHASE_SEMANT, "semant",
+                         what ? what : "out of memory");
   if (!compiler_source_span_valid(ctx->error_span)) ctx->error_span = span;
 }
 
@@ -153,18 +154,19 @@ static uint32_t sem_resolve_local_index(SEM_CTX *ctx, const char *name) {
 static void sem_set_error(SEM_CTX *ctx, int8_t errnum, const char *local_name,
                           CompilerSourceSpan span) {
   if (!ctx) return;
-  compdiag_set_once(&ctx->errnum, &ctx->errdetail, errnum, "semant",
-                    local_name ? local_name : "<null>");
+  compdiag_set_once_diag(&ctx->errnum, &ctx->diagnostic, errnum,
+                         DIAG_PHASE_SEMANT, "semant",
+                         local_name ? local_name : "<null>");
   if (!compiler_source_span_valid(ctx->error_span)) ctx->error_span = span;
 }
 
 static void sem_set_embedded_error(SEM_CTX *ctx, int8_t errnum,
-                                   const char *embedded_detail,
+                                   const char *embedded_message,
                                    CompilerSourceSpan span) {
   if (!ctx) return;
-  compdiag_setf_once(&ctx->errnum, &ctx->errdetail, errnum, "semant",
-                     "embedded code: %s",
-                     embedded_detail ? embedded_detail : "<null>");
+  compdiag_setf_once_diag(&ctx->errnum, &ctx->diagnostic, errnum,
+                          DIAG_PHASE_SEMANT, "semant", "embedded code: %s",
+                          embedded_message ? embedded_message : "<null>");
   if (!compiler_source_span_valid(ctx->error_span)) ctx->error_span = span;
 }
 
@@ -180,7 +182,7 @@ SEM_CTX *sem_create_ctx(void) {
   (*ctx).loop_depth = 0;
   (*ctx).foreach_depth = 0;
   (*ctx).errnum = ERR_NOERROR;
-  (*ctx).errdetail = NULL;
+  compiler_diag_init(&ctx->diagnostic);
   ctx->error_span = COMPILER_SOURCE_SPAN_INVALID;
 
   return ctx;
@@ -193,7 +195,7 @@ void sem_delete_ctx(SEM_CTX *ctx) {
   }
   free(ctx->locals);
   free(ctx->local_index);
-  compdiag_reset_detail(&ctx->errdetail);
+  compiler_diag_reset(&ctx->diagnostic);
   free(ctx);
 }
 
@@ -346,7 +348,8 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
       if (embedded->errnum != ERR_NOERROR) {
         // Preserve embedded scope provenance in the final semantic error:
         // semant: embedded code: semant: <detail>
-        sem_set_embedded_error(ctx, embedded->errnum, embedded->errdetail,
+        sem_set_embedded_error(ctx, embedded->errnum,
+                               embedded->diagnostic.message,
                                compiler_source_span_valid(embedded->error_span)
                                    ? embedded->error_span
                                    : node->span);
@@ -370,21 +373,19 @@ static void sem_walk(SEM_CTX *ctx, AS_NODE *node) {
   }
 }
 
-int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic *diag, SEM_CTX *ctx) {
-  // sem_check_locals is reusable per SEM_CTX. It preserves discovered locals
+int8_t sem_check_locals_diag(AS_NODE *root, CompilerDiagnostic *diag,
+                             SEM_CTX *ctx) {
+  if (diag) compiler_diag_reset(diag);
+
+  // sem_check_locals_diag is reusable per SEM_CTX. It preserves discovered locals
   // across calls, but resets and re-computes per-call error state.
   //
-  // Error detail text is stable and phase-qualified. Parent scope errors use:
-  //   semant: <detail>
+  // Error message text is stable and phase-qualified. Parent scope errors use:
+  //   semant: <message>
   // Embedded N_CODE errors use:
-  //   semant: embedded code: semant: <detail>
+  //   semant: embedded code: semant: <message>
   //
-  // When an output buffer is requested, the detail is copied exactly once and
-  // owned by the caller.
   if (!ctx) {
-    if (errdetail) {
-      *errdetail = compdiag_copy_detail("semant: out of memory creating semantic context");
-    }
     if (diag) {
       compiler_diag_set(diag, ERR_COMP_UNKNOWN, DIAG_PHASE_SEMANT,
                         "semant: out of memory creating semantic context");
@@ -392,7 +393,7 @@ int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic
     return ERR_COMP_UNKNOWN;
   }
 
-  compdiag_reset_detail(&ctx->errdetail);
+  compiler_diag_reset(&ctx->diagnostic);
   ctx->errnum = ERR_NOERROR;
   ctx->loop_depth = 0;
   ctx->foreach_depth = 0;
@@ -400,20 +401,13 @@ int8_t sem_check_locals_diag(AS_NODE *root, char **errdetail, CompilerDiagnostic
 
   sem_walk(ctx, root);
 
-  if (errdetail) {
-    *errdetail = compdiag_copy_detail(ctx->errdetail);
-  }
-
   if (diag && ctx->errnum != ERR_NOERROR) {
-    compiler_diag_set(diag, ctx->errnum, DIAG_PHASE_SEMANT, ctx->errdetail ? ctx->errdetail : "");
+    compiler_diag_set(diag, ctx->diagnostic.code, ctx->diagnostic.phase,
+                      ctx->diagnostic.message ? ctx->diagnostic.message : "");
     compiler_diag_set_span(diag, ctx->error_span);
   }
 
   return ctx->errnum;
-}
-
-int8_t sem_check_locals(AS_NODE *root, char **errdetail, SEM_CTX *ctx) {
-  return sem_check_locals_diag(root, errdetail, NULL, ctx);
 }
 
 bool sem_get_local_index(SEM_CTX *ctx, const char *name, uint8_t *index_out) {

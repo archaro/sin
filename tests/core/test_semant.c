@@ -15,10 +15,11 @@ static AS_NODE *parse_semantic_lists(const char *source);
 
 static AS_NODE *parse_semantic_lists(const char *source) {
   AS_NODE *absyn = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   ParseInput input = {source, strlen(source), "list-semantic-test.src"};
-  ASSERT_EQ_INT(ERR_NOERROR, parse_source(&input, &absyn, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(ERR_NOERROR, parse_source_diag(&input, &absyn, &diag, NULL));
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_NOT_NULL(absyn);
   return absyn;
 }
@@ -28,12 +29,13 @@ void test_sem_locals_in_lists_and_itemrefs(void) {
       "@x = 1; #[@missing, &players.[@index]];");
   SEM_CTX *ctx = sem_create_ctx();
   ASSERT_NOT_NULL(ctx);
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF,
-                sem_check_locals(root, &errdetail, ctx));
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail, "semant: @missing") == 0);
-  free(errdetail);
+                sem_check_locals_diag(root, &diag, ctx));
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp(diag.message, "semant: @missing") == 0);
+  compiler_diag_reset(&diag);
   as_delete(root);
   sem_delete_ctx(ctx);
 
@@ -41,12 +43,12 @@ void test_sem_locals_in_lists_and_itemrefs(void) {
       "@x = 1; #[@x, &players.[@index]];");
   ctx = sem_create_ctx();
   ASSERT_NOT_NULL(ctx);
-  errdetail = NULL;
+  compiler_diag_reset(&diag);
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF,
-                sem_check_locals(root, &errdetail, ctx));
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail, "semant: @index") == 0);
-  free(errdetail);
+                sem_check_locals_diag(root, &diag, ctx));
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp(diag.message, "semant: @index") == 0);
+  compiler_diag_reset(&diag);
   as_delete(root);
   sem_delete_ctx(ctx);
 
@@ -54,9 +56,9 @@ void test_sem_locals_in_lists_and_itemrefs(void) {
       "@x = 1; @index = 2; #[@x, &players.[@index]];");
   ctx = sem_create_ctx();
   ASSERT_NOT_NULL(ctx);
-  errdetail = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, sem_check_locals(root, &errdetail, ctx));
-  ASSERT_TRUE(errdetail == NULL);
+  compiler_diag_reset(&diag);
+  ASSERT_EQ_INT(ERR_NOERROR, sem_check_locals_diag(root, &diag, ctx));
+  ASSERT_TRUE(diag.message == NULL);
   as_delete(root);
   sem_delete_ctx(ctx);
 }
@@ -68,28 +70,25 @@ void test_sem_check_locals_reusable_context(void) {
   AS_NODE *ok_stmt = t_node(N_ASSLOCAL, t_local("defined"), t_int(1));
   AS_NODE *ok_prog = t_stmtlist_with_one(ok_stmt);
 
-  char *errdetail = (char *)0x1;
-  int8_t rc = sem_check_locals(ok_prog, &errdetail, ctx);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = sem_check_locals_diag(ok_prog, &diag, ctx);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   AS_NODE *bad_stmt = t_node(N_EXPRSTMT, t_local("missing"), NULL);
   AS_NODE *bad_prog = t_stmtlist_with_one(bad_stmt);
 
-  rc = sem_check_locals(bad_prog, &errdetail, ctx);
+  rc = sem_check_locals_diag(bad_prog, &diag, ctx);
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail, "semant: missing") == 0);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp(diag.message, "semant: missing") == 0);
 
-  char *first_errdetail = errdetail;
-
-  rc = sem_check_locals(bad_prog, &errdetail, ctx);
+  rc = sem_check_locals_diag(bad_prog, &diag, ctx);
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail, "semant: missing") == 0);
-  ASSERT_TRUE(errdetail != first_errdetail);
-  free(first_errdetail);
-  free(errdetail);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp(diag.message, "semant: missing") == 0);
+  compiler_diag_reset(&diag);
 
   as_delete(ok_prog);
   as_delete(bad_prog);
@@ -115,18 +114,17 @@ void test_sem_local_table_growth_oom_preserves_source_span(void) {
       ctx->capacity = 1;
     }
 
-    CompilerDiagnostic diag = {0};
-    char *errdetail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
     alloc_test_fail_after(0);
-    int8_t rc = sem_check_locals_diag(root, &errdetail, &diag, ctx);
+    int8_t rc = sem_check_locals_diag(root, &diag, ctx);
     alloc_test_fail_after(-1);
     ASSERT_EQ_INT(ERR_COMP_UNKNOWN, rc);
-    ASSERT_NOT_NULL(errdetail);
+    ASSERT_NOT_NULL(diag.message);
     ASSERT_EQ_INT(3, diag.line);
     ASSERT_EQ_INT(1, diag.column);
     ASSERT_EQ_INT(6, diag.span);
     ASSERT_TRUE(diag.has_loc);
-    free(errdetail);
     compiler_diag_reset(&diag);
     sem_delete_ctx(ctx);
   }
@@ -143,10 +141,11 @@ void test_sem_duplicate_local_keeps_original_index(void) {
   list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local("y"), t_int(2)));
   list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local("x"), t_int(3)));
 
-  char *errdetail = NULL;
-  int8_t rc = sem_check_locals(list, &errdetail, ctx);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = sem_check_locals_diag(list, &diag, ctx);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_EQ_INT(2, (int)ctx->count);
 
   uint8_t idx = 255;
@@ -168,10 +167,11 @@ void test_sem_seed_params_duplicate_name_only_marks_target_symbol(void) {
   list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local("z"), t_int(1)));
   list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local("a"), t_int(2)));
 
-  char *errdetail = NULL;
-  int8_t rc = sem_check_locals(list, &errdetail, ctx);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = sem_check_locals_diag(list, &diag, ctx);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   const char *params[] = {"a", "a"};
   ASSERT_EQ_INT(ERR_NOERROR, sem_seed_params(ctx, params, 2));
@@ -200,10 +200,11 @@ void test_sem_code_params_duplicate_after_unrelated_locals_no_param_corruption(v
 
   SEM_CTX *ctx = sem_create_ctx();
   ASSERT_NOT_NULL(ctx);
-  char *errdetail = NULL;
-  int8_t rc = sem_check_locals(program, &errdetail, ctx);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = sem_check_locals_diag(program, &diag, ctx);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   as_delete(program);
   sem_delete_ctx(ctx);
@@ -218,10 +219,11 @@ void test_sem_code_params_are_treated_as_defined_locals(void) {
   AS_NODE *code = t_node(N_CODE, params, body);
   AS_NODE *program = t_stmtlist_with_one(t_node(N_EXPRSTMT, code, NULL));
 
-  char *errdetail = NULL;
-  int8_t rc = sem_check_locals(program, &errdetail, ctx);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = sem_check_locals_diag(program, &diag, ctx);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   as_delete(program);
   sem_delete_ctx(ctx);
@@ -236,14 +238,15 @@ void test_sem_embedded_scope_error_detail_includes_provenance(void) {
   AS_NODE *embedded = t_node(N_CODE, NULL, embedded_body);
   AS_NODE *program = t_stmtlist_with_one(t_node(N_EXPRSTMT, embedded, NULL));
 
-  char *errdetail = NULL;
-  int8_t rc = sem_check_locals(program, &errdetail, ctx);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = sem_check_locals_diag(program, &diag, ctx);
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
-  ASSERT_NOT_NULL(errdetail);
+  ASSERT_NOT_NULL(diag.message);
   ASSERT_TRUE(
-      strcmp(errdetail, "semant: embedded code: semant: missing_embedded") == 0);
+      strcmp(diag.message, "semant: embedded code: semant: missing_embedded") == 0);
 
-  free(errdetail);
+  compiler_diag_reset(&diag);
   as_delete(program);
   sem_delete_ctx(ctx);
   test_sem_break_continue_loop_scope();
@@ -258,21 +261,23 @@ void test_sem_foreach_semantics(void) {
   for (size_t i = 0; i < sizeof valid / sizeof valid[0]; ++i) {
     AS_NODE *root = parse_semantic_lists(valid[i]);
     SEM_CTX *ctx = sem_create_ctx();
-    char *detail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
     ASSERT_NOT_NULL(ctx);
-    ASSERT_EQ_INT(ERR_NOERROR, sem_check_locals(root, &detail, ctx));
-    ASSERT_TRUE(detail == NULL);
+    ASSERT_EQ_INT(ERR_NOERROR, sem_check_locals_diag(root, &diag, ctx));
+    ASSERT_TRUE(diag.message == NULL);
     ASSERT_TRUE(ctx->count >= (i == 1 ? 8 : 4));
-    free(detail);
+    compiler_diag_reset(&diag);
     sem_delete_ctx(ctx);
     as_delete(root);
   }
   AS_NODE *root = parse_semantic_lists("foreach @x in @missing do endfor;");
   SEM_CTX *ctx = sem_create_ctx();
-  char *detail = NULL;
-  ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, sem_check_locals(root, &detail, ctx));
-  ASSERT_TRUE(detail != NULL && strstr(detail, "@missing") != NULL);
-  free(detail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, sem_check_locals_diag(root, &diag, ctx));
+  ASSERT_TRUE(diag.message != NULL && strstr(diag.message, "@missing") != NULL);
+  compiler_diag_reset(&diag);
   sem_delete_ctx(ctx);
   as_delete(root);
 }
@@ -280,7 +285,8 @@ void test_sem_foreach_semantics(void) {
 static void test_sem_break_continue_loop_scope(void) {
   AS_NODE *root = NULL;
   SEM_CTX *ctx = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   for (int nodetype = N_BREAK; nodetype <= N_CONTINUE; nodetype++) {
     AS_NODE *embedded_body = as_new_stmtlist_node();
     embedded_body = as_stmtlist_append(
@@ -290,13 +296,13 @@ static void test_sem_break_continue_loop_scope(void) {
     root = t_stmtlist_with_one(t_node(N_WHILESTMT, t_int(1), outer_body));
     ctx = sem_create_ctx();
     ASSERT_NOT_NULL(ctx);
-    errdetail = NULL;
-    ASSERT_EQ_INT(ERR_COMP_SYNTAX, sem_check_locals(root, &errdetail, ctx));
-    ASSERT_NOT_NULL(errdetail);
-    ASSERT_TRUE(strstr(errdetail, nodetype == N_BREAK
+    compiler_diag_reset(&diag);
+    ASSERT_EQ_INT(ERR_COMP_SYNTAX, sem_check_locals_diag(root, &diag, ctx));
+    ASSERT_NOT_NULL(diag.message);
+    ASSERT_TRUE(strstr(diag.message, nodetype == N_BREAK
                                       ? "embedded code: semant: BREAK outside loop"
                                       : "embedded code: semant: CONTINUE outside loop") != NULL);
-    free(errdetail);
+    compiler_diag_reset(&diag);
     as_delete(root);
     sem_delete_ctx(ctx);
   }
@@ -310,9 +316,9 @@ static void test_sem_break_continue_loop_scope(void) {
   root = as_stmtlist_append(root, do_node);
   ctx = sem_create_ctx();
   ASSERT_NOT_NULL(ctx);
-  errdetail = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, sem_check_locals(root, &errdetail, ctx));
-  ASSERT_TRUE(errdetail == NULL);
+  compiler_diag_reset(&diag);
+  ASSERT_EQ_INT(ERR_NOERROR, sem_check_locals_diag(root, &diag, ctx));
+  ASSERT_TRUE(diag.message == NULL);
   as_delete(root);
   sem_delete_ctx(ctx);
 }
@@ -329,10 +335,11 @@ void test_sem_many_locals_deterministic_indices(void) {
     list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local(name), t_int(i)));
   }
 
-  char *errdetail = NULL;
-  int8_t rc = sem_check_locals(list, &errdetail, ctx);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = sem_check_locals_diag(list, &diag, ctx);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_EQ_INT(220, (int)ctx->count);
 
   uint8_t idx = 255;
@@ -343,9 +350,9 @@ void test_sem_many_locals_deterministic_indices(void) {
   ASSERT_TRUE(sem_get_local_index(ctx, "local_219", &idx));
   ASSERT_EQ_INT(219, (int)idx);
 
-  rc = sem_check_locals(list, &errdetail, ctx);
+  rc = sem_check_locals_diag(list, &diag, ctx);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_TRUE(sem_get_local_index(ctx, "local_099", &idx));
   ASSERT_EQ_INT(99, (int)idx);
 
@@ -364,10 +371,11 @@ void test_sem_local_limit_255_is_accepted(void) {
     list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local(name), t_int(i)));
   }
 
-  char *errdetail = NULL;
-  int8_t rc = sem_check_locals(list, &errdetail, ctx);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = sem_check_locals_diag(list, &diag, ctx);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_EQ_INT(255, (int)ctx->count);
 
   uint8_t idx = 0;
@@ -389,14 +397,15 @@ void test_sem_local_limit_over_255_fails_deterministically(void) {
     list = as_stmtlist_append(list, t_node(N_ASSLOCAL, t_local(name), t_int(i)));
   }
 
-  char *errdetail = NULL;
-  int8_t rc = sem_check_locals(list, &errdetail, ctx);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = sem_check_locals_diag(list, &diag, ctx);
   ASSERT_EQ_INT(ERR_COMP_TOOMANYLOCALS, rc);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "local_255") != NULL);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, "local_255") != NULL);
   ASSERT_EQ_INT(255, (int)ctx->count);
 
-  free(errdetail);
+  compiler_diag_reset(&diag);
   as_delete(list);
   sem_delete_ctx(ctx);
 }
@@ -412,14 +421,15 @@ void test_sem_embedded_local_limit_boundaries(void) {
   AS_NODE *code = t_node(N_CODE, NULL, body);
   AS_NODE *program = t_stmtlist_with_one(t_node(N_EXPRSTMT, code, NULL));
   SEM_CTX *ctx = sem_create_ctx();
-  char *detail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   ASSERT_NOT_NULL(ctx);
   ASSERT_EQ_INT(ERR_COMP_TOOMANYLOCALS,
-                sem_check_locals(program, &detail, ctx));
-  ASSERT_NOT_NULL(detail);
-  ASSERT_TRUE(strcmp(detail,
+                sem_check_locals_diag(program, &diag, ctx));
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp(diag.message,
                      "semant: embedded code: semant: embedded_255") == 0);
-  free(detail);
+  compiler_diag_reset(&diag);
   as_delete(program);
   sem_delete_ctx(ctx);
 
@@ -437,10 +447,10 @@ void test_sem_embedded_local_limit_boundaries(void) {
   code = t_node(N_CODE, params, body);
   program = t_stmtlist_with_one(t_node(N_EXPRSTMT, code, NULL));
   ctx = sem_create_ctx();
-  detail = NULL;
+  compiler_diag_reset(&diag);
   ASSERT_NOT_NULL(ctx);
-  ASSERT_EQ_INT(ERR_NOERROR, sem_check_locals(program, &detail, ctx));
-  ASSERT_TRUE(detail == NULL);
+  ASSERT_EQ_INT(ERR_NOERROR, sem_check_locals_diag(program, &diag, ctx));
+  ASSERT_TRUE(diag.message == NULL);
   as_delete(program);
   sem_delete_ctx(ctx);
 
@@ -460,14 +470,14 @@ void test_sem_embedded_local_limit_boundaries(void) {
   code = t_node(N_CODE, params, body);
   program = t_stmtlist_with_one(t_node(N_EXPRSTMT, code, NULL));
   ctx = sem_create_ctx();
-  detail = NULL;
+  compiler_diag_reset(&diag);
   ASSERT_NOT_NULL(ctx);
   ASSERT_EQ_INT(ERR_COMP_TOOMANYLOCALS,
-                sem_check_locals(program, &detail, ctx));
-  ASSERT_NOT_NULL(detail);
-  ASSERT_TRUE(strcmp(detail,
+                sem_check_locals_diag(program, &diag, ctx));
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp(diag.message,
                      "semant: embedded code: semant: boundary_255") == 0);
-  free(detail);
+  compiler_diag_reset(&diag);
   as_delete(program);
   sem_delete_ctx(ctx);
 }

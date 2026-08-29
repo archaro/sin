@@ -17,47 +17,56 @@ extern CONFIG_t config;
 
 static void assert_compile_ok(const char *name, const char *source) {
   OUTPUT_t *out = NULL;
-  char *errdetail = NULL;
-  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = compile_source_to_bytecode_diag(source, strlen(source), &out,
+                                              &diag);
   if (rc != ERR_NOERROR) {
     TEST_FAILF("%s: compiler error %d: %s", name, rc,
-               errdetail ? errdetail : "<no detail>");
+               diag.message ? diag.message : "<no detail>");
   }
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(ERR_NOERROR, diag.code);
   ASSERT_NOT_NULL(out);
   free(out->bytecode);
   free(out);
+  compiler_diag_reset(&diag);
   (void)name;
 }
 
 static void assert_compile_err(const char *source, int8_t expected_code,
                                const char *expected_substr) {
   OUTPUT_t *out = NULL;
-  char *errdetail = NULL;
-  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = compile_source_to_bytecode_diag(source, strlen(source), &out,
+                                              &diag);
   ASSERT_EQ_INT(expected_code, rc);
   ASSERT_TRUE(out == NULL);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, expected_substr) != NULL);
-  free(errdetail);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, expected_substr) != NULL);
+  compiler_diag_reset(&diag);
 }
 
 static void assert_compile_rejected(const char *source) {
   OUTPUT_t *out = NULL;
-  char *errdetail = NULL;
-  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = compile_source_to_bytecode_diag(source, strlen(source), &out,
+                                              &diag);
   ASSERT_TRUE(rc != ERR_NOERROR);
   ASSERT_TRUE(out == NULL);
-  ASSERT_NOT_NULL(errdetail);
-  free(errdetail);
+  ASSERT_NOT_NULL(diag.message);
+  compiler_diag_reset(&diag);
 }
 
 static VALUE_t compile_and_run(const char *name, const char *source) {
   OUTPUT_t *out = NULL;
-  char *errdetail = NULL;
-  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = compile_source_to_bytecode_diag(source, strlen(source), &out,
+                                              &diag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(ERR_NOERROR, diag.code);
   ASSERT_NOT_NULL(out);
 
   uint32_t len = (uint32_t)(out->nextbyte - out->bytecode);
@@ -74,6 +83,7 @@ static VALUE_t compile_and_run(const char *name, const char *source) {
 
   free(out->bytecode);
   free(out);
+  compiler_diag_reset(&diag);
   return result;
 }
 

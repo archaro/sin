@@ -13,21 +13,23 @@
 
 static AS_NODE *parse_lists_ok(const char *source) {
   AS_NODE *absyn = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   ParseInput input = {source, strlen(source), "list-parser-test.src"};
-  ASSERT_EQ_INT(ERR_NOERROR, parse_source(&input, &absyn, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(ERR_NOERROR, parse_source_diag(&input, &absyn, &diag, NULL));
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_NOT_NULL(absyn);
   return absyn;
 }
 
 static void parse_lists_fails(const char *source) {
   AS_NODE *absyn = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   ParseInput input = {source, strlen(source), "list-parser-test.src"};
-  ASSERT_TRUE(parse_source(&input, &absyn, &errdetail) != ERR_NOERROR);
-  ASSERT_NOT_NULL(errdetail);
-  free(errdetail);
+  ASSERT_TRUE(parse_source_diag(&input, &absyn, &diag, NULL) != ERR_NOERROR);
+  ASSERT_NOT_NULL(diag.message);
+  compiler_diag_reset(&diag);
   as_delete(absyn);
 }
 
@@ -52,47 +54,48 @@ static AS_VALUE *node_value(AS_NODE *node) {
 
 void test_parser_input_api(void) {
   AS_NODE *absyn = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
 
   const char malformed[] = "@x = ;";
   ParseInput malformed_input = {malformed, sizeof(malformed) - 1, "malformed.src"};
-  int8_t rc = parse_source(&malformed_input, &absyn, &errdetail);
+  int8_t rc = parse_source_diag(&malformed_input, &absyn, &diag, NULL);
   ASSERT_TRUE(rc != ERR_NOERROR);
-  ASSERT_TRUE(errdetail != NULL);
-  free(errdetail);
+  ASSERT_TRUE(diag.message != NULL);
+  compiler_diag_reset(&diag);
 
   const char embedded_nul[] = {'@','x','=','1',';','\0','@','y','=','2',';'};
   ParseInput nul_input = {embedded_nul, sizeof(embedded_nul), "embedded-nul.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&nul_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&nul_input, &absyn, &diag, NULL);
   ASSERT_TRUE(rc != ERR_NOERROR);
   ASSERT_TRUE(absyn == NULL);
-  ASSERT_TRUE(errdetail != NULL);
-  ASSERT_TRUE(strcmp(errdetail, "parser: NUL byte in source is not allowed") == 0);
-  free(errdetail);
+  ASSERT_TRUE(diag.message != NULL);
+  ASSERT_TRUE(strcmp(diag.message, "parser: NUL byte in source is not allowed") == 0);
+  compiler_diag_reset(&diag);
 
   const char nul_escape[] = "\"\\000\";";
   ParseInput nul_escape_input = {nul_escape, sizeof(nul_escape) - 1,
                                  "nul-escape.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&nul_escape_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&nul_escape_input, &absyn, &diag, NULL);
   ASSERT_TRUE(rc != ERR_NOERROR);
   ASSERT_TRUE(absyn == NULL);
-  ASSERT_TRUE(errdetail != NULL);
-  ASSERT_TRUE(strcmp(errdetail, "NUL byte escape \\000 is not allowed.") == 0);
-  free(errdetail);
+  ASSERT_TRUE(diag.message != NULL);
+  ASSERT_TRUE(strcmp(diag.message, "NUL byte escape \\000 is not allowed.") == 0);
+  compiler_diag_reset(&diag);
 
   const char nonzero_escape[] = "\"\\077\";";
   ParseInput nonzero_escape_input = {nonzero_escape,
                                      sizeof(nonzero_escape) - 1,
                                      "nonzero-escape.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&nonzero_escape_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&nonzero_escape_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_NOT_NULL(absyn);
   AS_STMTLIST *escape_list = (AS_STMTLIST *)absyn->lhs;
   AS_VALUE *escape_value = (AS_VALUE *)((AS_NODE *)escape_list->stmts[0]->lhs)->lhs;
@@ -106,36 +109,36 @@ void test_parser_input_api(void) {
       bare_string_newline, sizeof(bare_string_newline) - 1,
       "bare-string-newline.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&bare_string_newline_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&bare_string_newline_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
   ASSERT_TRUE(absyn == NULL);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail, "Newline in string.") == 0);
-  free(errdetail);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp(diag.message, "Newline in string.") == 0);
+  compiler_diag_reset(&diag);
 
   const char escaped_string_newline[] = "\"first\\\nsecond\";";
   ParseInput escaped_string_newline_input = {
       escaped_string_newline, sizeof(escaped_string_newline) - 1,
       "escaped-string-newline.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&escaped_string_newline_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&escaped_string_newline_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
   ASSERT_TRUE(absyn == NULL);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail, "Newline in string.") == 0);
-  free(errdetail);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp(diag.message, "Newline in string.") == 0);
+  compiler_diag_reset(&diag);
 
   const char text_newline_escape[] = "\"first\\nsecond\";";
   ParseInput text_newline_escape_input = {
       text_newline_escape, sizeof(text_newline_escape) - 1,
       "text-newline-escape.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&text_newline_escape_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&text_newline_escape_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_NOT_NULL(absyn);
   AS_STMTLIST *text_newline_escape_list = (AS_STMTLIST *)absyn->lhs;
   AS_VALUE *text_newline_escape_value =
@@ -149,10 +152,10 @@ void test_parser_input_api(void) {
       unknown_string_escape, sizeof(unknown_string_escape) - 1,
       "unknown-string-escape.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&unknown_string_escape_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&unknown_string_escape_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_NOT_NULL(absyn);
   AS_STMTLIST *unknown_string_escape_list = (AS_STMTLIST *)absyn->lhs;
   AS_VALUE *unknown_string_escape_value =
@@ -167,10 +170,10 @@ void test_parser_input_api(void) {
       raw_physical_newline, sizeof(raw_physical_newline) - 1,
       "raw-physical-newline.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&raw_physical_newline_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&raw_physical_newline_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_NOT_NULL(absyn);
   AS_STMTLIST *raw_physical_newline_list = (AS_STMTLIST *)absyn->lhs;
   AS_VALUE *raw_physical_newline_value =
@@ -184,10 +187,10 @@ void test_parser_input_api(void) {
       "\"quoted\" C:\\temp\"\"\";";
   ParseInput raw_input = {raw_source, sizeof(raw_source) - 1, "raw-string.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&raw_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&raw_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_NOT_NULL(absyn);
   AS_STMTLIST *raw_list = (AS_STMTLIST *)absyn->lhs;
   ASSERT_EQ_INT(1, raw_list->count);
@@ -201,30 +204,30 @@ void test_parser_input_api(void) {
   const char raw_eof[] = "\"\"\"unterminated";
   ParseInput raw_eof_input = {raw_eof, sizeof(raw_eof) - 1, "raw-eof.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&raw_eof_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&raw_eof_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
   ASSERT_TRUE(absyn == NULL);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail, "EOF in raw string.") == 0);
-  free(errdetail);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp(diag.message, "EOF in raw string.") == 0);
+  compiler_diag_reset(&diag);
 
   const char empty[] = "";
   ParseInput empty_input = {empty, 0, "empty.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&empty_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&empty_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
   ASSERT_TRUE(absyn != NULL);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   as_delete(absyn);
 
   const char nil_source[] = "RETURN NiL;";
   ParseInput nil_input = {nil_source, sizeof(nil_source) - 1, "nil.src"};
   absyn = NULL;
-  errdetail = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, parse_source(&nil_input, &absyn, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
+  compiler_diag_reset(&diag);
+  ASSERT_EQ_INT(ERR_NOERROR, parse_source_diag(&nil_input, &absyn, &diag, NULL));
+  ASSERT_TRUE(diag.message == NULL);
   AS_STMTLIST *nil_list = (AS_STMTLIST *)absyn->lhs;
   ASSERT_EQ_INT(1, nil_list->count);
   ASSERT_EQ_INT(N_RETURN, nil_list->stmts[0]->nodetype);
@@ -239,10 +242,10 @@ void test_parser_input_api(void) {
   ParseInput control_input = {control_flow, sizeof(control_flow) - 1,
                               "control-flow.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&control_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&control_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   AS_STMTLIST *controls = (AS_STMTLIST *)absyn->lhs;
   ASSERT_EQ_INT(N_BREAK, controls->stmts[0]->nodetype);
   ASSERT_EQ_INT(N_CONTINUE, controls->stmts[1]->nodetype);
@@ -251,10 +254,10 @@ void test_parser_input_api(void) {
   const char returns[] = "return; return 17;";
   ParseInput return_input = {returns, sizeof(returns) - 1, "returns.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&return_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&return_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   AS_STMTLIST *return_list = (AS_STMTLIST *)absyn->lhs;
   ASSERT_EQ_INT(2, return_list->count);
   ASSERT_EQ_INT(N_RETURN, return_list->stmts[0]->nodetype);
@@ -268,46 +271,58 @@ void test_parser_input_api(void) {
                                        sizeof(malformed_return) - 1,
                                        "malformed-return.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&malformed_return_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&malformed_return_input, &absyn, &diag, NULL);
   ASSERT_TRUE(rc != ERR_NOERROR);
   ASSERT_TRUE(absyn == NULL);
-  ASSERT_NOT_NULL(errdetail);
-  free(errdetail);
+  ASSERT_NOT_NULL(diag.message);
+  compiler_diag_reset(&diag);
 
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(NULL, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(NULL, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   ASSERT_TRUE(absyn == NULL);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, diag.code);
+  ASSERT_EQ_INT(DIAG_PHASE_PARSE, diag.phase);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp("parser: invalid input", diag.message) == 0);
+  ASSERT_NOT_NULL(diag.source_name);
+  ASSERT_TRUE(strcmp("<memory>", diag.source_name) == 0);
+  ASSERT_TRUE(diag.has_loc);
+  ASSERT_EQ_INT(1, diag.line);
+  ASSERT_EQ_INT(1, diag.column);
+  ASSERT_EQ_INT(1, diag.span);
+  compiler_diag_reset(&diag);
 
   ParseInput null_data_input = {NULL, 0, "null-data.src"};
-  CompilerDiagnostic diag = {0};
+  CompilerDiagnostic null_diag = {0};
   SCANNER_STATE_t state = {0};
-  rc = parse_source_compiler_diag(&null_data_input, &absyn, &errdetail,
-                                  &diag, &state);
+  rc = parse_source_diag(&null_data_input, &absyn, &null_diag, &state);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   ASSERT_EQ_INT(1, state.line);
   ASSERT_EQ_INT(1, state.column);
   ASSERT_EQ_INT(1, state.span);
   ASSERT_TRUE(state.offending_token == NULL);
-  ASSERT_EQ_INT(DIAG_PHASE_PARSE, diag.phase);
-  compiler_diag_reset(&diag);
+  ASSERT_EQ_INT(DIAG_PHASE_PARSE, null_diag.phase);
+  compiler_diag_reset(&null_diag);
 
-  rc = parse_source(&empty_input, NULL, &errdetail);
+  rc = parse_source_diag(&empty_input, NULL, &diag, NULL);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
-  rc = parse_source(&empty_input, &absyn, NULL);
-  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  rc = parse_source_diag(&empty_input, &absyn, NULL, NULL);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_NOT_NULL(absyn);
+  as_delete(absyn);
+  absyn = NULL;
 
   const char crlf_code_source[] = "target = code (\r\nreturn 1;\r\n);";
   ParseInput crlf_code_input = {crlf_code_source, sizeof(crlf_code_source) - 1,
                                 "crlf-code.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&crlf_code_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&crlf_code_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   AS_STMTLIST *crlf_code_list = (AS_STMTLIST *)absyn->lhs;
   ASSERT_EQ_INT(1, crlf_code_list->count);
   AS_NODE *crlf_assignment = crlf_code_list->stmts[0];
@@ -328,23 +343,23 @@ void test_parser_input_api(void) {
       crlf_embedded_string_source, sizeof(crlf_embedded_string_source) - 1,
       "crlf-embedded-string.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&crlf_embedded_string_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&crlf_embedded_string_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
   ASSERT_TRUE(absyn == NULL);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail, "Newline in string.") == 0);
-  free(errdetail);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp(diag.message, "Newline in string.") == 0);
+  compiler_diag_reset(&diag);
 
   const char raw_code_source[] =
       "target = code ( @x = \"\"\"left )\nright\"\"\"; return @x; );";
   ParseInput raw_code_input = {raw_code_source, sizeof(raw_code_source) - 1,
                                "raw-code-string.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&raw_code_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&raw_code_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_NOT_NULL(absyn);
   AS_STMTLIST *raw_code_list = (AS_STMTLIST *)absyn->lhs;
   ASSERT_EQ_INT(1, raw_code_list->count);
@@ -367,14 +382,14 @@ void test_parser_input_api(void) {
       raw_code_eof_source, sizeof(raw_code_eof_source) - 1,
       "raw-code-eof.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&raw_code_eof_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&raw_code_eof_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
   ASSERT_TRUE(absyn == NULL);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail,
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp(diag.message,
                      "Unterminated raw string inside code(...) body.") == 0);
-  free(errdetail);
+  compiler_diag_reset(&diag);
 
   const char crlf_error_source[] = "@x = 1;\r\n^;";
   ParseInput crlf_error_input = {crlf_error_source,
@@ -383,9 +398,8 @@ void test_parser_input_api(void) {
   CompilerDiagnostic crlf_diag = {0};
   SCANNER_STATE_t crlf_state = {0};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source_compiler_diag(&crlf_error_input, &absyn, &errdetail,
-                                  &crlf_diag, &crlf_state);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&crlf_error_input, &absyn, &crlf_diag, &crlf_state);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
   ASSERT_EQ_INT(2, crlf_state.line);
   ASSERT_EQ_INT(1, crlf_state.column);
@@ -393,7 +407,7 @@ void test_parser_input_api(void) {
   ASSERT_EQ_INT(2, crlf_diag.line);
   ASSERT_EQ_INT(1, crlf_diag.column);
   ASSERT_TRUE(crlf_diag.has_loc);
-  free(errdetail);
+  compiler_diag_reset(&diag);
   free(crlf_state.offending_token);
   compiler_diag_reset(&crlf_diag);
 
@@ -410,12 +424,12 @@ void test_parser_input_api(void) {
   large_literal[source_len] = '\0';
   ParseInput large_input = {large_literal, source_len, "large-string.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&large_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&large_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "String literal too long.") != NULL);
-  free(errdetail);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, "String literal too long.") != NULL);
+  compiler_diag_reset(&diag);
   free(large_literal);
 
   source_len = literal_len + 7;
@@ -427,12 +441,12 @@ void test_parser_input_api(void) {
   large_raw[source_len] = '\0';
   ParseInput large_raw_input = {large_raw, source_len, "large-raw-string.src"};
   absyn = NULL;
-  errdetail = NULL;
-  rc = parse_source(&large_raw_input, &absyn, &errdetail);
+  compiler_diag_reset(&diag);
+  rc = parse_source_diag(&large_raw_input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "String literal too long.") != NULL);
-  free(errdetail);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, "String literal too long.") != NULL);
+  compiler_diag_reset(&diag);
   free(large_raw);
 }
 
@@ -477,14 +491,15 @@ void test_parser_scanner_setup_allocation_failures(void) {
 
   for (long fail_at = 0; fail_at <= 4; ++fail_at) {
     AS_NODE *absyn = NULL;
-    char *errdetail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
     SCANNER_STATE_t state = {0};
     alloc_test_fail_after(fail_at);
-    int8_t rc = parse_source_diag(&input, &absyn, &errdetail, &state);
+    int8_t rc = parse_source_diag(&input, &absyn, &diag, &state);
     alloc_test_fail_after(-1);
     ASSERT_TRUE(rc != ERR_NOERROR);
     ASSERT_TRUE(absyn == NULL);
-    free(errdetail);
+    compiler_diag_reset(&diag);
     free(state.offending_token);
   }
 }
@@ -496,9 +511,10 @@ void test_parser_cleanup_allocation_failures(void) {
 
   for (long fail_at = 0; fail_at < 128; ++fail_at) {
     AS_NODE *absyn = NULL;
-    char *errdetail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
     alloc_test_fail_after(fail_at);
-    int8_t rc = parse_source(&input, &absyn, &errdetail);
+    int8_t rc = parse_source_diag(&input, &absyn, &diag, NULL);
     alloc_test_fail_after(-1);
     if (rc == ERR_NOERROR) {
       ASSERT_NOT_NULL(absyn);
@@ -506,7 +522,7 @@ void test_parser_cleanup_allocation_failures(void) {
     } else {
       ASSERT_TRUE(absyn == NULL);
     }
-    free(errdetail);
+    compiler_diag_reset(&diag);
   }
 }
 
@@ -516,9 +532,10 @@ void test_parser_foreach_allocation_failures(void) {
 
   for (long fail_at = 0; fail_at < 128; ++fail_at) {
     AS_NODE *absyn = NULL;
-    char *errdetail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
     alloc_test_fail_after(fail_at);
-    int8_t rc = parse_source(&input, &absyn, &errdetail);
+    int8_t rc = parse_source_diag(&input, &absyn, &diag, NULL);
     alloc_test_fail_after(-1);
     if (rc == ERR_NOERROR) {
       ASSERT_NOT_NULL(absyn);
@@ -526,7 +543,7 @@ void test_parser_foreach_allocation_failures(void) {
     } else {
       ASSERT_TRUE(absyn == NULL);
     }
-    free(errdetail);
+    compiler_diag_reset(&diag);
   }
 }
 
@@ -540,25 +557,26 @@ void test_parser_ast_node_budget_stops_construction_early(void) {
   source[used] = '\0';
   ParseInput input = {source, used, "node-budget.src"};
   AS_NODE *absyn = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   SCANNER_STATE_t state = {0};
 
-  int8_t rc = parse_source_diag_with_node_limit(&input, &absyn, &errdetail,
+  int8_t rc = parse_source_diag_with_node_limit(&input, &absyn, &diag,
                                                 &state, 32);
 
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   ASSERT_TRUE(absyn == NULL);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strcmp(errdetail, "AST node budget exceeded") == 0);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strcmp(diag.message, "AST node budget exceeded") == 0);
   ASSERT_EQ_INT(32, state.ast_node_count);
   ASSERT_EQ_INT(32, state.ast_node_limit);
-  free(errdetail);
+  compiler_diag_reset(&diag);
   free(state.offending_token);
 
-  errdetail = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, parse_source(&input, &absyn, &errdetail));
+  compiler_diag_reset(&diag);
+  ASSERT_EQ_INT(ERR_NOERROR, parse_source_diag(&input, &absyn, &diag, NULL));
   ASSERT_NOT_NULL(absyn);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   as_delete(absyn);
 }
 

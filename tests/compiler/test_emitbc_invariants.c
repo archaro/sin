@@ -45,18 +45,19 @@ static void assert_preflight_rejects(IR_Unit *u, int8_t expected_code,
       .nextbyte = storage + 2,
       .maxsize = sizeof(sentinel)};
   OUTPUT_t before = out;
-  char *err = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
 
-  ASSERT_EQ_INT(expected_code, t_emit_bytecode(u, 0, 0, &out, &err));
-  ASSERT_NOT_NULL(err);
-  ASSERT_TRUE(strstr(err, "ir:") != NULL);
-  ASSERT_TRUE(strstr(err, expected_detail) != NULL);
+  ASSERT_EQ_INT(expected_code, t_emit_bytecode_diag(u, 0, 0, &out, &diag));
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, "ir:") != NULL);
+  ASSERT_TRUE(strstr(diag.message, expected_detail) != NULL);
   ASSERT_EQ_INT(0, memcmp(storage, sentinel, sizeof(sentinel)));
   ASSERT_TRUE(out.bytecode == before.bytecode);
   ASSERT_TRUE(out.nextbyte == before.nextbyte);
   ASSERT_EQ_INT(before.maxsize, out.maxsize);
 
-  free(err);
+  compiler_diag_reset(&diag);
   free(storage);
   if (u->embedded_code.count > 0 && !u->embedded_code.entries) {
     u->embedded_code.count = 0;
@@ -251,9 +252,11 @@ static void test_emitbc_accepts_unencoded_embedded_locals(void) {
   t_emit(u, (IR_Inst){.op = IR_OP_HALT});
 
   OUTPUT_t out = make_out(32);
-  char *err = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 0, 0, &out, &err));
-  ASSERT_TRUE(err == NULL);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode_diag(u, 0, 0, &out, &diag));
+  ASSERT_TRUE(diag.message == NULL);
+  compiler_diag_reset(&diag);
 
   free(out.bytecode);
   ir_destroy_unit(u);
@@ -269,9 +272,11 @@ static void test_emitbc_accepts_unreferenced_terminal_label(void) {
   ASSERT_EQ_INT(u->function.count, u->labels.entries[terminal].position);
 
   OUTPUT_t out = make_out(16);
-  char *err = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 0, 0, &out, &err));
-  ASSERT_TRUE(err == NULL);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode_diag(u, 0, 0, &out, &diag));
+  ASSERT_TRUE(diag.message == NULL);
+  compiler_diag_reset(&diag);
 
   free(out.bytecode);
   ir_destroy_unit(u);
@@ -295,10 +300,11 @@ static void assert_class_layout(IR_Inst inst, size_t expected_body_len, size_t e
   }
 
   OUTPUT_t out = make_out(16);
-  char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, UINT8_MAX, UINT8_MAX, &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = t_emit_bytecode_diag(unit, UINT8_MAX, UINT8_MAX, &out, &diag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   size_t len = (size_t)(out.nextbyte - out.bytecode);
   ASSERT_EQ_INT(UINT8_MAX, out.bytecode[6]);
@@ -316,6 +322,7 @@ static void assert_class_layout(IR_Inst inst, size_t expected_body_len, size_t e
 
   free(out.bytecode);
   ir_destroy_unit(unit);
+  compiler_diag_reset(&diag);
 }
 
 static void test_emitbc_op_class_invariants(void) {
@@ -337,15 +344,17 @@ static void test_emitbc_op_class_invariants(void) {
   t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = idx});
   t_emit(u, (IR_Inst){.op = IR_OP_HALT});
   OUTPUT_t out = make_out(16);
-  char *errdetail = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 2, 2, &out, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode_diag(u, 2, 2, &out, &diag));
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_EQ_INT(2, out.bytecode[6]);
   ASSERT_EQ_INT(2, out.bytecode[7]);
   ASSERT_EQ_INT(BC_V1_HEADER_SIZE + 1 + 1 + 2 + 2 + 4 + 1,
                 (size_t)(out.nextbyte - out.bytecode));
   free(out.bytecode);
   ir_destroy_unit(u);
+  compiler_diag_reset(&diag);
 }
 
 static void test_embedded_code_canonical_boundaries(void) {
@@ -366,9 +375,11 @@ static void test_embedded_code_canonical_boundaries(void) {
     t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = idx});
     t_emit(u, (IR_Inst){.op = IR_OP_HALT});
     OUTPUT_t out = make_out(lengths[i] + 64u);
-    char *err = NULL;
-    ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 0, 0, &out, &err));
-    ASSERT_TRUE(err == NULL);
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    ASSERT_EQ_INT(ERR_NOERROR,
+                  t_emit_bytecode_diag(u, 0, 0, &out, &diag));
+    ASSERT_TRUE(diag.message == NULL);
     size_t n = (size_t)(out.nextbyte - out.bytecode);
     size_t embedded = BC_V1_HEADER_SIZE + 1u + 2u + strlen("boundary.target");
     ASSERT_EQ_INT('B', out.bytecode[embedded]);
@@ -390,6 +401,7 @@ static void test_embedded_code_canonical_boundaries(void) {
     ASSERT_EQ_INT(0, memcmp(out.bytecode, c.data, n));
     bc_convert_result_free(&c);
     free(out.bytecode);
+    compiler_diag_reset(&diag);
     free(src);
     ir_destroy_unit(u);
   }
@@ -411,9 +423,11 @@ static void test_embedded_code_parameterized_compatibility(void) {
   t_emit(u, (IR_Inst){.op = IR_OP_ITEM_SAVE_CODE, .a = idx});
   t_emit(u, (IR_Inst){.op = IR_OP_HALT});
   OUTPUT_t out = make_out(64u);
-  char *err = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 0, 0, &out, &err));
-  ASSERT_TRUE(err == NULL);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  ASSERT_EQ_INT(ERR_NOERROR,
+                t_emit_bytecode_diag(u, 0, 0, &out, &diag));
+  ASSERT_TRUE(diag.message == NULL);
   size_t n = (size_t)(out.nextbyte - out.bytecode);
   ASSERT_EQ_INT(BC_VERIFY_OK,
                 bc_verify_bytecode(out.bytecode, (uint32_t)n,
@@ -424,6 +438,7 @@ static void test_embedded_code_parameterized_compatibility(void) {
   ASSERT_EQ_INT(0, memcmp(out.bytecode, converted.data, n));
   bc_convert_result_free(&converted);
   free(out.bytecode);
+  compiler_diag_reset(&diag);
   ir_destroy_unit(u);
 }
 
@@ -445,11 +460,12 @@ static void test_compiler_embedded_code_boundary_lengths(void) {
     memcpy(program + pos, suffix, sizeof(suffix));
 
     OUTPUT_t *out = NULL;
-    char *err = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
     ASSERT_EQ_INT(ERR_NOERROR,
-                  compile_source_to_bytecode(program, program_len, &out,
-                                             &err));
-    ASSERT_TRUE(err == NULL);
+                  compile_source_to_bytecode_diag(program, program_len, &out,
+                                                  &diag));
+    ASSERT_EQ_INT(ERR_NOERROR, diag.code);
     ASSERT_NOT_NULL(out);
     size_t bytecode_len = (size_t)(out->nextbyte - out->bytecode);
     EmbeddedDecodeCapture capture = {0};
@@ -462,7 +478,7 @@ static void test_compiler_embedded_code_boundary_lengths(void) {
 
     free(out->bytecode);
     free(out);
-    free(err);
+    compiler_diag_reset(&diag);
     free(program);
   }
 }
@@ -495,11 +511,12 @@ static void test_emitbc_determinism_fixed_seed(void) {
 
   OUTPUT_t oa = make_out(32);
   OUTPUT_t ob = make_out(32);
-  char *errdetail = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(a, 8, 0, &oa, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
-  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(b, 8, 0, &ob, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode_diag(a, 8, 0, &oa, &diag));
+  ASSERT_TRUE(diag.message == NULL);
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode_diag(b, 8, 0, &ob, &diag));
+  ASSERT_TRUE(diag.message == NULL);
 
   size_t lena = (size_t)(oa.nextbyte - oa.bytecode);
   size_t lenb = (size_t)(ob.nextbyte - ob.bytecode);
@@ -510,6 +527,7 @@ static void test_emitbc_determinism_fixed_seed(void) {
   free(ob.bytecode);
   ir_destroy_unit(a);
   ir_destroy_unit(b);
+  compiler_diag_reset(&diag);
 }
 
 static void test_emitbc_successful_emission_verifies(void) {
@@ -519,14 +537,16 @@ static void test_emitbc_successful_emission_verifies(void) {
   t_emit(unit, (IR_Inst){.op = IR_OP_HALT});
 
   OUTPUT_t out = make_out(16);
-  char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, 0, 0, &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = t_emit_bytecode_diag(unit, 0, 0, &out, &diag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
   ASSERT_EQ_INT('h', out.bytecode[(out.nextbyte - out.bytecode) - 1]);
 
   free(out.bytecode);
   ir_destroy_unit(unit);
+  compiler_diag_reset(&diag);
 }
 
 static void test_emitbc_label_heavy_jump_targets_in_bounds(void) {
@@ -546,9 +566,10 @@ static void test_emitbc_label_heavy_jump_targets_in_bounds(void) {
   t_emit(u, (IR_Inst){.op = IR_OP_HALT});
 
   OUTPUT_t out = make_out(128);
-  char *errdetail = NULL;
-  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode(u, 1, 0, &out, &errdetail));
-  ASSERT_TRUE(errdetail == NULL);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  ASSERT_EQ_INT(ERR_NOERROR, t_emit_bytecode_diag(u, 1, 0, &out, &diag));
+  ASSERT_TRUE(diag.message == NULL);
 
   size_t len = (size_t)(out.nextbyte - out.bytecode);
   size_t pc = 2;
@@ -579,6 +600,7 @@ static void test_emitbc_label_heavy_jump_targets_in_bounds(void) {
 
   free(out.bytecode);
   ir_destroy_unit(u);
+  compiler_diag_reset(&diag);
 }
 
 void test_emitbc_invariants(void) {

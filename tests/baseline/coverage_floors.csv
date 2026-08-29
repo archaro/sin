@@ -15,7 +15,7 @@ src/compiler/absyn.c,compiler,measured,48.84,59.92,68.42,Reviewed pre-rewrite ba
 src/compiler/compdiag.c,compiler,measured,94.93,56.98,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/compiler/compiler_context.c,compiler,measured,90.00,79.17,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/compiler/compiler_pipeline.c,compiler,measured,90.40,74.07,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
-src/compiler/emitbc.c,compiler,measured,75.16,49.36,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
+src/compiler/emitbc.c,compiler,measured,74.92,49.36,100.00,Removal of the fully covered legacy wrapper reduced covered/total lines from 233/310 to 230/307 without losing coverage of emit_bytecode_diag.,gcc-13
 src/compiler/ir.c,compiler,measured,83.77,70.61,88.24,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/compiler/lower.c,compiler,measured,83.66,61.64,96.30,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/compiler/semant.c,compiler,measured,94.46,67.66,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13

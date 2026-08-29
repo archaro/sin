@@ -314,16 +314,19 @@ static void test_compiler_diag_repeated_set_reset_cycles(void) {
     ASSERT_TRUE(!d.has_loc);
   }
 
-  char *errdetail = NULL;
+  CompilerDiagnostic detail_diag;
+  compiler_diag_init(&detail_diag);
   for (int i = 0; i < 256; i++) {
     int8_t errnum = ERR_NOERROR;
-    ASSERT_TRUE(compdiag_setf_once(&errnum, &errdetail, ERR_COMP_SYNTAX, "diag",
-                                   "repeated detail %d", i));
+    ASSERT_TRUE(compdiag_setf_once_diag(&errnum, &detail_diag,
+                                        ERR_COMP_SYNTAX, DIAG_PHASE_PARSE,
+                                        "diag", "repeated detail %d", i));
     ASSERT_EQ_INT(ERR_COMP_SYNTAX, errnum);
-    ASSERT_NOT_NULL(errdetail);
-    compdiag_reset_detail(&errdetail);
-    ASSERT_TRUE(errdetail == NULL);
+    ASSERT_NOT_NULL(detail_diag.message);
+    compiler_diag_reset(&detail_diag);
+    ASSERT_TRUE(detail_diag.message == NULL);
   }
+  compiler_diag_reset(&detail_diag);
 }
 
 static void test_compiler_diag_rejects_256_locals(void) {
@@ -417,120 +420,40 @@ static size_t pipeline_output_size(const OUTPUT_t *out) {
   return (size_t)(out->nextbyte - out->bytecode);
 }
 
-static void test_compiler_pipeline_legacy_diag_success_parity(void) {
-  static const char *sources[] = {
-      "1;",
-      "@x = 7; @x;",
-      "if 1 then 2; endif;",
-      "sys.log{\"hello\"};",
-  };
-
-  for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
-    OUTPUT_t *legacy_out = NULL;
-    OUTPUT_t *diag_out = NULL;
-    char *errdetail = NULL;
-    CompilerDiagnostic diag;
-    compiler_diag_init(&diag);
-
-    int8_t legacy_rc = compile_source_to_bytecode(
-        sources[i], strlen(sources[i]), &legacy_out, &errdetail);
-    int8_t diag_rc = compile_source_to_bytecode_diag(
-        sources[i], strlen(sources[i]), &diag_out, &diag);
-
-    ASSERT_EQ_INT(ERR_NOERROR, legacy_rc);
-    ASSERT_EQ_INT(legacy_rc, diag_rc);
-    ASSERT_NOT_NULL(legacy_out);
-    ASSERT_NOT_NULL(diag_out);
-    ASSERT_TRUE(errdetail == NULL);
-    ASSERT_EQ_INT((int)pipeline_output_size(legacy_out),
-                  (int)pipeline_output_size(diag_out));
-    ASSERT_TRUE(memcmp(legacy_out->bytecode, diag_out->bytecode,
-                       pipeline_output_size(legacy_out)) == 0);
-
-    free_pipeline_output(legacy_out);
-    free_pipeline_output(diag_out);
-    compiler_diag_reset(&diag);
-  }
-}
-
-static void test_compiler_pipeline_legacy_diag_error_parity(void) {
-  static const char *sources[] = {
-      "^;",
-      "@x;",
-      "@x = ;",
-  };
-
-  for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
-    OUTPUT_t *legacy_out = (OUTPUT_t *)(uintptr_t)1;
-    OUTPUT_t *diag_out = (OUTPUT_t *)(uintptr_t)1;
-    char *errdetail = NULL;
-    CompilerDiagnostic diag;
-    compiler_diag_init(&diag);
-
-    int8_t legacy_rc = compile_source_to_bytecode(
-        sources[i], strlen(sources[i]), &legacy_out, &errdetail);
-    int8_t diag_rc = compile_source_to_bytecode_diag(
-        sources[i], strlen(sources[i]), &diag_out, &diag);
-
-    ASSERT_TRUE(legacy_rc != ERR_NOERROR);
-    ASSERT_EQ_INT(legacy_rc, diag_rc);
-    ASSERT_TRUE(legacy_out == NULL);
-    ASSERT_TRUE(diag_out == NULL);
-    ASSERT_NOT_NULL(errdetail);
-    ASSERT_NOT_NULL(diag.message);
-    ASSERT_TRUE(strcmp(errdetail, diag.message) == 0);
-    ASSERT_EQ_INT(legacy_rc, diag.code);
-
-    compdiag_reset_detail(&errdetail);
-    compiler_diag_reset(&diag);
-  }
-}
-
 static void test_compiler_pipeline_parameter_seeding(void) {
   const char *params[] = {"@who"};
   OUTPUT_t *out = (OUTPUT_t *)(uintptr_t)1;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
 
-  int8_t rc = compile_source_to_bytecode_with_params(
-      "@who;", strlen("@who;"), params, 1, &out, &errdetail);
+  int8_t rc = compile_source_to_bytecode_diag_with_params(
+      "@who;", strlen("@who;"), params, 1, &out, &diag);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
   ASSERT_NOT_NULL(out);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_EQ_INT(DIAG_PHASE_NONE, diag.phase);
   ASSERT_TRUE(pipeline_output_size(out) >= 2);
   ASSERT_EQ_INT(1, out->bytecode[6]);
   ASSERT_EQ_INT(1, out->bytecode[7]);
   free_pipeline_output(out);
+  compiler_diag_reset(&diag);
 
+  compiler_diag_init(&diag);
   out = (OUTPUT_t *)(uintptr_t)1;
-  rc = compile_source_to_bytecode("@who;", strlen("@who;"), &out,
-                                  &errdetail);
+  rc = compile_source_to_bytecode_diag("@who;", strlen("@who;"), &out,
+                                       &diag);
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
   ASSERT_TRUE(out == NULL);
-  ASSERT_NOT_NULL(errdetail);
-  compdiag_reset_detail(&errdetail);
+  ASSERT_NOT_NULL(diag.message);
+  compiler_diag_reset(&diag);
 }
 
 static void test_compiler_pipeline_invalid_inputs_clear_output(void) {
   ParseInput invalid_input = {NULL, 0, "invalid.sin"};
   OUTPUT_t *out = (OUTPUT_t *)(uintptr_t)1;
-  char *errdetail = strdup("stale detail");
-  ASSERT_NOT_NULL(errdetail);
-
-  int8_t rc = compile_source_to_bytecode(NULL, 0, &out, &errdetail);
-  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
-  ASSERT_TRUE(out == NULL);
-  ASSERT_TRUE(errdetail == NULL);
-
-  out = (OUTPUT_t *)(uintptr_t)1;
-  rc = compile_parse_input_to_bytecode(&invalid_input, &out, &errdetail);
-  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
-  ASSERT_TRUE(out == NULL);
-  ASSERT_TRUE(errdetail == NULL);
 
   CompilerDiagnostic diag;
   compiler_diag_init(&diag);
-  out = (OUTPUT_t *)(uintptr_t)1;
-  rc = compile_source_to_bytecode_diag(NULL, 0, &out, &diag);
+  int8_t rc = compile_source_to_bytecode_diag(NULL, 0, &out, &diag);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   ASSERT_TRUE(out == NULL);
   ASSERT_EQ_INT(DIAG_PHASE_COMPILE, diag.phase);
@@ -544,31 +467,58 @@ static void test_compiler_pipeline_invalid_inputs_clear_output(void) {
   ASSERT_NOT_NULL(diag.source_name);
   ASSERT_TRUE(strcmp("invalid.sin", diag.source_name) == 0);
   compiler_diag_reset(&diag);
+
+  rc = compile_source_to_bytecode_diag("1;", 2, NULL, &diag);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
+  ASSERT_EQ_INT(DIAG_PHASE_COMPILE, diag.phase);
+  ASSERT_NOT_NULL(diag.message);
+  compiler_diag_reset(&diag);
+
+  ParseInput unnamed_input = {"^;", 2, NULL};
+  out = (OUTPUT_t *)(uintptr_t)1;
+  rc = compile_parse_input_to_bytecode_diag(&unnamed_input, &out, &diag);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_TRUE(out == NULL);
+  ASSERT_NOT_NULL(diag.source_name);
+  ASSERT_TRUE(strcmp("<memory>", diag.source_name) == 0);
+  compiler_diag_reset(&diag);
+
+  out = (OUTPUT_t *)(uintptr_t)1;
+  rc = compile_source_to_bytecode_diag("^;", 2, &out, NULL);
+  ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
+  ASSERT_TRUE(out == NULL);
+
+  out = (OUTPUT_t *)(uintptr_t)1;
+  rc = compile_source_to_bytecode_diag("1;", 2, &out, NULL);
+  ASSERT_EQ_INT(ERR_NOERROR, rc);
+  ASSERT_NOT_NULL(out);
+  free_pipeline_output(out);
 }
 
 static void test_compiler_pipeline_failure_cleanup(void) {
   const char *source = "if 1 then 2; elsif 0 then 3; else 4; endif;";
-  bool legacy_saw_failure = false;
-  bool legacy_saw_success = false;
+  bool with_params_saw_failure = false;
+  bool with_params_saw_success = false;
   bool diag_saw_failure = false;
   bool diag_saw_success = false;
 
   for (long fail_at = 0; fail_at < 128; fail_at++) {
     OUTPUT_t *out = (OUTPUT_t *)(uintptr_t)1;
-    char *errdetail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
     alloc_test_fail_after(fail_at);
-    int8_t rc = compile_source_to_bytecode(source, strlen(source), &out,
-                                            &errdetail);
+    int8_t rc = compile_source_to_bytecode_diag_with_params(
+        source, strlen(source), NULL, 0, &out, &diag);
     alloc_test_fail_after(-1);
 
     if (rc == ERR_NOERROR) {
-      legacy_saw_success = true;
+      with_params_saw_success = true;
       free_pipeline_output(out);
     } else {
-      legacy_saw_failure = true;
+      with_params_saw_failure = true;
       ASSERT_TRUE(out == NULL);
     }
-    compdiag_reset_detail(&errdetail);
+    compiler_diag_reset(&diag);
   }
 
   for (long fail_at = 0; fail_at < 128; fail_at++) {
@@ -590,8 +540,8 @@ static void test_compiler_pipeline_failure_cleanup(void) {
     compiler_diag_reset(&diag);
   }
 
-  ASSERT_TRUE(legacy_saw_failure);
-  ASSERT_TRUE(legacy_saw_success);
+  ASSERT_TRUE(with_params_saw_failure);
+  ASSERT_TRUE(with_params_saw_success);
   ASSERT_TRUE(diag_saw_failure);
   ASSERT_TRUE(diag_saw_success);
 }
@@ -603,22 +553,23 @@ static void test_compiler_pipeline_parameter_seeding_oom(void) {
 
   for (long fail_at = 0; fail_at < 256; fail_at++) {
     OUTPUT_t *out = NULL;
-    char *errdetail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
     alloc_test_fail_after(fail_at);
-    int8_t rc = compile_source_to_bytecode_with_params(
-        source, strlen(source), params, 1, &out, &errdetail);
+    int8_t rc = compile_source_to_bytecode_diag_with_params(
+        source, strlen(source), params, 1, &out, &diag);
     alloc_test_fail_after(-1);
 
-    if (rc == ERR_COMP_UNKNOWN && errdetail &&
-        strstr(errdetail, "semant: out of memory growing local table") != NULL) {
+    if (rc == ERR_COMP_UNKNOWN && diag.message &&
+        strstr(diag.message, "semant: out of memory growing local table") != NULL) {
       saw_seeding_oom = true;
       ASSERT_TRUE(out == NULL);
-      compdiag_reset_detail(&errdetail);
+      compiler_diag_reset(&diag);
       break;
     }
 
     if (out) free_pipeline_output(out);
-    compdiag_reset_detail(&errdetail);
+    compiler_diag_reset(&diag);
   }
 
   ASSERT_TRUE(saw_seeding_oom);
@@ -661,8 +612,6 @@ static void test_compiler_crlf_source_handling(void) {
 
 void test_compiler_diag_pipeline(void){
   test_shared_argv_capture_stdin_eof();
-  test_compiler_pipeline_legacy_diag_success_parity();
-  test_compiler_pipeline_legacy_diag_error_parity();
   test_compiler_pipeline_parameter_seeding();
   test_compiler_pipeline_invalid_inputs_clear_output();
   test_compiler_pipeline_failure_cleanup();
@@ -744,14 +693,6 @@ void test_compiler_diag_pipeline(void){
   compiler_diag_reset(&d);
   const char *named_source = "@x = ;";
   ParseInput named_input = {named_source, strlen(named_source), "custom_source.sin"};
-  char *errdetail = NULL;
-  rc = compile_parse_input_to_bytecode(&named_input, &out, &errdetail);
-  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "custom_source.sin") != NULL);
-  compdiag_reset_detail(&errdetail);
-
-  compiler_diag_reset(&d);
   rc = compile_parse_input_to_bytecode_diag(&named_input, &out, &d);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   ASSERT_NOT_NULL(d.source_name);
@@ -764,49 +705,42 @@ void test_compiler_diag_pipeline(void){
   AS_NODE *ast = NULL;
   SCANNER_STATE_t parse_state = {0};
   ParseInput parse_input = {"^;", 2, "parse_stage.sin"};
-  errdetail = NULL;
-  rc = parse_source_compiler_diag(&parse_input, &ast, &errdetail, &d, &parse_state);
+  rc = parse_source_diag(&parse_input, &ast, &d, &parse_state);
   ASSERT_EQ_INT(ERR_COMP_UNKNOWNCHAR, rc);
   ASSERT_EQ_INT(DIAG_PHASE_PARSE, d.phase);
-  ASSERT_NOT_NULL(errdetail);
-  compdiag_reset_detail(&errdetail);
   free(parse_state.offending_token);
 
   compiler_diag_reset(&d);
   SEM_CTX *sem = sem_create_ctx();
   ParseInput sem_input = {"@x;", 3, "semant_stage.sin"};
-  errdetail = NULL;
-  rc = parse_source(&sem_input, &ast, &errdetail);
+  rc = parse_source_diag(&sem_input, &ast, &d, NULL);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  rc = sem_check_locals_diag(ast, &errdetail, &d, sem);
+  rc = sem_check_locals_diag(ast, &d, sem);
   ASSERT_EQ_INT(ERR_COMP_LOCALBEFOREDEF, rc);
   ASSERT_EQ_INT(DIAG_PHASE_SEMANT, d.phase);
-  compdiag_reset_detail(&errdetail);
   as_delete(ast);
   sem_delete_ctx(sem);
 
   compiler_diag_reset(&d);
   IR_Unit *ir = NULL;
-  errdetail = NULL;
-  rc = lower_ast_to_ir_diag(NULL, NULL, NULL, &errdetail, &d);
+  rc = lower_ast_to_ir_diag(NULL, NULL, NULL, &d);
   ASSERT_TRUE(rc != ERR_NOERROR);
   (void)ir;
   ASSERT_EQ_INT(DIAG_PHASE_LOWER, d.phase);
-  compdiag_reset_detail(&errdetail);
 
   compiler_diag_reset(&d);
-  errdetail = NULL;
-  rc = ir_validate_diag(NULL, 0, &errdetail, &d);
+  rc = ir_validate_diag(NULL, 0, &d);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   ASSERT_EQ_INT(DIAG_PHASE_IR_VALIDATE, d.phase);
-  compdiag_reset_detail(&errdetail);
 
   compiler_diag_reset(&d);
-  errdetail = NULL;
-  rc = emit_bytecode_diag(NULL, 0, 0, NULL, &errdetail, &d);
+  rc = emit_bytecode_diag(NULL, 0, 0, NULL, &d);
   ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
   ASSERT_EQ_INT(DIAG_PHASE_EMITBC, d.phase);
-  compdiag_reset_detail(&errdetail);
+
+  compiler_diag_reset(&d);
+  rc = emit_bytecode_diag(NULL, 0, 0, NULL, NULL);
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX, rc);
 
   compiler_diag_reset(&d);
   rc = compile_source_to_bytecode_diag(NULL, 0, &out, &d);

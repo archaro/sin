@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "compiler/ir.h"
+#include "compiler/compdiag.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 
@@ -17,10 +18,11 @@ static void run_header_case(uint8_t local_count, uint8_t param_count) {
   out.nextbyte = out.bytecode;
   ASSERT_NOT_NULL(out.bytecode);
 
-  char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, local_count, param_count, &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = t_emit_bytecode_diag(unit, local_count, param_count, &out, &diag);
   ASSERT_EQ_INT(0, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   size_t out_len = (size_t)(out.nextbyte - out.bytecode);
   ASSERT_TRUE(out_len >= 8);
@@ -36,6 +38,7 @@ static void run_header_case(uint8_t local_count, uint8_t param_count) {
   ASSERT_EQ_INT('h', out.bytecode[8]);
 
   free(out.bytecode);
+  compiler_diag_reset(&diag);
   ir_destroy_unit(unit);
 }
 

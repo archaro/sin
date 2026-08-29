@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "compiler/absyn.h"
+#include "compiler/compdiag.h"
 #include "error.h"
 #include "compiler/parse_input.h"
 #include "parser.h"
@@ -11,23 +12,26 @@
 
 static AS_NODE *parse_ok(const char *source) {
   AS_NODE *absyn = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   ParseInput input = {source, strlen(source), "float-literal-test.src"};
-  int8_t rc = parse_source(&input, &absyn, &errdetail);
+  int8_t rc = parse_source_diag(&input, &absyn, &diag, NULL);
   ASSERT_EQ_INT(ERR_NOERROR, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
+  compiler_diag_reset(&diag);
   ASSERT_NOT_NULL(absyn);
   return absyn;
 }
 
 static void parse_fails(const char *source) {
   AS_NODE *absyn = NULL;
-  char *errdetail = NULL;
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
   ParseInput input = {source, strlen(source), "float-literal-test.src"};
-  int8_t rc = parse_source(&input, &absyn, &errdetail);
+  int8_t rc = parse_source_diag(&input, &absyn, &diag, NULL);
   ASSERT_TRUE(rc != ERR_NOERROR);
-  ASSERT_TRUE(errdetail != NULL);
-  free(errdetail);
+  ASSERT_TRUE(diag.message != NULL);
+  compiler_diag_reset(&diag);
   if (absyn != NULL) {
     as_delete(absyn);
   }
@@ -203,15 +207,16 @@ void test_parser_integer_literals_range(void) {
   };
   for (size_t i = 0; i < sizeof(out_of_range) / sizeof(out_of_range[0]); ++i) {
     AS_NODE *absyn = NULL;
-    char *errdetail = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
     ParseInput input = {out_of_range[i], strlen(out_of_range[i]),
                         "integer-literal-test.src"};
-    ASSERT_TRUE(parse_source(&input, &absyn, &errdetail) != ERR_NOERROR);
+    ASSERT_TRUE(parse_source_diag(&input, &absyn, &diag, NULL) != ERR_NOERROR);
     ASSERT_TRUE(absyn == NULL);
-    ASSERT_NOT_NULL(errdetail);
-    ASSERT_TRUE(strcmp(errdetail,
+    ASSERT_NOT_NULL(diag.message);
+    ASSERT_TRUE(strcmp(diag.message,
                        "parser: integer literal out of range (expected 0..9223372036854775807)") == 0);
-    free(errdetail);
+    compiler_diag_reset(&diag);
   }
 }
 

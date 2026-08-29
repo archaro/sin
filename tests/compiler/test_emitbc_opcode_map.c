@@ -31,10 +31,11 @@ void test_emitbc_libcall_pair_bytes(void) {
   };
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
     OUTPUT_t *out = NULL;
-    char *errdetail = NULL;
-    int8_t rc = compile_source_to_bytecode(cases[i].source,
-                                           strlen(cases[i].source), &out,
-                                           &errdetail);
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    int8_t rc = compile_source_to_bytecode_diag(cases[i].source,
+                                                strlen(cases[i].source), &out,
+                                                &diag);
     ASSERT_EQ_INT(ERR_NOERROR, rc);
     ASSERT_NOT_NULL(out);
     size_t out_len = (size_t)(out->nextbyte - out->bytecode);
@@ -53,9 +54,9 @@ void test_emitbc_libcall_pair_bytes(void) {
       break;
     }
     ASSERT_TRUE(found);
-    free(errdetail);
     free(out->bytecode);
     free(out);
+    compiler_diag_reset(&diag);
   }
 }
 
@@ -192,27 +193,31 @@ void test_emitbc_opcode_map(void) {
     out.nextbyte = out.bytecode;
     ASSERT_NOT_NULL(out.bytecode);
 
-    char *errdetail = NULL;
-    int8_t rc = t_emit_bytecode(unit, 8, 8, &out, &errdetail);
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    int8_t rc = t_emit_bytecode_diag(unit, 8, 8, &out, &diag);
     if (rc != ERR_NOERROR) {
       TEST_FAILF("opcode case %s failed: %s", tc->name,
-                 errdetail ? errdetail : "<no diagnostic>");
+                 diag.message ? diag.message : "<no diagnostic>");
     }
-    ASSERT_TRUE(errdetail == NULL);
+    ASSERT_TRUE(diag.message == NULL);
     ASSERT_TRUE((size_t)(out.nextbyte - out.bytecode) > BC_V1_HEADER_SIZE + tc->offset);
     ASSERT_EQ_INT((int)tc->expected_opcode, out.bytecode[BC_V1_HEADER_SIZE + tc->offset]);
 
     free(out.bytecode);
     ir_destroy_unit(unit);
+    compiler_diag_reset(&diag);
   }
 }
 
 void test_emitbc_lists_and_itemrefs_emission(void) {
   const char *source = "return #[1, 2, &fred];";
   OUTPUT_t *out = NULL;
-  char *errdetail = NULL;
-  int8_t rc = compile_source_to_bytecode(source, strlen(source), &out, &errdetail);
-  if (rc != ERR_NOERROR) fprintf(stderr, "list compile: rc=%d detail=%s\n", rc, errdetail ? errdetail : "<none>");
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = compile_source_to_bytecode_diag(source, strlen(source), &out,
+                                               &diag);
+  if (rc != ERR_NOERROR) fprintf(stderr, "list compile: rc=%d detail=%s\n", rc, diag.message ? diag.message : "<none>");
   ASSERT_EQ_INT(ERR_NOERROR, rc);
   ASSERT_NOT_NULL(out);
   size_t len = (size_t)(out->nextbyte - out->bytecode);
@@ -232,7 +237,7 @@ void test_emitbc_lists_and_itemrefs_emission(void) {
   ASSERT_EQ_INT(0, out->bytecode[build + 4]);
   ASSERT_TRUE(out->bytecode[ref - 1] == 'E');
   ASSERT_TRUE(out->bytecode[ref + 1] == '[' || out->bytecode[ref + 1] == 'Q');
-  free(errdetail);
+  compiler_diag_reset(&diag);
   free(out->bytecode);
   free(out);
 }
@@ -269,10 +274,11 @@ void test_emitbc_push_float_immediate_layout(void) {
   out.nextbyte = out.bytecode;
   ASSERT_NOT_NULL(out.bytecode);
 
-  char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, 0, 0, &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = t_emit_bytecode_diag(unit, 0, 0, &out, &diag);
   ASSERT_EQ_INT(0, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   size_t pos = BC_V1_HEADER_SIZE;
   for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
@@ -285,6 +291,7 @@ void test_emitbc_push_float_immediate_layout(void) {
 
   free(out.bytecode);
   ir_destroy_unit(unit);
+  compiler_diag_reset(&diag);
 }
 
 void test_emitbc_push_int_immediate_layout(void) {
@@ -316,10 +323,11 @@ void test_emitbc_push_int_immediate_layout(void) {
   out.nextbyte = out.bytecode;
   ASSERT_NOT_NULL(out.bytecode);
 
-  char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, 0, 0, &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = t_emit_bytecode_diag(unit, 0, 0, &out, &diag);
   ASSERT_EQ_INT(0, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   size_t pos = BC_V1_HEADER_SIZE;
   for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
@@ -332,6 +340,7 @@ void test_emitbc_push_int_immediate_layout(void) {
 
   free(out.bytecode);
   ir_destroy_unit(unit);
+  compiler_diag_reset(&diag);
 }
 
 void test_emitbc_opcode_map_call_item_deref_alias_layout(void) {
@@ -348,10 +357,11 @@ void test_emitbc_opcode_map_call_item_deref_alias_layout(void) {
   out.nextbyte = out.bytecode;
   ASSERT_NOT_NULL(out.bytecode);
 
-  char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, 3, 3, &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = t_emit_bytecode_diag(unit, 3, 3, &out, &diag);
   ASSERT_EQ_INT(0, rc);
-  ASSERT_TRUE(errdetail == NULL);
+  ASSERT_TRUE(diag.message == NULL);
 
   /* v1 header, ITEM_DEREF('F', argc=0), CALL('F', argc=2), HALT */
   ASSERT_TRUE((size_t)(out.nextbyte - out.bytecode) >= 9);
@@ -365,6 +375,7 @@ void test_emitbc_opcode_map_call_item_deref_alias_layout(void) {
 
   free(out.bytecode);
   ir_destroy_unit(unit);
+  compiler_diag_reset(&diag);
 }
 
 void test_emitbc_opcode_map_unsupported_ir_op(void) {
@@ -379,13 +390,14 @@ void test_emitbc_opcode_map_unsupported_ir_op(void) {
   out.nextbyte = out.bytecode;
   ASSERT_NOT_NULL(out.bytecode);
 
-  char *errdetail = NULL;
-  int8_t rc = t_emit_bytecode(unit, 0, 0, &out, &errdetail);
+  CompilerDiagnostic diag;
+  compiler_diag_init(&diag);
+  int8_t rc = t_emit_bytecode_diag(unit, 0, 0, &out, &diag);
   ASSERT_TRUE(rc != ERR_NOERROR);
-  ASSERT_NOT_NULL(errdetail);
-  ASSERT_TRUE(strstr(errdetail, "unsupported IR op") != NULL);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, "unsupported IR op") != NULL);
 
-  free(errdetail);
+  compiler_diag_reset(&diag);
   free(out.bytecode);
   ir_destroy_unit(unit);
 }
