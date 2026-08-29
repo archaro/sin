@@ -15,6 +15,10 @@ removing an operation leaves its byte reserved forever. Any new or changed
 instruction requires a newer bytecode version rather than editing the v1
 manifest.
 
+The v1 AND and OR opcodes are eager binary VM operations. The current compiler
+implements source-language and and or short-circuit semantics using conditional
+jumps rather than emitting these opcodes directly.
+
 ## Code Block Layout
 
 Every newly compiled code item starts with an eight-byte self-identifying v1

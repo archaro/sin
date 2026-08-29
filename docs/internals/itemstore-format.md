@@ -166,7 +166,7 @@ version and update this document.
 
 Itemstore and bytecode versions are independent. An itemstore code record
 contains bytecode payload bytes but does not assign their bytecode version.
-Runtime loading may verify those bytes but does not rewrite them. sconv may
+Runtime loading may verify those bytes but does not rewrite them. `sconv` may
 migrate supported embedded bytecode while explicitly converting an older store;
 bytecode compatibility rules are defined in
 [the bytecode reference](bytecode.md).

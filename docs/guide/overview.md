@@ -18,7 +18,7 @@ conceptually referred to as `.`), under which top-level items can be created.
 These, in turn, may have child items, which may also have child items, and so
 on.  The namespace is formed by the item path, separated by dots.  Items may
 contain values or they may contain code - they are not 'variables' in the sense
-of an ordinary programming language: the item tree is simultaneously a data-
+of an ordinary programming language: the item tree is simultaneously a data
 structure, a namespace, and a programmable world state.
 
 A tiny schematic will, hopefully, make things clearer:
@@ -59,7 +59,7 @@ item will be executed (in this case, it writes "Hello Dave" to the system log).
 
 So we talk about *code items* rather than *functions* because they are simply
 a type of item which executes code rather than storing a value.  Code items can
-also return a value, too, so you can have something like this:
+also return a value, so you can have something like this:
 ```sinistra
 greet = code {@name} (
   sys.log{"Hello "};

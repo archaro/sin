@@ -1,2 +1,3 @@
-/* Delete any old connection information that is still hanging around */
+/* Say what we are about to do */
 sys.log{"Starting the chat server...\n"};
+/* Here is where any boot-time setting-up-of-things would ordinarily occur. */

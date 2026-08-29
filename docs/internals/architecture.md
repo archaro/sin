@@ -262,4 +262,4 @@ make test
 Architectural, compiler, runtime, or build-system changes should also run the
 applicable extended checks described in
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) and the
-[testing workflow](testing/README.md).
+[testing internals guide](testing/README.md).

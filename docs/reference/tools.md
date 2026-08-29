@@ -8,8 +8,9 @@ This page documents the command-line tools built by the top-level `Makefile`:
 
 ## `sconv`
 
-`sconv` converts v1 or v2 itemstores to canonical v2 format using atomic
-publication.
+`sconv` converts itemstores in legacy formats to the current latest format.
+This conversion takes place atomically - an itemstore is never left in an
+interstitial state between versions.
 
 The input and output paths must be distinct. Existing outputs are preserved
 unless `--replace` is supplied.
@@ -29,11 +30,9 @@ sconv -i <input itemstore> -o <output itemstore> [options]
 | `--replace` | Atomically replace an existing output. |
 | `-q`, `--quiet` / `-v`, `--verbose` | Control progress messages. |
 
-Both v1 and v2 inputs are accepted and always rewritten as canonical v2. Every
-code item is strictly verified; unversioned 0.7.1 code is migrated to v1,
-including legacy libcall tokens and relocated jumps. Conversion prepares all
-code items before publication, so a failed item leaves an existing output
-unchanged even with `--replace`.
+Every code item is strictly verified. Conversion prepares all code items before
+publication, so a failed item leaves an existing output unchanged even
+with `--replace`.
 
 When converting a v1 store, an embedded NUL in a string value is truncated at
 the first NUL. Conversion can still succeed, but emits a warning identifying
@@ -114,7 +113,7 @@ Options:
 | `--loadonly` | Load and execute the object file, then shut down. This is useful for initializing or updating items without running the network game loop. |
 | `-h`, `--help` | Print help and exit successfully. |
 | `--version` | Print the runtime version and exit successfully. |
-| `-i <file>`, `--itemstore <file>` | Load the itemstore from `<file>`. If the file does not exist, a new itemstore is created and saved under that name. If omitted, `items.dat` is used. Existing itemstores that fail to load are not replaced. |
+| `-i <file>`, `--itemstore <file>` | Load the itemstore from `<file>`. If the file does not exist, a new in-memory itemstore is created for that path. It is persisted by sys.save or by a subsequent normal safe shutdown after bootstrap completes. If omitted, `items.dat` is the default name for the item store. Existing itemstores that fail to load are not replaced. |
 | `-d <mode>`, `--itemstore-durability <mode>` | Select itemstore replacement durability. `full` is the default and synchronizes the temporary file and containing directory where the platform supports those operations. `fast` skips synchronization but still flushes, closes, and renames the temporary file. |
 | `-l[<file>]`, `--log[=<file>]` | Redirect log output. Accepted spellings are `-l<file>`, `-l <file>`, `--log=<file>`, and `--log <file>`. If no filename is supplied, the default basename `sin` is used. The runtime writes `<file>.log` for standard output messages and `<file>.err` for error output. In a separated form, the following token is consumed as the log basename only when it is not option-looking; an option-looking token remains an option rather than becoming a filename. |
 | `-n <item>`, `--input <item>` | Use `<item>` as the input-handler code item instead of `input`. This option must appear after `-i`/`--itemstore`, and the named item must already exist as a code item. The runtime derives `<item>.line` and `<item>.text` for network input details. |

@@ -85,5 +85,5 @@ are in `src/runtime/task.c` and `task.h`; network state, queues, Telnet
 integration, and fair polling are in `src/net/network.c` and `network.h`.
 
 Focused coverage covers task lifecycle, network state, chat integration, and
-shutdown policy coverage. Changes should preserve malformed-input, boundary,
-ownership, and failure-atomicity coverage at the affected boundary.
+shutdown policy. Changes should preserve malformed-input, boundary, ownership,
+and failure-atomicity coverage at the affected boundary.

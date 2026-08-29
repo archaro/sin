@@ -84,4 +84,4 @@ in `lower.*`, IR contracts in `ir.*`, and encoding/post-verification in
 Compiler coverage spans semantic analysis, pipeline failure paths, diagnostics,
 IR validation, emission invariants, and embedded/runtime compilation. Update
 positive and negative coverage at the boundary that changes, then run the
-compiler checks described [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+compiler checks described in [`CONTRIBUTING.md`](../../CONTRIBUTING.md).

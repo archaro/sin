@@ -11,7 +11,8 @@ foo
 foo.bar
 foo.bar.baz
 ```
-…although there is nothing can be inferred from `foo.bar` by its relationship with `foo`.
+…although there is nothing that can be inferred from `foo.bar` by its
+relationship with `foo`.
 
 Item names are case-insensitive. `player.name`, `Player.Name`, and
 `PLAYER.NAME` therefore refer to the same item; internally, item layer names
