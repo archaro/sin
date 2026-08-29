@@ -3,6 +3,12 @@
 This document describes the current module boundaries in Sinistra and the
 intended dependency direction. It is a reasoning aid, not a file-move plan.
 
+For the broader internals map, start at the [internals index](README.md).
+Conceptual boundaries are also covered by the [compiler pipeline](compiler.md),
+[itemstore operations](itemstore.md), and [event-loop lifecycle](event-loop.md);
+this page remains the module/dependency map rather than the sole navigation
+point.
+
 ## Source Organization
 
 Top-level `src/` holds the CLI entry points and integration headers, with

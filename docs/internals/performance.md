@@ -1,7 +1,21 @@
-# Performance measurements
+# Performance and benchmarking
 
-Build the release benchmark binary, then invoke its benchmark descriptor
-directly:
+This page is the durable index for performance work. It records supported
+entry points and evidence policy; timings belong in a dated report such as
+[performance-pre-0.8.0.md](performance-pre-0.8.0.md). Reserve
+`performance-0.8.0.md` for evidence captured from the released version.
+
+## Deterministic benchmark-tagged checks
+
+Benchmark-tagged descriptors are included in the normal `make test` aggregate.
+The framework marks them `benchmark,exclusive`, runs each in a fresh process,
+and serializes them. They are regression checks for deterministic counters and
+invariants, not portable elapsed-time promises. The item-cache descriptor is
+also exercised by the normal test suite.
+
+## Opt-in measurements
+
+Build the release benchmark binary, then select its descriptor directly:
 
 ```sh
 make BUILD=release obj/release-gcc/tests/rewrite/test_runtime_benchmark
@@ -10,12 +24,27 @@ SIN_EXTENDED_BENCH=1 \
   --run rewrite.runtime.test_runtime_benchmark_optin
 ```
 
-Benchmark-tagged descriptors are process-isolated and serialized by the
-framework; they are included in the ordinary deterministic test run. The
-extended measurement matrix is opt-in via `SIN_EXTENDED_BENCH=1`. The
-top-level `make bench` recipe is stale: it omits the
-required `--run` argument and exits with usage. Fix that build rule separately.
+`SIN_EXTENDED_BENCH=1` enables the extended matrix (network, lists, itemstore,
+item references/syscalls, runtime verification, and string-registry samples).
+`SIN_STRICT_BENCH=1` additionally enforces the small deterministic threshold
+checks in the descriptor. Without the extended flag, the descriptor still
+runs its baseline deterministic measurements.
 
-The checked-in [performance-0.8.0.md](performance-0.8.0.md) is the historical
-evidence record. Its timings are local historical measurements, not portable
-benchmarks or current performance guarantees.
+The top-level `make bench` target currently invokes `_bench` without the
+required `--run` selector, so it exits with framework usage rather than running
+the descriptor. This page intentionally retains the known-good direct command
+above; fixing the build rule is a separate change.
+
+## Adding evidence
+
+Keep benchmark output machine- and revision-specific. Add a new dated
+`performance-<version-or-date>.md` report with the build/compiler/platform,
+workload shape, sample policy, deterministic counters, and measured values;
+link it from this index and from the internals index. State whether a result is
+a regression threshold or an opt-in measurement. Do not turn one machine's
+elapsed timing into a portable guarantee.
+
+The checked-in
+[performance-pre-0.8.0.md](performance-pre-0.8.0.md) is the historical
+pre-release evidence record. Its timings are local historical measurements,
+not portable benchmarks or current performance guarantees.
