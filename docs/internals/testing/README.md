@@ -1,9 +1,9 @@
-# Testing internals
+# Testing Internals
 
 Sinistra's tests use one self-contained C17/POSIX framework. This guide is the
 starting point for changing or extending the suite.
 
-## Guide map
+## Guide Map
 
 - [Framework architecture](framework.md) explains discovery, execution,
   isolation, records, and cleanup.
@@ -12,7 +12,7 @@ starting point for changing or extending the suite.
 - [Adding and running tests](workflow.md) gives the exact workflow for native,
   conformance, inventory, fixture, network, coverage, and fuzz changes.
 
-## Authoritative test documents
+## Authoritative Test Documents
 
 These documents are checked-in inputs or policy owned by the test suite:
 
@@ -35,7 +35,7 @@ The checked-in catalogs and current adapter descriptors are the authoritative
 inventory for executable tests and their contract edges. Coverage snapshots
 remain separate baseline data used by the coverage-floor checks.
 
-## Quick commands
+## Quick Commands
 
 ```sh
 make test                         # normal deterministic gate

@@ -1,4 +1,4 @@
-# Test APIs and helper ownership
+# Test APIs and Helper Ownership
 
 Include `test_framework.h` for new framework-native code. Retained native test
 bodies may include `tests/test_assert.h`, whose assertion names are thin aliases
@@ -21,7 +21,7 @@ Assertions report file and line, reset hooks, remove registered fixtures, and
 terminate the isolated child. Do not return a failed status manually after an
 assertion.
 
-## Processes and fixtures
+## Processes and Fixtures
 
 Use `tf_process_run(argv, timeout_ms, &result)` for a child process, then call
 `tf_process_result_destroy`. It captures independent stdout and stderr and
@@ -37,7 +37,7 @@ and common itemstore setup are appropriate. Put domain-specific helpers beside
 their native test source or in that group's adapter. Do not add production
 dependencies to the framework.
 
-## Descriptor and adapter rules
+## Descriptor and Adapter Rules
 
 Keep IDs stable once they are in `tests/inventory/tests.csv`. Add a contract
 edge for each observable behavior. Tag tests that mutate process-global hooks,

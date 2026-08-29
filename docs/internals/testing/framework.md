@@ -1,11 +1,11 @@
-# Framework architecture
+# Framework Architecture
 
 The framework lives in `tests/framework/`. A test translation unit defines a
 `TF_TestDescriptor` array and calls `tf_main(argc, argv, tests, count)`. The
 descriptor owns a stable ID, a comma-separated tag list, a timeout in
 milliseconds, and at least one inventory contract ID.
 
-## Build and execution flow
+## Build and Execution Flow
 
 `mk/tests.mk` compiles each framework or adapter executable into
 `obj/<build>-<compiler>/tests/...`; production programs and the shared archive
@@ -16,14 +16,15 @@ are in the matching `obj/` and `lib/` directories. The top-level runner is
 2. Each executable validates descriptors and emits
    `TF|LIST|id|tags|timeout_ms|contracts` records.
 3. The runner rejects malformed metadata, duplicate IDs, and discovery errors.
-4. For each selected ID it invokes the executable with `--run ID`.
-5. `tf_main` executes the descriptor in a fresh process. The runner also puts
-   each child in a process group, captures stdout/stderr, enforces the
-   descriptor timeout, and kills/reaps the group on timeout or capture error.
-6. The child emits a `TF|RESULT|...` record and exits 0 for success, 1 for a
-   failed assertion/crash/timeout, or 2 for usage/metadata errors. The runner
-   emits `TF|TOTAL|scope|selected|passed|failed` and returns the aggregate
-   status.
+4. For each selected ID, the runner invokes the owning executable with
+   `--run ID` through the framework process helper.
+5. Inside that executable, `tf_main` forks the descriptor into its own process
+   group, captures stdout/stderr, enforces the descriptor timeout, and
+   kills/reaps the group on timeout or capture failure.
+6. The selected executable reports its result and exits `0` for success, `1`
+   for test failure, or `2` for usage/metadata errors. The aggregate runner
+   treats that status as authoritative, emits one aggregate `TF|RESULT` for the
+   descriptor, and finally emits `TF|TOTAL|scope|selected|passed|failed`.
 
 By default only failing child output is replayed. Set `TF_VERBOSE=1` to replay
 successful output too. `TEST_JOBS=N` runs up to N non-serial descriptors in
@@ -32,7 +33,7 @@ barriers; all tests still get process isolation. IDs and token components use
 letters, digits, `_`, `-`, `.`, and `:`; tags and contracts are comma-separated
 without empty components.
 
-## Fixtures and cleanup
+## Fixtures and Cleanup
 
 `tf_fixture_init` creates a private `sin-test-XXXXXX` directory below
 `TF_TMP_ROOT` (default `/tmp`). `tf_fixture_file` rejects absolute and `..`
@@ -50,7 +51,7 @@ direct child and descendants are in its process group, so timeout cleanup does
 not leave servers or shell descendants behind. Temporary runner capture files
 are unlinked immediately and live below the configured temporary root.
 
-## Hooks and configuration
+## Hooks and Configuration
 
 `tf_reset_hooks` restores allocation, itemstore, and I/O hooks between tests.
 `tf_alloc_fail_after` and `tf_io_failures` let focused tests exercise failure

@@ -1,9 +1,9 @@
-# Internals guide
+# Internals Guide
 
 This is the conceptual starting point for maintainers. It maps ownership,
 boundaries, data flow, and invariants; it is not a second user guide.
 
-## Implementation and architecture
+## Implementation and Architecture
 
 - [Architecture and module map](architecture.md) — dependency direction,
   module ownership, concurrency boundaries, and change rules.
@@ -18,7 +18,7 @@ boundaries, data flow, and invariants; it is not a second user guide.
 - [Networking](network.md): runtime network connection handling, including
   Telnet
 
-## Wire and format references
+## Wire and Format References
 
 - [Bytecode reference](bytecode.md) — bytecode ABI, instruction encoding, and
   verifier-facing wire rules.
@@ -29,7 +29,7 @@ These format pages are the wire references. The conceptual pages above should
 explain how those formats are produced and consumed without duplicating their
 tables.
 
-## Testing and evidence
+## Testing and Evidence
 
 - [Testing internals](testing/README.md) — framework architecture, APIs, and
   workflows. Its detailed pages are [framework](testing/framework.md),

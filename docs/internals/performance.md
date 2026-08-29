@@ -1,11 +1,11 @@
-# Performance and benchmarking
+# Performance and Benchmarking
 
 This page is the durable index for performance work. It records supported
 entry points and evidence policy; timings belong in a dated report such as
 [performance-pre-0.8.0.md](performance-pre-0.8.0.md). Reserve
 `performance-0.8.0.md` for evidence captured from the released version.
 
-## Deterministic benchmark-tagged checks
+## Deterministic Benchmark-tagged Checks
 
 Benchmark-tagged descriptors are included in the normal `make test` aggregate.
 The framework marks them `benchmark,exclusive`, runs each in a fresh process,
@@ -13,7 +13,7 @@ and serializes them. They are regression checks for deterministic counters and
 invariants, not portable elapsed-time promises. The item-cache descriptor is
 also exercised by the normal test suite.
 
-## Release benchmark entry point
+## Release Benchmark Entry Point
 
 Run the supported release benchmark target from the repository root:
 
@@ -27,7 +27,7 @@ the existing `SIN_EXTENDED_BENCH=1 SIN_BENCH_REPORT=1` environment contract.
 `SIN_EXTENDED_BENCH=1` enables the extended matrix for this entry point;
 benchmark stdout may be captured by the caller.
 
-## Focused selection and opt-in measurements
+## Focused Selection and Opt-in Measurements
 
 Build the release benchmark binary, then select its descriptor directly:
 
@@ -44,7 +44,7 @@ item references/syscalls, runtime verification, and string-registry samples).
 checks in the descriptor. Without the extended flag, the descriptor still
 runs its baseline deterministic measurements.
 
-## Adding evidence
+## Adding Evidence
 
 Keep benchmark output machine- and revision-specific. Add a new dated
 `performance-<version-or-date>.md` report with the build/compiler/platform,
