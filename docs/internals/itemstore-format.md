@@ -1,12 +1,12 @@
 # Sinistra Itemstore File Format
 
 This document is the canonical reference for the on-disk itemstore format.
-The current runtime format version is `2`. Version 1 decoding remains an
-internal conversion-only path; the normal runtime loader rejects v1.
+The current runtime format version is `2`. The normal runtime loader rejects v1,
+which should be converted using `sconv`.
 
-Itemstore v1 was stabilised at Sinistra release 0.5. V2 retains all v1 scalar,
-code, and record bytes and adds list (tag 5) and item-reference (tag 6)
-payloads.
+Itemstore v1 was stabilised at Sinistra release 0.5. It was superseded by v2 in
+release 0.7.1; v2 retains all v1 scalar, code, and record bytes and adds lists
+and item-reference payloads.
 
 V2 list payloads are a `uint32` element count followed by recursively encoded
 values. Item references are a `uint16` byte length followed by a canonical
@@ -126,16 +126,10 @@ limited to 32 bytes and
 may not contain an embedded NUL, but it is not subject to the non-root character
 set restriction.
 
-The in-memory item APIs enforce name, depth, and path limits before changing a
-tree. The v2 aggregate list-element budget is a stream-level save/load check,
-and the persisted bytecode and child-count limits are checked while writing and
-reading the file. A path
-passed to `item_set_value`, `item_set_code`, `find_item`,
-`find_item_cached`, or `item_delete` is relative to the supplied item pointer;
-the supplied item's ancestor depth counts toward the depth limit. Its complete
-non-root path must fit within 263 bytes including separators. Invalid paths are
-rejected without creating intermediate items, changing the itemstore
-topology/payload revisions, or updating cache hit/miss counters.
+The same layer and path limits are enforced by the live itemstore APIs; see
+[Itemstore Operations](itemstore.md). The wire reader additionally enforces
+stream-level record, aggregate-list, bytecode, and decode-budget limits while
+loading.
 
 The record and cumulative decode-heap limits apply to every v2 load and to the
 v1 conversion reader. A record is reserved before its payload is decoded, and
@@ -146,66 +140,33 @@ the complete load or conversion, and save performs the same admissibility
 preflight before publishing a destination.
 
 `itemstore_load()` (or `itemstore_load_with_options()` when strict bytecode
-validation is requested) aborts the entire load on any validation, allocation,
-truncation, or I/O failure and returns `NULL`. A partially constructed store is
-discarded; callers own a successfully returned `ITEMSTORE_t` and release it
-with `itemstore_destroy()`.
+validation is requested) aborts the entire load: malformed, truncated, or
+budget-exceeding streams are invalid.
 
-Mutations through the in-memory item APIs take effect immediately in the loaded
-tree, but are not durable until `itemstore_save()` completes. Normal safe
-shutdown, including `sin --loadonly`, saves the itemstore; `sys.abort` skips that
-save. A failed save reports failure and does not claim durability. A code-item
-source copy written under `srcroot` is a separate best-effort file write and is
-not covered by the itemstore durability mode.
+## Publication and Durability
 
-## Save and replacement behavior
+The writer serializes a complete v2 stream to an exclusive temporary file
+beside the destination and publishes it by replacement only after serialization
+and flush/close succeed. `full` durability additionally synchronizes the
+temporary file and containing directory where supported; `fast` omits those
+synchronization calls.
 
-`itemstore_save()` creates an exclusive, collision-resistant temporary file
-beside the destination, writes the v2 stream to it, flushes and closes it, and
-then renames it over the destination. A pre-existing temporary file is never
-opened with truncation or replaced. The `--itemstore-durability` startup option
-controls synchronization:
-
-- `full` is the default. On POSIX systems, it calls `fsync` on the temporary
-  file after `fflush` and before close and replacement, then calls `fsync` on
-  the containing directory after the rename. This is the strongest contract
-  available from this implementation, subject to the filesystem's own crash
-  semantics; it is not a guarantee against hardware or operating-system
-  failure.
-- `fast` skips both synchronization calls, but still flushes, closes, and
-  renames the temporary file. This can substantially reduce save latency on
-  physical storage, but an operating-system crash or power loss can lose or
-  corrupt the latest save.
-
-On Windows builds, the synchronization hooks are no-ops, so `full` still
-flushes, closes, and replaces the file but does not provide POSIX-style file or
-directory `fsync` durability. Other platforms should be treated similarly
-unless their build supplies equivalent synchronization semantics.
-
-In either mode, serialization, temporary-file creation, flush, file sync,
-close, rename, or any required directory sync failure makes `itemstore_save()`
-return `false`. A failure before rename removes the temporary file where
-possible and leaves the existing destination in place. A directory-sync failure
-occurs after rename: the function still returns `false`, but the destination may
-already contain the new data. The function returns `true` only after replacement
-and all required durability steps succeed.
+Failures before replacement leave the previous destination intact where
+possible. A required directory-sync failure occurs after replacement and
+therefore reports failure even though the new file may already be visible. See
+[Itemstore Operations](itemstore.md) for the operational save lifecycle.
 
 ## Versioning
 
-The normal runtime reader accepts only version 2 and the writer always emits
-version 2. The internal dispatcher retains the frozen version 1 decoder for
-the explicit `sconv` migration path; runtime loading never auto-converts and
-does not rewrite embedded bytecode. A future incompatible layout must use a
-new header version and update this document.
+The normal runtime reader accepts only itemstore version 2, and the writer
+always emits version 2. The frozen version 1 decoder is retained solely for the
+explicit `sconv` migration path; normal runtime loading never auto-converts an
+older store. A future incompatible itemstore layout must use a new header
+version and update this document.
 
-The itemstore version describes the container's wire structure, not the
-compatibility of bytecode payloads stored in code items. Version 2 stores
-payload bytes unchanged. The frozen v1 bytecode ABI is portable, and legacy
-unversioned 0.7.1 blocks may execute when embedded. Runtime loading does not
-auto-migrate embedded bytecode; the `sin` bootstrap requires versioned v1 input,
-and `sconv` remains the explicit migration path when conversion is needed.
-Version 2 values may be recursive lists and item references, for example
-`#[1, #[2], &player]`; references store canonical paths and do not execute on
-load. Migration is explicit: run `sconv` to a new output path, validate with a
-current bootstrap and `sin --loadonly`, then have an administrator back up/move
-the old store and rename the validated output.
+Itemstore and bytecode versions are independent. An itemstore code record
+contains bytecode payload bytes but does not assign their bytecode version.
+Runtime loading may verify those bytes but does not rewrite them. sconv may
+migrate supported embedded bytecode while explicitly converting an older store;
+bytecode compatibility rules are defined in
+[the bytecode reference](bytecode.md).

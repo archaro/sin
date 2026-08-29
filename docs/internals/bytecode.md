@@ -2,18 +2,20 @@
 
 This document is the canonical human-readable reference for Sinistra bytecode.  The bytecode ABI opcode metadata in `src/bytecode/opcode_schema.def` is the source of truth for opcode symbols, operand kinds, size policies, validators, and runtime handler requirements.
 
-Newly compiled code uses bytecode format v1. Bytecode v1 and later versions are
-retained as the compatibility contract. The unversioned 0.7.1 little-endian
-layout remains accepted and executable by the runtime/interpreter and bytecode
-APIs when embedded as a code-item payload. The `sin` CLI bootstrap requires
-versioned v1 input; `sconv` remains the explicit migration path for legacy
-stores and code.
+Newly compiled code uses bytecode format v1. Bytecode v1 is the current
+compatibility contract. `sin` bootstrap objects must use a supported versioned
+bytecode format; the current supported format is v1.
 
-## v1 compatibility contract
+## V1 Compatibility Contract
 
-The v1 opcode ABI is frozen as of pre-release 0.5.0. Encoded bytes, operand layouts, context validity, stack effects, and control/termination classes are immutable. Bytes not assigned by the frozen manifest are reserved and invalid; removing an operation leaves its byte reserved forever. Any new or changed instruction requires a newer bytecode version rather than editing the v1 manifest.
+The v1 opcode ABI is frozen as of pre-release 0.5.0. Encoded bytes, operand
+layouts, context validity, stack effects, and control/termination classes are
+immutable. Bytes not assigned by the frozen manifest are reserved and invalid;
+removing an operation leaves its byte reserved forever. Any new or changed
+instruction requires a newer bytecode version rather than editing the v1
+manifest.
 
-## Code block layout
+## Code Block Layout
 
 Every newly compiled code item starts with an eight-byte self-identifying v1
 header followed by the instruction stream.
@@ -32,45 +34,47 @@ The interpreter enters a code item by allocating `locals count - parameter count
 additional local slots and beginning execution at byte offset 8. Legacy blocks
 use their two-byte header and begin execution at offset 2.
 
-## Encoding conventions
+## Encoding Conventions
 
 All multi-byte unsigned values are fixed-width little-endian. Signed i16 jumps
 and i64 integer literals use two's-complement bit patterns in little-endian
 order. Float operands are little-endian IEEE 754 binary64 payload bits,
 preserving signed zero, infinities, and NaN payloads. Jump offsets are measured
-from the start of their two-byte offset field and remain in INT16_MIN..INT16_MAX.
+from the start of their two-byte offset field and remain in
+INT16_MIN..INT16_MAX.
+
 Locals, parameters, and item-layer lengths are u8; string, parameter-name, and
 embedded-source lengths are u16 with values capped by SIN_MAX_STRING_BYTES.
 List counts are encoded u32 while runtime lists remain capped by
 SIN_LIST_MAX_ELEMENTS. One-byte fields are unchanged.
 
-* **Opcode bytes** are single-byte character symbols. For example, `p` is
+- **Opcode bytes** are single-byte character symbols. For example, `p` is
   `IR_OP_PUSH_INT` and `h` is `IR_OP_HALT`.
-* **One-byte immediates** (`u8`) follow the opcode directly and are used for
+- **One-byte immediates** (`u8`) follow the opcode directly and are used for
   local indexes, boolean values, libcall pair indices, and item layer lengths.
-* **Two-byte immediates** (`u16` or signed `i16`) follow the opcode directly.
+- **Two-byte immediates** (`u16` or signed `i16`) follow the opcode directly.
   Strings and embedded source blocks use unsigned 16-bit lengths. Jumps use a
   signed 16-bit relative offset.
-* **Four-byte immediates** (`u32`) follow the opcode directly. `[` /
+- **Four-byte immediates** (`u32`) follow the opcode directly. `[` /
   `IR_OP_BUILD_LIST` stores its element count as a little-endian unsigned
   32-bit value.
-* **Eight-byte immediates** are used by `p` / `IR_OP_PUSH_INT` and `P` /
+- **Eight-byte immediates** are used by `p` / `IR_OP_PUSH_INT` and `P` /
   `IR_OP_PUSH_FLOAT`. Integers are encoded as `i64`. Floats are encoded as raw
   IEEE 754 binary64 payload bits copied through the emitter and interpreter as
   an eight-byte `uint64_t` blob; the payload is not numerically converted during
   bytecode I/O.
-* **Strings** are encoded as a 16-bit unsigned byte length followed by exactly
+- **Strings** are encoded as a 16-bit unsigned byte length followed by exactly
   that many bytes. A trailing NUL is not stored in bytecode.
-* **Jumps** (`j`, `k`) encode a signed 16-bit offset measured from the first
+- **Jumps** (`j`, `k`) encode a signed 16-bit offset measured from the first
   byte after the jump opcode (the start of the two-byte offset field). A taken
   branch sets the instruction pointer to `offset_field_start + offset`; a
   not-taken conditional branch skips the two offset bytes.
-* **Item names** are assembled between `I` or `R` and `E`. Literal layers use
+- **Item names** are assembled between `I` or `R` and `E`. Literal layers use
   `L`, a one-byte unsigned length, and the layer-name bytes. Dereferenced layers
   use `D` followed by the nested dereference kind, currently `V` plus a one-byte
   local index for a local variable layer, or another item assembly. Nested item
   assemblies are limited to eight levels.
-* **Embedded code** (`B`) begins with a parameter marker `P`, zero or more
+- **Embedded code** (`B`) begins with a parameter marker `P`, zero or more
   parameter names as `u16 length + bytes`, then a terminating zero `u16` length.
   The parameter block is followed by the mandatory source block encoded as
   `u16 source_length + source bytes`. New emitters always write `P, u16(0)` for
@@ -82,7 +86,7 @@ SIN_LIST_MAX_ELEMENTS. One-byte fields are unchanged.
   are rejected rather than guessed or rewritten in place. Consequently, an old
   markerless source whose length has low byte `0x50` is rejected as ambiguous.
 
-## Opcode reference
+## Opcode Reference
 
 Compiler source operands and arguments are evaluated left-to-right. Binary VM
 instructions consume the RHS from the top of the stack and the LHS immediately
@@ -162,38 +166,42 @@ error. Malformed or truncated encodings are verifier errors.
 | `V` | `IR_OP_ITEM_PUSH_DEREF_LOCAL` | `u8 local_index` | Inside a `D` dereference payload, turn the addressed local value into a layer name. |
 
 
-## List and reference opcodes
+## List and Reference Opcodes
 
 `BUILD_LIST` consumes element values from the VM stack in source order
 (leftmost below later elements) and pushes one list value. `MAKE_ITEMREF`
 creates a canonical path reference without resolving or executing its target;
 resolution is deferred to the relevant `sys.*` call.
 
-## Code item result semantics
+## Code Item Result Semantics
 
-`IR_OP_HALT` terminates the current code item with `nil`, discarding any residual
-operand values. `IR_OP_RETURN` pops exactly one explicit result and terminates
-the current code item with that value. For nested calls the result is pushed onto
-the caller's stack; for top-level execution it is returned by the interpreter.
+`IR_OP_HALT` terminates the current code item with `nil`, discarding any
+residual operand values. `IR_OP_RETURN` pops exactly one explicit result and
+terminates the current code item with that value. For nested calls the result
+is pushed onto the caller's stack; for top-level execution it is returned by
+the interpreter.
 
 The compiler emits `IR_OP_DISCARD` after every expression statement. Therefore
 `1; 2;`, assignments, and control-flow statements fall through with `nil`.
 Code-item values are produced only by source `return expression;`, while
-`return;` and fallthrough compile to `HALT`. `RETURN` and `HALT` are control-flow
-terminators, not physical end markers: valid bytecode may contain later
-instructions and branch targets, but compiler-produced streams end in a final
-structural `HALT`.
+`return;` and fallthrough compile to `HALT`. `RETURN` and `HALT` are
+control-flow terminators, not physical end markers: valid bytecode may contain
+later instructions and branch targets, but compiler-produced streams end in a
+final structural `HALT`.
 
-## Numeric edge cases
+## Numeric Edge Cases
 
-Integer arithmetic is signed 64-bit arithmetic with checked overflow. `IR_OP_ADD` is the only arithmetic opcode that treats `nil` as integer `0`; `IR_OP_SUB`, `IR_OP_MUL`, `IR_OP_DIV`, and `IR_OP_NEG` do not treat `nil` as numeric. Overflow in
-`IR_OP_ADD`, `IR_OP_SUB`, `IR_OP_MUL`, `IR_OP_DIV`, and integer `IR_OP_NEG`
-pushes `nil`; it does not wrap, saturate, or trap. Examples include
-`INT64_MAX + 1`, `INT64_MIN - 1`, `3037000500 * 3037000500`,
-`INT64_MIN / -1`, and `-INT64_MIN`. Integer division by zero pushes integer `0`. Float operations, including division
-by zero, use IEEE 754 binary64 results after any integer-to-float promotion.
+Integer arithmetic is signed 64-bit arithmetic with checked overflow.
+`IR_OP_ADD` is the only arithmetic opcode that treats `nil` as integer `0`;
+`IR_OP_SUB`, `IR_OP_MUL`, `IR_OP_DIV`, and `IR_OP_NEG` do not treat `nil` as
+numeric. Overflow in `IR_OP_ADD`, `IR_OP_SUB`, `IR_OP_MUL`, `IR_OP_DIV`, and
+integer `IR_OP_NEG` pushes `nil`; it does not wrap, saturate, or trap. Examples
+include `INT64_MAX + 1`, `INT64_MIN - 1`, `3037000500 * 3037000500`,
+`INT64_MIN / -1`, and `-INT64_MIN`. Integer division by zero pushes integer
+`0`. Float operations, including division by zero, use IEEE 754 binary64
+results after any integer-to-float promotion.
 
-## Shared `F` opcode behavior
+## Shared `F` Opcode Behavior
 
 `IR_OP_ITEM_DEREF` and `IR_OP_CALL` intentionally share the encoded opcode byte
 `F`. Both operations execute the same VM primitive: fetch the item named by the
@@ -202,43 +210,36 @@ string on top of the stack.
 The shared primitive canonicalizes the item name in the current item context,
 then behaves as follows:
 
-* If the target is a value item, it discards all supplied arguments and pushes
+- If the target is a value item, it discards all supplied arguments and pushes
   a copy of the value.
-* If the target is a code item, it normalizes the supplied argument count to the
+- If the target is a code item, it normalizes the supplied argument count to the
   callee parameter count by discarding extra arguments or pushing `nil` for
   missing arguments, saves the caller continuation, and transfers execution to
   the callee.
-* If the target does not exist or the item name is invalid, it discards supplied
+- If the target does not exist or the item name is invalid, it discards supplied
   arguments and pushes `nil`.
 
 By default, discarding arguments in these cases is silent by design. This lets
 running worlds tolerate live code updates while callers and callees are being
 brought back into agreement after a parameter-list change. When the runtime is
-started with `--strict-runtime-contracts`, the `F` primitive still performs the
-same stack normalization and return-value behavior, but each discarded argument
-caused by an over-arity code-item call, a value-item target, invalid item name,
-or missing target item
-sets `error` to `ERR_RUNTIME_INVALIDARGS` and writes a diagnostic to `error.msg`.
-This option is separate from `--strict-validation`, which optionally validates
-persisted code while loading itemstores; mandatory executable bytecode
-verification still occurs immediately before execution. It has a runtime cost
-because it performs extra contract checks. For example, an over-arity call such as `add{1, 2, 3}` still
-returns the same value that `add{1, 2}` would return, and a missing-target call
-such as `missing.item{1}` still returns `nil`; strict runtime contracts
-additionally set `ERR_RUNTIME_INVALIDARGS` and explain that an argument was
-discarded.
+started with `--strict-runtime-contracts`, the `F` primitive always performs
+the same argument normalization and stack effects. `--strict-runtime-contracts`
+may additionally diagnose otherwise tolerated discarded arguments, but does not
+alter the opcode's result or stack semantics. See
+[Runtime Ownership and API Boundaries](runtime.md) and the
+[Reference Manual](../reference/README.md) for diagnostic behaviour.
 
 The IR schema distinguishes the two producers of `F`:
 
-* `IR_OP_ITEM_DEREF` is a plain item dereference and has no IR operand; the
+- `IR_OP_ITEM_DEREF` is a plain item dereference and has no IR operand; the
   emitter writes an encoded argument count of zero.
-* `IR_OP_CALL` carries the call arity as an unsigned 16-bit immediate after `F`.
+- `IR_OP_CALL` carries the call arity as an unsigned 16-bit immediate after `F`.
 
 A plain dereference is semantically a zero-argument fetch. Keep the schema,
 emitter, interpreter, and this reference aligned whenever changing the `F`
 encoding or arity handling.
 
-## Maintaining this reference
+## Maintaining This Reference
 
 `src/bytecode/opcode_schema.def` is the source of truth for IR opcode
 metadata. When any row in that file changes, update this document in the same
@@ -251,7 +252,5 @@ change set:
    format, or embedded-code format.
 3. Update the shared-opcode notes when rows intentionally share an encoded
    symbol, especially `F`.
-4. Run the opcode schema, emitter, and compiler pipeline tests that cover the
-   changed rows, then include those commands in the change summary.
-5. Treat v1 bytecode as portable; legacy unversioned input remains a
-   pre-v1 little-endian migration format.
+4. Run the opcode-schema, emitter, verifier, and compiler coverage affected by
+   the changed rows.
