@@ -1,10 +1,10 @@
-# Compiler pipeline
+# Compiler Pipeline
 
-The compiler is a single bounded pipeline owned by `CompilerContext`. The
-public entry points are `compile_source_to_bytecode*()` in
-`src/compiler/compiler_pipeline.h`; all variants use the same stage order.
+The compiler is a single bounded pipeline coordinated through
+`CompilerContext`. The public entry points are `compile_source_to_bytecode*()`
+in `src/compiler/compiler_pipeline.h`; all variants use the same stage order.
 
-## Data flow
+## Data Flow
 
 ```text
 source + ParseInput
@@ -35,7 +35,7 @@ payload references before emission. The emitter performs its own
 size/representability checks, writes the versioned bytecode header and stream,
 and post-verifies the completed output before returning it.
 
-## Context and destruction
+## Context and Destruction
 
 `CompilerContext` borrows the source bytes and owns the AST root, semantic
 context, IR unit, diagnostic string, and temporary `OUTPUT_t`. Its reset path
@@ -44,7 +44,7 @@ destroys those in their owning APIs (`as_delete`, `sem_delete_ctx`,
 the context before cleanup. Every error path goes through the same cleanup, so
 callers receive no partial output.
 
-## Provenance and diagnostics
+## Provenance and Diagnostics
 
 `CompilerSourceSpan` is non-owning and is copied from AST nodes into lowered IR
 instructions and embedded payloads. Parse state supplies the scanner location;
@@ -54,7 +54,7 @@ final diagnostic boundary. Keep spans available when adding nodes or IR
 instructions: emitted bytecode does not contain source provenance, but
 diagnostics and compiler error items depend on it.
 
-## Embedded code and the runtime crossing
+## Embedded Code and the Runtime Crossing
 
 The `code (...)` AST form is semantically checked in its own scope, seeded only
 with its declared parameters. Lowering copies the source pointer and builds
@@ -63,14 +63,14 @@ that metadata. Emission writes the embedded parameter marker, terminated
 parameter list, and source block into the `ITEM_SAVE_CODE` payload. The wire
 layout and limits are specified in [the bytecode reference](bytecode.md).
 
-At runtime, `sys.compile` is the intentional crossing: `libcall_sys.c` invokes
-the same diagnostic pipeline on a source string, inserts the resulting bytecode
-as a temporary code item, interprets it synchronously, discards only values
-produced by that nested run, and deletes the temporary item. Compilation errors
-are published through the runtime error item. This path must preserve both
-compiler cleanup and runtime stack/frame ownership.
+At runtime, `sys.compile` is the intentional compiler/runtime crossing:
+it invokes the same diagnostic pipeline on dynamic source and executes the
+resulting temporary code synchronously. The runtime owns temporary-item and
+frame cleanup; the compiler retains its normal output, diagnostic, and
+failure-cleanup contracts. See
+[Runtime Ownership and API Boundaries](runtime.md) for the execution side.
 
-## Durable invariants and change map
+## Durable Invariants and Change Map
 
 Keep stage order and fail-closed behavior intact: no lowering without a valid
 AST, no emission without valid IR, no returned output after a failed stage, and
@@ -81,11 +81,7 @@ remain bounded and unambiguous. Changes to syntax start in `parser.y` or
 in `lower.*`, IR contracts in `ir.*`, and encoding/post-verification in
 `emitbc.*` plus the bytecode verifier.
 
-The focused coverage is in `tests/core/test_semant.c` and
-`tests/compiler/test_pipeline_*`, `test_compiler_context_failures.c`,
-`test_compiler_diag_pipeline.c`, `test_ir_validate.c`, and
-`test_emitbc_*`; embedded and runtime crossing cases also live in
-`tests/compiler/test_emitbc_invariants.c` and
-`tests/core/test_libcall_sys_compile.c`. Update positive and negative coverage
-at the boundary that changes, then use the compiler gates described in
-[`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+Compiler coverage spans semantic analysis, pipeline failure paths, diagnostics,
+IR validation, emission invariants, and embedded/runtime compilation. Update
+positive and negative coverage at the boundary that changes, then run the
+compiler checks described [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
