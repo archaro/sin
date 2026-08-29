@@ -1,10 +1,10 @@
-# Itemstore operations
+# Itemstore Operations
 
 This page describes the live itemstore and its operational boundaries. The
 [itemstore file-format reference](itemstore-format.md) owns the wire tables;
 this page explains the in-memory model, staging, and ownership around them.
 
-## Names and tree topology
+## Names and Tree Topology
 
 An `ITEMSTORE_t` owns one root and its complete descendant tree. Dot-separated
 paths passed to the direct tree APIs are relative to the supplied root/item;
@@ -22,11 +22,11 @@ are rejected before the tree changes.
 Each item's child container is opaque to callers. It combines a hash table for
 lookup with an insertion-ordered array for deterministic traversal and save
 order. The hash representation may resize; the order array is the observable
-iteration order. Child links, values, bytecode, and item pointers are owned by
-the store. Roots and other item pointers are borrowed and become invalid when
+iteration order. Child links, values, bytecode, and items are owned by the
+store. Roots and other item pointers are borrowed and become invalid when
 their store or containing subtree is destroyed.
 
-## Mutations, pins, and revisions
+## Mutations, Pins, and Revisions
 
 `item_set_value()` and `item_set_code()` create missing intermediate value
 items, or replace the target payload. Creation/replacement is transactional:
@@ -49,7 +49,7 @@ topology, so cached item pointers remain valid. Revisions have epochs/exhaustion
 flags to prevent token reuse during a store lifetime; hit/miss counters are
 per-store and invalid names do not touch them.
 
-## Protected errors
+## Protected Errors
 
 The root-relative `error` namespace (`error` and its descendants) is reserved
 for runtime publication. Runtime mutation helpers reject writes there and set a
@@ -75,7 +75,7 @@ Clearing errors normalizes the same fields. Error fields are ordinary value
 items in memory but their namespace and publication semantics are protected
 runtime contracts.
 
-## Load, save, conversion, and durability
+## Load, Save, Conversion, and Durability
 
 Loading constructs a detached tree while reading and validating each record,
 then returns a store only after the complete stream succeeds. Truncation,
@@ -86,16 +86,15 @@ perform mandatory verification before execution. Save performs an admissibility
 preflight, serializes v2 to an exclusive temporary file beside the destination,
 flushes/closes it, and publishes by replacement. The no-replace API uses
 exclusive no-replace publication. `full` additionally synchronizes the file and
-containing directory where supported; `fast` skips those sync calls. Failures before
-publication leave the old destination in place where possible; a directory
-sync failure can occur after replacement and therefore reports failure without
-claiming the destination is unchanged. Mutations become durable only after a
-successful save boundary.
+containing directory where supported; `fast` skips those sync calls. Failures
+before publication leave the old destination in place where possible; a
+directory sync failure can occur after replacement and therefore reports
+failure without claiming the destination is unchanged. Mutations become durable
+only after a successful save boundary.
 
-`sconv` is the explicit migration tool. Its conversion path loads the legacy
-version, stages converted code payloads with a separate work budget, and saves
-the new destination only after all conversion and validation work succeeds.
-It does not turn normal runtime loading into an auto-converter.
+`sconv` is the explicit migration boundary for legacy itemstores. Conversion is
+staged and validated before publication; normal runtime loading does not
+perform automatic format conversion.
 
 Source sidecars are independent files under `srcroot/<canonical path>/source.sin`.
 Only code items may have sidecars. Save/read helpers borrow the item and source
@@ -104,14 +103,14 @@ independently of itemstore save durability. Sidecar source is therefore useful
 provenance, not the persisted code payload or an atomic part of the itemstore
 publication.
 
-## Maintenance map
+## Maintenance Map
 
-Tree, canonicalization, revisions, cache, and mutation ownership are in
-`src/itemstore/item_tree.c`, `item_hash.c`, `item_registry.c`, and `item.h`.
-Load/save staging and conversion orchestration are in `item_persist.c`, with
-version codecs in `item_persist_v1.c` and `item_persist_v2.c`; sidecars are in
-`item_source_persist.c`, and structured errors in `item_error.c`.
-Corresponding tests are `tests/core/test_item_cache.c`,
-`test_itemstore_io.c`, `test_sin_itemstore_policy.c`, `test_sconv.c`, and the
-itemstore adapters under `tests/rewrite/`. Keep malformed/boundary cases and
-failure-atomicity assertions next to the changed boundary.
+Tree, canonicalisation, revisions, caching, and mutation ownership live in
+`item_tree.c`, `item_hash.c`, `item_registry.c`, and `item.h`. Persistence and
+conversion are split between `item_persist.c` and the version codecs; sidecars
+live in `item_source_persist.c`, and structured error publication in
+`item_error.c`.
+
+Focused coverage lives in the itemstore, cache, persistence, conversion, and
+`sin` policy tests. Changes should preserve malformed-input, boundary,
+ownership, and failure-atomicity coverage at the affected boundary.
