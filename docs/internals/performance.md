@@ -53,7 +53,5 @@ link it from this index and from the internals index. State whether a result is
 a regression threshold or an opt-in measurement. Do not turn one machine's
 elapsed timing into a portable guarantee.
 
-The checked-in
-[performance-pre-0.8.0.md](performance-pre-0.8.0.md) is the historical
-pre-release evidence record. Its timings are local historical measurements,
-not portable benchmarks or current performance guarantees.
+The [0.8.0 performance evidence](performance-0.8.0.md) records the release
+benchmark run for the 0.8.0 tree.

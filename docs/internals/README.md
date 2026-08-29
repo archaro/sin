@@ -37,8 +37,6 @@ tables.
   its linked authoritative test and fixture documents complete the test map.
 - [Performance and benchmarking](performance.md): supported benchmark entry
   points and evidence policy.
-- [Pre-0.8.0 performance evidence](performance-pre-0.8.0.md): dated historical
-  measurements, retained as evidence rather than a guarantee.
 
 Use the testing pages for test mechanics and the dated performance page for
 measurements. User-visible language and library behavior belong in the Guide
