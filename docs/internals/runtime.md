@@ -1,35 +1,25 @@
-# Runtime ownership and API boundaries
+# Runtime Ownership and API Boundaries
 
 This page summarizes the ownership contracts between the interpreter runtime,
 the itemstore, and native library-call handlers.
 
-## Flow of Operations ##
+## Runtime Boundary
 
-When the runtime engine starts up, it first loads and executes the bootstrap code
-(which is separately compiled). The event-driven engine then sets up the game.
-These mechanisms are distinct:
+Runtime execution is hosted by the single-threaded `libuv` process lifecycle
+described in [Event Loop and Process Lifecycle](event-loop.md). This page
+begins at the point where a `RuntimeContext` and VM are available to execute
+code; startup, task scheduling, network polling, and shutdown ownership are
+documented there.
 
-- Game tasks are `TASK_t` timer-backed game callbacks managed by Sinistra code;
-  see `src/runtime/task.h`. Each timer expiry runs the task's specified code.
-- Network handles are the listener and player connections owned by
-  `NetworkRuntime`. They run outside the game and interact with Sinistra code in
-  limited ways to manage input from and output to connected players.
-- The input scheduler is a separate repeating `uv_timer_t` owned by `sin`, with
-  a nominal 10ms interval. Its callback runs on the event-loop thread, so it is
-  serialized with network callbacks and game-task callbacks; a busy loop can
-  delay it. The input item should call `net.input` to process network activity.
+## Runtime Context and Interpreter
 
-## Runtime context and interpreter
-
-`RuntimeContext` is the execution context passed to opcode and libcall handlers.
-It borrows process-level dependencies such as the VM, itemstore root, libuv loop,
-configuration strings, network state, and shutdown flag. Runtime execution may
-mutate those dependencies, but the context does not own or free them.
-
-The context owns only its per-invocation interpreter bookkeeping, such as the
-runtime decoder, current item pointer, pending call item pointer, opcode table,
-and interpreter-initialization flag. The bytecode and items referenced by that
-bookkeeping remain owned by the itemstore or by the caller that supplied them.
+`RuntimeContext` is the execution context passed to opcode and libcall
+handlers. It borrows process-level dependencies such as the VM, itemstore,
+`libuv` loop, configuration, network state, and shutdown state, but owns its
+runtime-local state: interpreter bookkeeping, opcode dispatch table, libcall
+registry, and bytecode-verification cache. Runtime execution may mutate
+borrowed dependencies but does not own or free them. Bytecode and `ITEM_t`
+objects referenced by the context remain borrowed from the itemstore or caller.
 
 All multi-step frame changes go through the checked `runtime_frame` boundary.
 It captures the VM checkpoint for an invocation, validates stack/call-stack
@@ -37,13 +27,6 @@ capacity before normalizing arguments or publishing a continuation, and owns
 the execution pin for each frame it enters. Return and unwind operations restore
 the checkpoint and release exactly the pins owned by that invocation, including
 the pending callee transfer on verification failure.
-
-The runtime input item is scheduled by `sin` with a repeating libuv timer at a
-nominal 10ms cadence. Timer eligibility is not a real-time guarantee: other
-callbacks or a long-running input item can delay the next invocation. The input
-item executes on the event-loop thread, and `net.input` processes at most one
-fair-queue network event per invocation. The timer is stopped and closed by the
-centralized startup cleanup path on both partial startup failure and shutdown.
 
 `interpret(ctx, item)` returns a `VALUE_t` by value. The caller owns the whole
 returned value and must call `value_free(&result)` when it is no longer needed;
@@ -66,88 +49,29 @@ interpreter saves and restores decoder/current-item state around each call. The
 VM stack and call stack are still shared, so nested callers must account for the
 stack effects of both the nested code and its returned `VALUE_t`.
 
-## Code item result semantics
+## Code Item Result Semantics
 
-A code item returns a value only through explicit `RETURN expression;`.
-`RETURN;`, ordinary fallthrough, and `HALT` return `nil`; residual stack values
-are discarded during frame cleanup. `interpret()` transfers the explicit value
-to the caller, then discards the frame's locals and parameters.
+Each invocation has an explicit frame result. An explicit `RETURN` expression
+transfers its owned value to the caller; fallthrough and valueless termination
+yield `nil`. Frame cleanup discards locals, parameters, and residual stack
+values without leaking ownership.
 
-At source level, item-call arguments are evaluated left-to-right before the
-target expression, and each is evaluated once. Code-item calls then execute
-synchronously and resume the caller at the following instruction. Value-item
-targets are not executed: the runtime pushes a clone of the stored value.
-Missing or invalid targets consume the call's arguments and push `nil`.
-Arguments bind to code-item parameter slots in first-occurrence declaration
-order; duplicate names reuse a slot. Excess arguments are dropped and missing
-trailing slots are padded with `nil`. These are language contracts, not
-guarantees about a particular VM stack layout.
+## Itemstore Ownership
 
-At the language level, every expression statement is compiled with `DISCARD`.
-Its value is evaluated for side effects and removed from the stack.
+`RuntimeContext` borrows an `ITEMSTORE_t`. The store owns items, stored values,
+and bytecode; runtime item pointers are therefore non-owning and may not
+outlive their store or a deleted containing subtree. Successful item mutations
+transfer supplied payload ownership according to the itemstore API.
 
-Statement forms such as assignment, `if`, `while`, and `do ... while` do not
-themselves produce a result value, and local variables do not leak out as
-implicit results. Expression statements inside `if` branches or
-`while`/`do ... while` bodies are also discarded; they do not become the
-enclosing code item's result merely because the branch or loop is the last
-top-level statement. Use an explicit `RETURN` in the branch or loop when it
-should terminate the current code item.
+Runtime values returned from itemstore operations are cloned or otherwise given
+explicit `VALUE_t` ownership before they are placed on the VM stack. Item
+references contain canonical paths rather than borrowed `ITEM_t *` pointers and
+resolve against the current store when used.
 
-Libcalls and item calls follow the same expression-statement rule as other
-expressions; use `RETURN` to expose their value to the caller. Completed
-itemstore/libcall effects remain after an expression is discarded, a callee
-falls through, or an explicit return transfers control. Statements after a
-taken return do not execute.
+See [Itemstore Operations](itemstore.md) for mutation, pinning, revision,
+persistence, error-publication and sidecar ownership rules.
 
-## Itemstore ownership
-
-Create a store with `itemstore_create()` (or load one with `itemstore_load()`),
-then borrow its root with `itemstore_root()`. The store owns the complete item
-tree, including child links, value payloads, and code-item bytecode. Root and
-other `ITEM_t` pointers are borrowed: the root remains valid until
-`itemstore_destroy()`, while a non-root pointer is also invalidated if that item
-or one of its ancestors is deleted. The `VALUE_t` field pointer returned by
-`item_value()` returns a borrowed pointer only for value items; it returns
-`NULL` for code items and NULL inputs. The pointer remains valid while its item
-does, although its contents can change. `item_bytecode()` and
-`item_bytecode_length()` return the borrowed code payload and its length only
-for code items; they return `NULL` and zero for value items and NULL inputs.
-The bytecode buffer may be invalidated when that payload is replaced.
-
-Mutate the borrowed tree with the public item APIs such as `item_set_value()`
-and `item_set_code()`. On successful creation or replacement, supplied payload
-ownership transfers to the store; on validation or allocation failure, the
-caller retains ownership. Persist changes with `itemstore_save()`; its boolean
-result reports whether replacement and required durability steps completed.
-
-At the language level, lists are immutable values: derived updates do not
-mutate inputs, regardless of any internal structural sharing. At the runtime
-ownership level, list handles may be shared and retained/released by `VALUE_t`.
-References expose canonical paths rather than raw pointers, resolve afresh for
-each fetch/call, and remain values when dangling. Itemstore v2 serializes
-nested lists and canonical reference paths and restores them on reload without
-executing targets.
-
-Mutation results distinguish creation, replacement, deletion, missing names,
-invalid input, pinned items, and allocation failure. Payload ownership transfers
-only for successful creation or replacement; every failure leaves caller-owned
-input unchanged (except aliases already owned by the target, which remain
-store-owned).
-
-`get_itemfilename` allocates and returns a path string for the caller to free.
-Source sidecars belong only to code items: `save_itemsource` rejects NULL and
-value items before creating or modifying a sidecar, and
-`read_itemsource_in_srcroot` rejects them before opening a sidecar (reporting
-`source item is not a code item` for an existing value item). Both helpers
-derive each directory component from the item's canonical lower-case path and
-never alter the root label or source text. They borrow their item and source
-text only for the duration of the call. A failed
-`itemstore_load()` returns `NULL` after discarding any
-partially loaded data; a successful load returns a store whose root remains
-borrowed until the store is destroyed.
-
-## Runtime diagnostics options
+## Runtime Diagnostics Options
 
 Executable code is always verified for memory-safe structure (including stack
 flow, local indices, and jump targets) before runtime execution; failures are
@@ -157,24 +81,14 @@ configuration can weaken it. `--strict-validation` additionally applies the
 same verification while loading itemstores, rejecting malformed persisted code
 items before they enter the store.
 
-`--strict-runtime-contracts` is a separate diagnostic mode for runtime argument
-contracts. In default mode, item fetch/call execution may intentionally discard
-supplied arguments when a code item receives too many arguments, when the target
-is a value item, when the target item is missing, or when the computed item name
-is invalid. This is a live-update
-design choice: code can keep running while callers and callees are updated to
-match a changed parameter list. With strict runtime contracts enabled, those
-stack effects and return values are preserved, but the interpreter performs
-extra checks, sets `error` to `ERR_RUNTIME_INVALIDARGS`, writes a detail string
-to `error.msg`, and logs a runtime contract violation. Enabling
-`--strict-validation` alone does not enable these dropped-argument diagnostics;
-use `--strict-runtime-contracts` when you want runtime contract reporting and can
-accept the extra runtime overhead. For example, `add{1, 2, 3}` and
-`missing.item{1}` and `value.item{1}` keep their normal return values, but strict
-runtime contracts also set `ERR_RUNTIME_INVALIDARGS` and describe each
-discarded argument in `error.msg`.
+`--strict-runtime-contracts` is a separate diagnostic mode for otherwise
+tolerated runtime call-contract mismatches. It preserves the normal stack
+effects and return values but additionally publishes `ERR_RUNTIME_INVALIDARGS`
+diagnostics. It is diagnostic instrumentation rather than a stricter execution
+model; see the [Reference Manual](../reference/README.md) for the observable
+cases.
 
-## Libcall API boundary
+## Libcall API Boundary
 
 Libcall handlers use the same opcode-handler signature as bytecode opcodes. The
 compiler emits bytecode that evaluates libcall arguments first, so handlers find
@@ -188,70 +102,31 @@ Sinistra code, the handler must free it. Arguments left in place, such as the
 string-mutating `str.*` calls, remain owned by the stack and become the return
 value.
 
-A libcall should push `VALUE_NIL`, `VALUE_FALSE`, or another explicit value for
-failure cases that are visible to Sinistra code. Returning `NULL` from a handler
-is reserved for fatal interpreter/opcode failures and causes interpretation to
-abort with `nil`.
+Ordinary Sinistra-level failures must still leave one explicit result on the VM
+stack; returning `NULL` is reserved for failures which abort interpretation.
+Shared invalid-argument handling should use the helpers in `libcall_common.h`
+so argument cleanup, error publication and result placement remain consistent.
 
-Most invalid libcall argument types, ranges, or values use a shared runtime
-policy: the handler consumes and frees its arguments, sets `error` to
-`ERR_RUNTIME_INVALIDARGS`, sets `error.msg` to a handler-specific diagnostic when
-available, and pushes the documented failure value for that libcall. Handlers
-should use the helpers in `src/libcall/libcall_common.h`, such as
-`lc_invalid_args_return` or `lc_invalid_args_detail_return`, so the error item
-and stack result are updated consistently. Domain failures that are not invalid
-arguments, such as missing items, unknown task ids, inactive network lines, or
-compiler diagnostics from valid `sys.compile` source strings, continue to use
-their own documented errors or non-error return values.
+Runtime bytecode-shape failures use `ERR_RUNTIME_BYTECODE`, invalid item
+mutations use `ERR_RUNTIME_INVALIDITEM`, and internal invariant failures use
+`ERR_RUNTIME_INTERNAL`. User-visible per-libcall failure semantics belong in
+the [Reference Manual](../reference/README.md). Runtime diagnostics associate
+`error.item` with the executing code item where applicable.
 
-Runtime bytecode-shape failures use `ERR_RUNTIME_BYTECODE`, including malformed
-embedded code-assignment payloads. Ordinary invalid or missing fetch/call names
-return `nil`; strict runtime contracts may additionally diagnose discarded
-arguments with `ERR_RUNTIME_INVALIDARGS`. Value assignments whose canonical
-item name is invalid are discarded without mutation. Invalid code-assignment
-names and attempts to mutate the protected `error` namespace use
-`ERR_RUNTIME_INVALIDITEM`. Internal runtime invariants that are not caused by
-Sinistra source or bytecode use `ERR_RUNTIME_INTERNAL`.
+## Network Boundary
 
-Runtime errors also set `error.item` to the full name of the code item executing
-when the error was reported. Compiler diagnostics clear `error.item` to `nil`
-because they describe source text rather than the currently executing item.
+`RuntimeContext` borrows an opaque `NetworkRuntime *` for libcalls that require
+network services. Connection and `libuv` ownership does not belong to the
+interpreter; see [Event Loop and Process Lifecycle](event-loop.md).
 
-## Network line lifecycle
+## Runtime Bytecode Verification Cache
 
-Network slots move through a small logical lifecycle:
-
-- Active: `LINE_connecting`, `LINE_idle`, and `LINE_data` own a live connection
-  slot. `net.write` only writes to the writable active states, `LINE_idle` and
-  `LINE_data`, after Telnet setup has completed.
-- Disconnecting: `LINE_disconnecting` means the connection has been asked to
-  close or libuv has reported remote closure. Repeated disconnect requests are
-  no-ops, writes are ignored by `net.write`, and pending output may drain before
-  the handle is closed when the disconnect was requested locally.
-- Disconnected/reusable: `LINE_empty` with no handle, Telnet object, buffers, or
-  pending output state is reusable. `net.input` reports the disconnect event,
-  destroys the line, and returns the slot to this reusable state.
-
-Runtime contexts borrow an explicit `ITEMSTORE_t *` for execution. The store
-owns its complete tree and cache context; `itemstore_root()` returns a borrowed
-root for relative lookup operations. Runtime item pointers are non-owning and
-must not outlive the store. `itemstore_topology_revision()` and
-`itemstore_payload_revision()`, together with `itemstore_cache_hits()` and
-`itemstore_cache_misses()`, expose allocation-free diagnostics for tests and
-benchmarks. Topology revisions advance on item creation/deletion and invalidate
-positive and negative lookup-cache entries; payload revisions advance on
-successful value/code replacement and leave cached pointers valid to observe
-the new payload. Destroying one store invalidates only that store's borrowed
-items and cache entries; other stores remain usable.
-
-## Runtime bytecode verification cache
-
-Each `RuntimeContext` owns a small fixed-size cache of successful executable
-bytecode verification results. An entry is keyed by bytecode pointer and
-length, itemstore identity, payload revision, and the verification-policy
-identifier. This lets a fetched callee cross the pending-transfer boundary
-without being verified twice, while keeping verification isolated between
-runtime contexts. Ownerless/raw items are deliberately never cached.
+Each `RuntimeContext` owns a small fixed-size cache of successful
+executable-bytecode verification results. Entries identify the bytecode, owning
+itemstore, current mutation tokens and verification policy. The context
+synchronises the cache against itemstore topology and payload revisions before
+reuse, so replacement or deletion cannot make an old successful verification
+applicable to new code.
 
 Payload replacement changes the itemstore payload revision. The itemstore also
 advances payload and topology epochs whenever their counters wrap; each
@@ -260,7 +135,6 @@ verification entries when it observes a different store, topology revision, or
 payload revision (including revision wraparound), so deleted or old payloads
 cannot be reused. If either token is exhausted, the itemstore marks that token
 permanently exhausted and runtime verification caching remains disabled for
-that store. Failed verification is never
-cached and retains the normal diagnostic,
-unwind, pin, and stack behavior on each attempt. Cache capacity and eviction
-are deterministic and independent of call count.
+that store. Failed verification is never cached and retains the normal
+diagnostic, unwind, pin, and stack behavior on each attempt. Cache capacity and
+eviction are deterministic and independent of call count.
