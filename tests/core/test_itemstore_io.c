@@ -999,6 +999,45 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
   ASSERT_EQ_INT(0, fclose(file));
   ASSERT_EQ_INT(0, unlink(aggregate_path));
 
+  FILE *writer = tmpfile();
+  ASSERT_NOT_NULL(writer);
+  size_t writer_budget = 1u;
+  VALUE_t writer_nil = VALUE_NIL;
+  ASSERT_TRUE(!itemstore_write_v2_value(NULL, &writer_nil, 0,
+                                        &writer_budget));
+  ASSERT_TRUE(!itemstore_write_v2_value(writer, NULL, 0, &writer_budget));
+  ASSERT_TRUE(!itemstore_write_v2_value(writer, &writer_nil, 0, NULL));
+
+  VALUE_t invalid_bool = {VALUE_bool, {.i = 2}};
+  ASSERT_TRUE(!itemstore_write_v2_value(writer, &invalid_bool, 0,
+                                        &writer_budget));
+  VALUE_t null_ref = {VALUE_itemref, {.itemref = NULL}};
+  ASSERT_TRUE(!itemstore_write_v2_value(writer, &null_ref, 0,
+                                        &writer_budget));
+
+  VALUE_t null_list = {VALUE_list, {.list = NULL}};
+  ASSERT_TRUE(!itemstore_write_v2_value(writer, &null_list, 0,
+                                        &writer_budget));
+  SIN_LIST_t *empty_list = sin_list_build_owned(NULL, 0);
+  ASSERT_NOT_NULL(empty_list);
+  VALUE_t deep_list = {VALUE_list, {.list = empty_list}};
+  ASSERT_TRUE(!itemstore_write_v2_value(writer, &deep_list,
+                                        SIN_LIST_MAX_DEPTH,
+                                        &writer_budget));
+  sin_list_release(empty_list);
+  VALUE_t one_element = VALUE_NIL;
+  SIN_LIST_t *budget_list = sin_list_build_owned(&one_element, 1);
+  ASSERT_NOT_NULL(budget_list);
+  writer_budget = 0;
+  VALUE_t over_budget = {VALUE_list, {.list = budget_list}};
+  ASSERT_TRUE(!itemstore_write_v2_value(writer, &over_budget, 0,
+                                        &writer_budget));
+  sin_list_release(budget_list);
+  VALUE_t unknown_type = {(VALUE_e)255, {.i = 0}};
+  ASSERT_TRUE(!itemstore_write_v2_value(writer, &unknown_type, 0,
+                                        &writer_budget));
+  ASSERT_EQ_INT(0, fclose(writer));
+
   badpath[0] = '\0';
   ASSERT_EQ_INT(0, test_temp_template(badpath, sizeof badpath,
                                       "sin-itemstore-v2-ref"));
