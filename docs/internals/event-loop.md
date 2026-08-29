@@ -51,8 +51,8 @@ corresponding libuv callbacks complete. A connection slot is not reusable until
 its transport resources have been released and its disconnect event has been
 delivered.
 
-For transport-state and Telnet details, see
-[`src/net/AGENTS.md`](../../src/net/AGENTS.md).
+For connection state, transport ownership, Telnet negotiation, and network
+buffering, see [Network Internals](network.md).
 
 ## Shutdown and Partial Failure
 
@@ -83,8 +83,7 @@ save or shutdown does not claim durability.
 Process staging and cleanup are in `src/sin.c`; task states and close draining
 are in `src/runtime/task.c` and `task.h`; network state, queues, Telnet
 integration, and fair polling are in `src/net/network.c` and `network.h`.
-The network-specific guidance is in [`src/net/AGENTS.md`](../../src/net/AGENTS.md).
 
-Focused coverage lives in the focused task, network, chat and shutdown-policy
-coverage. Changes should preserve malformed-input, boundary, ownership, and
-failure-atomicity coverage at the affected boundary.
+Focused coverage covers task lifecycle, network state, chat integration, and
+shutdown policy coverage. Changes should preserve malformed-input, boundary,
+ownership, and failure-atomicity coverage at the affected boundary.

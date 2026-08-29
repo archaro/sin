@@ -15,6 +15,8 @@ boundaries, data flow, and invariants; it is not a second user guide.
   task/network ownership, callback confinement, and shutdown.
 - [Runtime ownership and API boundaries](runtime.md) — VM/frame/value
   ownership and the runtime-facing contracts.
+- [Networking](network.md): runtime network connection handling, including
+  Telnet
 
 ## Wire and format references
 
