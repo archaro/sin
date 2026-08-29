@@ -58,6 +58,14 @@ bool itemstore_read_charge_bytes(ITEMSTORE_READ_CTX_t *ctx, size_t amount,
                                  const char *what);
 bool itemstore_valid_ref_path(const char *path, size_t length);
 
+/* Validate a prospective mutation against the default v2 persistence
+ * policy.  The payload pointers are borrowed for the duration of the call;
+ * this function never consumes them or changes the tree. */
+bool itemstore_validate_mutation_persistence(
+    const ITEM_t *base, const char *relative_name, const ITEM_t *target,
+    ITEM_e type, const VALUE_t *value, uint32_t bytecode_len,
+    const uint8_t *bytecode);
+
 ITEMSTORE_READ_CTX_t itemstore_read_context(const char *filename,
                                             size_t depth);
 bool itemstore_read_bytes(FILE *file, void *data, size_t length,

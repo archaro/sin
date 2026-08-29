@@ -258,6 +258,9 @@ rewrite.core.test_loaded_zero_child_item_can_gain_runtime_child,api.itemstore.tr
 rewrite.core.test_itemstore_value_and_code_roundtrip,api.itemstore.persistence-format
 rewrite.core.test_item_value_accessor_rejects_code_items,api.itemstore.tree-and-values
 rewrite.core.test_itemstore_v2_lists_and_itemrefs_roundtrip,api.itemstore.persistence-format
+rewrite.core.test_itemstore_public_mutation_payload_rejections_are_atomic,api.itemstore.tree-and-values;api.itemstore.persistence-save
+rewrite.core.test_itemstore_public_mutation_aggregate_list_budget_is_atomic,api.itemstore.tree-and-values;api.itemstore.persistence-save
+rewrite.core.test_itemstore_public_mutation_child_limit_is_atomic,api.itemstore.tree-and-values;api.itemstore.persistence-save
 rewrite.core.test_itemstore_v2_all_values_fixture,api.itemstore.persistence-format
 rewrite.core.test_itemstore_v2_malformed_value_table,api.itemstore.persistence-format
 rewrite.core.test_itemstore_v2_budget_and_malformed_save,api.itemstore.persistence-save

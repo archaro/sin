@@ -5,6 +5,9 @@ void test_loaded_zero_child_item_can_gain_runtime_child(void);
 void test_itemstore_value_and_code_roundtrip(void);
 void test_item_value_accessor_rejects_code_items(void);
 void test_itemstore_v2_lists_and_itemrefs_roundtrip(void);
+void test_itemstore_public_mutation_payload_rejections_are_atomic(void);
+void test_itemstore_public_mutation_aggregate_list_budget_is_atomic(void);
+void test_itemstore_public_mutation_child_limit_is_atomic(void);
 void test_itemstore_v2_all_values_fixture(void);
 void test_itemstore_v2_malformed_value_table(void);
 void test_itemstore_v2_budget_and_malformed_save(void);
@@ -46,6 +49,9 @@ static const TF_TestDescriptor tests[] = {
     {"rewrite.core.test_itemstore_value_and_code_roundtrip", test_itemstore_value_and_code_roundtrip, "exclusive", 30000, "api.itemstore.persistence-format"},
     {"rewrite.core.test_item_value_accessor_rejects_code_items", test_item_value_accessor_rejects_code_items, "exclusive", 30000, "api.itemstore.tree-and-values"},
     {"rewrite.core.test_itemstore_v2_lists_and_itemrefs_roundtrip", test_itemstore_v2_lists_and_itemrefs_roundtrip, "exclusive", 30000, "api.itemstore.persistence-format"},
+    {"rewrite.core.test_itemstore_public_mutation_payload_rejections_are_atomic", test_itemstore_public_mutation_payload_rejections_are_atomic, "exclusive", 30000, "api.itemstore.tree-and-values,api.itemstore.persistence-save"},
+    {"rewrite.core.test_itemstore_public_mutation_aggregate_list_budget_is_atomic", test_itemstore_public_mutation_aggregate_list_budget_is_atomic, "exclusive", 30000, "api.itemstore.tree-and-values,api.itemstore.persistence-save"},
+    {"rewrite.core.test_itemstore_public_mutation_child_limit_is_atomic", test_itemstore_public_mutation_child_limit_is_atomic, "exclusive", 30000, "api.itemstore.tree-and-values,api.itemstore.persistence-save"},
     {"rewrite.core.test_itemstore_v2_all_values_fixture", test_itemstore_v2_all_values_fixture, "exclusive", 30000, "api.itemstore.persistence-format"},
     {"rewrite.core.test_itemstore_v2_malformed_value_table", test_itemstore_v2_malformed_value_table, "exclusive", 30000, "api.itemstore.persistence-format"},
     {"rewrite.core.test_itemstore_v2_budget_and_malformed_save", test_itemstore_v2_budget_and_malformed_save, "exclusive", 30000, "api.itemstore.persistence-save"},

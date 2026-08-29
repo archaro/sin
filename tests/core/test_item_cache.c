@@ -135,9 +135,14 @@ void test_itemstore_benchmarks(void) {
   start = itemstore_bench_now_ns();
   for (int i = 0; i < iterations; i++) sink ^= find_item(loaded, deep) != NULL;
   uint64_t loaded_deep_ns = itemstore_bench_now_ns() - start;
-  char mutation_names[iterations][16];
+  const int mutation_groups = 20;
+  const int mutation_leaves_per_group = iterations / mutation_groups;
+  char mutation_names[iterations][32];
   for (int i = 0; i < iterations; i++) {
-    snprintf(mutation_names[i], sizeof mutation_names[i], "i%d", i);
+    ASSERT_TRUE(snprintf(mutation_names[i], sizeof mutation_names[i],
+                         "g%02d.i%03d",
+                         i / mutation_leaves_per_group,
+                         i % mutation_leaves_per_group) > 0);
   }
   uint64_t hits_before = ctx->fetchitem_cache_hits;
   uint64_t misses_before = ctx->fetchitem_cache_misses;
@@ -162,7 +167,9 @@ void test_itemstore_benchmarks(void) {
         mut, mutation_names[i], (VALUE_t){.type = VALUE_int, .i = i});
   }
   uint64_t insertion_ns = itemstore_bench_now_ns() - start;
-  ASSERT_EQ_INT(iterations, item_child_count(mut));
+  ASSERT_EQ_INT(mutation_groups, item_child_count(mut));
+  ASSERT_EQ_INT(mutation_leaves_per_group,
+                item_child_count(find_item(mut, "g00")));
   ASSERT_EQ_INT(0, find_item(mut, mutation_names[0])->value.i);
   ASSERT_EQ_INT(iterations - 1,
                 find_item(mut, mutation_names[iterations - 1])->value.i);
@@ -171,6 +178,11 @@ void test_itemstore_benchmarks(void) {
     test_item_delete(mut, mutation_names[i]);
   }
   uint64_t deletion_ns = itemstore_bench_now_ns() - start;
+  for (int i = 0; i < mutation_groups; i++) {
+    char group_name[8];
+    ASSERT_TRUE(snprintf(group_name, sizeof group_name, "g%02d", i) > 0);
+    test_item_delete(mut, group_name);
+  }
   ASSERT_EQ_INT(0, item_child_count(mut));
 
   for (size_t i = 0; i < 63u; i++) {

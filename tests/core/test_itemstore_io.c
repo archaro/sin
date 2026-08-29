@@ -517,6 +517,182 @@ void test_itemstore_v2_lists_and_itemrefs_roundtrip(void) {
   ASSERT_EQ_INT(0, unlink(path));
 }
 
+static void assert_value_mutation_rejected(ITEM_t *root, ITEM_t *target,
+                                            VALUE_t value) {
+  uint64_t topology = get_itemstore_topology_revision();
+  uint64_t payload = get_itemstore_payload_revision();
+  size_t children = item_child_count(root);
+  ITEM_MUTATION_RESULT_t result = item_set_value(root, "target", value);
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_PAYLOAD, result.status);
+  ASSERT_TRUE(result.item == NULL);
+  ASSERT_TRUE(find_item(root, "target") == target);
+  ASSERT_EQ_INT(ITEM_value, target->type);
+  ASSERT_EQ_INT(VALUE_int, target->value.type);
+  ASSERT_EQ_INT(7, target->value.i);
+  ASSERT_EQ_INT(children, item_child_count(root));
+  ASSERT_EQ_INT(topology, get_itemstore_topology_revision());
+  ASSERT_EQ_INT(payload, get_itemstore_payload_revision());
+}
+
+static void assert_code_mutation_rejected(ITEM_t *root, ITEM_t *target,
+                                          uint32_t length, uint8_t *bytecode) {
+  uint64_t topology = get_itemstore_topology_revision();
+  uint64_t payload = get_itemstore_payload_revision();
+  size_t children = item_child_count(root);
+  ITEM_MUTATION_RESULT_t result =
+      item_set_code(root, "code_target", length, bytecode);
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_PAYLOAD, result.status);
+  ASSERT_TRUE(result.item == NULL);
+  ASSERT_TRUE(find_item(root, "code_target") == target);
+  ASSERT_EQ_INT(ITEM_code, target->type);
+  ASSERT_EQ_INT(1, target->bytecode_len);
+  ASSERT_TRUE(target->bytecode[0] == 'h');
+  ASSERT_EQ_INT(children, item_child_count(root));
+  ASSERT_EQ_INT(topology, get_itemstore_topology_revision());
+  ASSERT_EQ_INT(payload, get_itemstore_payload_revision());
+}
+
+void test_itemstore_public_mutation_payload_rejections_are_atomic(void) {
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  ITEM_t *target = test_item_set_value(
+      root, "target", (VALUE_t){VALUE_int, {.i = 7}});
+  ASSERT_NOT_NULL(target);
+  uint8_t *initial_code = malloc(1);
+  ASSERT_NOT_NULL(initial_code);
+  initial_code[0] = 'h';
+  ITEM_t *code_target = test_item_set_code(root, "code_target", 1,
+                                           initial_code);
+  ASSERT_NOT_NULL(code_target);
+
+  assert_value_mutation_rejected(
+      root, target, (VALUE_t){VALUE_bool, {.i = 2}});
+  assert_value_mutation_rejected(
+      root, target, (VALUE_t){VALUE_str, {.s = NULL}});
+  assert_value_mutation_rejected(
+      root, target, (VALUE_t){VALUE_itemref, {.itemref = NULL}});
+  assert_value_mutation_rejected(
+      root, target, (VALUE_t){(VALUE_e)255, {.i = 0}});
+  assert_value_mutation_rejected(
+      root, target, (VALUE_t){VALUE_list, {.list = NULL}});
+
+  char *oversized = malloc(SIN_MAX_STRING_BYTES + 2u);
+  ASSERT_NOT_NULL(oversized);
+  memset(oversized, 'x', SIN_MAX_STRING_BYTES + 1u);
+  oversized[SIN_MAX_STRING_BYTES + 1u] = '\0';
+  assert_value_mutation_rejected(
+      root, target, (VALUE_t){VALUE_str, {.s = oversized}});
+  ASSERT_TRUE(oversized[SIN_MAX_STRING_BYTES] == 'x');
+  free(oversized);
+
+  uint8_t *oversized_code = malloc(1);
+  ASSERT_NOT_NULL(oversized_code);
+  oversized_code[0] = 0xA5;
+  assert_code_mutation_rejected(root, code_target,
+                                ITEMSTORE_MAX_BYTECODE_LEN + 1u,
+                                oversized_code);
+  ASSERT_EQ_INT(0xA5, oversized_code[0]);
+  free(oversized_code);
+  assert_code_mutation_rejected(root, code_target, 1, NULL);
+
+  /* A list at the public maximum depth is constructible and saveable. */
+  VALUE_t deepest = VALUE_NIL;
+  for (size_t depth = 0; depth < SIN_LIST_MAX_DEPTH; ++depth) {
+    SIN_LIST_t *list = sin_list_build_owned(&deepest, 1);
+    ASSERT_NOT_NULL(list);
+    deepest = (VALUE_t){VALUE_list, {.list = list}};
+  }
+  ITEM_MUTATION_RESULT_t valid = item_set_value(root, "deepest", deepest);
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, valid.status);
+  ASSERT_TRUE(valid.item != NULL);
+  deepest = VALUE_NIL;
+
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path,
+                                      "sin-itemstore-mutation-valid"));
+  FILE *file = new_fixture(path);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_TRUE(save_itemstore(path, root));
+  destroy_item(root);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_itemstore_public_mutation_aggregate_list_budget_is_atomic(void) {
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  const size_t count = SIN_LIST_MAX_ELEMENTS / 2u + 1u;
+  VALUE_t *elements = calloc(count, sizeof *elements);
+  ASSERT_NOT_NULL(elements);
+  for (size_t i = 0; i < count; ++i) elements[i] = VALUE_NIL;
+  SIN_LIST_t *shared = sin_list_build_owned(elements, count);
+  free(elements);
+  ASSERT_NOT_NULL(shared);
+
+  ITEM_MUTATION_RESULT_t first = item_set_value(
+      root, "first", (VALUE_t){VALUE_list, {.list = sin_list_retain(shared)}});
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, first.status);
+  ASSERT_TRUE(first.item != NULL);
+  size_t children = item_child_count(root);
+  uint64_t topology = get_itemstore_topology_revision();
+  uint64_t payload = get_itemstore_payload_revision();
+  SIN_LIST_t *candidate = sin_list_retain(shared);
+  ASSERT_NOT_NULL(candidate);
+  ITEM_MUTATION_RESULT_t second = item_set_value(
+      root, "second", (VALUE_t){VALUE_list, {.list = candidate}});
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_PAYLOAD, second.status);
+  ASSERT_TRUE(second.item == NULL);
+  ASSERT_TRUE(find_item(root, "second") == NULL);
+  ASSERT_EQ_INT(children, item_child_count(root));
+  ASSERT_EQ_INT(topology, get_itemstore_topology_revision());
+  ASSERT_EQ_INT(payload, get_itemstore_payload_revision());
+  ASSERT_EQ_INT(count, sin_list_count(candidate));
+  sin_list_release(candidate);
+  sin_list_release(shared);
+
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path,
+                                      "sin-itemstore-list-budget"));
+  FILE *file = new_fixture(path);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_TRUE(save_itemstore(path, root));
+  destroy_item(root);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+void test_itemstore_public_mutation_child_limit_is_atomic(void) {
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  for (unsigned i = 0; i < ITEMSTORE_MAX_CHILDREN_PER_ITEM; ++i) {
+    char name[16];
+    ASSERT_TRUE(snprintf(name, sizeof name, "child_%03u", i) > 0);
+    ASSERT_NOT_NULL(make_item(name, root, ITEM_value, VALUE_NIL, NULL, 0));
+  }
+  ASSERT_EQ_INT(ITEMSTORE_MAX_CHILDREN_PER_ITEM, item_child_count(root));
+  uint64_t topology = get_itemstore_topology_revision();
+  uint64_t payload = get_itemstore_payload_revision();
+  char *rejected_payload = strdup("caller-owned");
+  ASSERT_NOT_NULL(rejected_payload);
+  ITEM_MUTATION_RESULT_t result = item_set_value(
+      root, "child_250", (VALUE_t){VALUE_str, {.s = rejected_payload}});
+  ASSERT_EQ_INT(ITEM_MUTATION_INVALID_PAYLOAD, result.status);
+  ASSERT_TRUE(result.item == NULL);
+  ASSERT_TRUE(find_item(root, "child_250") == NULL);
+  ASSERT_EQ_INT(ITEMSTORE_MAX_CHILDREN_PER_ITEM, item_child_count(root));
+  ASSERT_EQ_INT(topology, get_itemstore_topology_revision());
+  ASSERT_EQ_INT(payload, get_itemstore_payload_revision());
+  ASSERT_TRUE(strcmp(rejected_payload, "caller-owned") == 0);
+  free(rejected_payload);
+
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path,
+                                      "sin-itemstore-child-limit"));
+  FILE *file = new_fixture(path);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_TRUE(save_itemstore(path, root));
+  ASSERT_EQ_INT(0, unlink(path));
+  destroy_item(root);
+}
+
 void test_itemstore_v2_all_values_fixture(void) {
   char path[4096];
   ASSERT_EQ_INT(0, test_temp_template(path, sizeof path, "sin-itemstore-v2-values"));
@@ -761,8 +937,8 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
   ASSERT_EQ_INT(0, fclose(file));
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  ASSERT_NOT_NULL(
-      test_item_set_value(root, "bad", (VALUE_t){VALUE_list, {.list = NULL}}));
+  ASSERT_NOT_NULL(make_item("bad", root, ITEM_value,
+                            (VALUE_t){VALUE_list, {.list = NULL}}, NULL, 0));
   ASSERT_TRUE(!save_itemstore(badpath, root));
   destroy_item(root);
   file = fopen(badpath, "rb");
@@ -793,8 +969,9 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
   ASSERT_NOT_NULL(repeated);
   ASSERT_NOT_NULL(test_item_set_value(
       root, "first", (VALUE_t){VALUE_list, {.list = sin_list_retain(repeated)}}));
-  ASSERT_NOT_NULL(test_item_set_value(
-      root, "second", (VALUE_t){VALUE_list, {.list = sin_list_retain(repeated)}}));
+  ASSERT_NOT_NULL(make_item(
+      "second", root, ITEM_value,
+      (VALUE_t){VALUE_list, {.list = sin_list_retain(repeated)}}, NULL, 0));
   sin_list_release(repeated);
   ASSERT_TRUE(!save_itemstore(aggregate_path, root));
   destroy_item(root);
@@ -816,8 +993,9 @@ void test_itemstore_v2_budget_and_malformed_save(void) {
   ASSERT_EQ_INT(0, fclose(file));
   root = make_root_item("root");
   ASSERT_NOT_NULL(root);
-  ASSERT_NOT_NULL(test_item_set_value(
-      root, "bad", (VALUE_t){VALUE_itemref, {.itemref = NULL}}));
+  ASSERT_NOT_NULL(make_item("bad", root, ITEM_value,
+                            (VALUE_t){VALUE_itemref, {.itemref = NULL}}, NULL,
+                            0));
   ASSERT_TRUE(!save_itemstore(badpath, root));
   destroy_item(root);
   file = fopen(badpath, "rb");
@@ -2268,7 +2446,8 @@ void test_save_itemstore_preserves_existing_file_on_failure(void) {
 
   ITEM_t *invalid = make_root_item("root");
   ASSERT_NOT_NULL(invalid);
-  ASSERT_NOT_NULL(test_item_set_code(invalid, "invalid_code", 1, NULL));
+  ASSERT_NOT_NULL(make_item("invalid_code", invalid, ITEM_code, VALUE_NIL,
+                            NULL, 1));
   ASSERT_TRUE(!save_itemstore(path, invalid));
   destroy_item(invalid);
 
@@ -2277,8 +2456,8 @@ void test_save_itemstore_preserves_existing_file_on_failure(void) {
   for (int i = 0; i < 251; i++) {
     char name[16];
     ASSERT_TRUE(snprintf(name, sizeof(name), "child_%03d", i) > 0);
-    ASSERT_NOT_NULL(test_item_set_value(
-        too_many_children, name, (VALUE_t){.type = VALUE_nil, .i = 0}));
+    ASSERT_NOT_NULL(make_item(name, too_many_children, ITEM_value, VALUE_NIL,
+                              NULL, 0));
   }
   ASSERT_TRUE(!save_itemstore(path, too_many_children));
   destroy_item(too_many_children);

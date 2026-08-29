@@ -20,7 +20,7 @@
 #include "memory.h"
 #include "log.h"
 #include "item_internal.h"
-#include "string_limits.h"
+#include "item_persist_internal.h"
 
 // The configuration object, defined in src/sin.c
 extern CONFIG_t config;
@@ -425,9 +425,8 @@ ITEM_MUTATION_RESULT_t item_set_value(ITEM_t *root, const char *item_name,
     result.status = ITEM_MUTATION_INVALID_PAYLOAD;
     return result;
   }
-  if (!value_string_within_limit(&value)) {
-    logerr("item_set_value called with string longer than maximum %zu bytes.\n",
-           SIN_MAX_STRING_BYTES);
+  if (!itemstore_validate_mutation_persistence(
+          root, item_name, existing, ITEM_value, &value, 0, NULL)) {
     result.status = ITEM_MUTATION_INVALID_PAYLOAD;
     return result;
   }
@@ -468,6 +467,11 @@ ITEM_MUTATION_RESULT_t item_set_code(ITEM_t *root, const char *item_name,
   ITEM_t *existing = find_item_unchecked(root, item_name);
   if (existing && bytecode_aliases_value_payload(existing, bytecode)) {
     log_incompatible_payload_alias(existing);
+    result.status = ITEM_MUTATION_INVALID_PAYLOAD;
+    return result;
+  }
+  if (!itemstore_validate_mutation_persistence(
+          root, item_name, existing, ITEM_code, NULL, len, bytecode)) {
     result.status = ITEM_MUTATION_INVALID_PAYLOAD;
     return result;
   }

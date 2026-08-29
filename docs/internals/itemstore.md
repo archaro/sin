@@ -31,12 +31,19 @@ their store or containing subtree is destroyed.
 `item_set_value()` and `item_set_code()` create missing intermediate value
 items, or replace the target payload. Creation/replacement is transactional:
 allocation, name, payload-limit, alias, and pin checks happen before a
-successful result. On `CREATED` or `REPLACED`, `result.item` is the borrowed
-resulting leaf and the store owns the supplied payload. On every failure the
-tree and revisions are unchanged and the caller retains the payload, except a
-rejected alias that was already owned by the target. `item_delete()` removes a
-whole subtree and returns `DELETED` with a null item; absent valid names return
-`NOT_FOUND`.
+successful result. The prospective whole owning store must also be
+representable in the current v2 format under the default policy: value tags and
+payloads must be valid, list elements must stay within the aggregate limit,
+and the record, per-item child, and decode-allocation limits must hold. This
+check is read-only and occurs before allocation or ownership transfer. The
+custom limits accepted by `save_itemstore_with_limits()` apply only to that
+save call and do not change this mutation invariant.
+
+On `CREATED` or `REPLACED`, `result.item` is the borrowed resulting leaf and
+the store owns the supplied payload. On every failure the tree and revisions
+are unchanged and the caller retains the payload, except a rejected alias
+that was already owned by the target. `item_delete()` removes a whole subtree
+and returns `DELETED` with a null item; absent valid names return `NOT_FOUND`.
 
 Execution frames pin code items while they run. Replacement rejects a pinned
 target; deletion rejects a pinned target or any pinned descendant. Pins are

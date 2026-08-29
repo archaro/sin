@@ -459,6 +459,7 @@ typedef struct {
   size_t bytes;
   size_t max_records;
   size_t max_bytes;
+  size_t aggregate_budget;
   const char *filename;
   bool failed;
 } ITEMSTORE_SAVE_BUDGET_t;
@@ -491,19 +492,23 @@ static bool save_reserve_record(ITEMSTORE_SAVE_BUDGET_t *budget) {
   return true;
 }
 
-static bool preflight_value(const VALUE_t *value, size_t depth,
-                            ITEMSTORE_SAVE_BUDGET_t *budget) {
+static bool validate_persistence_value(const VALUE_t *value, size_t depth,
+                                       ITEMSTORE_SAVE_BUDGET_t *budget) {
   if (value == NULL) return false;
   switch (value->type) {
     case VALUE_str: {
-      size_t length = value->s == NULL ? 0 : strlen(value->s);
-      if (length > SIN_MAX_STRING_BYTES || length == SIZE_MAX) return false;
+      if (value->s == NULL) return false;
+      size_t length = strlen(value->s);
+      if (length > SIN_MAX_STRING_BYTES || length > UINT32_MAX) return false;
       return save_charge_bytes(budget, length + 1u, "string payload");
     }
+    case VALUE_bool:
+      return value->i == 0 || value->i == 1;
     case VALUE_itemref: {
-      const char *path = value->itemref == NULL
-          ? NULL : sin_itemref_path(value->itemref);
-      size_t length = path == NULL ? 0 : strlen(path);
+      if (value->itemref == NULL) return false;
+      const char *path = sin_itemref_path(value->itemref);
+      if (path == NULL) return false;
+      size_t length = strlen(path);
       size_t ref_bytes = 0;
       if (!itemstore_valid_ref_path(path, length) ||
           !sin_itemref_allocation_bytes(length, &ref_bytes)) return false;
@@ -515,13 +520,16 @@ static bool preflight_value(const VALUE_t *value, size_t depth,
       size_t count;
       size_t transient_bytes = 0;
       size_t persistent_bytes = 0;
-      if (value->list == NULL || depth >= SIN_LIST_MAX_DEPTH) return false;
+      if (value->list == NULL || depth >= SIN_LIST_MAX_DEPTH ||
+          sin_list_depth(value->list) > SIN_LIST_MAX_DEPTH) return false;
       count = sin_list_count(value->list);
       if (count > SIN_LIST_MAX_ELEMENTS ||
           alloc_mul_overflow(count, sizeof(VALUE_t), &transient_bytes) ||
           !sin_list_decode_allocation_bytes(count, &persistent_bytes)) {
         return false;
       }
+      if (count > budget->aggregate_budget) return false;
+      budget->aggregate_budget -= count;
       if (!save_charge_bytes(budget, transient_bytes,
                              "list transient values") ||
           !save_charge_bytes(budget, persistent_bytes, "list storage")) {
@@ -536,7 +544,9 @@ static bool preflight_value(const VALUE_t *value, size_t depth,
       while (sin_list_iter_next(&iter, &values, &span_count, &leaf)) {
         if (span_count > count - seen) return false;
         for (size_t i = 0; i < span_count; ++i) {
-          if (!preflight_value(&values[i], depth + 1u, budget)) return false;
+          if (!validate_persistence_value(&values[i], depth + 1u, budget)) {
+            return false;
+          }
         }
         seen += span_count;
       }
@@ -548,35 +558,178 @@ static bool preflight_value(const VALUE_t *value, size_t depth,
   }
 }
 
-static bool preflight_item(ITEM_t *item, size_t depth,
-                           ITEMSTORE_SAVE_BUDGET_t *budget) {
+typedef struct {
+  const ITEM_t *target;
+  ITEM_e type;
+  const VALUE_t *value;
+  uint32_t bytecode_len;
+  const uint8_t *bytecode;
+  const ITEM_t *first_missing_parent;
+  size_t missing_layers;
+} ITEMSTORE_MUTATION_PLAN_t;
+
+static bool save_item_payload(const ITEM_t *item,
+                              const ITEMSTORE_MUTATION_PLAN_t *plan,
+                              ITEMSTORE_SAVE_BUDGET_t *budget) {
+  if (plan != NULL && item == plan->target) {
+    if (plan->type == ITEM_value) {
+      return validate_persistence_value(plan->value, 0, budget);
+    }
+    if (plan->type == ITEM_code) {
+      if (plan->bytecode_len > ITEMSTORE_MAX_BYTECODE_LEN ||
+          (plan->bytecode_len != 0 && plan->bytecode == NULL)) return false;
+      return save_charge_bytes(budget, plan->bytecode_len,
+                               "bytecode payload");
+    }
+    return false;
+  }
+  if (item->type == ITEM_value) {
+    return validate_persistence_value(&item->value, 0, budget);
+  }
+  if (item->type == ITEM_code) {
+    if (item->bytecode_len > ITEMSTORE_MAX_BYTECODE_LEN ||
+        (item->bytecode_len != 0 && item->bytecode == NULL)) return false;
+    return save_charge_bytes(budget, item->bytecode_len,
+                             "bytecode payload");
+  }
+  return false;
+}
+
+static bool validate_synthetic_item(const ITEMSTORE_MUTATION_PLAN_t *plan,
+                                    size_t index, size_t depth,
+                                    ITEMSTORE_SAVE_BUDGET_t *budget) {
+  size_t children = index + 1u < plan->missing_layers ? 1u : 0u;
+  size_t item_bytes = 0;
+  if (depth > ITEM_MAX_DEPTH || !save_reserve_record(budget) ||
+      !item_children_loaded_allocation_bytes((uint32_t)children,
+                                               &item_bytes) ||
+      !save_charge_bytes(budget, item_bytes, "item and child storage")) {
+    return false;
+  }
+  if (index + 1u == plan->missing_layers) {
+    return plan->type == ITEM_value
+        ? validate_persistence_value(plan->value, 0, budget)
+        : (plan->type == ITEM_code &&
+           plan->bytecode_len <= ITEMSTORE_MAX_BYTECODE_LEN &&
+           (plan->bytecode_len == 0 || plan->bytecode != NULL) &&
+           save_charge_bytes(budget, plan->bytecode_len,
+                             "bytecode payload"));
+  }
+  return validate_synthetic_item(plan, index + 1u, depth + 1u, budget);
+}
+
+static bool validate_persistence_item(
+    const ITEM_t *item, size_t depth,
+    const ITEMSTORE_MUTATION_PLAN_t *plan,
+    ITEMSTORE_SAVE_BUDGET_t *budget) {
   size_t children;
   size_t item_bytes = 0;
   if (item == NULL || depth > ITEM_MAX_DEPTH ||
       !save_reserve_record(budget)) return false;
   children = item_children_count(item->children);
+  if (plan != NULL && item == plan->first_missing_parent &&
+      plan->missing_layers != 0) {
+    if (children == SIZE_MAX) return false;
+    children++;
+  }
   if (children > ITEMSTORE_MAX_CHILDREN_PER_ITEM ||
       !item_children_loaded_allocation_bytes((uint32_t)children,
                                               &item_bytes) ||
       !save_charge_bytes(budget, item_bytes, "item and child storage")) {
     return false;
   }
-  if (item->type == ITEM_value) {
-    if (!preflight_value(&item->value, 0, budget)) return false;
-  } else if (item->type == ITEM_code) {
-    if (item->bytecode_len > ITEMSTORE_MAX_BYTECODE_LEN ||
-        (item->bytecode_len != 0 && item->bytecode == NULL) ||
-        !save_charge_bytes(budget, item->bytecode_len, "bytecode payload")) {
-      return false;
+  if (!save_item_payload(item, plan, budget)) return false;
+  for (size_t i = 0; i < children; i++) {
+    if (plan != NULL && item == plan->first_missing_parent &&
+        plan->missing_layers != 0 && i == children - 1u) continue;
+    if (!validate_persistence_item(item_children_at(item->children, i),
+                                   depth + 1u, plan, budget)) return false;
+  }
+  if (plan != NULL && item == plan->first_missing_parent &&
+      plan->missing_layers != 0 &&
+      !validate_synthetic_item(plan, 0, depth + 1u, budget)) return false;
+  return true;
+}
+
+static size_t mutation_missing_layers(const ITEM_t *base,
+                                      const char *relative_name,
+                                      const ITEM_t **parent) {
+  const ITEM_t *current = base;
+  const char *position = relative_name;
+  size_t missing = 0;
+  while (current != NULL && *position != '\0') {
+    const char *dot = strchr(position, '.');
+    size_t length = dot == NULL ? strlen(position)
+                                : (size_t)(dot - position);
+    ITEM_t *child = item_children_lookup_span(current->children, position,
+                                               length);
+    if (child == NULL) {
+      if (parent != NULL) *parent = current;
+      missing = 1;
+      while (dot != NULL) {
+        position = dot + 1u;
+        dot = strchr(position, '.');
+        missing++;
+      }
+      return missing;
     }
-  } else {
+    current = child;
+    if (dot == NULL) break;
+    position = dot + 1u;
+  }
+  if (parent != NULL) *parent = NULL;
+  return 0;
+}
+
+static bool itemstore_validate_persistence_tree(const ITEM_t *root,
+                                                const char *filename,
+                                                size_t max_records,
+                                                size_t max_decode_bytes) {
+  if (root == NULL) return false;
+  ITEMSTORE_SAVE_BUDGET_t budget = {
+      .records = 0,
+      .bytes = 0,
+      .max_records = max_records,
+      .max_bytes = max_decode_bytes,
+      .aggregate_budget = SIN_LIST_MAX_ELEMENTS,
+      .filename = filename == NULL ? "<itemstore>" : filename,
+      .failed = false};
+  return validate_persistence_item(root, 0, NULL, &budget);
+}
+
+bool itemstore_validate_mutation_persistence(
+    const ITEM_t *base, const char *relative_name, const ITEM_t *target,
+    ITEM_e type, const VALUE_t *value, uint32_t bytecode_len,
+    const uint8_t *bytecode) {
+  if (base == NULL || relative_name == NULL ||
+      (type == ITEM_value && value == NULL) ||
+      (type == ITEM_code && bytecode_len != 0 && bytecode == NULL)) {
     return false;
   }
-  for (size_t i = 0; i < children; i++) {
-    if (!preflight_item(item_children_at(item->children, i), depth + 1u,
-                        budget)) return false;
-  }
-  return true;
+  ITEMSTORE_t *store = itemstore_owner(base);
+  const ITEM_t *store_root = store == NULL ? base : store->root;
+  const ITEM_t *first_missing_parent = NULL;
+  size_t missing_layers = target == NULL
+      ? mutation_missing_layers(base, relative_name, &first_missing_parent)
+      : 0;
+  if (target == NULL && missing_layers == 0) return false;
+  ITEMSTORE_MUTATION_PLAN_t plan = {
+      .target = target,
+      .type = type,
+      .value = value,
+      .bytecode_len = bytecode_len,
+      .bytecode = bytecode,
+      .first_missing_parent = first_missing_parent,
+      .missing_layers = missing_layers};
+  ITEMSTORE_SAVE_BUDGET_t budget = {
+      .records = 0,
+      .bytes = 0,
+      .max_records = ITEMSTORE_MAX_RECORDS,
+      .max_bytes = ITEMSTORE_MAX_DECODE_BYTES,
+      .aggregate_budget = SIN_LIST_MAX_ELEMENTS,
+      .filename = "<itemstore mutation>",
+      .failed = false};
+  return validate_persistence_item(store_root, 0, &plan, &budget);
 }
 
 static ITEMSTORE_SAVE_RESULT_e itemstore_save_core(
@@ -590,12 +743,10 @@ static ITEMSTORE_SAVE_RESULT_e itemstore_save_core(
   bool published = false;
   bool temp_needs_cleanup = false;
   size_t aggregate_budget = SIN_LIST_MAX_ELEMENTS;
-  ITEMSTORE_SAVE_BUDGET_t preflight = {
-    .records = 0, .bytes = 0, .max_records = max_records,
-    .max_bytes = max_decode_bytes, .filename = filename, .failed = false
-  };
-
-  if (!preflight_item(root, 0, &preflight)) return ITEMSTORE_SAVE_FAILURE;
+  if (!itemstore_validate_persistence_tree(root, filename, max_records,
+                                           max_decode_bytes)) {
+    return ITEMSTORE_SAVE_FAILURE;
+  }
 
   file = create_temp_itemstore(filename, &temp_path);
   if (file == NULL) return ITEMSTORE_SAVE_FAILURE;

@@ -232,6 +232,7 @@ itemstore_set_sync_hook_for_tests,item_persist.o,itemstore,src/itemstore/item_pe
 itemstore_topology_revision,item_registry.o,itemstore,src/itemstore/item_registry.c:201: itemstore_topology_revision definition/provenance,api.itemstore.registry-and-lookup
 itemstore_topology_revision_epoch,item_registry.o,itemstore,src/itemstore/item_registry.c:204: itemstore_topology_revision_epoch definition/provenance,api.itemstore.registry-and-lookup
 itemstore_topology_revision_token_exhausted,item_registry.o,itemstore,src/itemstore/item_registry.c:207: itemstore_topology_revision_token_exhausted definition/provenance,api.itemstore.registry-and-lookup
+itemstore_validate_mutation_persistence,item_persist.o,itemstore,src/itemstore/item_persist.c:700: itemstore_validate_mutation_persistence definition/provenance,api.itemstore.tree-and-values
 itemstore_valid_ref_path,item_persist_v2.o,itemstore,src/itemstore/item_persist_v2.c:18: itemstore_valid_ref_path definition/provenance,api.itemstore.persistence-format
 itemstore_write_bytes,item_persist.o,itemstore,src/itemstore/item_persist.c:130: itemstore_write_bytes definition/provenance,api.itemstore.persistence-format
 itemstore_write_u16_le,item_persist.o,itemstore,src/itemstore/item_persist.c:287: itemstore_write_u16_le definition/provenance,api.itemstore.persistence-format

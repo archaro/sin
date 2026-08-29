@@ -116,11 +116,14 @@ void item_enter_use(ITEM_t *item);
 void item_leave_use(ITEM_t *item);
 
 // On CREATED or REPLACED, result.item is the borrowed resulting leaf and the
-// itemstore takes ownership of the supplied payload. DELETED always returns a
-// NULL result.item. Every failure returns a NULL result.item, leaves the tree
-// and revisions unchanged, and leaves the supplied payload caller-owned. The
-// exception is a rejected alias already owned by the target: it remains owned
-// by that target and must not be freed by the caller.
+// itemstore takes ownership of the supplied payload. Before either success,
+// the prospective whole owning store must be representable by the current v2
+// format under its default persistence limits (including value validity,
+// aggregate list elements, records, children, and decode bytes). DELETED
+// always returns a NULL result.item. Every failure returns a NULL result.item,
+// leaves the tree and revisions unchanged, and leaves the supplied payload
+// caller-owned. The exception is a rejected alias already owned by the target:
+// it remains owned by that target and must not be freed by the caller.
 ITEM_MUTATION_RESULT_t item_set_value(ITEM_t *root, const char *item_name,
                                       VALUE_t value);
 ITEM_MUTATION_RESULT_t item_set_code(ITEM_t *root, const char *item_name,
