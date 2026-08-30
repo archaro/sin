@@ -70,8 +70,7 @@ commands.look = code {@l} (
 commands.quit = code {@l} (
   net.write{@l, "Goodbye!"};
   net.write{@l, "\n"};
-  net.flush{@l}; /* Flush the output first! */
-  net.ditch{@l}; /* Drop the connection. */
+  net.ditch{@l}; /* Drain pending output and drop the connection. */
 );
 
 commands.shutdown = code {@l} (

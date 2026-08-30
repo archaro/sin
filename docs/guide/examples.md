@@ -143,13 +143,10 @@ Another string manipulation libcall which does a case-insensitive comparison.
 
 ```sinistra
 net.write{@l, "You have been disconnected.\n"};
-net.flush{@l};
 net.ditch{@l};
 ```
-Three network libcalls: write to a connection, request that all pending output
-be flushed to the client, then request that the connection be closed. In this
-example the explicit flush is important: without it, the final message may not
-reach the client before the connection closes.
+Two network libcalls: write to a connection, then request that it be closed.
+`net.ditch` drains pending output before completing the graceful close.
 
 ```sinistra
 sys.shutdown;

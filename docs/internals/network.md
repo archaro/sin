@@ -127,10 +127,6 @@ A requested local disconnect normally attempts to drain already queued output
 before closing the connection. Once draining is complete, or if transport
 failure makes draining impossible, the client handle is closed asynchronously.
 
-Code which requires final output to be handed to the transport before requesting
-a disconnect should therefore preserve the documented `net.flush`/`net.ditch`
-ordering.
-
 ## Telnet Integration
 
 `network.c` owns Sinistra's use of Telnet and `libuv`. `libtelnet.c` and

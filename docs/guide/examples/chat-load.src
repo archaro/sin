@@ -66,8 +66,6 @@ docommand = code {@l, @cmd} (
   /* This is really naive. */
   if str.eqcasei{@cmd, "quit"} then
     net.write{@l, "You have been disconnected.\n"};
-    /* Flush before ditching so the farewell is sent before the graceful close. */
-    net.flush{@l};
     net.ditch{@l};
   elsif str.eqcasei{@cmd, "shutdown"} then
     sys.shutdown;
