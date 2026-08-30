@@ -659,6 +659,236 @@ void test_itemstore_public_mutation_aggregate_list_budget_is_atomic(void) {
   ASSERT_EQ_INT(0, unlink(path));
 }
 
+static void assert_public_value_persistability(const char *name,
+                                                VALUE_t value) {
+  char path[4096];
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  ITEM_MUTATION_RESULT_t mutation = item_set_value(root, name, value);
+  ASSERT_TRUE(mutation.status == ITEM_MUTATION_CREATED ||
+              mutation.status == ITEM_MUTATION_REPLACED);
+  ASSERT_NOT_NULL(mutation.item);
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path,
+                                      "sin-itemstore-persist-property"));
+  FILE *file = new_fixture(path);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_TRUE(save_itemstore(path, root));
+  ITEM_t *loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  ITEM_t *loaded_item = find_item(loaded, name);
+  ASSERT_NOT_NULL(loaded_item);
+  ASSERT_TRUE(value_equal(&mutation.item->value, &loaded_item->value));
+  destroy_item(loaded);
+  destroy_item(root);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+static void assert_public_code_persistability(uint32_t length) {
+  char path[4096];
+  uint8_t *bytecode = length == 0 ? NULL : malloc(length);
+  if (length != 0) ASSERT_NOT_NULL(bytecode);
+  if (bytecode != NULL) memset(bytecode, 0xA5, length);
+  ITEM_t *root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  ITEM_MUTATION_RESULT_t mutation = item_set_code(root, "code", length,
+                                                  bytecode);
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, mutation.status);
+  ASSERT_NOT_NULL(mutation.item);
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path,
+                                      "sin-itemstore-code-property"));
+  FILE *file = new_fixture(path);
+  ASSERT_EQ_INT(0, fclose(file));
+  ASSERT_TRUE(save_itemstore(path, root));
+  ITEM_t *loaded = load_itemstore(path);
+  ASSERT_NOT_NULL(loaded);
+  ITEM_t *loaded_item = find_item(loaded, "code");
+  ASSERT_NOT_NULL(loaded_item);
+  ASSERT_EQ_INT(length, loaded_item->bytecode_len);
+  if (length != 0) ASSERT_TRUE(memcmp(bytecode, loaded_item->bytecode, length) == 0);
+  else ASSERT_TRUE(loaded_item->bytecode == NULL);
+  destroy_item(loaded);
+  destroy_item(root);
+  ASSERT_EQ_INT(0, unlink(path));
+}
+
+static SIN_LIST_t *make_nil_list_for_persistability(size_t count) {
+  VALUE_t *values = count == 0 ? NULL : calloc(count, sizeof *values);
+  if (count != 0) ASSERT_NOT_NULL(values);
+  for (size_t i = 0; i < count; ++i) values[i] = VALUE_NIL;
+  SIN_LIST_t *list = sin_list_build_owned(values, count);
+  free(values);
+  return list;
+}
+
+void test_itemstore_public_mutation_persistability_boundaries(void) {
+  char *string;
+  ITEM_t *root;
+  ITEM_t *target;
+  ITEM_MUTATION_RESULT_t mutation;
+
+  string = malloc(SIN_MAX_STRING_BYTES);
+  ASSERT_NOT_NULL(string);
+  memset(string, 's', SIN_MAX_STRING_BYTES - 1u);
+  string[SIN_MAX_STRING_BYTES - 1u] = '\0';
+  assert_public_value_persistability(
+      "string_below", (VALUE_t){VALUE_str, {.s = string}});
+
+  string = malloc(SIN_MAX_STRING_BYTES + 1u);
+  ASSERT_NOT_NULL(string);
+  memset(string, 's', SIN_MAX_STRING_BYTES);
+  string[SIN_MAX_STRING_BYTES] = '\0';
+  assert_public_value_persistability(
+      "string_at", (VALUE_t){VALUE_str, {.s = string}});
+
+  root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  target = test_item_set_value(root, "target",
+                               (VALUE_t){VALUE_int, {.i = 7}});
+  ASSERT_NOT_NULL(target);
+  string = malloc(SIN_MAX_STRING_BYTES + 2u);
+  ASSERT_NOT_NULL(string);
+  memset(string, 's', SIN_MAX_STRING_BYTES + 1u);
+  string[SIN_MAX_STRING_BYTES + 1u] = '\0';
+  assert_value_mutation_rejected(
+      root, target, (VALUE_t){VALUE_str, {.s = string}});
+  value_free(&(VALUE_t){VALUE_str, {.s = string}});
+  destroy_item(root);
+
+  assert_public_code_persistability(ITEMSTORE_MAX_BYTECODE_LEN - 1u);
+  assert_public_code_persistability(ITEMSTORE_MAX_BYTECODE_LEN);
+  assert_public_code_persistability(0);
+
+  root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  target = test_item_set_code(root, "code_target", 1, malloc(1));
+  ASSERT_NOT_NULL(target);
+  target->bytecode[0] = 'h';
+  uint8_t *oversized_code = malloc(1);
+  ASSERT_NOT_NULL(oversized_code);
+  oversized_code[0] = 0x5A;
+  assert_code_mutation_rejected(root, target,
+                                ITEMSTORE_MAX_BYTECODE_LEN + 1u,
+                                oversized_code);
+  free(oversized_code);
+  assert_code_mutation_rejected(root, target, 1, NULL);
+  destroy_item(root);
+
+  SIN_LIST_t *deepest = sin_list_build_owned(NULL, 0);
+  ASSERT_NOT_NULL(deepest);
+  for (size_t depth = 1; depth < SIN_LIST_MAX_DEPTH; ++depth) {
+    VALUE_t element = {VALUE_list, {.list = sin_list_retain(deepest)}};
+    SIN_LIST_t *next = sin_list_build_owned(&element, 1);
+    ASSERT_NOT_NULL(next);
+    sin_list_release(deepest);
+    deepest = next;
+  }
+  ASSERT_EQ_INT(SIN_LIST_MAX_DEPTH, sin_list_depth(deepest));
+  VALUE_t too_deep_element = {VALUE_list, {.list = sin_list_retain(deepest)}};
+  ASSERT_TRUE(sin_list_build_owned(&too_deep_element, 1) == NULL);
+  ASSERT_EQ_INT(VALUE_nil, too_deep_element.type);
+  assert_public_value_persistability(
+      "depth_at_limit", (VALUE_t){VALUE_list, {.list = deepest}});
+  deepest = NULL;
+
+  SIN_LIST_t *max_list = make_nil_list_for_persistability(
+      SIN_LIST_MAX_ELEMENTS);
+  ASSERT_NOT_NULL(max_list);
+  root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  target = test_item_set_value(root, "target",
+                               (VALUE_t){VALUE_int, {.i = 7}});
+  ASSERT_NOT_NULL(target);
+  mutation = item_set_value(root, "elements_at_limit",
+                            (VALUE_t){VALUE_list, {.list = max_list}});
+  ASSERT_EQ_INT(ITEM_MUTATION_CREATED, mutation.status);
+  ASSERT_NOT_NULL(mutation.item);
+  SIN_LIST_t *one = make_nil_list_for_persistability(1);
+  ASSERT_NOT_NULL(one);
+  assert_value_mutation_rejected(
+      root, target, (VALUE_t){VALUE_list, {.list = one}});
+  value_free(&(VALUE_t){VALUE_list, {.list = one}});
+  char list_path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(list_path, sizeof list_path,
+                                      "sin-itemstore-list-property"));
+  FILE *list_file = new_fixture(list_path);
+  ASSERT_EQ_INT(0, fclose(list_file));
+  ASSERT_TRUE(save_itemstore(list_path, root));
+  ITEM_t *list_loaded = load_itemstore(list_path);
+  ASSERT_NOT_NULL(list_loaded);
+  ITEM_t *list_item = find_item(list_loaded, "elements_at_limit");
+  ASSERT_NOT_NULL(list_item);
+  ASSERT_TRUE(value_equal(&mutation.item->value, &list_item->value));
+  destroy_item(list_loaded);
+  ASSERT_EQ_INT(0, unlink(list_path));
+  destroy_item(root);
+  VALUE_t *too_many = calloc(SIN_LIST_MAX_ELEMENTS + 1u, sizeof *too_many);
+  ASSERT_NOT_NULL(too_many);
+  ASSERT_TRUE(sin_list_build_owned(too_many, SIN_LIST_MAX_ELEMENTS + 1u) == NULL);
+  free(too_many);
+
+  SIN_ITEMREF_t *ref = sin_itemref_create("target");
+  ASSERT_NOT_NULL(ref);
+  SIN_LIST_t *inner = make_nil_list_for_persistability(1);
+  ASSERT_NOT_NULL(inner);
+  VALUE_t *nested_values = calloc(2, sizeof *nested_values);
+  ASSERT_NOT_NULL(nested_values);
+  nested_values[0] = (VALUE_t){VALUE_itemref, {.itemref = ref}};
+  nested_values[1] = (VALUE_t){VALUE_list, {.list = inner}};
+  SIN_LIST_t *nested = sin_list_build_owned(nested_values, 2);
+  free(nested_values);
+  ASSERT_NOT_NULL(nested);
+  assert_public_value_persistability(
+      "nested_itemref", (VALUE_t){VALUE_list, {.list = nested}});
+
+  root = make_root_item("root");
+  ASSERT_NOT_NULL(root);
+  target = test_item_set_value(root, "target",
+                               (VALUE_t){VALUE_int, {.i = 7}});
+  ASSERT_NOT_NULL(target);
+  VALUE_t malformed_bool = {VALUE_bool, {.i = 2}};
+  SIN_LIST_t *malformed_inner = sin_list_build_owned(&malformed_bool, 1);
+  ASSERT_NOT_NULL(malformed_inner);
+  VALUE_t malformed = {VALUE_list, {.list = malformed_inner}};
+  assert_value_mutation_rejected(root, target, malformed);
+  value_free(&malformed);
+  VALUE_t malformed_null = {VALUE_list, {.list = NULL}};
+  SIN_LIST_t *malformed_outer = sin_list_build_owned(&malformed_null, 1);
+  ASSERT_NOT_NULL(malformed_outer);
+  malformed = (VALUE_t){VALUE_list, {.list = malformed_outer}};
+  assert_value_mutation_rejected(root, target, malformed);
+  value_free(&malformed);
+
+  char path[4096];
+  ASSERT_EQ_INT(0, test_temp_template(path, sizeof path,
+                                      "sin-itemstore-record-property"));
+  FILE *file = new_fixture(path);
+  ASSERT_EQ_INT(0, fclose(file));
+  /* UINT32_MAX is the child-count wire threshold.  Constructing that many
+   * runtime children is not feasible and the decode budget rejects it before
+   * allocation; the v2 malformed-resource fixture exercises that boundary. */
+  size_t child_boundary_bytes = 0;
+  ASSERT_TRUE(item_children_loaded_allocation_bytes(
+      ITEMSTORE_MAX_CHILDREN_PER_ITEM, &child_boundary_bytes));
+  ASSERT_TRUE(child_boundary_bytes > ITEMSTORE_MAX_DECODE_BYTES);
+  ASSERT_TRUE(!save_itemstore_with_limits(path, root, ITEMSTORE_DURABLE_FAST,
+                                          1, ITEMSTORE_MAX_DECODE_BYTES));
+  ASSERT_TRUE(save_itemstore_with_limits(path, root, ITEMSTORE_DURABLE_FAST,
+                                         2, ITEMSTORE_MAX_DECODE_BYTES));
+  ASSERT_TRUE(save_itemstore_with_limits(path, root, ITEMSTORE_DURABLE_FAST,
+                                         3, ITEMSTORE_MAX_DECODE_BYTES));
+  ASSERT_TRUE(save_itemstore_with_limits(
+      path, root, ITEMSTORE_DURABLE_FAST, ITEMSTORE_MAX_RECORDS - 1u,
+      ITEMSTORE_MAX_DECODE_BYTES));
+  ASSERT_TRUE(save_itemstore_with_limits(
+      path, root, ITEMSTORE_DURABLE_FAST, ITEMSTORE_MAX_RECORDS,
+      ITEMSTORE_MAX_DECODE_BYTES));
+  ASSERT_TRUE(save_itemstore_with_limits(
+      path, root, ITEMSTORE_DURABLE_FAST, ITEMSTORE_MAX_RECORDS + 1u,
+      ITEMSTORE_MAX_DECODE_BYTES));
+  ASSERT_EQ_INT(0, unlink(path));
+  destroy_item(root);
+}
+
 void test_itemstore_public_mutation_children_roundtrip(void) {
   ITEM_t *root = make_root_item("root");
   ASSERT_NOT_NULL(root);
