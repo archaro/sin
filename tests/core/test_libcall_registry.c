@@ -39,6 +39,8 @@ uint8_t *lc_math_max(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_floor(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_ceil(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_round(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_math_sqrt(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_math_pow(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_thisid(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -258,6 +260,8 @@ void test_libcall_registry_roundtrip(void) {
       {"math", "floor", 6, 3, 1, lc_math_floor},
       {"math", "ceil", 6, 4, 1, lc_math_ceil},
       {"math", "round", 6, 5, 1, lc_math_round},
+      {"math", "sqrt", 6, 6, 1, lc_math_sqrt},
+      {"math", "pow", 6, 7, 2, lc_math_pow},
       {"net", "input", 3, 0, 0, lc_net_input},
       {"net", "write", 3, 1, 2, lc_net_write},
       {"net", "ditch", 3, 2, 1, lc_net_ditch},

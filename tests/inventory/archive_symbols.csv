@@ -244,7 +244,9 @@ lc_math_ceil,libcall_math.o,libcall,src/libcall/libcall_math.c:105: lc_math_ceil
 lc_math_floor,libcall_math.o,libcall,src/libcall/libcall_math.c:100: lc_math_floor definition/provenance,api.libcall.math
 lc_math_max,libcall_math.o,libcall,src/libcall/libcall_math.c:171: lc_math_max definition/provenance,api.libcall.math
 lc_math_min,libcall_math.o,libcall,src/libcall/libcall_math.c:167: lc_math_min definition/provenance,api.libcall.math
+lc_math_pow,libcall_math.o,libcall,src/libcall/libcall_math.c:206: lc_math_pow definition/provenance,api.libcall.math
 lc_math_round,libcall_math.o,libcall,src/libcall/libcall_math.c:110: lc_math_round definition/provenance,api.libcall.math
+lc_math_sqrt,libcall_math.o,libcall,src/libcall/libcall_math.c:175: lc_math_sqrt definition/provenance,api.libcall.math
 lc_net_address,libcall_net.o,libcall,src/libcall/libcall_net.c:198: lc_net_address definition/provenance,api.libcall.net
 lc_net_connected,libcall_net.o,libcall,src/libcall/libcall_net.c:178: lc_net_connected definition/provenance,api.libcall.net
 lc_net_ditch,libcall_net.o,libcall,src/libcall/libcall_net.c:142: lc_net_ditch definition/provenance,api.libcall.net

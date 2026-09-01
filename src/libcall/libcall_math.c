@@ -171,3 +171,68 @@ uint8_t *lc_math_min(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 uint8_t *lc_math_max(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return lc_math_select(ctx, nextop, item, false);
 }
+
+uint8_t *lc_math_sqrt(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  VALUE_t value;
+  double input;
+  double result;
+  (void)item;
+
+  value = pop_stack(ctx->vm->stack);
+  if (value.type != VALUE_int && value.type != VALUE_float) {
+    value_free(&value);
+    return lc_invalid_args_detail_return(
+        ctx, nextop, VALUE_NIL, "math.sqrt expects an integer or float");
+  }
+
+  input = value.type == VALUE_int ? (double)value.i : value.f;
+  value_free(&value);
+  if (input < 0.0) {
+    return lc_invalid_args_detail_return(
+        ctx, nextop, VALUE_NIL, "math.sqrt expects a non-negative number");
+  }
+  if (!isfinite(input)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+
+  result = sqrt(input);
+  if (!isfinite(result)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
+  return nextop;
+}
+
+uint8_t *lc_math_pow(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  VALUE_t exponent = pop_stack(ctx->vm->stack);
+  VALUE_t base = pop_stack(ctx->vm->stack);
+  double base_float;
+  double exponent_float;
+  double result;
+  (void)item;
+
+  if ((base.type != VALUE_int && base.type != VALUE_float) ||
+      (exponent.type != VALUE_int && exponent.type != VALUE_float)) {
+    value_free(&base);
+    value_free(&exponent);
+    return lc_invalid_args_detail_return(
+        ctx, nextop, VALUE_NIL,
+        "math.pow expects two integer or float arguments");
+  }
+
+  base_float = base.type == VALUE_int ? (double)base.i : base.f;
+  exponent_float =
+      exponent.type == VALUE_int ? (double)exponent.i : exponent.f;
+  value_free(&base);
+  value_free(&exponent);
+  if (!isfinite(base_float) || !isfinite(exponent_float)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+
+  result = pow(base_float, exponent_float);
+  if (!isfinite(result)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
+  return nextop;
+}

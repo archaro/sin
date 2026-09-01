@@ -24,6 +24,8 @@ exclude|libcall.math.max|covered by the focused native math libcall tests; no so
 exclude|libcall.math.floor|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
 exclude|libcall.math.ceil|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
 exclude|libcall.math.round|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
+exclude|libcall.math.sqrt|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
+exclude|libcall.math.pow|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
 exclude|libcall.sys.backup|writes itemstore backups; exercised by native persistence tests
 exclude|libcall.sys.shutdown|stops the runtime event loop; unsafe in load-only conformance
 exclude|libcall.sys.abort|aborts runtime shutdown state; unsafe in load-only conformance

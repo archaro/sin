@@ -413,6 +413,13 @@ rewrite.runtime.test_math_rounding_rejects_nonnumeric_and_consumes_owned_values,
 rewrite.runtime.test_math_rounding_registry_contract,api.libcall.math;api.libcall.table;libcall.math.floor;libcall.math.ceil;libcall.math.round
 rewrite.runtime.test_math_rounding_success_preserves_existing_error,api.libcall.math;libcall.math.floor;libcall.math.ceil;libcall.math.round
 rewrite.runtime.test_math_rounding_undefined_inputs_publish_error,api.common.errors;api.libcall.math;libcall.math.floor;libcall.math.ceil;libcall.math.round
+rewrite.runtime.test_math_pow_integer_float_inputs_and_result_type,api.libcall.math;libcall.math.pow
+rewrite.runtime.test_math_pow_undefined_inputs_and_results_publish_error,api.common.errors;api.libcall.math;libcall.math.pow
+rewrite.runtime.test_math_sqrt_integer_and_float_inputs,api.libcall.math;libcall.math.sqrt
+rewrite.runtime.test_math_sqrt_negative_and_undefined_inputs_publish_errors,api.common.errors;api.libcall.math;libcall.math.sqrt
+rewrite.runtime.test_math_sqrt_pow_registry_contract,api.libcall.math;api.libcall.table;libcall.math.sqrt;libcall.math.pow
+rewrite.runtime.test_math_sqrt_pow_reject_invalid_args_and_consume_owned_values,api.libcall.math;libcall.math.sqrt;libcall.math.pow
+rewrite.runtime.test_math_sqrt_pow_success_preserves_existing_error,api.libcall.math;libcall.math.sqrt;libcall.math.pow
 rewrite.runtime.test_sys_compile_libcall_runtime,language.expression.libcall;api.libcall.sys;libcall.sys.compile
 rewrite.runtime.test_sys_itemref_dynamic_calls,language.expression.libcall;language.expression.item-reference;bytecode.encoding.item
 rewrite.network.test_append_input_lines_and_limits,api.network.runtime-io;api.network.telnet

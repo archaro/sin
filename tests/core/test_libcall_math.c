@@ -61,7 +61,7 @@ void test_math_abs_registry_contract(void) {
   ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_math_abs);
   ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
   ASSERT_EQ_INT(1, args);
-  ASSERT_EQ_INT(69, count);
+  ASSERT_EQ_INT(71, count);
 }
 
 void test_math_rounding_registry_contract(void) {
@@ -78,7 +78,7 @@ void test_math_rounding_registry_contract(void) {
   size_t count = 0;
 
   for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
-  ASSERT_EQ_INT(69, count);
+  ASSERT_EQ_INT(71, count);
   for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
     uint8_t lib_index = 0;
     uint8_t call_index = 0;
@@ -571,4 +571,216 @@ void test_math_min_max_success_preserves_existing_error(void) {
                  "Invalid arguments to library call. (prior error)");
     teardown_libcall_runtime();
   }
+}
+
+void test_math_sqrt_pow_registry_contract(void) {
+  const struct {
+    const char *name;
+    uint8_t call_index;
+    uint8_t args;
+    OP_t handler;
+  } manifest[] = {
+      {"sqrt", 6, 1, lc_math_sqrt},
+      {"pow", 7, 2, lc_math_pow},
+  };
+  size_t count = 0;
+
+  for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
+  ASSERT_EQ_INT(71, count);
+  for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
+    uint8_t lib_index = 0;
+    uint8_t call_index = 0;
+    uint8_t args = 0;
+    ASSERT_TRUE(libcall_lookup_pair("math", manifest[i].name, &lib_index,
+                                   &call_index, &args));
+    ASSERT_EQ_INT(6, lib_index);
+    ASSERT_EQ_INT(manifest[i].call_index, call_index);
+    ASSERT_EQ_INT(manifest[i].args, args);
+    ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == manifest[i].handler);
+    ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
+    ASSERT_EQ_INT(manifest[i].args, args);
+  }
+}
+
+void test_math_sqrt_integer_and_float_inputs(void) {
+  setup_libcall_runtime();
+
+  VALUE_t result = call_math_unary(lc_math_sqrt,
+                                   (VALUE_t){VALUE_int, {.i = 9}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 3.0);
+  result = call_math_unary(lc_math_sqrt,
+                           (VALUE_t){VALUE_float, {.f = 2.25}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 1.5);
+  result = call_math_unary(lc_math_sqrt,
+                           (VALUE_t){VALUE_float, {.f = -0.0}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 0.0 && signbit(result.f));
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+
+  teardown_libcall_runtime();
+}
+
+void test_math_pow_integer_float_inputs_and_result_type(void) {
+  setup_libcall_runtime();
+
+  VALUE_t result = call_math_binary(
+      lc_math_pow, (VALUE_t){VALUE_int, {.i = 2}},
+      (VALUE_t){VALUE_int, {.i = 10}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 1024.0);
+  result = call_math_binary(
+      lc_math_pow, (VALUE_t){VALUE_float, {.f = 9.0}},
+      (VALUE_t){VALUE_int, {.i = 2}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 81.0);
+  result = call_math_binary(
+      lc_math_pow, (VALUE_t){VALUE_int, {.i = 4}},
+      (VALUE_t){VALUE_float, {.f = 0.5}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 2.0);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+
+  teardown_libcall_runtime();
+}
+
+void test_math_sqrt_pow_reject_invalid_args_and_consume_owned_values(void) {
+  setup_libcall_runtime();
+  int before = size_stack(config.vm->stack);
+  char *payload = strdup("owned by the argument");
+  ASSERT_NOT_NULL(payload);
+  VALUE_t result = call_math_unary(
+      lc_math_sqrt, (VALUE_t){VALUE_str, {.s = payload}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(before, size_stack(config.vm->stack));
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.sqrt expects an integer or float)");
+  teardown_libcall_runtime();
+
+  setup_libcall_runtime();
+  before = size_stack(config.vm->stack);
+  payload = strdup("owned invalid base");
+  ASSERT_NOT_NULL(payload);
+  result = call_math_binary(
+      lc_math_pow, (VALUE_t){VALUE_str, {.s = payload}},
+      (VALUE_t){VALUE_int, {.i = 2}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(before, size_stack(config.vm->stack));
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.pow expects two integer or float arguments)");
+  teardown_libcall_runtime();
+
+  setup_libcall_runtime();
+  before = size_stack(config.vm->stack);
+  payload = strdup("owned invalid exponent");
+  ASSERT_NOT_NULL(payload);
+  result = call_math_binary(
+      lc_math_pow, (VALUE_t){VALUE_int, {.i = 2}},
+      (VALUE_t){VALUE_str, {.s = payload}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(before, size_stack(config.vm->stack));
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.pow expects two integer or float arguments)");
+  teardown_libcall_runtime();
+}
+
+void test_math_sqrt_negative_and_undefined_inputs_publish_errors(void) {
+  const double undefined_values[] = {NAN, INFINITY};
+
+  setup_libcall_runtime();
+  VALUE_t result = call_math_unary(
+      lc_math_sqrt, (VALUE_t){VALUE_int, {.i = -1}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.sqrt expects a non-negative number)");
+  teardown_libcall_runtime();
+
+  setup_libcall_runtime();
+  result = call_math_unary(
+      lc_math_sqrt, (VALUE_t){VALUE_float, {.f = -2.25}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.sqrt expects a non-negative number)");
+  teardown_libcall_runtime();
+
+  setup_libcall_runtime();
+  result = call_math_unary(
+      lc_math_sqrt, (VALUE_t){VALUE_float, {.f = -INFINITY}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.sqrt expects a non-negative number)");
+  teardown_libcall_runtime();
+
+  for (size_t i = 0; i < sizeof(undefined_values) / sizeof(undefined_values[0]); i++) {
+    setup_libcall_runtime();
+    result = call_math_unary(
+        lc_math_sqrt, (VALUE_t){VALUE_float, {.f = undefined_values[i]}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+    teardown_libcall_runtime();
+  }
+}
+
+void test_math_pow_undefined_inputs_and_results_publish_error(void) {
+  const double undefined_values[] = {NAN, INFINITY, -INFINITY};
+
+  for (size_t i = 0; i < sizeof(undefined_values) / sizeof(undefined_values[0]); i++) {
+    setup_libcall_runtime();
+    VALUE_t result = call_math_binary(
+        lc_math_pow, (VALUE_t){VALUE_float, {.f = undefined_values[i]}},
+        (VALUE_t){VALUE_int, {.i = 2}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+    teardown_libcall_runtime();
+
+    setup_libcall_runtime();
+    result = call_math_binary(
+        lc_math_pow, (VALUE_t){VALUE_int, {.i = 2}},
+        (VALUE_t){VALUE_float, {.f = undefined_values[i]}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+    teardown_libcall_runtime();
+  }
+
+  setup_libcall_runtime();
+  VALUE_t result = call_math_binary(
+      lc_math_pow, (VALUE_t){VALUE_int, {.i = 10}},
+      (VALUE_t){VALUE_int, {.i = 1000}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+  teardown_libcall_runtime();
+
+  setup_libcall_runtime();
+  result = call_math_binary(
+      lc_math_pow, (VALUE_t){VALUE_int, {.i = -1}},
+      (VALUE_t){VALUE_float, {.f = 0.5}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+  teardown_libcall_runtime();
+}
+
+void test_math_sqrt_pow_success_preserves_existing_error(void) {
+  setup_libcall_runtime();
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
+                 "prior error", NULL);
+  VALUE_t result = call_math_unary(
+      lc_math_sqrt, (VALUE_t){VALUE_int, {.i = 16}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 4.0);
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (prior error)");
+  teardown_libcall_runtime();
+
+  setup_libcall_runtime();
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
+                 "prior error", NULL);
+  result = call_math_binary(
+      lc_math_pow, (VALUE_t){VALUE_int, {.i = 2}},
+      (VALUE_t){VALUE_int, {.i = 3}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 8.0);
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (prior error)");
+  teardown_libcall_runtime();
 }

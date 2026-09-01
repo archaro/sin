@@ -6,7 +6,10 @@
 Mathematical operations accept numeric VM values and preserve an existing
 runtime diagnostic on success. Nonnumeric values are consumed and rejected with
 `ERR_RUNTIME_INVALIDARGS`; numeric inputs whose result is not representable
-are consumed and return `nil` with `ERR_RUNTIME_UNDEFINED`.
+are consumed and return `nil` with `ERR_RUNTIME_UNDEFINED`. `math.sqrt` rejects
+negative values (including negative infinity) with `ERR_RUNTIME_INVALIDARGS`,
+while NaN and positive infinity are undefined. `math.pow` treats NaN and either
+infinity in either argument, domain errors, and non-finite results as undefined.
 The unary rounding operations always return integers. `math.round` rounds
 exact halfway cases away from zero. Float results are accepted only in the
 binary64-safe interval `[-0x1p63, 0x1p63)` after rounding.
@@ -19,3 +22,5 @@ binary64-safe interval `[-0x1p63, 0x1p63)` after rounding.
 | `math.floor{value}` | `math` | `floor` | 1 | `value` must be an integer or float. | The greatest integral value no greater than `value`, returned as an integer. | Consumes the input value. | A nonnumeric input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.floor-specific detail. NaN, either infinity, or an out-of-range rounded result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@lower = math.floor{@value};` |
 | `math.ceil{value}` | `math` | `ceil` | 1 | `value` must be an integer or float. | The least integral value no less than `value`, returned as an integer. | Consumes the input value. | A nonnumeric input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.ceil-specific detail. NaN, either infinity, or an out-of-range rounded result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@upper = math.ceil{@value};` |
 | `math.round{value}` | `math` | `round` | 1 | `value` must be an integer or float. | The nearest integral value, with exact halfway cases rounded away from zero, returned as an integer. | Consumes the input value. | A nonnumeric input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.round-specific detail. NaN, either infinity, or an out-of-range rounded result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@nearest = math.round{@value};` |
+| `math.sqrt{value}` | `math` | `sqrt` | 1 | `value` must be an integer or float and non-negative. | The square root, always returned as a float; negative zero is accepted. | Consumes the input value. | A nonnumeric or negative input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.sqrt-specific detail. NaN, positive infinity, or a non-finite result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@root = math.sqrt{@value};` |
+| `math.pow{base, exponent}` | `math` | `pow` | 2 | Both values must be integers or floats. | `base` raised to `exponent`, always returned as a float. | Consumes both input values. | A nonnumeric input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.pow-specific detail. NaN, either infinity, a domain error, or a non-finite result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@power = math.pow{@base, @exponent};` |
