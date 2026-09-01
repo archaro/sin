@@ -392,6 +392,12 @@ rewrite.runtime.test_list_libcall_valid_operations_and_ownership,language.expres
 rewrite.runtime.test_list_libcall_invalid_types_and_ranges,api.libcall.list;libcall.list.get
 rewrite.runtime.test_list_libcall_source_integration,api.libcall.list
 rewrite.runtime.test_list_libcall_islist,libcall.list.islist
+rewrite.runtime.test_math_abs_float_inputs_and_signed_zero,api.libcall.math;libcall.math.abs
+rewrite.runtime.test_math_abs_integer_inputs,api.libcall.math;libcall.math.abs
+rewrite.runtime.test_math_abs_rejects_nonnumeric_and_consumes_owned_value,api.libcall.math;libcall.math.abs
+rewrite.runtime.test_math_abs_registry_contract,api.libcall.math;api.libcall.table;libcall.math.abs
+rewrite.runtime.test_math_abs_success_preserves_existing_error,api.libcall.math;libcall.math.abs
+rewrite.runtime.test_math_abs_undefined_inputs_publish_error,api.common.errors;api.libcall.math;libcall.math.abs
 rewrite.runtime.test_sys_compile_libcall_runtime,language.expression.libcall;api.libcall.sys;libcall.sys.compile
 rewrite.runtime.test_sys_itemref_dynamic_calls,language.expression.libcall;language.expression.item-reference;bytecode.encoding.item
 rewrite.network.test_append_input_lines_and_limits,api.network.runtime-io;api.network.telnet

@@ -5,8 +5,8 @@ numeric error codes. For the conceptual distinction between failures, return
 values, and diagnostics, see the [Failure Model](../guide/failure-model.md).
 The exact return values, side effects, and error-setting rules for each
 operation are in the [libcall reference](libcalls.md) and the [sys](libcalls-sys.md),
-[str](libcalls-str.md), [net](libcalls-net.md), [list](libcalls-list.md), and
-[task](libcalls-task.md) library pages.
+[str](libcalls-str.md), [net](libcalls-net.md), [list](libcalls-list.md),
+[task](libcalls-task.md), and [math](libcalls-math.md) library pages.
 
 [Reference Manual](README.md) · [Language Reference](language.md) ·
 [Libcalls](libcalls.md) · [Tool Reference](tools.md)
@@ -54,6 +54,7 @@ gaps are explicit.
 | 29 | `ERR_RUNTIME_SOURCE` | Item source is unavailable. |
 | 30 | `ERR_NETWORK_ERROR` | Network error. |
 | 31 | `ERR_RUNTIME_INUSE` | Item or descendant is execution-pinned; cannot delete. |
+| 32 | `ERR_RUNTIME_UNDEFINED` | Undefined mathematical result. |
 
 An operation may add detail to the default message. A return value of `nil` or
 `false` does not by itself imply that an error was published; consult the

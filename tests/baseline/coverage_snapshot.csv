@@ -28,6 +28,7 @@ src/itemstore/item_registry.c,itemstore,measured,204,206,99.03,110,150,73.33,38,
 src/itemstore/item_source_persist.c,itemstore,measured,132,189,69.84,85,164,51.83,6,6,100.00,GCC gcov JSON from full make test
 src/itemstore/item_tree.c,itemstore,measured,316,341,92.67,231,280,82.50,28,29,96.55,GCC gcov JSON from full make test
 src/libcall/libcall_list.c,libcall,measured,104,104,100.00,49,70,70.00,9,9,100.00,GCC gcov JSON from full make test
+src/libcall/libcall_math.c,libcall,unavailable,0,0,n/a,0,0,n/a,0,0,n/a,Post-baseline math.abs module did not exist at the recorded GCC baseline commit
 src/libcall/libcall_net.c,libcall,measured,123,123,100.00,62,72,86.11,10,10,100.00,GCC gcov JSON from full make test
 src/libcall/libcall_registry.c,libcall,measured,238,256,92.97,142,182,78.02,22,23,95.65,GCC gcov JSON from full make test
 src/libcall/libcall_str.c,libcall,measured,314,339,92.63,149,162,91.98,27,27,100.00,GCC gcov JSON from full make test

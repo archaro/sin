@@ -21,6 +21,12 @@ without changing `error`, `net.flush` or `net.ditch` on an inactive line returns
 `false` with `ERR_NETWORK_ERROR`, and `str.substr{text, start, len}` with
 `len < 1` returns `nil` without changing `error`.
 
+The `math` library accepts numeric values only. A nonnumeric value is consumed,
+returns `nil`, and publishes `ERR_RUNTIME_INVALIDARGS` with a math-specific
+detail. A numeric value whose mathematical result is not representable returns
+`nil` and publishes `ERR_RUNTIME_UNDEFINED`; successful math calls preserve an
+existing diagnostic.
+
 Examples:
 
 * `task.newgametask{"heartbeat", -1, 10};` returns `nil`, sets `error` to
@@ -39,4 +45,5 @@ Examples:
 - [str](libcalls-str.md) - string manipulation
 - [net](libcalls-net.md) - network operations
 - [list](libcalls-list.md) - list operations
+- [math](libcalls-math.md) - mathematical operations
 - [task](libcalls-task.md) - task handling

@@ -97,6 +97,9 @@ void test_error_message_table_defines_active_errors(void) {
   ASSERT_EQ_INT(28, ERR_RUNTIME_PERSISTENCE);
   ASSERT_EQ_INT(29, ERR_RUNTIME_SOURCE);
   ASSERT_EQ_INT(31, ERR_RUNTIME_INUSE);
+  ASSERT_EQ_INT(32, ERR_RUNTIME_UNDEFINED);
+  ASSERT_TRUE(strcmp(errmsg[ERR_RUNTIME_UNDEFINED],
+                     "Undefined mathematical result.") == 0);
 
   int active_errors[] = {
       ERR_NOERROR,
@@ -120,6 +123,7 @@ void test_error_message_table_defines_active_errors(void) {
       ERR_RUNTIME_SOURCE,
       ERR_NETWORK_ERROR,
       ERR_RUNTIME_INUSE,
+      ERR_RUNTIME_UNDEFINED,
   };
 
   for (size_t i = 0; i < sizeof(active_errors) / sizeof(active_errors[0]); i++) {
