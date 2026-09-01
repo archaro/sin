@@ -33,6 +33,13 @@ static VALUE_t call_abs(VALUE_t input) {
   return pop_stack(config.vm->stack);
 }
 
+static VALUE_t call_math_binary(OP_t handler, VALUE_t left, VALUE_t right) {
+  push_stack(config.vm->stack, left);
+  push_stack(config.vm->stack, right);
+  (void)handler(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  return pop_stack(config.vm->stack);
+}
+
 void test_math_abs_registry_contract(void) {
   uint8_t lib_index = 0;
   uint8_t call_index = 0;
@@ -48,7 +55,33 @@ void test_math_abs_registry_contract(void) {
   ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_math_abs);
   ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
   ASSERT_EQ_INT(1, args);
-  ASSERT_EQ_INT(64, count);
+  ASSERT_EQ_INT(66, count);
+}
+
+void test_math_min_max_registry_contract(void) {
+  struct manifest {
+    const char *name;
+    uint8_t call_index;
+    OP_t handler;
+  };
+  static const struct manifest manifest[] = {
+      {"min", 1, lc_math_min},
+      {"max", 2, lc_math_max},
+  };
+
+  for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
+    uint8_t lib_index = 0;
+    uint8_t call_index = 0;
+    uint8_t args = 0;
+    ASSERT_TRUE(libcall_lookup_pair("math", manifest[i].name, &lib_index,
+                                    &call_index, &args));
+    ASSERT_EQ_INT(6, lib_index);
+    ASSERT_EQ_INT(manifest[i].call_index, call_index);
+    ASSERT_EQ_INT(2, args);
+    ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == manifest[i].handler);
+    ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
+    ASSERT_EQ_INT(2, args);
+  }
 }
 
 void test_math_abs_integer_inputs(void) {
@@ -128,4 +161,203 @@ void test_math_abs_success_preserves_existing_error(void) {
   assert_error(ERR_RUNTIME_INVALIDARGS,
                "Invalid arguments to library call. (prior error)");
   teardown_libcall_runtime();
+}
+
+void test_math_min_max_integer_inputs(void) {
+  setup_libcall_runtime();
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+
+  VALUE_t result = call_math_binary(
+      lc_math_min, (VALUE_t){VALUE_int, {.i = 8}},
+      (VALUE_t){VALUE_int, {.i = -2}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(-2, result.i);
+  result = call_math_binary(
+      lc_math_max, (VALUE_t){VALUE_int, {.i = 8}},
+      (VALUE_t){VALUE_int, {.i = -2}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(8, result.i);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_math_min_max_mixed_and_float_inputs(void) {
+  setup_libcall_runtime();
+
+  VALUE_t result = call_math_binary(
+      lc_math_min, (VALUE_t){VALUE_int, {.i = 3}},
+      (VALUE_t){VALUE_float, {.f = 4.5}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 3.0);
+  result = call_math_binary(
+      lc_math_min, (VALUE_t){VALUE_float, {.f = 4.5}},
+      (VALUE_t){VALUE_int, {.i = 3}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 3.0);
+  result = call_math_binary(
+      lc_math_max, (VALUE_t){VALUE_int, {.i = 3}},
+      (VALUE_t){VALUE_float, {.f = 4.5}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 4.5);
+  result = call_math_binary(
+      lc_math_max, (VALUE_t){VALUE_float, {.f = 4.5}},
+      (VALUE_t){VALUE_int, {.i = 3}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 4.5);
+  result = call_math_binary(
+      lc_math_min, (VALUE_t){VALUE_float, {.f = 8.5}},
+      (VALUE_t){VALUE_float, {.f = 2.25}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 2.25);
+  result = call_math_binary(
+      lc_math_max, (VALUE_t){VALUE_float, {.f = 2.25}},
+      (VALUE_t){VALUE_float, {.f = 8.5}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 8.5);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+
+  teardown_libcall_runtime();
+}
+
+void test_math_min_max_equality_and_signed_zero(void) {
+  setup_libcall_runtime();
+
+  VALUE_t result = call_math_binary(
+      lc_math_min, (VALUE_t){VALUE_int, {.i = 7}},
+      (VALUE_t){VALUE_int, {.i = 7}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(7, result.i);
+  result = call_math_binary(
+      lc_math_max, (VALUE_t){VALUE_float, {.f = 7.0}},
+      (VALUE_t){VALUE_float, {.f = 7.0}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 7.0);
+  result = call_math_binary(
+      lc_math_min, (VALUE_t){VALUE_int, {.i = 7}},
+      (VALUE_t){VALUE_float, {.f = 7.0}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 7.0);
+  result = call_math_binary(
+      lc_math_max, (VALUE_t){VALUE_float, {.f = 7.0}},
+      (VALUE_t){VALUE_int, {.i = 7}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 7.0);
+
+  result = call_math_binary(
+      lc_math_min, (VALUE_t){VALUE_float, {.f = 0.0}},
+      (VALUE_t){VALUE_float, {.f = -0.0}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 0.0 && signbit(result.f));
+  result = call_math_binary(
+      lc_math_min, (VALUE_t){VALUE_float, {.f = -0.0}},
+      (VALUE_t){VALUE_float, {.f = 0.0}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 0.0 && signbit(result.f));
+  result = call_math_binary(
+      lc_math_max, (VALUE_t){VALUE_float, {.f = 0.0}},
+      (VALUE_t){VALUE_float, {.f = -0.0}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 0.0 && !signbit(result.f));
+  result = call_math_binary(
+      lc_math_max, (VALUE_t){VALUE_float, {.f = -0.0}},
+      (VALUE_t){VALUE_float, {.f = 0.0}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 0.0 && !signbit(result.f));
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+
+  teardown_libcall_runtime();
+}
+
+void test_math_min_max_rejects_invalid_arguments_and_consumes_owned_values(void) {
+  setup_libcall_runtime();
+  int before = size_stack(config.vm->stack);
+  VALUE_t result = call_math_binary(
+      lc_math_min, VALUE_NIL, (VALUE_t){VALUE_int, {.i = 2}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(before, size_stack(config.vm->stack));
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.min expects two integer or float arguments)");
+  teardown_libcall_runtime();
+
+  setup_libcall_runtime();
+  before = size_stack(config.vm->stack);
+  result = call_math_binary(
+      lc_math_max, (VALUE_t){VALUE_int, {.i = 2}}, VALUE_NIL);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(before, size_stack(config.vm->stack));
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.max expects two integer or float arguments)");
+  teardown_libcall_runtime();
+
+  setup_libcall_runtime();
+  before = size_stack(config.vm->stack);
+  char *left_payload = strdup("owned invalid left");
+  ASSERT_NOT_NULL(left_payload);
+  result = call_math_binary(
+      lc_math_min, (VALUE_t){VALUE_str, {.s = left_payload}},
+      (VALUE_t){VALUE_int, {.i = 2}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(before, size_stack(config.vm->stack));
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.min expects two integer or float arguments)");
+  teardown_libcall_runtime();
+
+  setup_libcall_runtime();
+  before = size_stack(config.vm->stack);
+  char *right_payload = strdup("owned invalid right");
+  ASSERT_NOT_NULL(right_payload);
+  result = call_math_binary(
+      lc_math_max, (VALUE_t){VALUE_int, {.i = 2}},
+      (VALUE_t){VALUE_str, {.s = right_payload}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(before, size_stack(config.vm->stack));
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.max expects two integer or float arguments)");
+  teardown_libcall_runtime();
+}
+
+void test_math_min_max_undefined_inputs_publish_error(void) {
+  const double undefined_values[] = {NAN, INFINITY, -INFINITY};
+  const OP_t operations[] = {lc_math_min, lc_math_max};
+
+  for (size_t op = 0; op < sizeof(operations) / sizeof(operations[0]); op++) {
+    for (size_t i = 0; i < sizeof(undefined_values) / sizeof(undefined_values[0]); i++) {
+      setup_libcall_runtime();
+      VALUE_t result = call_math_binary(
+          operations[op], (VALUE_t){VALUE_float, {.f = undefined_values[i]}},
+          (VALUE_t){VALUE_int, {.i = 1}});
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+      assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+      teardown_libcall_runtime();
+
+      setup_libcall_runtime();
+      result = call_math_binary(
+          operations[op], (VALUE_t){VALUE_int, {.i = 1}},
+          (VALUE_t){VALUE_float, {.f = undefined_values[i]}});
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+      assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+      teardown_libcall_runtime();
+    }
+  }
+}
+
+void test_math_min_max_success_preserves_existing_error(void) {
+  const OP_t operations[] = {lc_math_min, lc_math_max};
+
+  for (size_t i = 0; i < sizeof(operations) / sizeof(operations[0]); i++) {
+    setup_libcall_runtime();
+    set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
+                   "prior error", NULL);
+    VALUE_t result = call_math_binary(
+        operations[i], (VALUE_t){VALUE_int, {.i = 3}},
+        (VALUE_t){VALUE_int, {.i = 7}});
+    ASSERT_EQ_INT(VALUE_int, result.type);
+    ASSERT_EQ_INT(i == 0 ? 3 : 7, result.i);
+    ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+    assert_error(ERR_RUNTIME_INVALIDARGS,
+                 "Invalid arguments to library call. (prior error)");
+    teardown_libcall_runtime();
+  }
 }

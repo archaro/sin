@@ -34,6 +34,8 @@ uint8_t *lc_list_concat(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_list_slice(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_list_islist(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_abs(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_math_min(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_math_max(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_thisid(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -248,6 +250,8 @@ void test_libcall_registry_roundtrip(void) {
       {"list", "slice", 5, 5, 3, lc_list_slice},
       {"list", "islist", 5, 6, 1, lc_list_islist},
       {"math", "abs", 6, 0, 1, lc_math_abs},
+      {"math", "min", 6, 1, 2, lc_math_min},
+      {"math", "max", 6, 2, 2, lc_math_max},
       {"net", "input", 3, 0, 0, lc_net_input},
       {"net", "write", 3, 1, 2, lc_net_write},
       {"net", "ditch", 3, 2, 1, lc_net_ditch},

@@ -46,3 +46,63 @@ uint8_t *lc_math_abs(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
                                        "math.abs expects an integer or float");
 }
+
+static uint8_t *lc_math_select(RuntimeContext *ctx, uint8_t *nextop,
+                               ITEM_t *item, bool select_min) {
+  VALUE_t right = pop_stack(ctx->vm->stack);
+  VALUE_t left = pop_stack(ctx->vm->stack);
+  (void)item;
+
+  if ((left.type != VALUE_int && left.type != VALUE_float) ||
+      (right.type != VALUE_int && right.type != VALUE_float)) {
+    value_free(&left);
+    value_free(&right);
+    return lc_invalid_args_detail_return(
+        ctx, nextop, VALUE_NIL,
+        select_min ? "math.min expects two integer or float arguments"
+                   : "math.max expects two integer or float arguments");
+  }
+
+  if ((left.type == VALUE_float && !isfinite(left.f)) ||
+      (right.type == VALUE_float && !isfinite(right.f))) {
+    value_free(&left);
+    value_free(&right);
+    return lc_math_undefined_return(ctx, nextop);
+  }
+
+  if (left.type == VALUE_int && right.type == VALUE_int) {
+    int64_t result = select_min
+                         ? (left.i < right.i ? left.i : right.i)
+                         : (left.i > right.i ? left.i : right.i);
+    value_free(&left);
+    value_free(&right);
+    push_stack(ctx->vm->stack, (VALUE_t){VALUE_int, {.i = result}});
+    return nextop;
+  }
+
+  double left_float = left.type == VALUE_int ? (double)left.i : left.f;
+  double right_float = right.type == VALUE_int ? (double)right.i : right.f;
+  double result;
+  if (left_float == 0.0 && right_float == 0.0) {
+    bool left_negative = signbit(left_float) != 0;
+    bool right_negative = signbit(right_float) != 0;
+    bool negative_result = select_min ? (left_negative || right_negative)
+                                     : (left_negative && right_negative);
+    result = negative_result ? -0.0 : 0.0;
+  } else {
+    result = select_min ? fmin(left_float, right_float)
+                        : fmax(left_float, right_float);
+  }
+  value_free(&left);
+  value_free(&right);
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
+  return nextop;
+}
+
+uint8_t *lc_math_min(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_select(ctx, nextop, item, true);
+}
+
+uint8_t *lc_math_max(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_select(ctx, nextop, item, false);
+}

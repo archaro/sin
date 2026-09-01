@@ -240,6 +240,8 @@ lc_list_length,libcall_list.o,libcall,src/libcall/libcall_list.c:22: lc_list_len
 lc_list_set,libcall_list.o,libcall,src/libcall/libcall_list.c:90: lc_list_set definition/provenance,api.libcall.list
 lc_list_slice,libcall_list.o,libcall,src/libcall/libcall_list.c:135: lc_list_slice definition/provenance,api.libcall.list
 lc_math_abs,libcall_math.o,libcall,src/libcall/libcall_math.c:17: lc_math_abs definition/provenance,api.libcall.math
+lc_math_max,libcall_math.o,libcall,src/libcall/libcall_math.c:97: lc_math_max definition/provenance,api.libcall.math
+lc_math_min,libcall_math.o,libcall,src/libcall/libcall_math.c:93: lc_math_min definition/provenance,api.libcall.math
 lc_net_address,libcall_net.o,libcall,src/libcall/libcall_net.c:198: lc_net_address definition/provenance,api.libcall.net
 lc_net_connected,libcall_net.o,libcall,src/libcall/libcall_net.c:178: lc_net_connected definition/provenance,api.libcall.net
 lc_net_ditch,libcall_net.o,libcall,src/libcall/libcall_net.c:142: lc_net_ditch definition/provenance,api.libcall.net
