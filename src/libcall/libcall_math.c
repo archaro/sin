@@ -47,6 +47,71 @@ uint8_t *lc_math_abs(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
                                        "math.abs expects an integer or float");
 }
 
+typedef enum {
+  MATH_ROUND_FLOOR,
+  MATH_ROUND_CEIL,
+  MATH_ROUND_NEAREST,
+} MathRoundMode;
+
+static uint8_t *lc_math_rounding(RuntimeContext *ctx, uint8_t *nextop,
+                                 ITEM_t *item, MathRoundMode mode,
+                                 const char *name) {
+  VALUE_t value;
+  double rounded = 0.0;
+  (void)item;
+
+  value = pop_stack(ctx->vm->stack);
+  if (value.type == VALUE_int) {
+    int64_t result = value.i;
+    value_free(&value);
+    push_stack(ctx->vm->stack, (VALUE_t){VALUE_int, {.i = result}});
+    return nextop;
+  }
+
+  if (value.type != VALUE_float) {
+    value_free(&value);
+    return lc_invalid_args_detail_return(
+        ctx, nextop, VALUE_NIL, name);
+  }
+
+  switch (mode) {
+    case MATH_ROUND_FLOOR:
+      rounded = floor(value.f);
+      break;
+    case MATH_ROUND_CEIL:
+      rounded = ceil(value.f);
+      break;
+    case MATH_ROUND_NEAREST:
+      rounded = round(value.f);
+      break;
+  }
+  value_free(&value);
+
+  /* The lower endpoint is representable as INT64_MIN; the upper endpoint
+   * is one past INT64_MAX and must remain excluded before conversion. */
+  if (!isfinite(rounded) || rounded < -0x1p63 || rounded >= 0x1p63) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+  push_stack(ctx->vm->stack,
+             (VALUE_t){VALUE_int, {.i = (int64_t)rounded}});
+  return nextop;
+}
+
+uint8_t *lc_math_floor(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_rounding(ctx, nextop, item, MATH_ROUND_FLOOR,
+                          "math.floor expects an integer or float");
+}
+
+uint8_t *lc_math_ceil(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_rounding(ctx, nextop, item, MATH_ROUND_CEIL,
+                          "math.ceil expects an integer or float");
+}
+
+uint8_t *lc_math_round(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_rounding(ctx, nextop, item, MATH_ROUND_NEAREST,
+                          "math.round expects an integer or float");
+}
+
 static uint8_t *lc_math_select(RuntimeContext *ctx, uint8_t *nextop,
                                ITEM_t *item, bool select_min) {
   VALUE_t right = pop_stack(ctx->vm->stack);

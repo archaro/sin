@@ -405,6 +405,14 @@ rewrite.runtime.test_math_min_max_rejects_invalid_arguments_and_consumes_owned_v
 rewrite.runtime.test_math_min_max_registry_contract,api.libcall.math;api.libcall.table;libcall.math.min;libcall.math.max
 rewrite.runtime.test_math_min_max_success_preserves_existing_error,api.libcall.math;libcall.math.min;libcall.math.max
 rewrite.runtime.test_math_min_max_undefined_inputs_publish_error,api.common.errors;api.libcall.math;libcall.math.min;libcall.math.max
+rewrite.runtime.test_math_floor_and_ceil_float_inputs_return_integers,api.libcall.math;libcall.math.floor;libcall.math.ceil;libcall.math.round
+rewrite.runtime.test_math_round_float_halfway_values_away_from_zero,api.libcall.math;libcall.math.round
+rewrite.runtime.test_math_rounding_float_representability_boundaries,api.common.errors;api.libcall.math;libcall.math.floor;libcall.math.ceil;libcall.math.round
+rewrite.runtime.test_math_rounding_integer_inputs_preserve_identity,api.libcall.math;libcall.math.floor;libcall.math.ceil;libcall.math.round
+rewrite.runtime.test_math_rounding_rejects_nonnumeric_and_consumes_owned_values,api.libcall.math;libcall.math.floor;libcall.math.ceil;libcall.math.round
+rewrite.runtime.test_math_rounding_registry_contract,api.libcall.math;api.libcall.table;libcall.math.floor;libcall.math.ceil;libcall.math.round
+rewrite.runtime.test_math_rounding_success_preserves_existing_error,api.libcall.math;libcall.math.floor;libcall.math.ceil;libcall.math.round
+rewrite.runtime.test_math_rounding_undefined_inputs_publish_error,api.common.errors;api.libcall.math;libcall.math.floor;libcall.math.ceil;libcall.math.round
 rewrite.runtime.test_sys_compile_libcall_runtime,language.expression.libcall;api.libcall.sys;libcall.sys.compile
 rewrite.runtime.test_sys_itemref_dynamic_calls,language.expression.libcall;language.expression.item-reference;bytecode.encoding.item
 rewrite.network.test_append_input_lines_and_limits,api.network.runtime-io;api.network.telnet

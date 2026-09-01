@@ -33,6 +33,12 @@ static VALUE_t call_abs(VALUE_t input) {
   return pop_stack(config.vm->stack);
 }
 
+static VALUE_t call_math_unary(OP_t handler, VALUE_t input) {
+  push_stack(config.vm->stack, input);
+  (void)handler(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  return pop_stack(config.vm->stack);
+}
+
 static VALUE_t call_math_binary(OP_t handler, VALUE_t left, VALUE_t right) {
   push_stack(config.vm->stack, left);
   push_stack(config.vm->stack, right);
@@ -55,7 +61,37 @@ void test_math_abs_registry_contract(void) {
   ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_math_abs);
   ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
   ASSERT_EQ_INT(1, args);
-  ASSERT_EQ_INT(66, count);
+  ASSERT_EQ_INT(69, count);
+}
+
+void test_math_rounding_registry_contract(void) {
+  struct manifest {
+    const char *name;
+    uint8_t call_index;
+    OP_t handler;
+  };
+  static const struct manifest manifest[] = {
+      {"floor", 3, lc_math_floor},
+      {"ceil", 4, lc_math_ceil},
+      {"round", 5, lc_math_round},
+  };
+  size_t count = 0;
+
+  for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
+  ASSERT_EQ_INT(69, count);
+  for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
+    uint8_t lib_index = 0;
+    uint8_t call_index = 0;
+    uint8_t args = 0;
+    ASSERT_TRUE(libcall_lookup_pair("math", manifest[i].name, &lib_index,
+                                    &call_index, &args));
+    ASSERT_EQ_INT(6, lib_index);
+    ASSERT_EQ_INT(manifest[i].call_index, call_index);
+    ASSERT_EQ_INT(1, args);
+    ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == manifest[i].handler);
+    ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
+    ASSERT_EQ_INT(1, args);
+  }
 }
 
 void test_math_min_max_registry_contract(void) {
@@ -161,6 +197,181 @@ void test_math_abs_success_preserves_existing_error(void) {
   assert_error(ERR_RUNTIME_INVALIDARGS,
                "Invalid arguments to library call. (prior error)");
   teardown_libcall_runtime();
+}
+
+void test_math_rounding_integer_inputs_preserve_identity(void) {
+  const OP_t operations[] = {lc_math_floor, lc_math_ceil, lc_math_round};
+  const int64_t values[] = {INT64_MIN, -42, 0, 42, INT64_MAX};
+
+  setup_libcall_runtime();
+  for (size_t op = 0; op < sizeof(operations) / sizeof(operations[0]); op++) {
+    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+      VALUE_t result = call_math_unary(
+          operations[op], (VALUE_t){VALUE_int, {.i = values[i]}});
+      ASSERT_EQ_INT(VALUE_int, result.type);
+      ASSERT_EQ_INT(values[i], result.i);
+      ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+    }
+  }
+  teardown_libcall_runtime();
+}
+
+void test_math_floor_and_ceil_float_inputs_return_integers(void) {
+  setup_libcall_runtime();
+
+  VALUE_t result = call_math_unary(lc_math_floor,
+                                   (VALUE_t){VALUE_float, {.f = 3.75}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(3, result.i);
+  result = call_math_unary(lc_math_floor,
+                           (VALUE_t){VALUE_float, {.f = -3.25}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(-4, result.i);
+  result = call_math_unary(lc_math_ceil,
+                           (VALUE_t){VALUE_float, {.f = 3.25}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(4, result.i);
+  result = call_math_unary(lc_math_ceil,
+                           (VALUE_t){VALUE_float, {.f = -3.75}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(-3, result.i);
+  result = call_math_unary(lc_math_floor,
+                           (VALUE_t){VALUE_float, {.f = 0.0}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(0, result.i);
+  result = call_math_unary(lc_math_ceil,
+                           (VALUE_t){VALUE_float, {.f = -0.0}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(0, result.i);
+  result = call_math_unary(lc_math_round,
+                           (VALUE_t){VALUE_float, {.f = 0.0}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(0, result.i);
+  result = call_math_unary(lc_math_round,
+                           (VALUE_t){VALUE_float, {.f = -0.0}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(0, result.i);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+
+  teardown_libcall_runtime();
+}
+
+void test_math_round_float_halfway_values_away_from_zero(void) {
+  setup_libcall_runtime();
+
+  const struct {
+    double input;
+    int64_t expected;
+  } cases[] = {{0.5, 1}, {-0.5, -1}, {1.5, 2}, {-1.5, -2},
+               {2.5, 3}, {-2.5, -3}, {0.49, 0}, {-0.51, -1}};
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+    VALUE_t result = call_math_unary(
+        lc_math_round, (VALUE_t){VALUE_float, {.f = cases[i].input}});
+    ASSERT_EQ_INT(VALUE_int, result.type);
+    ASSERT_EQ_INT(cases[i].expected, result.i);
+  }
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+
+  teardown_libcall_runtime();
+}
+
+void test_math_rounding_float_representability_boundaries(void) {
+  setup_libcall_runtime();
+
+  const OP_t operations[] = {lc_math_floor, lc_math_ceil, lc_math_round};
+  for (size_t i = 0; i < sizeof(operations) / sizeof(operations[0]); i++) {
+    VALUE_t result = call_math_unary(
+        operations[i], (VALUE_t){VALUE_float, {.f = -0x1p63}});
+    ASSERT_EQ_INT(VALUE_int, result.type);
+    ASSERT_EQ_INT(INT64_MIN, result.i);
+    result = call_math_unary(
+        operations[i],
+        (VALUE_t){VALUE_float, {.f = nextafter(0x1p63, 0.0)}});
+    ASSERT_EQ_INT(VALUE_int, result.type);
+    ASSERT_EQ_INT((int64_t)nextafter(0x1p63, 0.0), result.i);
+  }
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+
+  setup_libcall_runtime();
+  const OP_t undefined_operations[] = {lc_math_floor, lc_math_ceil,
+                                       lc_math_round};
+  for (size_t i = 0; i < sizeof(undefined_operations) /
+                             sizeof(undefined_operations[0]);
+       i++) {
+    VALUE_t result = call_math_unary(
+        undefined_operations[i], (VALUE_t){VALUE_float, {.f = 0x1p63}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+    assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+  }
+  teardown_libcall_runtime();
+}
+
+void test_math_rounding_rejects_nonnumeric_and_consumes_owned_values(void) {
+  const struct {
+    OP_t handler;
+    const char *detail;
+  } operations[] = {
+      {lc_math_floor,
+       "Invalid arguments to library call. (math.floor expects an integer or float)"},
+      {lc_math_ceil,
+       "Invalid arguments to library call. (math.ceil expects an integer or float)"},
+      {lc_math_round,
+       "Invalid arguments to library call. (math.round expects an integer or float)"},
+  };
+
+  for (size_t i = 0; i < sizeof(operations) / sizeof(operations[0]); i++) {
+    setup_libcall_runtime();
+    int before = size_stack(config.vm->stack);
+    char *payload = strdup("owned by the argument");
+    ASSERT_NOT_NULL(payload);
+    VALUE_t result = call_math_unary(
+        operations[i].handler, (VALUE_t){VALUE_str, {.s = payload}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    ASSERT_EQ_INT(before, size_stack(config.vm->stack));
+    assert_error(ERR_RUNTIME_INVALIDARGS, operations[i].detail);
+    teardown_libcall_runtime();
+  }
+}
+
+void test_math_rounding_undefined_inputs_publish_error(void) {
+  const double undefined_values[] = {
+      NAN, INFINITY, -INFINITY, 0x1p63,
+      nextafter(-0x1p63, -INFINITY),
+  };
+  const OP_t operations[] = {lc_math_floor, lc_math_ceil, lc_math_round};
+
+  for (size_t op = 0; op < sizeof(operations) / sizeof(operations[0]); op++) {
+    for (size_t i = 0; i < sizeof(undefined_values) /
+                               sizeof(undefined_values[0]);
+         i++) {
+      setup_libcall_runtime();
+      VALUE_t result = call_math_unary(
+          operations[op], (VALUE_t){VALUE_float, {.f = undefined_values[i]}});
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+      assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+      teardown_libcall_runtime();
+    }
+  }
+}
+
+void test_math_rounding_success_preserves_existing_error(void) {
+  const OP_t operations[] = {lc_math_floor, lc_math_ceil, lc_math_round};
+  for (size_t i = 0; i < sizeof(operations) / sizeof(operations[0]); i++) {
+    setup_libcall_runtime();
+    set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
+                   "prior error", NULL);
+    VALUE_t result = call_math_unary(
+        operations[i], (VALUE_t){VALUE_float, {.f = -3.25}});
+    ASSERT_EQ_INT(VALUE_int, result.type);
+    ASSERT_EQ_INT(i == 0 ? -4 : (i == 1 ? -3 : -3), result.i);
+    ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+    assert_error(ERR_RUNTIME_INVALIDARGS,
+                 "Invalid arguments to library call. (prior error)");
+    teardown_libcall_runtime();
+  }
 }
 
 void test_math_min_max_integer_inputs(void) {

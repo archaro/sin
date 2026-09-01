@@ -13,6 +13,14 @@ void test_math_min_max_equality_and_signed_zero(void);
 void test_math_min_max_rejects_invalid_arguments_and_consumes_owned_values(void);
 void test_math_min_max_undefined_inputs_publish_error(void);
 void test_math_min_max_success_preserves_existing_error(void);
+void test_math_rounding_registry_contract(void);
+void test_math_rounding_integer_inputs_preserve_identity(void);
+void test_math_floor_and_ceil_float_inputs_return_integers(void);
+void test_math_round_float_halfway_values_away_from_zero(void);
+void test_math_rounding_float_representability_boundaries(void);
+void test_math_rounding_rejects_nonnumeric_and_consumes_owned_values(void);
+void test_math_rounding_undefined_inputs_publish_error(void);
+void test_math_rounding_success_preserves_existing_error(void);
 
 static const TF_TestDescriptor tests[] = {
     {"rewrite.runtime.test_math_abs_registry_contract", test_math_abs_registry_contract, "exclusive", 30000, "api.libcall.math,api.libcall.table,libcall.math.abs"},
@@ -28,6 +36,14 @@ static const TF_TestDescriptor tests[] = {
     {"rewrite.runtime.test_math_min_max_rejects_invalid_arguments_and_consumes_owned_values", test_math_min_max_rejects_invalid_arguments_and_consumes_owned_values, "exclusive", 30000, "api.libcall.math,libcall.math.min,libcall.math.max"},
     {"rewrite.runtime.test_math_min_max_undefined_inputs_publish_error", test_math_min_max_undefined_inputs_publish_error, "exclusive", 30000, "api.common.errors,api.libcall.math,libcall.math.min,libcall.math.max"},
     {"rewrite.runtime.test_math_min_max_success_preserves_existing_error", test_math_min_max_success_preserves_existing_error, "exclusive", 30000, "api.libcall.math,libcall.math.min,libcall.math.max"},
+    {"rewrite.runtime.test_math_rounding_registry_contract", test_math_rounding_registry_contract, "exclusive", 30000, "api.libcall.math,api.libcall.table,libcall.math.floor,libcall.math.ceil,libcall.math.round"},
+    {"rewrite.runtime.test_math_rounding_integer_inputs_preserve_identity", test_math_rounding_integer_inputs_preserve_identity, "exclusive", 30000, "api.libcall.math,libcall.math.floor,libcall.math.ceil,libcall.math.round"},
+    {"rewrite.runtime.test_math_floor_and_ceil_float_inputs_return_integers", test_math_floor_and_ceil_float_inputs_return_integers, "exclusive", 30000, "api.libcall.math,libcall.math.floor,libcall.math.ceil,libcall.math.round"},
+    {"rewrite.runtime.test_math_round_float_halfway_values_away_from_zero", test_math_round_float_halfway_values_away_from_zero, "exclusive", 30000, "api.libcall.math,libcall.math.round"},
+    {"rewrite.runtime.test_math_rounding_float_representability_boundaries", test_math_rounding_float_representability_boundaries, "exclusive", 30000, "api.common.errors,api.libcall.math,libcall.math.floor,libcall.math.ceil,libcall.math.round"},
+    {"rewrite.runtime.test_math_rounding_rejects_nonnumeric_and_consumes_owned_values", test_math_rounding_rejects_nonnumeric_and_consumes_owned_values, "exclusive", 30000, "api.libcall.math,libcall.math.floor,libcall.math.ceil,libcall.math.round"},
+    {"rewrite.runtime.test_math_rounding_undefined_inputs_publish_error", test_math_rounding_undefined_inputs_publish_error, "exclusive", 30000, "api.common.errors,api.libcall.math,libcall.math.floor,libcall.math.ceil,libcall.math.round"},
+    {"rewrite.runtime.test_math_rounding_success_preserves_existing_error", test_math_rounding_success_preserves_existing_error, "exclusive", 30000, "api.libcall.math,libcall.math.floor,libcall.math.ceil,libcall.math.round"},
 };
 
 int main(int argc, char **argv) {
