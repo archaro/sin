@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,7 +62,7 @@ void test_math_abs_registry_contract(void) {
   ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_math_abs);
   ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
   ASSERT_EQ_INT(1, args);
-  ASSERT_EQ_INT(71, count);
+  ASSERT_EQ_INT(74, count);
 }
 
 void test_math_rounding_registry_contract(void) {
@@ -78,7 +79,7 @@ void test_math_rounding_registry_contract(void) {
   size_t count = 0;
 
   for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
-  ASSERT_EQ_INT(71, count);
+  ASSERT_EQ_INT(74, count);
   for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
     uint8_t lib_index = 0;
     uint8_t call_index = 0;
@@ -586,7 +587,7 @@ void test_math_sqrt_pow_registry_contract(void) {
   size_t count = 0;
 
   for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
-  ASSERT_EQ_INT(71, count);
+  ASSERT_EQ_INT(74, count);
   for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
     uint8_t lib_index = 0;
     uint8_t call_index = 0;
@@ -783,4 +784,165 @@ void test_math_sqrt_pow_success_preserves_existing_error(void) {
   assert_error(ERR_RUNTIME_INVALIDARGS,
                "Invalid arguments to library call. (prior error)");
   teardown_libcall_runtime();
+}
+
+void test_math_log_registry_contract(void) {
+  const struct {
+    const char *name;
+    uint8_t call_index;
+    OP_t handler;
+  } manifest[] = {
+      {"log", 8, lc_math_log},
+      {"log2", 9, lc_math_log2},
+      {"log10", 10, lc_math_log10},
+  };
+  size_t count = 0;
+
+  for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
+  ASSERT_EQ_INT(74, count);
+  for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
+    uint8_t lib_index = 0;
+    uint8_t call_index = 0;
+    uint8_t args = 0;
+    ASSERT_TRUE(libcall_lookup_pair("math", manifest[i].name, &lib_index,
+                                   &call_index, &args));
+    ASSERT_EQ_INT(6, lib_index);
+    ASSERT_EQ_INT(manifest[i].call_index, call_index);
+    ASSERT_EQ_INT(1, args);
+    ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == manifest[i].handler);
+    ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
+    ASSERT_EQ_INT(1, args);
+  }
+}
+
+void test_math_log_integer_and_float_inputs_return_floats(void) {
+  const struct {
+    OP_t handler;
+    double (*operation)(double);
+    int64_t integer_input;
+    double float_input;
+  } operations[] = {
+      {lc_math_log, log, 1, 2.5},
+      {lc_math_log2, log2, 8, 2.5},
+      {lc_math_log10, log10, 100, 2.5},
+  };
+
+  setup_libcall_runtime();
+  for (size_t i = 0; i < sizeof(operations) / sizeof(operations[0]); i++) {
+    VALUE_t result = call_math_unary(
+        operations[i].handler,
+        (VALUE_t){VALUE_int, {.i = operations[i].integer_input}});
+    ASSERT_EQ_INT(VALUE_float, result.type);
+    ASSERT_TRUE(result.f == operations[i].operation(
+                              (double)operations[i].integer_input));
+    ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+
+    result = call_math_unary(
+        operations[i].handler,
+        (VALUE_t){VALUE_float, {.f = operations[i].float_input}});
+    ASSERT_EQ_INT(VALUE_float, result.type);
+    ASSERT_TRUE(result.f == operations[i].operation(operations[i].float_input));
+    ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  }
+  teardown_libcall_runtime();
+}
+
+void test_math_log_rejects_nonnumeric_and_consumes_owned_values(void) {
+  const struct {
+    OP_t handler;
+    const char *detail;
+  } operations[] = {
+      {lc_math_log,
+       "Invalid arguments to library call. (math.log expects an integer or float)"},
+      {lc_math_log2,
+       "Invalid arguments to library call. (math.log2 expects an integer or float)"},
+      {lc_math_log10,
+       "Invalid arguments to library call. (math.log10 expects an integer or float)"},
+  };
+
+  for (size_t i = 0; i < sizeof(operations) / sizeof(operations[0]); i++) {
+    setup_libcall_runtime();
+    int before = size_stack(config.vm->stack);
+    char *payload = strdup("owned by the argument");
+    ASSERT_NOT_NULL(payload);
+    VALUE_t result = call_math_unary(
+        operations[i].handler, (VALUE_t){VALUE_str, {.s = payload}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    ASSERT_EQ_INT(before, size_stack(config.vm->stack));
+    assert_error(ERR_RUNTIME_INVALIDARGS, operations[i].detail);
+    teardown_libcall_runtime();
+  }
+}
+
+void test_math_log_rejects_nonpositive_inputs(void) {
+  const struct {
+    VALUE_t value;
+    const char *suffix;
+  } invalid_values[] = {
+      {{VALUE_int, {.i = 0}}, "positive number"},
+      {{VALUE_int, {.i = -7}}, "positive number"},
+      {{VALUE_float, {.f = 0.0}}, "positive number"},
+      {{VALUE_float, {.f = -0.0}}, "positive number"},
+      {{VALUE_float, {.f = -INFINITY}}, "positive number"},
+  };
+  const struct {
+    OP_t handler;
+    const char *name;
+  } operations[] = {
+      {lc_math_log, "math.log"},
+      {lc_math_log2, "math.log2"},
+      {lc_math_log10, "math.log10"},
+  };
+
+  for (size_t op = 0; op < sizeof(operations) / sizeof(operations[0]); op++) {
+    for (size_t i = 0;
+         i < sizeof(invalid_values) / sizeof(invalid_values[0]); i++) {
+      setup_libcall_runtime();
+      VALUE_t result = call_math_unary(operations[op].handler,
+                                       invalid_values[i].value);
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+      char expected[160];
+      (void)snprintf(expected, sizeof(expected),
+                     "Invalid arguments to library call. (%s expects a %s)",
+                     operations[op].name, invalid_values[i].suffix);
+      assert_error(ERR_RUNTIME_INVALIDARGS, expected);
+      teardown_libcall_runtime();
+    }
+  }
+}
+
+void test_math_log_undefined_inputs_publish_error(void) {
+  const double undefined_values[] = {NAN, INFINITY};
+  const OP_t operations[] = {lc_math_log, lc_math_log2, lc_math_log10};
+
+  for (size_t op = 0; op < sizeof(operations) / sizeof(operations[0]); op++) {
+    for (size_t i = 0;
+         i < sizeof(undefined_values) / sizeof(undefined_values[0]); i++) {
+      setup_libcall_runtime();
+      VALUE_t result = call_math_unary(
+          operations[op], (VALUE_t){VALUE_float, {.f = undefined_values[i]}});
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+      assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+      teardown_libcall_runtime();
+    }
+  }
+}
+
+void test_math_log_success_preserves_existing_error(void) {
+  const OP_t operations[] = {lc_math_log, lc_math_log2, lc_math_log10};
+
+  for (size_t i = 0; i < sizeof(operations) / sizeof(operations[0]); i++) {
+    setup_libcall_runtime();
+    set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
+                   "prior error", NULL);
+    VALUE_t result = call_math_unary(
+        operations[i], (VALUE_t){VALUE_int, {.i = i == 0 ? 1 : 8}});
+    ASSERT_EQ_INT(VALUE_float, result.type);
+    ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+    assert_error(ERR_RUNTIME_INVALIDARGS,
+                 "Invalid arguments to library call. (prior error)");
+    teardown_libcall_runtime();
+  }
 }

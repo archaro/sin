@@ -236,3 +236,55 @@ uint8_t *lc_math_pow(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
   return nextop;
 }
+
+static uint8_t *lc_math_logarithm(RuntimeContext *ctx, uint8_t *nextop,
+                                   ITEM_t *item, double (*operation)(double),
+                                   const char *type_name,
+                                   const char *positive_name) {
+  VALUE_t value;
+  double input;
+  double result;
+  (void)item;
+
+  value = pop_stack(ctx->vm->stack);
+  if (value.type != VALUE_int && value.type != VALUE_float) {
+    value_free(&value);
+    return lc_invalid_args_detail_return(
+        ctx, nextop, VALUE_NIL, type_name);
+  }
+
+  input = value.type == VALUE_int ? (double)value.i : value.f;
+  value_free(&value);
+  if (input <= 0.0) {
+    return lc_invalid_args_detail_return(
+        ctx, nextop, VALUE_NIL, positive_name);
+  }
+  if (!isfinite(input)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+
+  result = operation(input);
+  if (!isfinite(result)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
+  return nextop;
+}
+
+uint8_t *lc_math_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_logarithm(ctx, nextop, item, log,
+                           "math.log expects an integer or float",
+                           "math.log expects a positive number");
+}
+
+uint8_t *lc_math_log2(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_logarithm(ctx, nextop, item, log2,
+                           "math.log2 expects an integer or float",
+                           "math.log2 expects a positive number");
+}
+
+uint8_t *lc_math_log10(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_logarithm(ctx, nextop, item, log10,
+                           "math.log10 expects an integer or float",
+                           "math.log10 expects a positive number");
+}

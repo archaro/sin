@@ -420,6 +420,12 @@ rewrite.runtime.test_math_sqrt_negative_and_undefined_inputs_publish_errors,api.
 rewrite.runtime.test_math_sqrt_pow_registry_contract,api.libcall.math;api.libcall.table;libcall.math.sqrt;libcall.math.pow
 rewrite.runtime.test_math_sqrt_pow_reject_invalid_args_and_consume_owned_values,api.libcall.math;libcall.math.sqrt;libcall.math.pow
 rewrite.runtime.test_math_sqrt_pow_success_preserves_existing_error,api.libcall.math;libcall.math.sqrt;libcall.math.pow
+rewrite.runtime.test_math_log_integer_and_float_inputs_return_floats,api.libcall.math;libcall.math.log;libcall.math.log2;libcall.math.log10
+rewrite.runtime.test_math_log_rejects_nonnumeric_and_consumes_owned_values,api.libcall.math;libcall.math.log;libcall.math.log2;libcall.math.log10
+rewrite.runtime.test_math_log_rejects_nonpositive_inputs,api.common.errors;api.libcall.math;libcall.math.log;libcall.math.log2;libcall.math.log10
+rewrite.runtime.test_math_log_registry_contract,api.libcall.math;api.libcall.table;libcall.math.log;libcall.math.log2;libcall.math.log10
+rewrite.runtime.test_math_log_success_preserves_existing_error,api.libcall.math;libcall.math.log;libcall.math.log2;libcall.math.log10
+rewrite.runtime.test_math_log_undefined_inputs_publish_error,api.common.errors;api.libcall.math;libcall.math.log;libcall.math.log2;libcall.math.log10
 rewrite.runtime.test_sys_compile_libcall_runtime,language.expression.libcall;api.libcall.sys;libcall.sys.compile
 rewrite.runtime.test_sys_itemref_dynamic_calls,language.expression.libcall;language.expression.item-reference;bytecode.encoding.item
 rewrite.network.test_append_input_lines_and_limits,api.network.runtime-io;api.network.telnet
