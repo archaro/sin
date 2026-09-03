@@ -44,6 +44,7 @@ uint8_t *lc_math_pow(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_log2(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_log10(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_math_exp(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_thisid(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -268,6 +269,7 @@ void test_libcall_registry_roundtrip(void) {
       {"math", "log", 6, 8, 1, lc_math_log},
       {"math", "log2", 6, 9, 1, lc_math_log2},
       {"math", "log10", 6, 10, 1, lc_math_log10},
+      {"math", "exp", 6, 11, 1, lc_math_exp},
       {"net", "input", 3, 0, 0, lc_net_input},
       {"net", "write", 3, 1, 2, lc_net_write},
       {"net", "ditch", 3, 2, 1, lc_net_ditch},

@@ -53,6 +53,7 @@
   X("math", "log",         6,  8, 1, lc_math_log) \
   X("math", "log2",        6,  9, 1, lc_math_log2) \
   X("math", "log10",       6, 10, 1, lc_math_log10) \
+  X("math", "exp",         6, 11, 1, lc_math_exp) \
   X("net",  "input",       3,  0, 0, lc_net_input) \
   X("net",  "write",       3,  1, 2, lc_net_write) \
   X("net",  "ditch",       3,  2, 1, lc_net_ditch) \

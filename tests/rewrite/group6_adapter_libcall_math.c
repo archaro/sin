@@ -26,6 +26,12 @@ void test_math_log_rejects_nonnumeric_and_consumes_owned_values(void);
 void test_math_log_rejects_nonpositive_inputs(void);
 void test_math_log_undefined_inputs_publish_error(void);
 void test_math_log_success_preserves_existing_error(void);
+void test_math_exp_registry_contract(void);
+void test_math_exp_integer_float_and_signed_zero_inputs(void);
+void test_math_exp_finite_underflow_succeeds(void);
+void test_math_exp_rejects_nonnumeric_and_consumes_owned_value(void);
+void test_math_exp_undefined_inputs_publish_error(void);
+void test_math_exp_success_preserves_existing_error(void);
 void test_math_rounding_registry_contract(void);
 void test_math_rounding_integer_inputs_preserve_identity(void);
 void test_math_floor_and_ceil_float_inputs_return_integers(void);
@@ -70,6 +76,12 @@ static const TF_TestDescriptor tests[] = {
     {"rewrite.runtime.test_math_log_registry_contract", test_math_log_registry_contract, "exclusive", 30000, "api.libcall.math,api.libcall.table,libcall.math.log,libcall.math.log2,libcall.math.log10"},
     {"rewrite.runtime.test_math_log_success_preserves_existing_error", test_math_log_success_preserves_existing_error, "exclusive", 30000, "api.libcall.math,libcall.math.log,libcall.math.log2,libcall.math.log10"},
     {"rewrite.runtime.test_math_log_undefined_inputs_publish_error", test_math_log_undefined_inputs_publish_error, "exclusive", 30000, "api.common.errors,api.libcall.math,libcall.math.log,libcall.math.log2,libcall.math.log10"},
+    {"rewrite.runtime.test_math_exp_integer_float_and_signed_zero_inputs", test_math_exp_integer_float_and_signed_zero_inputs, "exclusive", 30000, "api.libcall.math,libcall.math.exp"},
+    {"rewrite.runtime.test_math_exp_finite_underflow_succeeds", test_math_exp_finite_underflow_succeeds, "exclusive", 30000, "api.libcall.math,libcall.math.exp"},
+    {"rewrite.runtime.test_math_exp_rejects_nonnumeric_and_consumes_owned_value", test_math_exp_rejects_nonnumeric_and_consumes_owned_value, "exclusive", 30000, "api.libcall.math,libcall.math.exp"},
+    {"rewrite.runtime.test_math_exp_registry_contract", test_math_exp_registry_contract, "exclusive", 30000, "api.libcall.math,api.libcall.table,libcall.math.exp"},
+    {"rewrite.runtime.test_math_exp_success_preserves_existing_error", test_math_exp_success_preserves_existing_error, "exclusive", 30000, "api.libcall.math,libcall.math.exp"},
+    {"rewrite.runtime.test_math_exp_undefined_inputs_publish_error", test_math_exp_undefined_inputs_publish_error, "exclusive", 30000, "api.common.errors,api.libcall.math,libcall.math.exp"},
 };
 
 int main(int argc, char **argv) {

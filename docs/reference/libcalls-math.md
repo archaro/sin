@@ -14,6 +14,10 @@ infinity in either argument, domain errors, and non-finite results as undefined.
 input; zero, negative values (including negative zero and negative infinity),
 and nonnumeric values are invalid, while NaN, positive infinity, and
 non-finite results are undefined.
+`math.exp` accepts every finite numeric input, including negative values and
+either signed zero. Non-finite inputs and finite inputs whose exponential
+overflows are undefined; finite underflow to zero is representable and
+succeeds.
 The unary rounding operations always return integers. `math.round` rounds
 exact halfway cases away from zero. Float results are accepted only in the
 binary64-safe interval `[-0x1p63, 0x1p63)` after rounding.
@@ -31,3 +35,4 @@ binary64-safe interval `[-0x1p63, 0x1p63)` after rounding.
 | `math.log{value}` | `math` | `log` | 1 | `value` must be an integer or float greater than zero. | The natural logarithm, always returned as a float. | Consumes the input value. | A nonnumeric or non-positive input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.log-specific detail. NaN, positive infinity, or a non-finite result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@natural = math.log{@value};` |
 | `math.log2{value}` | `math` | `log2` | 1 | `value` must be an integer or float greater than zero. | The base-2 logarithm, always returned as a float. | Consumes the input value. | A nonnumeric or non-positive input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.log2-specific detail. NaN, positive infinity, or a non-finite result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@bits = math.log2{@value};` |
 | `math.log10{value}` | `math` | `log10` | 1 | `value` must be an integer or float greater than zero. | The base-10 logarithm, always returned as a float. | Consumes the input value. | A nonnumeric or non-positive input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.log10-specific detail. NaN, positive infinity, or a non-finite result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@digits = math.log10{@value};` |
+| `math.exp{value}` | `math` | `exp` | 1 | `value` must be an integer or float. | The exponential, always returned as a float; finite underflow to `0.0` succeeds. | Consumes the input value. | A nonnumeric input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.exp-specific detail. NaN, either infinity, or a non-finite result (including finite-input overflow) returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@growth = math.exp{@value};` |

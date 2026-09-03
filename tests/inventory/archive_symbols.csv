@@ -241,6 +241,7 @@ lc_list_set,libcall_list.o,libcall,src/libcall/libcall_list.c:90: lc_list_set de
 lc_list_slice,libcall_list.o,libcall,src/libcall/libcall_list.c:135: lc_list_slice definition/provenance,api.libcall.list
 lc_math_abs,libcall_math.o,libcall,src/libcall/libcall_math.c:17: lc_math_abs definition/provenance,api.libcall.math
 lc_math_ceil,libcall_math.o,libcall,src/libcall/libcall_math.c:105: lc_math_ceil definition/provenance,api.libcall.math
+lc_math_exp,libcall_math.o,libcall,src/libcall/libcall_math.c:292: lc_math_exp definition/provenance,api.libcall.math
 lc_math_floor,libcall_math.o,libcall,src/libcall/libcall_math.c:100: lc_math_floor definition/provenance,api.libcall.math
 lc_math_log,libcall_math.o,libcall,src/libcall/libcall_math.c:274: lc_math_log definition/provenance,api.libcall.math
 lc_math_log10,libcall_math.o,libcall,src/libcall/libcall_math.c:286: lc_math_log10 definition/provenance,api.libcall.math

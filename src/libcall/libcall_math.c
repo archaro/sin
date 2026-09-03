@@ -288,3 +288,30 @@ uint8_t *lc_math_log10(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
                            "math.log10 expects an integer or float",
                            "math.log10 expects a positive number");
 }
+
+uint8_t *lc_math_exp(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  VALUE_t value;
+  double input;
+  double result;
+  (void)item;
+
+  value = pop_stack(ctx->vm->stack);
+  if (value.type != VALUE_int && value.type != VALUE_float) {
+    value_free(&value);
+    return lc_invalid_args_detail_return(
+        ctx, nextop, VALUE_NIL, "math.exp expects an integer or float");
+  }
+
+  input = value.type == VALUE_int ? (double)value.i : value.f;
+  value_free(&value);
+  if (!isfinite(input)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+
+  result = exp(input);
+  if (!isfinite(result)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
+  return nextop;
+}
