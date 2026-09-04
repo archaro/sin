@@ -17,114 +17,70 @@ Sinistra is a C17 MUD engine with four executables:
 The codebase intentionally mixes older and newer C styles. Make small,
 idiomatic changes that fit nearby code; avoid broad cleanup during feature work.
 
+## Task framing and decisions
+
+- Establish the requested outcome, observable acceptance criteria, affected
+  subsystems, and compatibility constraints before editing. Scale planning to
+  the task; a small change does not need a formal plan.
+- Use nearby code, tests, and the authoritative build files to check assumptions.
+  Read enough to resolve the next decision; avoid repository-wide exploration
+  when a targeted inspection will answer it.
+- Resolve routine implementation choices from repository conventions. Ask when
+  missing information would materially change public behavior, compatibility,
+  or scope; continue independent work while awaiting an answer.
+- Prefer the smallest coherent change that satisfies the outcome. Carry a
+  behavior change through its consumers, validation, tests, and documentation.
+- Explain consequential decisions with evidence and tradeoffs. Distinguish
+  observed facts from hypotheses and identify uncertainty that affects the
+  result.
+
+## Investigation and review
+
+- For a failure, capture the exact command, input, and diagnostic. Reproduce it
+  when feasible, trace the failing path, and test a specific hypothesis before
+  changing code. Separate environment failures from product failures.
+- Add a regression case that exercises the failed contract. Check relevant
+  boundaries and error paths; a test should detect incorrect behavior rather
+  than merely repeat the implementation.
+- Review the actual diff against the acceptance criteria, including ownership,
+  cleanup, compatibility, and affected callers. Passing tests support review
+  but do not establish that every requirement was implemented.
+- Finish when the requested outcome is implemented, the diff is reviewed, and
+  the applicable checks have passed. If a check cannot run, report the exact
+  limitation and its effect on confidence; do not claim it passed.
+- Keep unrelated findings separate from the requested change. Do not extend a
+  completed task into speculative cleanup or repeated validation.
+
 ## Multi-agent implementation policy
 
-Use a small, stable team for non-trivial code changes:
+Use a small, stable team for non-trivial code changes. Documentation-only and
+tiny mechanical edits can stay with the root agent.
 
-- The root orchestrator owns requirements, architecture, task decomposition,
-  acceptance criteria, diff review, integration decisions, and the final
-  answer. It audits the work directly rather than delegating routine final
-  review.
-- Use one implementation agent to write code and make corrections. Reuse that
-  agent for the bounded task rather than starting fresh implementation agents.
-- Use one low-capability, read-only agent for repository searches and test
-  execution. It may report findings and exact failures, but it never edits
-  files, diagnoses failures, or proposes fixes.
+- The root owns requirements, architecture, acceptance criteria, the test plan,
+  direct diff review, integration, and the final answer.
+- One implementation agent owns code changes and corrections. Reuse it; never
+  run concurrent writers against the same working tree.
+- One low-capability, read-only agent owns delegated searches and test
+  execution. It returns findings, exact commands, and verbatim errors; it does
+  not edit files, diagnose failures, or propose fixes.
+- Use `OPENAI.md` to select OpenAI models and reasoning levels for these roles.
 
-When using OpenAI models, use the Model-specific in `OPENAI.md` to select the
-models and reasoning levels for these roles. The root remains the final
-reviewer and must inspect the diff and test evidence rather than accepting an
-agent's summary alone.
+Every handoff must be isolated: disable conversation-history forking and supply
+only the bounded task, relevant paths and decisions, acceptance criteria,
+necessary tree state, and expected deliverable. Remind the writer that the
+workspace is shared and unrelated edits must be preserved. Reuse discovery
+findings unless the tree changed or the answer was incomplete.
 
-### Isolated handoffs
+The root reviews the implementation diff before commissioning applicable
+checks. Send failures or unmet criteria back to the same writer with focused
+correction instructions. If corrections do not converge, reassess the task and
+evidence before another attempt.
 
-For every implementation, search, or test handoff:
-
-- Never pass the root conversation history: provide the minimum context
-  necessary to implement the requested task.
-- Send a focused, self-contained handoff rather than transcripts, raw context
-  dumps, or unrelated findings.
-- Include only what the recipient needs: the bounded task or question, relevant
-  acceptance criteria, decisions and files, necessary tree state, pertinent
-  failures or review findings, and the expected deliverable.
-- Summarize prior work. Include raw output only when a short excerpt is needed
-  to diagnose a specific failure.
-- Remind implementation agents that the workspace is shared and that they must
-  preserve unrelated changes. Never run two implementation agents concurrently
-  against the same working tree.
-
-Keep discovery handoffs narrow: ask concrete questions and name likely paths
-when known. Return only the findings needed for the orchestrator to make the
-next decision. The orchestrator should use those findings without repeating
-the same searches unless the tree changed or the result is incomplete.
-
-### Test ownership and reuse
-
-The read-only test agent owns test execution. The orchestrator defines the
-proportionate test plan, evaluates the evidence, and decides whether failures
-require another implementation iteration.
-
-- Run narrow tests while iterating only when their result can affect the next
-  code change. Run the planned final gates once after the candidate is stable.
-- A successful test result remains valid while the tested code, build inputs,
-  fixtures, and test configuration remain unchanged. Auditing the diff,
-  reviewing output, or integrating the result does not invalidate it.
-- Do not hand off for "final testing" and then rerun the same coverage as an
-  "integration test" when no relevant changes occurred. The orchestrator's
-  integration responsibility is review and evaluation, not duplicate execution.
-- After a correction, rerun only tests whose result could be affected, then run
-  any remaining planned gates that have not yet completed against that revision.
-- Repeat a successful test only when relevant inputs changed, the earlier run
-  was incomplete or unreliable, or a higher-priority instruction explicitly
-  requires an independent run. State the reason when repeating it.
-- Return concise results to the orchestrator, with exact command lines and
-  errors verbatim. Do not transfer bulky successful logs unless requested.
-
-### Implementation and correction
-
-Use the following pattern for non-trivial code changes:
-
-1. Inspect enough of the repository to define a bounded task, explicit
-   acceptance criteria, affected subsystems, constraints, and a proportionate
-   test plan. Delegate repository discovery to the read-only agent where useful.
-2. Give the implementation to the designated implementation agent.
-3. Review its diff directly, then have the read-only test agent run the checks
-   that are useful at this revision.
-4. If the result fails a check, is incomplete, violates an acceptance
-   criterion, requires substantial correction, or leaves an unresolved
-   certainty, refer back to the implementation agent for correction, with
-   detailed and bounded instructions on what is wrong and what needs to be
-   fixed.
-
-Keep corrections with the same implementation agent. If repeated corrections
-do not converge, the root must reassess the requirements, scope, and acceptance
-criteria before deciding how to proceed; do not silently add implementation or
-review agents.
-
-The root may make tiny mechanical edits. Substantive implementation follows
-the pattern of an implementation agent as code-monkey, irrespective of what
-the orchestration model is.
-
-### Agent count and review scope
-
-Use the smallest workflow that satisfies the task:
-
-- One bounded task normally needs the root orchestrator, one implementation
-  agent, and one read-only search/test agent. Do not add routine task or
-  whole-branch reviewers; the root owns audit and integration.
-- Add one independent reviewer only for unusual risk, cross-subsystem work,
-  multiple independently implemented tasks, specialist needs, or an explicit
-  user request. For a single-task branch, that reviewer should cover both
-  specification compliance and integration quality.
-- Use multiple reviewers only when their scopes are materially different and
-  the plan records why the added cost is justified.
-- Reviewer agents are strictly read-only: prohibit file edits, commits, ref
-  changes, and destructive Git commands. Record `HEAD` before review and verify
-  `HEAD` and the working tree afterward.
-- Match reviewer model capability and reasoning effort to the concrete risk;
-  do not default to the strongest model for a small diff.
-- Higher-priority instructions or an explicitly requested skill may require a
-  different workflow; otherwise this policy governs.
+Add an independent reviewer only for unusual risk, cross-subsystem work,
+specialist needs, or an explicit request. Reviewers are read-only: no edits,
+commits, ref changes, or destructive Git commands. Record `HEAD` and tree state
+before review and verify them afterward. The root still audits the diff and
+test evidence directly. Additional reviewers need distinct, justified scopes.
 
 ## Repository map
 
@@ -140,11 +96,14 @@ relocated.
 - `src/libcall/`: host library calls and registry plumbing.
 - `src/net/`: libuv networking and Telnet support.
 - `tests/`: core, compiler, interpreter, network, fixture, benchmark, and fuzz tests.
+- `tests/inventory/`: checked-in contract catalogs audited by `make test`; follow
+  `tests/inventory/README.md` when changing canonical definitions or test mappings.
 - `docs/`, `docs/guide/examples/`, and `ci/`: documentation, sample programs, and local/CI gates.
-- `Makefile`: authoritative build, test, sanitizer, and fuzz interface.
+- `Makefile`: public build and test interface; implementation lives in
+  `mk/build.mk`, `mk/tests.mk`, and `mk/fuzz.mk`.
 
 Parser sources are `src/compiler/parser.y` and `src/compiler/lexer.l`; generated
-files belong under `obj/generated/`, not in source control.
+files belong under `obj/<build>-<compiler>/generated/`, not in source control.
 
 ## Build and toolchain
 
@@ -160,35 +119,55 @@ dependencies; report the exact failing command and error.
 - `make help`: list targets and tunable variables.
 
 Keep C code compatible with C17. Useful variables include `CC`, `CSTD`,
-`STRICT_WARNINGS`, `BUILD`, `PKG_CONFIG`, and `LIBUV_PC`.
+`BUILD`, `PKG_CONFIG`, `LIBUV_PC`, and `TEST_JOBS`. Strict warnings are enabled
+by the Makefile.
 
 ## Validation
 
 Run the narrowest meaningful checks while iterating, then broaden according to
-risk. Preferred gates are:
+risk. Preferred component gates are:
 
 1. `make test`: deterministic framework, contract, and network tests.
-2. `make test-sanitize`: ASan/UBSan with leak detection. Run this outside a
-   ptrace-restricted sandbox on the first attempt; LeakSanitizer cannot run
-   correctly under ptrace.
+2. `make test-sanitize`: ASan/UBSan with leak detection. Run any command that
+   includes this target outside a ptrace-restricted sandbox on the first
+   attempt; LeakSanitizer cannot run correctly under ptrace.
 3. `BUILD=release make test`: release behavior, especially compiler/interpreter work.
 4. `./ci/gate_sanitizers_fuzz.sh`: compiler, runtime, parser, bytecode,
    itemstore loading, or fuzz-harness changes.
+
+The combined sanitizer/fuzz gate already runs `make test`,
+`BUILD=release make test`, `make test-sanitize`, and a seeded `make test-fuzz`.
+When that combined gate is required, run the whole script outside a
+ptrace-restricted sandbox and treat it as the final broad gate. Do not run its
+component gates separately at the same unchanged revision unless a component
+result is needed earlier to guide implementation or the combined run was
+incomplete or unreliable.
+
+Successful checks remain valid while the tested code, build inputs, fixtures,
+and configuration are unchanged. Diff review and handoffs do not invalidate
+them. After a correction, rerun affected checks and any remaining planned
+gates. State the reason for repeating a successful check.
+
+Use `make test-full` when coverage-floor implications are part of the change;
+see `docs/internals/testing/workflow.md`. It includes debug, release, coverage,
+sanitizer, and fuzz gates, so the same sandbox and check-reuse rules apply.
+Coverage snapshots, floors, and contract catalogs are reviewed source data;
+do not weaken or regenerate them merely to clear a failure.
 
 Use `make bench` when benchmark measurements are relevant; `make test` is the
 normal deterministic gate.
 
 Fuzzing is `make test-fuzz`, which builds and runs all three harnesses. Tune
-campaigns with `FUZZ_RUNS` and `FUZZ_TIME`; do not edit scripts for local
-iteration.
+campaigns with `FUZZ_RUNS`, `FUZZ_TIME`, and `FUZZ_SEED`; do not edit scripts for
+local iteration.
 
 Validation by change type:
 
 - Documentation only: inspect Markdown; no build unless examples are generated.
 - Build system: `make clean`, `make`, and `make test` when feasible.
 - Core C logic: `make test`.
-- Compiler/parser/language: `make test`, `BUILD=release make test`, targeted golden
-  tests, and the sanitizer/fuzz gate.
+- Compiler/parser/language: targeted golden tests and the combined
+  sanitizer/fuzz gate, which includes debug and release tests.
 - Runtime/bytecode/itemstore: `make test`, applicable sanitizers, and relevant
   fuzz smoke tests.
 - Fuzz harness: `make test-fuzz` with a seeded run.
@@ -243,7 +222,9 @@ updates where applicable, and positive and negative tests.
 - Use existing registry patterns.
 - Test argument validation, truthiness and value conversion, ownership, returns,
   side effects, and error behavior as applicable.
-- Document user-visible behavior in `docs/reference/libcalls.md`.
+- Document user-visible behavior in the relevant library-specific page under
+  `docs/reference/`; update `docs/reference/libcalls.md` only when the shared
+  libcall policy or index changes.
 
 ### Networking
 
@@ -273,18 +254,6 @@ updates where applicable, and positive and negative tests.
 - Use `rg`, `rg --files`, `find`, or targeted commands instead of `ls -R` or
   `grep -R`.
 - Avoid broad cleanup unless cleanup is the task.
-
-## Session-efficiency guidance
-
-Keep coding work bounded to a single feature, bug, or review gate. Prefer a
-fresh agent session after implementation and validation rather than carrying a
-conversation across unrelated tasks. Batch independent repository inspection
-and test commands, keep file and terminal output targeted, and avoid polling
-loops when a completion notification or foreground command is sufficient.
-
-Do not repeat repository searches or skill loads already performed in the
-current task. Delegate only when isolation or genuine parallelism materially
-helps; do not duplicate the same inspection in both parent and worker sessions.
 
 For a PR or completed code change, report:
 
