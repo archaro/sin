@@ -30,6 +30,13 @@ exclude|libcall.math.log|covered by the focused native math libcall tests; no so
 exclude|libcall.math.log2|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
 exclude|libcall.math.log10|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
 exclude|libcall.math.exp|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
+exclude|libcall.math.sin|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
+exclude|libcall.math.cos|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
+exclude|libcall.math.tan|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
+exclude|libcall.math.asin|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
+exclude|libcall.math.acos|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
+exclude|libcall.math.atan|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
+exclude|libcall.math.atan2|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
 exclude|libcall.sys.backup|writes itemstore backups; exercised by native persistence tests
 exclude|libcall.sys.shutdown|stops the runtime event loop; unsafe in load-only conformance
 exclude|libcall.sys.abort|aborts runtime shutdown state; unsafe in load-only conformance

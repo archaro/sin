@@ -62,7 +62,7 @@ void test_math_abs_registry_contract(void) {
   ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_math_abs);
   ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
   ASSERT_EQ_INT(1, args);
-  ASSERT_EQ_INT(75, count);
+  ASSERT_EQ_INT(82, count);
 }
 
 void test_math_rounding_registry_contract(void) {
@@ -79,7 +79,7 @@ void test_math_rounding_registry_contract(void) {
   size_t count = 0;
 
   for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
-  ASSERT_EQ_INT(75, count);
+  ASSERT_EQ_INT(82, count);
   for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
     uint8_t lib_index = 0;
     uint8_t call_index = 0;
@@ -587,7 +587,7 @@ void test_math_sqrt_pow_registry_contract(void) {
   size_t count = 0;
 
   for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
-  ASSERT_EQ_INT(75, count);
+  ASSERT_EQ_INT(82, count);
   for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
     uint8_t lib_index = 0;
     uint8_t call_index = 0;
@@ -799,7 +799,7 @@ void test_math_log_registry_contract(void) {
   size_t count = 0;
 
   for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
-  ASSERT_EQ_INT(75, count);
+  ASSERT_EQ_INT(82, count);
   for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
     uint8_t lib_index = 0;
     uint8_t call_index = 0;
@@ -962,7 +962,7 @@ void test_math_exp_registry_contract(void) {
   ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_math_exp);
   ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
   ASSERT_EQ_INT(1, args);
-  ASSERT_EQ_INT(75, count);
+  ASSERT_EQ_INT(82, count);
 }
 
 void test_math_exp_integer_float_and_signed_zero_inputs(void) {
@@ -1048,5 +1048,222 @@ void test_math_exp_success_preserves_existing_error(void) {
   ASSERT_EQ_INT(0, size_stack(config.vm->stack));
   assert_error(ERR_RUNTIME_INVALIDARGS,
                "Invalid arguments to library call. (prior error)");
+  teardown_libcall_runtime();
+}
+
+static void assert_math_float_close(double actual, double expected) {
+  ASSERT_TRUE(isfinite(actual));
+  ASSERT_TRUE(fabs(actual - expected) <= 1e-12);
+}
+
+void test_math_trig_registry_contract(void) {
+  struct manifest {
+    const char *name;
+    uint8_t call_index;
+    uint8_t args;
+    OP_t handler;
+  };
+  static const struct manifest manifest[] = {
+      {"sin", 12, 1, lc_math_sin},   {"cos", 13, 1, lc_math_cos},
+      {"tan", 14, 1, lc_math_tan},   {"asin", 15, 1, lc_math_asin},
+      {"acos", 16, 1, lc_math_acos}, {"atan", 17, 1, lc_math_atan},
+      {"atan2", 18, 2, lc_math_atan2},
+  };
+  size_t count = 0;
+
+  for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
+  ASSERT_EQ_INT(82, count);
+  for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
+    uint8_t lib_index = 0;
+    uint8_t call_index = 0;
+    uint8_t args = 0;
+    ASSERT_TRUE(libcall_lookup_pair("math", manifest[i].name, &lib_index,
+                                    &call_index, &args));
+    ASSERT_EQ_INT(6, lib_index);
+    ASSERT_EQ_INT(manifest[i].call_index, call_index);
+    ASSERT_EQ_INT(manifest[i].args, args);
+    ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == manifest[i].handler);
+    ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
+    ASSERT_EQ_INT(manifest[i].args, args);
+  }
+}
+
+void test_math_trig_unary_values_return_floats(void) {
+  const struct {
+    OP_t handler;
+    VALUE_t input;
+    double expected;
+  } cases[] = {
+      {lc_math_sin, {VALUE_int, {.i = 0}}, 0.0},
+      {lc_math_sin, {VALUE_float, {.f = M_PI / 2.0}}, 1.0},
+      {lc_math_cos, {VALUE_int, {.i = 0}}, 1.0},
+      {lc_math_cos, {VALUE_float, {.f = M_PI}}, -1.0},
+      {lc_math_tan, {VALUE_float, {.f = M_PI / 4.0}}, 1.0},
+      {lc_math_atan, {VALUE_int, {.i = 1}}, M_PI / 4.0},
+  };
+
+  setup_libcall_runtime();
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+    VALUE_t result = call_math_unary(cases[i].handler, cases[i].input);
+    ASSERT_EQ_INT(VALUE_float, result.type);
+    assert_math_float_close(result.f, cases[i].expected);
+  }
+  VALUE_t result = call_math_unary(
+      lc_math_sin, (VALUE_t){VALUE_float, {.f = -0.0}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 0.0 && signbit(result.f));
+  result = call_math_unary(lc_math_tan,
+                           (VALUE_t){VALUE_float, {.f = -0.0}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  ASSERT_TRUE(result.f == 0.0 && signbit(result.f));
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_math_trig_atan2_ordering_and_quadrants(void) {
+  setup_libcall_runtime();
+
+  VALUE_t result = call_math_binary(
+      lc_math_atan2, (VALUE_t){VALUE_int, {.i = 1}},
+      (VALUE_t){VALUE_int, {.i = 1}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  assert_math_float_close(result.f, M_PI / 4.0);
+  result = call_math_binary(lc_math_atan2,
+                            (VALUE_t){VALUE_int, {.i = 1}},
+                            (VALUE_t){VALUE_int, {.i = -1}});
+  assert_math_float_close(result.f, 3.0 * M_PI / 4.0);
+  result = call_math_binary(lc_math_atan2,
+                            (VALUE_t){VALUE_int, {.i = -1}},
+                            (VALUE_t){VALUE_int, {.i = -1}});
+  assert_math_float_close(result.f, -3.0 * M_PI / 4.0);
+  result = call_math_binary(lc_math_atan2,
+                            (VALUE_t){VALUE_int, {.i = -1}},
+                            (VALUE_t){VALUE_int, {.i = 1}});
+  assert_math_float_close(result.f, -M_PI / 4.0);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_math_trig_inverse_endpoints_and_signed_zero(void) {
+  setup_libcall_runtime();
+
+  VALUE_t result = call_math_unary(
+      lc_math_asin, (VALUE_t){VALUE_int, {.i = 1}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  assert_math_float_close(result.f, M_PI / 2.0);
+  result = call_math_unary(
+      lc_math_asin, (VALUE_t){VALUE_int, {.i = -1}});
+  assert_math_float_close(result.f, -M_PI / 2.0);
+  result = call_math_unary(
+      lc_math_acos, (VALUE_t){VALUE_int, {.i = 1}});
+  assert_math_float_close(result.f, 0.0);
+  result = call_math_unary(
+      lc_math_acos, (VALUE_t){VALUE_int, {.i = -1}});
+  assert_math_float_close(result.f, M_PI);
+  result = call_math_unary(
+      lc_math_asin, (VALUE_t){VALUE_float, {.f = -0.0}});
+  ASSERT_TRUE(result.f == 0.0 && signbit(result.f));
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_math_trig_rejects_nonnumeric_and_consumes_owned_values(void) {
+  const OP_t unary[] = {lc_math_sin, lc_math_cos, lc_math_tan, lc_math_asin,
+                        lc_math_acos, lc_math_atan};
+
+  setup_libcall_runtime();
+  for (size_t i = 0; i < sizeof(unary) / sizeof(unary[0]); i++) {
+    char *payload = strdup("owned trig argument");
+    ASSERT_NOT_NULL(payload);
+    VALUE_t result = call_math_unary(unary[i],
+                                     (VALUE_t){VALUE_str, {.s = payload}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  }
+  char *left_payload = strdup("owned y argument");
+  char *right_payload = strdup("owned x argument");
+  ASSERT_NOT_NULL(left_payload);
+  ASSERT_NOT_NULL(right_payload);
+  VALUE_t result = call_math_binary(
+      lc_math_atan2, (VALUE_t){VALUE_str, {.s = left_payload}},
+      (VALUE_t){VALUE_str, {.s = right_payload}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.atan2 expects two integer or float arguments)");
+  teardown_libcall_runtime();
+}
+
+void test_math_trig_inverse_domain_errors(void) {
+  setup_libcall_runtime();
+
+  VALUE_t result = call_math_unary(
+      lc_math_asin, (VALUE_t){VALUE_float, {.f = nextafter(1.0, 2.0)}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.asin expects a number in the inclusive range [-1, 1])");
+  result = call_math_unary(lc_math_acos,
+                           (VALUE_t){VALUE_float, {.f = -1.1}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (math.acos expects a number in the inclusive range [-1, 1])");
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_math_trig_undefined_inputs_and_tan_nonfinite_result(void) {
+  const double inputs[] = {NAN, INFINITY, -INFINITY};
+  const OP_t unary[] = {lc_math_sin, lc_math_cos, lc_math_tan, lc_math_asin,
+                        lc_math_acos, lc_math_atan};
+
+  for (size_t op = 0; op < sizeof(unary) / sizeof(unary[0]); op++) {
+    for (size_t i = 0; i < sizeof(inputs) / sizeof(inputs[0]); i++) {
+      setup_libcall_runtime();
+      VALUE_t result = call_math_unary(
+          unary[op], (VALUE_t){VALUE_float, {.f = inputs[i]}});
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+      teardown_libcall_runtime();
+    }
+  }
+
+  setup_libcall_runtime();
+  VALUE_t result = call_math_binary(
+      lc_math_atan2, (VALUE_t){VALUE_float, {.f = NAN}},
+      (VALUE_t){VALUE_int, {.i = 1}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+  teardown_libcall_runtime();
+
+  setup_libcall_runtime();
+  double input = M_PI / 2.0;
+  double expected = tan(input);
+  result = call_math_unary(
+      lc_math_tan, (VALUE_t){VALUE_float, {.f = input}});
+  if (isfinite(expected)) {
+    ASSERT_EQ_INT(VALUE_float, result.type);
+    assert_math_float_close(result.f, expected);
+  } else {
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+  }
+  teardown_libcall_runtime();
+}
+
+void test_math_trig_success_preserves_existing_error(void) {
+  setup_libcall_runtime();
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
+                 "prior trig error", NULL);
+  VALUE_t result = call_math_unary(
+      lc_math_sin, (VALUE_t){VALUE_int, {.i = 0}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (prior trig error)");
+  result = call_math_binary(lc_math_atan2,
+                            (VALUE_t){VALUE_int, {.i = 1}},
+                            (VALUE_t){VALUE_int, {.i = 1}});
+  ASSERT_EQ_INT(VALUE_float, result.type);
+  assert_error(ERR_RUNTIME_INVALIDARGS,
+               "Invalid arguments to library call. (prior trig error)");
   teardown_libcall_runtime();
 }

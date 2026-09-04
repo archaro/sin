@@ -240,7 +240,12 @@ lc_list_length,libcall_list.o,libcall,src/libcall/libcall_list.c:22: lc_list_len
 lc_list_set,libcall_list.o,libcall,src/libcall/libcall_list.c:90: lc_list_set definition/provenance,api.libcall.list
 lc_list_slice,libcall_list.o,libcall,src/libcall/libcall_list.c:135: lc_list_slice definition/provenance,api.libcall.list
 lc_math_abs,libcall_math.o,libcall,src/libcall/libcall_math.c:17: lc_math_abs definition/provenance,api.libcall.math
+lc_math_acos,libcall_math.o,libcall,src/libcall/libcall_math.c:407: lc_math_acos definition/provenance,api.libcall.math
+lc_math_asin,libcall_math.o,libcall,src/libcall/libcall_math.c:401: lc_math_asin definition/provenance,api.libcall.math
+lc_math_atan,libcall_math.o,libcall,src/libcall/libcall_math.c:413: lc_math_atan definition/provenance,api.libcall.math
+lc_math_atan2,libcall_math.o,libcall,src/libcall/libcall_math.c:418: lc_math_atan2 definition/provenance,api.libcall.math
 lc_math_ceil,libcall_math.o,libcall,src/libcall/libcall_math.c:105: lc_math_ceil definition/provenance,api.libcall.math
+lc_math_cos,libcall_math.o,libcall,src/libcall/libcall_math.c:391: lc_math_cos definition/provenance,api.libcall.math
 lc_math_exp,libcall_math.o,libcall,src/libcall/libcall_math.c:292: lc_math_exp definition/provenance,api.libcall.math
 lc_math_floor,libcall_math.o,libcall,src/libcall/libcall_math.c:100: lc_math_floor definition/provenance,api.libcall.math
 lc_math_log,libcall_math.o,libcall,src/libcall/libcall_math.c:274: lc_math_log definition/provenance,api.libcall.math
@@ -250,7 +255,9 @@ lc_math_max,libcall_math.o,libcall,src/libcall/libcall_math.c:171: lc_math_max d
 lc_math_min,libcall_math.o,libcall,src/libcall/libcall_math.c:167: lc_math_min definition/provenance,api.libcall.math
 lc_math_pow,libcall_math.o,libcall,src/libcall/libcall_math.c:206: lc_math_pow definition/provenance,api.libcall.math
 lc_math_round,libcall_math.o,libcall,src/libcall/libcall_math.c:110: lc_math_round definition/provenance,api.libcall.math
+lc_math_sin,libcall_math.o,libcall,src/libcall/libcall_math.c:386: lc_math_sin definition/provenance,api.libcall.math
 lc_math_sqrt,libcall_math.o,libcall,src/libcall/libcall_math.c:175: lc_math_sqrt definition/provenance,api.libcall.math
+lc_math_tan,libcall_math.o,libcall,src/libcall/libcall_math.c:396: lc_math_tan definition/provenance,api.libcall.math
 lc_net_address,libcall_net.o,libcall,src/libcall/libcall_net.c:198: lc_net_address definition/provenance,api.libcall.net
 lc_net_connected,libcall_net.o,libcall,src/libcall/libcall_net.c:178: lc_net_connected definition/provenance,api.libcall.net
 lc_net_ditch,libcall_net.o,libcall,src/libcall/libcall_net.c:142: lc_net_ditch definition/provenance,api.libcall.net

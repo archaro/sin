@@ -45,6 +45,13 @@ uint8_t *lc_math_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_log2(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_log10(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_exp(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_math_sin(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_math_cos(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_math_tan(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_math_asin(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_math_acos(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_math_atan(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_math_atan2(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_thisid(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -270,6 +277,13 @@ void test_libcall_registry_roundtrip(void) {
       {"math", "log2", 6, 9, 1, lc_math_log2},
       {"math", "log10", 6, 10, 1, lc_math_log10},
       {"math", "exp", 6, 11, 1, lc_math_exp},
+      {"math", "sin", 6, 12, 1, lc_math_sin},
+      {"math", "cos", 6, 13, 1, lc_math_cos},
+      {"math", "tan", 6, 14, 1, lc_math_tan},
+      {"math", "asin", 6, 15, 1, lc_math_asin},
+      {"math", "acos", 6, 16, 1, lc_math_acos},
+      {"math", "atan", 6, 17, 1, lc_math_atan},
+      {"math", "atan2", 6, 18, 2, lc_math_atan2},
       {"net", "input", 3, 0, 0, lc_net_input},
       {"net", "write", 3, 1, 2, lc_net_write},
       {"net", "ditch", 3, 2, 1, lc_net_ditch},

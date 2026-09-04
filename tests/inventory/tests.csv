@@ -432,6 +432,14 @@ rewrite.runtime.test_math_exp_rejects_nonnumeric_and_consumes_owned_value,api.li
 rewrite.runtime.test_math_exp_registry_contract,api.libcall.math;api.libcall.table;libcall.math.exp
 rewrite.runtime.test_math_exp_success_preserves_existing_error,api.libcall.math;libcall.math.exp
 rewrite.runtime.test_math_exp_undefined_inputs_publish_error,api.common.errors;api.libcall.math;libcall.math.exp
+rewrite.runtime.test_math_trig_atan2_ordering_and_quadrants,api.libcall.math;libcall.math.atan2
+rewrite.runtime.test_math_trig_inverse_domain_errors,api.common.errors;api.libcall.math;libcall.math.asin;libcall.math.acos
+rewrite.runtime.test_math_trig_inverse_endpoints_and_signed_zero,api.libcall.math;libcall.math.asin;libcall.math.acos
+rewrite.runtime.test_math_trig_rejects_nonnumeric_and_consumes_owned_values,api.libcall.math;libcall.math.sin;libcall.math.cos;libcall.math.tan;libcall.math.asin;libcall.math.acos;libcall.math.atan;libcall.math.atan2
+rewrite.runtime.test_math_trig_registry_contract,api.libcall.math;api.libcall.table;libcall.math.sin;libcall.math.cos;libcall.math.tan;libcall.math.asin;libcall.math.acos;libcall.math.atan;libcall.math.atan2
+rewrite.runtime.test_math_trig_success_preserves_existing_error,api.libcall.math;libcall.math.sin;libcall.math.atan2
+rewrite.runtime.test_math_trig_unary_values_return_floats,api.libcall.math;libcall.math.sin;libcall.math.cos;libcall.math.tan;libcall.math.atan
+rewrite.runtime.test_math_trig_undefined_inputs_and_tan_nonfinite_result,api.common.errors;api.libcall.math;libcall.math.sin;libcall.math.cos;libcall.math.tan;libcall.math.asin;libcall.math.acos;libcall.math.atan;libcall.math.atan2
 rewrite.runtime.test_sys_compile_libcall_runtime,language.expression.libcall;api.libcall.sys;libcall.sys.compile
 rewrite.runtime.test_sys_itemref_dynamic_calls,language.expression.libcall;language.expression.item-reference;bytecode.encoding.item
 rewrite.network.test_append_input_lines_and_limits,api.network.runtime-io;api.network.telnet

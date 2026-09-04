@@ -32,6 +32,14 @@ void test_math_exp_finite_underflow_succeeds(void);
 void test_math_exp_rejects_nonnumeric_and_consumes_owned_value(void);
 void test_math_exp_undefined_inputs_publish_error(void);
 void test_math_exp_success_preserves_existing_error(void);
+void test_math_trig_registry_contract(void);
+void test_math_trig_unary_values_return_floats(void);
+void test_math_trig_atan2_ordering_and_quadrants(void);
+void test_math_trig_inverse_endpoints_and_signed_zero(void);
+void test_math_trig_rejects_nonnumeric_and_consumes_owned_values(void);
+void test_math_trig_inverse_domain_errors(void);
+void test_math_trig_undefined_inputs_and_tan_nonfinite_result(void);
+void test_math_trig_success_preserves_existing_error(void);
 void test_math_rounding_registry_contract(void);
 void test_math_rounding_integer_inputs_preserve_identity(void);
 void test_math_floor_and_ceil_float_inputs_return_integers(void);
@@ -82,6 +90,14 @@ static const TF_TestDescriptor tests[] = {
     {"rewrite.runtime.test_math_exp_registry_contract", test_math_exp_registry_contract, "exclusive", 30000, "api.libcall.math,api.libcall.table,libcall.math.exp"},
     {"rewrite.runtime.test_math_exp_success_preserves_existing_error", test_math_exp_success_preserves_existing_error, "exclusive", 30000, "api.libcall.math,libcall.math.exp"},
     {"rewrite.runtime.test_math_exp_undefined_inputs_publish_error", test_math_exp_undefined_inputs_publish_error, "exclusive", 30000, "api.common.errors,api.libcall.math,libcall.math.exp"},
+    {"rewrite.runtime.test_math_trig_registry_contract", test_math_trig_registry_contract, "exclusive", 30000, "api.libcall.math,api.libcall.table,libcall.math.sin,libcall.math.cos,libcall.math.tan,libcall.math.asin,libcall.math.acos,libcall.math.atan,libcall.math.atan2"},
+    {"rewrite.runtime.test_math_trig_unary_values_return_floats", test_math_trig_unary_values_return_floats, "exclusive", 30000, "api.libcall.math,libcall.math.sin,libcall.math.cos,libcall.math.tan,libcall.math.atan"},
+    {"rewrite.runtime.test_math_trig_atan2_ordering_and_quadrants", test_math_trig_atan2_ordering_and_quadrants, "exclusive", 30000, "api.libcall.math,libcall.math.atan2"},
+    {"rewrite.runtime.test_math_trig_inverse_endpoints_and_signed_zero", test_math_trig_inverse_endpoints_and_signed_zero, "exclusive", 30000, "api.libcall.math,libcall.math.asin,libcall.math.acos"},
+    {"rewrite.runtime.test_math_trig_rejects_nonnumeric_and_consumes_owned_values", test_math_trig_rejects_nonnumeric_and_consumes_owned_values, "exclusive", 30000, "api.libcall.math,libcall.math.sin,libcall.math.cos,libcall.math.tan,libcall.math.asin,libcall.math.acos,libcall.math.atan,libcall.math.atan2"},
+    {"rewrite.runtime.test_math_trig_inverse_domain_errors", test_math_trig_inverse_domain_errors, "exclusive", 30000, "api.common.errors,api.libcall.math,libcall.math.asin,libcall.math.acos"},
+    {"rewrite.runtime.test_math_trig_undefined_inputs_and_tan_nonfinite_result", test_math_trig_undefined_inputs_and_tan_nonfinite_result, "exclusive", 30000, "api.common.errors,api.libcall.math,libcall.math.sin,libcall.math.cos,libcall.math.tan,libcall.math.asin,libcall.math.acos,libcall.math.atan,libcall.math.atan2"},
+    {"rewrite.runtime.test_math_trig_success_preserves_existing_error", test_math_trig_success_preserves_existing_error, "exclusive", 30000, "api.libcall.math,libcall.math.sin,libcall.math.atan2"},
 };
 
 int main(int argc, char **argv) {

@@ -54,6 +54,13 @@
   X("math", "log2",        6,  9, 1, lc_math_log2) \
   X("math", "log10",       6, 10, 1, lc_math_log10) \
   X("math", "exp",         6, 11, 1, lc_math_exp) \
+  X("math", "sin",         6, 12, 1, lc_math_sin) \
+  X("math", "cos",         6, 13, 1, lc_math_cos) \
+  X("math", "tan",         6, 14, 1, lc_math_tan) \
+  X("math", "asin",        6, 15, 1, lc_math_asin) \
+  X("math", "acos",        6, 16, 1, lc_math_acos) \
+  X("math", "atan",        6, 17, 1, lc_math_atan) \
+  X("math", "atan2",       6, 18, 2, lc_math_atan2) \
   X("net",  "input",       3,  0, 0, lc_net_input) \
   X("net",  "write",       3,  1, 2, lc_net_write) \
   X("net",  "ditch",       3,  2, 1, lc_net_ditch) \

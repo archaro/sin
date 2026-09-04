@@ -315,3 +315,108 @@ uint8_t *lc_math_exp(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
   return nextop;
 }
+
+static uint8_t *lc_math_trig_unary(RuntimeContext *ctx, uint8_t *nextop,
+                                   ITEM_t *item, double (*operation)(double),
+                                   const char *type_name,
+                                   const char *domain_name) {
+  VALUE_t value;
+  double input;
+  double result;
+  (void)item;
+
+  value = pop_stack(ctx->vm->stack);
+  if (value.type != VALUE_int && value.type != VALUE_float) {
+    value_free(&value);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL, type_name);
+  }
+
+  input = value.type == VALUE_int ? (double)value.i : value.f;
+  value_free(&value);
+  if (!isfinite(input)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+  if (domain_name != NULL && (input < -1.0 || input > 1.0)) {
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+                                         domain_name);
+  }
+
+  result = operation(input);
+  if (!isfinite(result)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
+  return nextop;
+}
+
+static uint8_t *lc_math_trig_binary(RuntimeContext *ctx, uint8_t *nextop,
+                                    ITEM_t *item,
+                                    double (*operation)(double, double),
+                                    const char *type_name) {
+  VALUE_t right = pop_stack(ctx->vm->stack);
+  VALUE_t left = pop_stack(ctx->vm->stack);
+  double left_float;
+  double right_float;
+  double result;
+  (void)item;
+
+  if ((left.type != VALUE_int && left.type != VALUE_float) ||
+      (right.type != VALUE_int && right.type != VALUE_float)) {
+    value_free(&left);
+    value_free(&right);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL, type_name);
+  }
+
+  left_float = left.type == VALUE_int ? (double)left.i : left.f;
+  right_float = right.type == VALUE_int ? (double)right.i : right.f;
+  value_free(&left);
+  value_free(&right);
+  if (!isfinite(left_float) || !isfinite(right_float)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+
+  result = operation(left_float, right_float);
+  if (!isfinite(result)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
+  return nextop;
+}
+
+uint8_t *lc_math_sin(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_trig_unary(ctx, nextop, item, sin,
+                            "math.sin expects an integer or float", NULL);
+}
+
+uint8_t *lc_math_cos(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_trig_unary(ctx, nextop, item, cos,
+                            "math.cos expects an integer or float", NULL);
+}
+
+uint8_t *lc_math_tan(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_trig_unary(ctx, nextop, item, tan,
+                            "math.tan expects an integer or float", NULL);
+}
+
+uint8_t *lc_math_asin(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_trig_unary(
+      ctx, nextop, item, asin, "math.asin expects an integer or float",
+      "math.asin expects a number in the inclusive range [-1, 1]");
+}
+
+uint8_t *lc_math_acos(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_trig_unary(
+      ctx, nextop, item, acos, "math.acos expects an integer or float",
+      "math.acos expects a number in the inclusive range [-1, 1]");
+}
+
+uint8_t *lc_math_atan(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_trig_unary(ctx, nextop, item, atan,
+                            "math.atan expects an integer or float", NULL);
+}
+
+uint8_t *lc_math_atan2(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_math_trig_binary(
+      ctx, nextop, item, atan2,
+      "math.atan2 expects two integer or float arguments");
+}
