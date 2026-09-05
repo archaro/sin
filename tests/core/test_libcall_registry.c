@@ -60,6 +60,12 @@ uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_thisid(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_count(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_time_year(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_time_month(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_time_day(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_time_hour(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_time_minute(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_time_second(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 void execute_task_cb(uv_timer_t *req);
 uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -323,6 +329,12 @@ void test_libcall_registry_roundtrip(void) {
       {"task", "thisid", 2, 2, 0, lc_task_thisid},
       {"task", "exists", 2, 3, 1, lc_task_exists},
       {"task", "count", 2, 4, 0, lc_task_count},
+      {"time", "year", 8, 0, 1, lc_time_year},
+      {"time", "month", 8, 1, 1, lc_time_month},
+      {"time", "day", 8, 2, 1, lc_time_day},
+      {"time", "hour", 8, 3, 1, lc_time_hour},
+      {"time", "minute", 8, 4, 1, lc_time_minute},
+      {"time", "second", 8, 5, 1, lc_time_second},
       {NULL, NULL, 0, 0, 0, NULL},
   };
   size_t manifest_count = sizeof(manifest) / sizeof(manifest[0]) - 1;

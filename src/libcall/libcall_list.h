@@ -95,4 +95,10 @@
   X("task", "killtask",    2,  1, 1, lc_task_killtask) \
   X("task", "thisid",      2,  2, 0, lc_task_thisid) \
   X("task", "exists",      2,  3, 1, lc_task_exists) \
-  X("task", "count",       2,  4, 0, lc_task_count)
+  X("task", "count",       2,  4, 0, lc_task_count) \
+  X("time", "year",        8,  0, 1, lc_time_year) \
+  X("time", "month",       8,  1, 1, lc_time_month) \
+  X("time", "day",         8,  2, 1, lc_time_day) \
+  X("time", "hour",        8,  3, 1, lc_time_hour) \
+  X("time", "minute",      8,  4, 1, lc_time_minute) \
+  X("time", "second",      8,  5, 1, lc_time_second)

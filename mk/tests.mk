@@ -23,7 +23,7 @@ REWRITE_COMMON := $(foreach source,$(REWRITE_COMMON_SOURCES),$(call test_object,
 TEST_PROGRAMS := $(VARIANT_PROGRAMS)
 
 REWRITE_GROUP1_BINS := $(addprefix $(OBJ_DIR)/$(REWRITE_DIR)/group1/test_,absyn_lifecycle parser_input_api cli_io parser_float_literals sconv value_behavior libcall_registry libcall_sys fixture_policy output_contract memory)
-REWRITE_GROUP2_BINS := $(addprefix $(OBJ_DIR)/$(REWRITE_DIR)/,test_semant test_ir_validate test_relative_item_leading_dot test_pipeline_golden test_pipeline_source_golden test_pipeline_negative_matrix test_parser_examples_obj_golden test_compiler_context_failures test_compiler_diag_pipeline test_opcode_schema test_bytecode_convert test_bytecode_v1_abi test_bytecode_verify test_bytecode_wire test_emitbc_all_ir_ops test_emitbc_header test_emitbc_invariants test_emitbc_jumps test_emitbc_opcode_map test_emitbc_post_verify test_sdiss_fixtures test_stack_frames test_list test_interpret_semantics test_interpret_stress test_runtime_benchmark test_item_cache test_itemstore_io test_sin_itemstore_policy test_libcall_task test_task_lifecycle test_libcall_net test_libcall_str test_libcall_list test_libcall_math test_libcall_rand test_libcall_sys_compile test_network test_chat_smoke test_cli_contract_matrix)
+REWRITE_GROUP2_BINS := $(addprefix $(OBJ_DIR)/$(REWRITE_DIR)/,test_semant test_ir_validate test_relative_item_leading_dot test_pipeline_golden test_pipeline_source_golden test_pipeline_negative_matrix test_parser_examples_obj_golden test_compiler_context_failures test_compiler_diag_pipeline test_opcode_schema test_bytecode_convert test_bytecode_v1_abi test_bytecode_verify test_bytecode_wire test_emitbc_all_ir_ops test_emitbc_header test_emitbc_invariants test_emitbc_jumps test_emitbc_opcode_map test_emitbc_post_verify test_sdiss_fixtures test_stack_frames test_list test_interpret_semantics test_interpret_stress test_runtime_benchmark test_item_cache test_itemstore_io test_sin_itemstore_policy test_libcall_task test_task_lifecycle test_libcall_net test_libcall_str test_libcall_list test_libcall_math test_libcall_rand test_libcall_time test_libcall_sys_compile test_network test_chat_smoke test_cli_contract_matrix)
 REWRITE_BINS := $(REWRITE_GROUP1_BINS) $(REWRITE_GROUP2_BINS)
 TEST_BINS := $(FRAMEWORK_SELF_BIN) $(FRAMEWORK_RUNNER_BIN) $(FRAMEWORK_DUP_BIN) $(FRAMEWORK_NEG_BIN) $(CONFORMANCE_BIN) $(REWRITE_BINS)
 TEST_CFLAGS := $(CFLAGS) $(STRICT_WARNING_FLAGS)
@@ -76,7 +76,8 @@ REWRITE_COMMON_CASES := \
  test_libcall_str|group6_adapter_libcall_str.c|core/test_libcall_str.c \
  test_libcall_list|group6_adapter_libcall_list.c|core/test_libcall_list.c \
  test_libcall_math|group6_adapter_libcall_math.c|core/test_libcall_math.c \
- test_libcall_rand|group6_adapter_libcall_rand.c|core/test_libcall_rand.c
+ test_libcall_rand|group6_adapter_libcall_rand.c|core/test_libcall_rand.c \
+ test_libcall_time|group6_adapter_libcall_time.c|core/test_libcall_time.c
 
 define rewrite_common_template
 $(OBJ_DIR)/$(REWRITE_DIR)/$(1): $(REWRITE_COMMON) $(call test_object,$(REWRITE_DIR)/$(2)) $(call test_object,$(TEST_DIR)/$(3)) $(LIB) $(TEST_PROGRAMS)

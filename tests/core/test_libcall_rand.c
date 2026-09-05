@@ -90,7 +90,7 @@ void test_rand_registry_contract(void) {
                            lc_rand_choice};
   size_t count = 0;
   while (libcalls[count].libname) count++;
-  ASSERT_EQ_INT(86, count);
+  ASSERT_EQ_INT(92, count);
   for (size_t i = 0; i < 4; ++i) {
     uint8_t lib = 0, call = 0, args = 0;
     ASSERT_TRUE(libcall_lookup_pair("rand", names[i], &lib, &call, &args));

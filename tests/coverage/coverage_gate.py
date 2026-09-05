@@ -41,6 +41,9 @@ OWNERS = {
     "net", "executable",
 }
 NO_INSTRUMENTABLE = "src/libcall/libcall_table.c"
+NO_INSTRUMENTABLE_MODULES = {
+    NO_INSTRUMENTABLE,
+}
 THIRD_PARTY = "src/net/libtelnet.c"
 PERCENT_QUANTUM = Decimal("0.01")
 
@@ -245,12 +248,12 @@ def validate_floors(root: Path, path: Path = FLOORS,
         status = row["status"]
         if status not in STATUSES:
             fail(f"floor row {number} has invalid status {status!r}")
-        if status == "no_instrumentable_code" and module != NO_INSTRUMENTABLE:
-            fail(f"no-instrumentable status is only valid for {NO_INSTRUMENTABLE}")
+        if status == "no_instrumentable_code" and module not in NO_INSTRUMENTABLE_MODULES:
+            fail(f"no-instrumentable status is only valid for {sorted(NO_INSTRUMENTABLE_MODULES)}")
         if status == "excluded_third_party" and module != THIRD_PARTY:
             fail(f"third-party exclusion is only valid for {THIRD_PARTY}")
-        if module == NO_INSTRUMENTABLE and status != "no_instrumentable_code":
-            fail(f"{NO_INSTRUMENTABLE} must have no_instrumentable_code status")
+        if module in NO_INSTRUMENTABLE_MODULES and status != "no_instrumentable_code":
+            fail(f"{module} must have no_instrumentable_code status")
         if module == THIRD_PARTY and status != "excluded_third_party":
             fail(f"{THIRD_PARTY} must have excluded_third_party status")
         if len(row["rationale"].strip()) < 8:
@@ -332,8 +335,8 @@ def parse_gcov_payload(payload: dict, root: Path, module: str,
             functions.add((module, name, int(item.get("execution_count", 0)) > 0))
     if not lines and not functions and not branches and not allow_empty:
         fail(f"gcov JSON has no observations for {module}")
-    if module == NO_INSTRUMENTABLE and (lines or branches or functions):
-        fail(f"{NO_INSTRUMENTABLE} unexpectedly has gcov observations")
+    if module in NO_INSTRUMENTABLE_MODULES and (lines or branches or functions):
+        fail(f"{module} unexpectedly has gcov observations")
     return {"lines": lines, "branches": branches, "functions": functions}
 
 
@@ -528,13 +531,13 @@ def parse_llvm_summaries(payload: dict, root: Path, modules: Iterable[str],
             summary = source.get("summary")
             if module in no_instrumentable_set:
                 if not isinstance(summary, dict):
-                    fail(f"LLVM coverage summary is missing for {NO_INSTRUMENTABLE}")
+                    fail(f"LLVM coverage summary is missing for {module}")
                 for metric in ("lines", "branches", "functions"):
                     values = summary.get(metric)
                     if (not isinstance(values, dict)
                             or int(values.get("covered", 0)) > 0
                             or int(values.get("count", 0)) > 0):
-                        fail(f"{NO_INSTRUMENTABLE} unexpectedly has LLVM {metric} observations")
+                        fail(f"{module} unexpectedly has LLVM {metric} observations")
                 summaries[module] = {metric: {"covered": 0, "total": 0}
                                      for metric in ("lines", "branches", "functions")}
                 continue

@@ -159,8 +159,9 @@ revision, and durability invariants and
 ### Libcalls
 
 Files: `src/libcall/libcall*.c`, `src/libcall/libcall*.h`, including the
-dedicated immutable list handlers in `libcall_list.c` and random handlers
-and internal initialization/test hooks in `libcall_rand.c` / `libcall_rand.h`.
+dedicated immutable list handlers in `libcall_list.c`, random handlers and
+internal initialization/test hooks in `libcall_rand.c` / `libcall_rand.h`, and
+the UTC calendar handler in `libcall_time.c` / `libcall_time.h`.
 
 Ownership: Sinistra standard library primitives exposed to bytecode. Libcalls
 bridge runtime values to host services such as tasks, networking, system
@@ -179,6 +180,12 @@ failure or an all-zero seed. Context/task initialization and destruction do
 not reset this state, and itemstores do not persist it. Direct C handlers
 ensure initialization too. Internal deterministic entropy/draw hooks are
 for serial tests under process quiescence only.
+
+`libcall_time.c` exposes `time.year`, `time.month`, `time.day`, `time.hour`,
+`time.minute`, and `time.second` at ABI pairs `(8, 0)` through `(8, 5)`. They
+floor Unix milliseconds to seconds, convert with a thread-safe UTC routine,
+and return Gregorian calendar components without consulting the host local
+timezone.
 
 ### Networking
 

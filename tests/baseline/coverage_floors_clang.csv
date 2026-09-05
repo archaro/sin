@@ -30,6 +30,7 @@ src/itemstore/item_tree.c,itemstore,measured,91.83,82.52,96.55,Reviewed initial 
 src/libcall/libcall_list.c,libcall,measured,100.00,69.44,100.00,Reviewed initial LLVM 18 native baseline (not GCC snapshot); manual floor; see tests/baseline/README.md,clang-18
 src/libcall/libcall_math.c,libcall,measured,100.00,70.00,100.00,"Reviewed floor: focused math.abs/min/max/floor/ceil/round tests exercise every handler/result path; conservative branch floor accounts for compiler-generated/context diagnostic branches; see tests/baseline/README.md",clang-18
 src/libcall/libcall_rand.c,libcall,measured,100.00,94.83,100.00,Reviewed focused nine-descriptor rand run: LLVM 18 lines 125/125; branches 55/58; functions 12/12. Native LLVM metrics; full-suite OS entropy paths may add coverage; see tests/baseline/README.md,clang-18
+src/libcall/libcall_time.c,libcall,measured,81.08,50.00,100.00,"Focused LLVM 18 time.year run covers 30/37 lines, 7/14 branches, and all 3 functions; unsupported conversion remains platform-dependent",clang-18
 src/libcall/libcall_net.c,libcall,measured,100.00,84.21,100.00,Reviewed initial LLVM 18 native baseline (not GCC snapshot); manual floor; see tests/baseline/README.md,clang-18
 src/libcall/libcall_registry.c,libcall,measured,91.52,78.57,100.00,Reviewed initial LLVM 18 native baseline (not GCC snapshot); manual floor; see tests/baseline/README.md,clang-18
 src/libcall/libcall_str.c,libcall,measured,92.53,91.77,100.00,Reviewed initial LLVM 18 native baseline (not GCC snapshot); manual floor; see tests/baseline/README.md,clang-18

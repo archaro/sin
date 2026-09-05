@@ -582,3 +582,9 @@ lc_rand_choice,libcall_rand.o,libcall,src/libcall/libcall_rand.c: lc_rand_choice
 libcall_rand_init,libcall_rand.o,libcall,src/libcall/libcall_rand.c: libcall_rand_init definition/provenance,api.libcall.rand
 libcall_rand_test_reset,libcall_rand.o,libcall,src/libcall/libcall_rand.c: libcall_rand_test_reset definition/provenance,api.libcall.rand
 libcall_rand_test_draw,libcall_rand.o,libcall,src/libcall/libcall_rand.c: libcall_rand_test_draw definition/provenance,api.libcall.rand
+lc_time_year,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_year definition/provenance,api.libcall.time
+lc_time_month,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_month definition/provenance,api.libcall.time
+lc_time_day,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_day definition/provenance,api.libcall.time
+lc_time_hour,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_hour definition/provenance,api.libcall.time
+lc_time_minute,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_minute definition/provenance,api.libcall.time
+lc_time_second,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_second definition/provenance,api.libcall.time

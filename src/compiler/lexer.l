@@ -254,6 +254,7 @@ crlf        \r\n
   "str"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "sys"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "task"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
+  "time"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "then"        { return TTHEN; }
   "true"        { return TTRUE; }
   "false"       { return TFALSE; }

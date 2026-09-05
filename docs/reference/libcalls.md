@@ -48,3 +48,4 @@ Examples:
 - [math](libcalls-math.md) - mathematical operations
 - [rand](libcalls-rand.md) - random values and selection
 - [task](libcalls-task.md) - task handling
+- [time](libcalls-time.md) - UTC calendar values
