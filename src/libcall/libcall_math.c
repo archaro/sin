@@ -5,19 +5,10 @@
 #include "libcall_handlers.h"
 #include "stack.h"
 
-static uint8_t *lc_math_undefined_return(RuntimeContext *ctx,
-                                         uint8_t *nextop) {
-  set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL,
-                 ERR_RUNTIME_UNDEFINED, NULL,
-                 ctx ? ctx->current_item : NULL);
-  push_stack(ctx->vm->stack, VALUE_NIL);
-  return nextop;
-}
-
 static uint8_t *lc_math_float_return(RuntimeContext *ctx, uint8_t *nextop,
                                       double result) {
   if (!isfinite(result)) {
-    return lc_math_undefined_return(ctx, nextop);
+    return lc_undefined_nil_return(ctx, nextop);
   }
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
   return nextop;
@@ -31,7 +22,7 @@ uint8_t *lc_math_abs(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (value.type == VALUE_int) {
     if (value.i == INT64_MIN) {
       value_free(&value);
-      return lc_math_undefined_return(ctx, nextop);
+      return lc_undefined_nil_return(ctx, nextop);
     }
 
     int64_t result = value.i < 0 ? -value.i : value.i;
@@ -45,7 +36,7 @@ uint8_t *lc_math_abs(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
     bool representable = isfinite(result);
     value_free(&value);
     if (!representable) {
-      return lc_math_undefined_return(ctx, nextop);
+      return lc_undefined_nil_return(ctx, nextop);
     }
     push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
     return nextop;
@@ -99,7 +90,7 @@ static uint8_t *lc_math_rounding(RuntimeContext *ctx, uint8_t *nextop,
   /* The lower endpoint is representable as INT64_MIN; the upper endpoint
    * is one past INT64_MAX and must remain excluded before conversion. */
   if (!isfinite(rounded) || rounded < -0x1p63 || rounded >= 0x1p63) {
-    return lc_math_undefined_return(ctx, nextop);
+    return lc_undefined_nil_return(ctx, nextop);
   }
   push_stack(ctx->vm->stack,
              (VALUE_t){VALUE_int, {.i = (int64_t)rounded}});
@@ -141,7 +132,7 @@ static uint8_t *lc_math_select(RuntimeContext *ctx, uint8_t *nextop,
       (right.type == VALUE_float && !isfinite(right.f))) {
     value_free(&left);
     value_free(&right);
-    return lc_math_undefined_return(ctx, nextop);
+    return lc_undefined_nil_return(ctx, nextop);
   }
 
   if (left.type == VALUE_int && right.type == VALUE_int) {
@@ -201,7 +192,7 @@ uint8_t *lc_math_sqrt(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
         ctx, nextop, VALUE_NIL, "math.sqrt expects a non-negative number");
   }
   if (!isfinite(input)) {
-    return lc_math_undefined_return(ctx, nextop);
+    return lc_undefined_nil_return(ctx, nextop);
   }
 
   result = sqrt(input);
@@ -231,7 +222,7 @@ uint8_t *lc_math_pow(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   value_free(&base);
   value_free(&exponent);
   if (!isfinite(base_float) || !isfinite(exponent_float)) {
-    return lc_math_undefined_return(ctx, nextop);
+    return lc_undefined_nil_return(ctx, nextop);
   }
 
   result = pow(base_float, exponent_float);
@@ -261,7 +252,7 @@ static uint8_t *lc_math_logarithm(RuntimeContext *ctx, uint8_t *nextop,
         ctx, nextop, VALUE_NIL, positive_name);
   }
   if (!isfinite(input)) {
-    return lc_math_undefined_return(ctx, nextop);
+    return lc_undefined_nil_return(ctx, nextop);
   }
 
   result = operation(input);
@@ -302,7 +293,7 @@ uint8_t *lc_math_exp(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   input = value.type == VALUE_int ? (double)value.i : value.f;
   value_free(&value);
   if (!isfinite(input)) {
-    return lc_math_undefined_return(ctx, nextop);
+    return lc_undefined_nil_return(ctx, nextop);
   }
 
   result = exp(input);
@@ -327,7 +318,7 @@ static uint8_t *lc_math_trig_unary(RuntimeContext *ctx, uint8_t *nextop,
   input = value.type == VALUE_int ? (double)value.i : value.f;
   value_free(&value);
   if (!isfinite(input)) {
-    return lc_math_undefined_return(ctx, nextop);
+    return lc_undefined_nil_return(ctx, nextop);
   }
   if (domain_name != NULL && (input < -1.0 || input > 1.0)) {
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
@@ -361,7 +352,7 @@ static uint8_t *lc_math_trig_binary(RuntimeContext *ctx, uint8_t *nextop,
   value_free(&left);
   value_free(&right);
   if (!isfinite(left_float) || !isfinite(right_float)) {
-    return lc_math_undefined_return(ctx, nextop);
+    return lc_undefined_nil_return(ctx, nextop);
   }
 
   result = operation(left_float, right_float);

@@ -65,10 +65,7 @@ static uint8_t *lc_task_timer_setup_failed(RuntimeContext *ctx, uint8_t *nextop,
                                            const char *detail) {
   if (task) destroy_task(task);
   if (itemname) value_free(itemname);
-  push_stack(ctx->vm->stack, VALUE_NIL);
-  set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL, ERR_RUNTIME_INVALIDARGS,
-                         detail, ctx ? ctx->current_item : NULL);
-  return nextop;
+  return lc_invalid_args_nil_return(ctx, nextop, detail);
 }
 
 uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {

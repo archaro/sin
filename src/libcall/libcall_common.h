@@ -33,6 +33,21 @@ static inline uint8_t *lc_invalid_args_detail_return(RuntimeContext *ctx, uint8_
   return nextop;
 }
 
+static inline uint8_t *lc_invalid_args_nil_return(RuntimeContext *ctx,
+                                                  uint8_t *nextop,
+                                                  const char *detail) {
+  return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL, detail);
+}
+
+static inline uint8_t *lc_undefined_nil_return(RuntimeContext *ctx,
+                                               uint8_t *nextop) {
+  set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL,
+                 ERR_RUNTIME_UNDEFINED, NULL,
+                 ctx ? ctx->current_item : NULL);
+  push_stack(ctx->vm->stack, VALUE_NIL);
+  return nextop;
+}
+
 static inline void lc_cleanup_values(VALUE_t *values, size_t count) {
   for (size_t i = 0; i < count; i++) {
     value_free(&values[i]);

@@ -13,7 +13,7 @@ static uint8_t *lc_str_invalid_top(RuntimeContext *ctx, uint8_t *nextop,
                                    const char *detail) {
   VALUE_t val = pop_stack(ctx->vm->stack);
   FREE_STR(val);
-  return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL, detail);
+  return lc_invalid_args_nil_return(ctx, nextop, detail);
 }
 
 static VALUE_t *lc_str_peek_string(RuntimeContext *ctx) {

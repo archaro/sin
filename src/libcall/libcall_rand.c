@@ -72,14 +72,6 @@ static double random_fraction(void) {
   return (double)(random_word() >> 11) * 0x1p-53;
 }
 
-static uint8_t *random_undefined(RuntimeContext *ctx, uint8_t *nextop) {
-  set_error_item(ctx ? itemstore_root(ctx->itemstore) : NULL,
-                 ERR_RUNTIME_UNDEFINED, NULL,
-                 ctx ? ctx->current_item : NULL);
-  push_stack(ctx->vm->stack, VALUE_NIL);
-  return nextop;
-}
-
 uint8_t *lc_rand_int(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   VALUE_t maximum = pop_stack(ctx->vm->stack);
@@ -97,7 +89,7 @@ uint8_t *lc_rand_int(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   uint64_t high = (uint64_t)maximum.i - (uint64_t)INT64_MIN;
   value_free(&minimum);
   value_free(&maximum);
-  if (!libcall_rand_init()) return random_undefined(ctx, nextop);
+  if (!libcall_rand_init()) return lc_undefined_nil_return(ctx, nextop);
   uint64_t coordinate = low + random_below(high - low + UINT64_C(1));
   /* Cast only representable unsigned values, avoiding implementation-defined
    * conversion to signed even for INT64_MIN and the full-width range. */
@@ -110,7 +102,7 @@ uint8_t *lc_rand_int(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
 
 uint8_t *lc_rand_float(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
-  if (!libcall_rand_init()) return random_undefined(ctx, nextop);
+  if (!libcall_rand_init()) return lc_undefined_nil_return(ctx, nextop);
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = random_fraction()}});
   return nextop;
 }
@@ -125,12 +117,12 @@ uint8_t *lc_rand_chance(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
   double probability = value.type == VALUE_int ? (double)value.i : value.f;
   value_free(&value);
-  if (isnan(probability)) return random_undefined(ctx, nextop);
+  if (isnan(probability)) return lc_undefined_nil_return(ctx, nextop);
   if (probability < 0.0 || probability > 1.0) {
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
         "rand.chance expects an integer or float in [0, 1]");
   }
-  if (!libcall_rand_init()) return random_undefined(ctx, nextop);
+  if (!libcall_rand_init()) return lc_undefined_nil_return(ctx, nextop);
   bool result = probability == 1.0 ||
       (probability != 0.0 && random_fraction() < probability);
   push_stack(ctx->vm->stack, result ? VALUE_TRUE : VALUE_FALSE);
@@ -150,7 +142,7 @@ uint8_t *lc_rand_choice(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (count != 0) {
     if (!libcall_rand_init()) {
       value_free(&list);
-      return random_undefined(ctx, nextop);
+      return lc_undefined_nil_return(ctx, nextop);
     }
     size_t index = (size_t)random_below((uint64_t)count);
     (void)value_clone_fallible(sin_list_get(list.list, index), &result);
