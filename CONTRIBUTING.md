@@ -1,13 +1,30 @@
 # Contributing to Sinistra
 
+First, thanks for contributing.
+
 Sinistra is released under the MIT license. Contributions should be bounded,
 understandable, and accompanied by a focused commit message.
 
+## Use of AI
+
+Sinistra is developed using AI tools, and AI-assisted PRs are welcome subject
+to the following simple rules:
+- PRs must be understandable to a human without AI assistance - make sure to
+document everything clearly.
+- PRs should be limited to fixing or adding one thing, and touch the minimum
+amount of code and documentation.  Bulk PRs that have unrelated tentacles
+everywhere are likely to be rejected.
+
 ## Build and test
 
-The Unix-like toolchain requires `make`, a C17 compiler, Bison, Flex, the
-`libuv` development package, `pkg-config`, and `xxd`. On Debian or Ubuntu:
+Sinistra  is built on Linux and tested on Ubuntu with gcc and clang.  There are
+no plans at present to support other platforms, but PRs welcome.  C17 is the
+supported standard.
 
+Building will require `make`, `gcc` and/or `clang`, `bison`, `flex`,
+`libuv1-dev`, `pkg-config`, and `xxd`.
+
+To install the necessary packages on Ubuntu:
 ```bash
 sudo apt-get update
 sudo apt-get install -y build-essential clang bison flex libuv1-dev pkg-config xxd
@@ -18,8 +35,7 @@ sudo apt-get install -y build-essential clang bison flex libuv1-dev pkg-config x
 All test and fuzz binaries, generated corpora, coverage data, and temporary
 logs are written below the active `obj/<build>-<compiler>/` directory.
 
-The supported test interface is intentionally small:
-
+There are several test targets:
 ```bash
 make test
 make test-sanitize       # ASan + UBSan + leak detection
@@ -31,17 +47,16 @@ make bench               # opt-in release benchmark measurements
 `make test` builds with strict warnings and runs the C17 framework, all
 migrated deterministic groups, conformance fixtures, inventory audits, CLI,
 network, and integration checks. `TEST_JOBS=N` controls non-exclusive runner
-batches. `test-sanitize` must run outside ptrace-restricted environments
-because LeakSanitizer cannot operate correctly there.
+batches. Note that `test-sanitize` must run outside ptrace-restricted
+environments because LeakSanitizer cannot operate correctly there.
 
 The [testing internals guide](docs/internals/testing/README.md) documents the
 framework protocol, assertion/process/fixture APIs, and workflows for adding
 native, conformance, inventory, fixture, network, and fuzz coverage.
 
-`test-full` is the pre-PR gate for compiler, parser, bytecode, runtime,
-itemstore, or fuzz changes. It composes the shared recipes without cleaning or
-recursively rebuilding the workspace. Coverage is checked against the recorded
-module baseline and inventory catalogs remain enforceable.
+Before submitting a PR, ensure that `test-full` runs to completion without
+errors or warnings.  Minimum coverage targets are enforced, so if you make
+changes, you need to ensure that the tests are suitably updated.
 
 ## Fuzzing
 
@@ -58,11 +73,14 @@ there.
 
 ## Editor support and fixtures
 
-Install `bear` and run `make compiledb` if a clangd compilation database is
-needed. Fixture conventions and deliberate regeneration procedures are
-documented in `tests/fixtures/README.md` and
-`tests/fixtures/conformance/README.md`. Do not rewrite fixtures during normal
-test execution.
+If you want to use the clangd compilation database, install `bear` and run
+`make compiledb`.
+
+Fixture conventions and deliberate regeneration procedures are documented in
+`tests/fixtures/README.md` and `tests/fixtures/conformance/README.md`.
+Do not rewrite fixtures during normal test execution.
+
+## Mandatory pre-PR requirements
 
 Before submitting a change, ensure the relevant inventory catalog and positive
 and negative coverage entries are updated. Public language, bytecode, runtime,
