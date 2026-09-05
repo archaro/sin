@@ -4,6 +4,8 @@ These instructions apply to the repository rooted here. A deeper `AGENTS.md`
 overrides this file for its subtree. User, system, and developer instructions
 take precedence.
 
+When running on Codex, review OPENAI.md for multi-agent instructions.
+
 ## Project
 
 Sinistra is a C17 MUD engine with four executables:
@@ -51,30 +53,11 @@ idiomatic changes that fit nearby code; avoid broad cleanup during feature work.
 - Keep unrelated findings separate from the requested change. Do not extend a
   completed task into speculative cleanup or repeated validation.
 
-## Multi-agent implementation policy
-
-Use a small, stable team for non-trivial code changes. Documentation-only and
-tiny mechanical edits can stay with the root agent.
-
-- The root owns requirements, architecture, acceptance criteria, the test plan,
-  direct diff review, integration, and the final answer.
-- One implementation agent owns code changes and corrections. Reuse it; never
-  run concurrent writers against the same working tree.
-- One low-capability, read-only agent owns delegated searches and test
-  execution. It returns findings, exact commands, and verbatim errors; it does
-  not edit files, diagnose failures, or propose fixes.
-- Use `OPENAI.md` to select OpenAI models and reasoning levels for these roles.
-
 Every handoff must be isolated: disable conversation-history forking and supply
 only the bounded task, relevant paths and decisions, acceptance criteria,
 necessary tree state, and expected deliverable. Remind the writer that the
 workspace is shared and unrelated edits must be preserved. Reuse discovery
 findings unless the tree changed or the answer was incomplete.
-
-The root reviews the implementation diff before commissioning applicable
-checks. Send failures or unmet criteria back to the same writer with focused
-correction instructions. If corrections do not converge, reassess the task and
-evidence before another attempt.
 
 Add an independent reviewer only for unusual risk, cross-subsystem work,
 specialist needs, or an explicit request. Reviewers are read-only: no edits,
