@@ -749,6 +749,8 @@ int main(void) {
   resources.client_fd = connect_loop(port);
   close(resources.client_fd);
   resources.client_fd = -1;
+  wait_for_log_text(chat_flow_log, "early client disconnect",
+                    "Line 0: 127.0.0.1 disconnected.");
   if (kill(resources.server_pid, 0) != 0) {
     fail_errno("server exited after early client disconnect");
   }
