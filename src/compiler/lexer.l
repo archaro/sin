@@ -249,6 +249,7 @@ crlf        \r\n
   "list"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "net"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "or"          { return TOR; }
+  "rand"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "return"      { return TRETURN; }
   "str"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "sys"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }

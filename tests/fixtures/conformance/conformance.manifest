@@ -37,6 +37,10 @@ exclude|libcall.math.asin|covered by the focused native math libcall tests; no s
 exclude|libcall.math.acos|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
 exclude|libcall.math.atan|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
 exclude|libcall.math.atan2|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
+exclude|libcall.rand.int|native deterministic rand tests cover generated-word endpoints and rejection sampling; test_rand_source_integration_and_arity compiles and runs all four rand calls; random draws do not have fixed golden output
+exclude|libcall.rand.float|native deterministic rand tests cover zero and maximum 53-bit generated-word results; test_rand_source_integration_and_arity compiles and runs all four rand calls; random draws do not have fixed golden output
+exclude|libcall.rand.chance|native deterministic rand tests cover generated-word probability boundaries and exact endpoints; test_rand_source_integration_and_arity compiles and runs all four rand calls; random draws do not have fixed golden output
+exclude|libcall.rand.choice|native deterministic rand tests cover generated-word selection boundaries and owned value lifetimes; test_rand_source_integration_and_arity compiles and runs all four rand calls; random draws do not have fixed golden output
 exclude|libcall.sys.backup|writes itemstore backups; exercised by native persistence tests
 exclude|libcall.sys.shutdown|stops the runtime event loop; unsafe in load-only conformance
 exclude|libcall.sys.abort|aborts runtime shutdown state; unsafe in load-only conformance

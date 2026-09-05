@@ -52,6 +52,10 @@ uint8_t *lc_math_asin(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_acos(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_atan(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_math_atan2(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_rand_int(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_rand_float(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_rand_chance(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_rand_choice(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_killtask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_thisid(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -292,6 +296,10 @@ void test_libcall_registry_roundtrip(void) {
       {"net", "maxlines", 3, 5, 0, lc_net_maxlines},
       {"net", "connected", 3, 6, 1, lc_net_connected},
       {"net", "address", 3, 7, 1, lc_net_address},
+      {"rand", "int", 7, 0, 2, lc_rand_int},
+      {"rand", "float", 7, 1, 0, lc_rand_float},
+      {"rand", "chance", 7, 2, 1, lc_rand_chance},
+      {"rand", "choice", 7, 3, 1, lc_rand_choice},
       {"str", "capitalise", 4, 0, 1, lc_str_capitalise},
       {"str", "upper", 4, 1, 1, lc_str_upper},
       {"str", "lower", 4, 2, 1, lc_str_lower},

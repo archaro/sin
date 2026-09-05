@@ -159,7 +159,8 @@ revision, and durability invariants and
 ### Libcalls
 
 Files: `src/libcall/libcall*.c`, `src/libcall/libcall*.h`, including the
-dedicated immutable list handlers in `libcall_list.c`.
+dedicated immutable list handlers in `libcall_list.c` and random handlers
+and internal initialization/test hooks in `libcall_rand.c` / `libcall_rand.h`.
 
 Ownership: Sinistra standard library primitives exposed to bytecode. Libcalls
 bridge runtime values to host services such as tasks, networking, system
@@ -170,6 +171,14 @@ The libcall registry owns the permanent `(library index, call index)` ABI
 shared by compiler lowering and runtime dispatch. `libcall_lookup_pair()`
 resolves compiler-side names, while `libcall_func_pair()` resolves runtime
 dispatch. Handlers are named `lc_<library>_<name>`.
+
+`libcall_rand.c` owns a process-wide xoshiro256** stream confined to the
+runtime thread. `runtime_init()` seeds it once through synchronous libuv
+`uv_random()` before allocating the registry, failing startup on entropy
+failure or an all-zero seed. Context/task initialization and destruction do
+not reset this state, and itemstores do not persist it. Direct C handlers
+ensure initialization too. Internal deterministic entropy/draw hooks are
+for serial tests under process quiescence only.
 
 ### Networking
 

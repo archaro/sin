@@ -29,6 +29,7 @@ src/itemstore/item_source_persist.c,itemstore,measured,69.84,51.83,100.00,Review
 src/itemstore/item_tree.c,itemstore,measured,92.67,82.50,96.55,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/libcall/libcall_list.c,libcall,measured,100.00,70.00,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/libcall/libcall_math.c,libcall,measured,100.00,70.00,100.00,"Reviewed floor: focused math.abs/min/max/floor/ceil/round tests exercise every handler/result path; conservative branch floor accounts for compiler-generated/context diagnostic branches; see tests/baseline/README.md",gcc-13
+src/libcall/libcall_rand.c,libcall,measured,100.00,95.00,100.00,Reviewed focused nine-descriptor rand run: GCC 13 lines 96/96; branches 57/60; functions 12/12. Full-suite OS entropy paths may add coverage; see tests/baseline/README.md,gcc-13
 src/libcall/libcall_net.c,libcall,measured,100.00,86.11,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/libcall/libcall_registry.c,libcall,measured,92.97,78.02,95.65,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/libcall/libcall_str.c,libcall,measured,92.63,91.98,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13

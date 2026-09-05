@@ -14,6 +14,7 @@
 #include "util.h"
 #include "interpret.h"
 #include "libcall.h"
+#include "libcall_rand.h"
 #include "log.h"
 #include "memory.h"
 #include "parser.h"
@@ -89,6 +90,10 @@ bool runtime_init(RuntimeContext *ctx, VM_t *vm) {
   if (!ctx) return false;
   if (vm) ctx->vm = vm;
   if (ctx->initialized) return true;
+  if (!libcall_rand_init()) {
+    logerr("Failed to initialize rand from OS entropy.\n");
+    return false;
+  }
   runtime_verify_cache_clear(ctx);
   if (!ctx->libcalls) {
     ctx->libcalls = calloc(1, sizeof(*ctx->libcalls));

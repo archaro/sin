@@ -40,7 +40,7 @@ ARCHIVE_OBJECT_MODULES = {
     "log.o": "common", "memory.o": "common", "cli_io.o": "common", "floatconv.o": "common", "error.o": "common", "util.o": "common",
     "bytecode_abi.o": "bytecode", "bytecode_wire.o": "bytecode", "bytecode_format.o": "bytecode", "bytecode_verify.o": "bytecode", "bytecode_convert.o": "bytecode", "sdiss_core.o": "bytecode",
     "parser.o": "compiler", "lexer.o": "compiler", "absyn.o": "compiler", "semant.o": "compiler", "ir.o": "compiler", "lower.o": "compiler", "compiler_context.o": "compiler", "compiler_pipeline.o": "compiler", "emitbc.o": "compiler", "compdiag.o": "compiler",
-    "libcall_sys.o": "libcall", "libcall_task.o": "libcall", "libcall_net.o": "libcall", "libcall_str.o": "libcall", "libcall_list.o": "libcall", "libcall_math.o": "libcall", "libcall_registry.o": "libcall", "libcall_table.o": "libcall",
+    "libcall_sys.o": "libcall", "libcall_task.o": "libcall", "libcall_net.o": "libcall", "libcall_str.o": "libcall", "libcall_list.o": "libcall", "libcall_math.o": "libcall", "libcall_rand.o": "libcall", "libcall_registry.o": "libcall", "libcall_table.o": "libcall",
     "stack.o": "runtime", "value.o": "runtime", "list.o": "runtime", "itemref.o": "runtime", "vm.o": "runtime", "task.o": "runtime", "runtime_decode.o": "runtime", "runtime_value.o": "runtime", "runtime_item_ops.o": "runtime", "runtime_opcode.o": "runtime", "runtime_frame.o": "runtime", "interpret.o": "runtime",
     "item_hash.o": "itemstore", "item_tree.o": "itemstore", "item_registry.o": "itemstore", "item_persist.o": "itemstore", "item_source_persist.o": "itemstore", "item_error.o": "itemstore", "item_persist_v1.o": "itemstore", "item_persist_v2.o": "itemstore",
     "network.o": "network", "libtelnet.o": "network",

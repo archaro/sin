@@ -46,6 +46,35 @@ authored C source):
 gcov -b -f --json-format -o obj/debug-gcc/<module-dir> src/<module>.c
 ```
 
+## Rand floor provenance
+
+`src/libcall/libcall_rand.c` did not exist at the recorded historical commit,
+so its snapshot row is `unavailable`; historical counts remain unchanged.
+Its reviewed floors come from the nine focused rand descriptors with the
+production module instrumented through Make:
+
+| Toolchain | Lines | Branches | Functions |
+| --- | ---: | ---: | ---: |
+| GCC 13 / gcov 13 | 96/96 (100.00%) | 57/60 (95.00%) | 12/12 (100.00%) |
+| Clang 18 / LLVM 18 | 125/125 (100.00%) | 55/58 (94.83%) | 12/12 (100.00%) |
+
+Build each compiler variant and run each descriptor from
+`tests/rewrite/group6_adapter_libcall_rand.c` using `--run`:
+
+```sh
+make BUILD=coverage CC=<gcc|clang> obj/coverage-<compiler>/tests/rewrite/test_libcall_rand
+obj/coverage-<compiler>/tests/rewrite/test_libcall_rand --run <descriptor-id>
+```
+
+The measurements used `collect_gcc()` with `metric_summary()` and
+`collect_clang()` from `tests/coverage/coverage_gate.py`, restricting the module
+list to `src/libcall/libcall_rand.c`. These collectors invoke gcov 13 and
+LLVM 18 native tools respectively. Clang descriptor runs used
+`LLVM_PROFILE_FILE=obj/coverage-clang/coverage-data/%m.profraw`. Counts retain
+each collector's native line, branch, and function metrics. The floors match
+these focused observations; the full suite also exercises OS entropy
+initialization and may cover additional branches.
+
 ## Active coverage gate
 
 Run the complete instrumented workload, contract inventory audit, and floor

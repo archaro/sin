@@ -468,3 +468,12 @@ rewrite.e2e.scomp_cli_contract_matrix,api.entrypoint.scomp;executable.scomp.comm
 rewrite.e2e.sdiss_cli_contract_matrix,api.entrypoint.sdiss;executable.sdiss.command-line;executable.sdiss.input-output;executable.sdiss.exit-status;executable.sdiss.persistence;executable.sdiss.errors
 rewrite.e2e.sin_cli_contract_matrix,api.entrypoint.sin;executable.sin.command-line;executable.sin.input-output;executable.sin.exit-status;executable.sin.persistence;executable.sin.errors
 rewrite.e2e.sconv_cli_contract_matrix,api.entrypoint.sconv;executable.sconv.command-line;executable.sconv.input-output;executable.sconv.exit-status;executable.sconv.persistence;executable.sconv.errors
+rewrite.runtime.test_rand_registry_contract,api.libcall.rand;api.libcall.table;libcall.rand.chance;libcall.rand.choice;libcall.rand.float;libcall.rand.int
+rewrite.runtime.test_rand_generator_vector_and_context_lifetime,api.libcall.rand;libcall.rand.int
+rewrite.runtime.test_rand_entropy_failures,api.libcall.rand;libcall.rand.chance;libcall.rand.choice;libcall.rand.float;libcall.rand.int
+rewrite.runtime.test_rand_int_boundaries_and_rejection,api.libcall.rand;libcall.rand.int
+rewrite.runtime.test_rand_invalid_arguments,api.libcall.rand;libcall.rand.chance;libcall.rand.choice;libcall.rand.int
+rewrite.runtime.test_rand_float_and_chance_boundaries,api.libcall.rand;libcall.rand.chance;libcall.rand.float
+rewrite.runtime.test_rand_choice_ownership_and_selection,api.libcall.rand;libcall.rand.choice
+rewrite.runtime.test_rand_preserves_errors_and_clone_failure,api.libcall.rand;libcall.rand.chance;libcall.rand.choice;libcall.rand.float;libcall.rand.int
+rewrite.runtime.test_rand_source_integration_and_arity,api.libcall.rand;language.token.tlibname;libcall.rand.chance;libcall.rand.choice;libcall.rand.float;libcall.rand.int

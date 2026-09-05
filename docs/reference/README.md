@@ -17,6 +17,7 @@ for Sinistra's language, runtime diagnostics, tools, and library calls.
 - [net](libcalls-net.md)
 - [list](libcalls-list.md)
 - [math](libcalls-math.md)
+- [rand](libcalls-rand.md)
 - [task](libcalls-task.md)
 
 ## Internals and persistence

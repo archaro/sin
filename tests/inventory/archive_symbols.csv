@@ -575,3 +575,10 @@ yyalloc,lexer.o,compiler,src/compiler/lexer.l:20: yyalloc definition/provenance,
 yyerror,parser.o,compiler,src/compiler/parser.y:374: yyerror definition/provenance,api.compiler.parser-lifecycle
 yyfree,lexer.o,compiler,src/compiler/lexer.l:21: yyfree definition/provenance,api.compiler.parser-lifecycle
 yyrealloc,lexer.o,compiler,src/compiler/lexer.l:56: yyrealloc definition/provenance,api.compiler.parser-lifecycle
+lc_rand_int,libcall_rand.o,libcall,src/libcall/libcall_rand.c: lc_rand_int definition/provenance,api.libcall.rand
+lc_rand_float,libcall_rand.o,libcall,src/libcall/libcall_rand.c: lc_rand_float definition/provenance,api.libcall.rand
+lc_rand_chance,libcall_rand.o,libcall,src/libcall/libcall_rand.c: lc_rand_chance definition/provenance,api.libcall.rand
+lc_rand_choice,libcall_rand.o,libcall,src/libcall/libcall_rand.c: lc_rand_choice definition/provenance,api.libcall.rand
+libcall_rand_init,libcall_rand.o,libcall,src/libcall/libcall_rand.c: libcall_rand_init definition/provenance,api.libcall.rand
+libcall_rand_test_reset,libcall_rand.o,libcall,src/libcall/libcall_rand.c: libcall_rand_test_reset definition/provenance,api.libcall.rand
+libcall_rand_test_draw,libcall_rand.o,libcall,src/libcall/libcall_rand.c: libcall_rand_test_draw definition/provenance,api.libcall.rand
