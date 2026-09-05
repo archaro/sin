@@ -1267,3 +1267,61 @@ void test_math_trig_success_preserves_existing_error(void) {
                "Invalid arguments to library call. (prior trig error)");
   teardown_libcall_runtime();
 }
+
+void test_math_float_result_stack_and_diagnostic_contract(void) {
+  const struct {
+    OP_t handler;
+    VALUE_t args[2];
+    size_t arg_count;
+    bool undefined;
+    double expected;
+  } cases[] = {
+      {lc_math_sqrt, {{VALUE_int, {.i = 4}}}, 1, false, 2.0},
+      {lc_math_pow, {{VALUE_int, {.i = 2}}, {VALUE_int, {.i = 3}}},
+       2, false, 8.0},
+      {lc_math_log, {{VALUE_int, {.i = 1}}}, 1, false, 0.0},
+      {lc_math_exp, {{VALUE_int, {.i = 0}}}, 1, false, 1.0},
+      {lc_math_sin, {{VALUE_float, {.f = 0.0}}}, 1, false, 0.0},
+      {lc_math_atan2, {{VALUE_int, {.i = 0}}, {VALUE_int, {.i = 1}}},
+       2, false, 0.0},
+      {lc_math_pow, {{VALUE_int, {.i = -1}}, {VALUE_float, {.f = 0.5}}},
+       2, true, 0.0},
+      {lc_math_pow, {{VALUE_float, {.f = 1e308}}, {VALUE_int, {.i = 2}}},
+       2, true, 0.0},
+      {lc_math_exp, {{VALUE_int, {.i = 1000}}}, 1, true, 0.0},
+  };
+  setup_libcall_runtime();
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+    set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
+                   "prior result error", NULL);
+    char *sentinel = strdup("preserved lower stack value");
+    ASSERT_NOT_NULL(sentinel);
+    push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = sentinel}});
+    for (size_t j = 0; j < cases[i].arg_count; ++j) {
+      push_stack(config.vm->stack, cases[i].args[j]);
+    }
+    uint8_t continuation[2] = {0};
+    ASSERT_TRUE(cases[i].handler(test_ctx(), &continuation[1],
+                                itemstore_root(config.itemstore_ctx)) ==
+                &continuation[1]);
+    ASSERT_EQ_INT(2, size_stack(config.vm->stack));
+    VALUE_t result = pop_stack(config.vm->stack);
+    if (cases[i].undefined) {
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      assert_error(ERR_RUNTIME_UNDEFINED, errmsg[ERR_RUNTIME_UNDEFINED]);
+    } else {
+      ASSERT_EQ_INT(VALUE_float, result.type);
+      ASSERT_TRUE(result.f == cases[i].expected);
+      assert_error(ERR_RUNTIME_INVALIDARGS,
+                   "Invalid arguments to library call. (prior result error)");
+    }
+    value_free(&result);
+    VALUE_t preserved = pop_stack(config.vm->stack);
+    ASSERT_EQ_INT(VALUE_str, preserved.type);
+    ASSERT_TRUE(preserved.s == sentinel);
+    ASSERT_TRUE(strcmp(preserved.s, "preserved lower stack value") == 0);
+    value_free(&preserved);
+    ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  }
+  teardown_libcall_runtime();
+}

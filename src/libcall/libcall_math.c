@@ -14,6 +14,15 @@ static uint8_t *lc_math_undefined_return(RuntimeContext *ctx,
   return nextop;
 }
 
+static uint8_t *lc_math_float_return(RuntimeContext *ctx, uint8_t *nextop,
+                                      double result) {
+  if (!isfinite(result)) {
+    return lc_math_undefined_return(ctx, nextop);
+  }
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
+  return nextop;
+}
+
 uint8_t *lc_math_abs(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   VALUE_t value;
   (void)item;
@@ -196,11 +205,7 @@ uint8_t *lc_math_sqrt(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   result = sqrt(input);
-  if (!isfinite(result)) {
-    return lc_math_undefined_return(ctx, nextop);
-  }
-  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
-  return nextop;
+  return lc_math_float_return(ctx, nextop, result);
 }
 
 uint8_t *lc_math_pow(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -230,11 +235,7 @@ uint8_t *lc_math_pow(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   result = pow(base_float, exponent_float);
-  if (!isfinite(result)) {
-    return lc_math_undefined_return(ctx, nextop);
-  }
-  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
-  return nextop;
+  return lc_math_float_return(ctx, nextop, result);
 }
 
 static uint8_t *lc_math_logarithm(RuntimeContext *ctx, uint8_t *nextop,
@@ -264,11 +265,7 @@ static uint8_t *lc_math_logarithm(RuntimeContext *ctx, uint8_t *nextop,
   }
 
   result = operation(input);
-  if (!isfinite(result)) {
-    return lc_math_undefined_return(ctx, nextop);
-  }
-  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
-  return nextop;
+  return lc_math_float_return(ctx, nextop, result);
 }
 
 uint8_t *lc_math_log(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -309,11 +306,7 @@ uint8_t *lc_math_exp(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   }
 
   result = exp(input);
-  if (!isfinite(result)) {
-    return lc_math_undefined_return(ctx, nextop);
-  }
-  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
-  return nextop;
+  return lc_math_float_return(ctx, nextop, result);
 }
 
 static uint8_t *lc_math_trig_unary(RuntimeContext *ctx, uint8_t *nextop,
@@ -342,11 +335,7 @@ static uint8_t *lc_math_trig_unary(RuntimeContext *ctx, uint8_t *nextop,
   }
 
   result = operation(input);
-  if (!isfinite(result)) {
-    return lc_math_undefined_return(ctx, nextop);
-  }
-  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
-  return nextop;
+  return lc_math_float_return(ctx, nextop, result);
 }
 
 static uint8_t *lc_math_trig_binary(RuntimeContext *ctx, uint8_t *nextop,
@@ -376,11 +365,7 @@ static uint8_t *lc_math_trig_binary(RuntimeContext *ctx, uint8_t *nextop,
   }
 
   result = operation(left_float, right_float);
-  if (!isfinite(result)) {
-    return lc_math_undefined_return(ctx, nextop);
-  }
-  push_stack(ctx->vm->stack, (VALUE_t){VALUE_float, {.f = result}});
-  return nextop;
+  return lc_math_float_return(ctx, nextop, result);
 }
 
 uint8_t *lc_math_sin(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {

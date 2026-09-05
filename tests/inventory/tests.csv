@@ -477,3 +477,4 @@ rewrite.runtime.test_rand_float_and_chance_boundaries,api.libcall.rand;libcall.r
 rewrite.runtime.test_rand_choice_ownership_and_selection,api.libcall.rand;libcall.rand.choice
 rewrite.runtime.test_rand_preserves_errors_and_clone_failure,api.libcall.rand;libcall.rand.chance;libcall.rand.choice;libcall.rand.float;libcall.rand.int
 rewrite.runtime.test_rand_source_integration_and_arity,api.libcall.rand;language.token.tlibname;libcall.rand.chance;libcall.rand.choice;libcall.rand.float;libcall.rand.int
+rewrite.runtime.test_math_float_result_stack_and_diagnostic_contract,api.common.errors;api.libcall.math;libcall.math.sqrt;libcall.math.pow;libcall.math.log;libcall.math.exp;libcall.math.sin;libcall.math.atan2

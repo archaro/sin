@@ -49,7 +49,10 @@ void test_math_rounding_rejects_nonnumeric_and_consumes_owned_values(void);
 void test_math_rounding_undefined_inputs_publish_error(void);
 void test_math_rounding_success_preserves_existing_error(void);
 
+void test_math_float_result_stack_and_diagnostic_contract(void);
+
 static const TF_TestDescriptor tests[] = {
+    {"rewrite.runtime.test_math_float_result_stack_and_diagnostic_contract", test_math_float_result_stack_and_diagnostic_contract, "exclusive", 30000, "api.common.errors,api.libcall.math,libcall.math.sqrt,libcall.math.pow,libcall.math.log,libcall.math.exp,libcall.math.sin,libcall.math.atan2"},
     {"rewrite.runtime.test_math_abs_registry_contract", test_math_abs_registry_contract, "exclusive", 30000, "api.libcall.math,api.libcall.table,libcall.math.abs"},
     {"rewrite.runtime.test_math_abs_integer_inputs", test_math_abs_integer_inputs, "exclusive", 30000, "api.libcall.math,libcall.math.abs"},
     {"rewrite.runtime.test_math_abs_float_inputs_and_signed_zero", test_math_abs_float_inputs_and_signed_zero, "exclusive", 30000, "libcall.math.abs"},
