@@ -3,6 +3,11 @@ rewrite.runtime.test_conv_bool_registry_contract,api.libcall.conv;libcall.conv.b
 rewrite.runtime.test_conv_bool_uses_runtime_truthiness,api.libcall.conv;libcall.conv.bool
 rewrite.runtime.test_conv_bool_consumes_values_and_preserves_diagnostics,api.libcall.conv;libcall.conv.bool
 rewrite.runtime.test_conv_bool_source_integration_and_arity,api.libcall.conv;libcall.conv.bool
+rewrite.runtime.test_conv_int_registry_contract,api.libcall.conv;api.libcall.table;libcall.conv.int
+rewrite.runtime.test_conv_int_converts_values,api.libcall.conv;libcall.conv.int
+rewrite.runtime.test_conv_int_rejects_invalid_values_and_boundaries,api.libcall.conv;libcall.conv.int
+rewrite.runtime.test_conv_int_consumes_values_and_preserves_diagnostics,api.libcall.conv;libcall.conv.int
+rewrite.runtime.test_conv_int_source_integration_and_arity,api.libcall.conv;libcall.conv.int
 rewrite.output_contract.quiet_runner.abnormal_exit,test.output_contract.quiet_runner.abnormal_exit
 rewrite.output_contract.quiet_runner.aggregate_failure,test.output_contract.quiet_runner.aggregate_failure
 rewrite.output_contract.quiet_runner.aggregate_success,test.output_contract.quiet_runner.aggregate_success
