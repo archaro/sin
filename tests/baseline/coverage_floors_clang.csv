@@ -1,5 +1,5 @@
 module,owner,status,lines_floor,branches_floor,functions_floor,rationale,compiler
-src/libcall/libcall_conv.c,libcall,measured,100.00,100.00,100.00,Focused conv.bool and conv.int tests cover conversion handlers including boundaries and source dispatch.,clang-18
+src/libcall/libcall_conv.c,libcall,measured,100.00,100.00,100.00,"Focused conv.bool, conv.int, and conv.float tests cover conversion handlers including boundaries, diagnostics, ownership, and source dispatch.",clang-18
 src/bytecode/bytecode_abi.c,bytecode,measured,96.43,65.91,100.00,Reviewed initial LLVM 18 native baseline (not GCC snapshot); manual floor; see tests/baseline/README.md,clang-18
 src/bytecode/bytecode_convert.c,bytecode,measured,84.76,71.14,100.00,Reviewed initial LLVM 18 native baseline (not GCC snapshot); manual floor; see tests/baseline/README.md,clang-18
 src/bytecode/bytecode_format.c,bytecode,measured,100.00,86.36,100.00,Reviewed initial LLVM 18 native baseline (not GCC snapshot); manual floor; see tests/baseline/README.md,clang-18

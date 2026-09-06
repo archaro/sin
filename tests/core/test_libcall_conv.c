@@ -29,6 +29,12 @@ static VALUE_t call_int(VALUE_t value) {
   return pop_stack(config.vm->stack);
 }
 
+static VALUE_t call_float(VALUE_t value) {
+  push_stack(config.vm->stack, value);
+  (void)lc_conv_float(test_ctx(), NULL, NULL);
+  return pop_stack(config.vm->stack);
+}
+
 static void assert_bool(VALUE_t value, int expected) {
   ASSERT_EQ_INT(VALUE_bool, value.type);
   ASSERT_EQ_INT(expected, value.i);
@@ -39,6 +45,11 @@ static void assert_int(VALUE_t value, int64_t expected) {
   ASSERT_EQ_INT(expected, value.i);
 }
 
+static void assert_float(VALUE_t value, double expected) {
+  ASSERT_EQ_INT(VALUE_float, value.type);
+  ASSERT_TRUE(value.f == expected);
+}
+
 void test_conv_bool_registry_contract(void) {
   uint8_t lib_index = 0;
   uint8_t call_index = 0;
@@ -46,7 +57,7 @@ void test_conv_bool_registry_contract(void) {
   size_t count = 0;
 
   while (libcalls[count].libname != NULL) count++;
-  ASSERT_EQ_INT(98, count);
+  ASSERT_EQ_INT(99, count);
   ASSERT_TRUE(libcall_lookup_pair("conv", "bool", &lib_index, &call_index,
                                  &args));
   ASSERT_EQ_INT(9, lib_index);
@@ -64,6 +75,133 @@ void test_conv_bool_registry_contract(void) {
   ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_conv_int);
   ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
   ASSERT_EQ_INT(1, args);
+
+  ASSERT_TRUE(libcall_lookup_pair("conv", "float", &lib_index, &call_index,
+                                 &args));
+  ASSERT_EQ_INT(9, lib_index);
+  ASSERT_EQ_INT(2, call_index);
+  ASSERT_EQ_INT(1, args);
+  ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_conv_float);
+  ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
+  ASSERT_EQ_INT(1, args);
+}
+
+void test_conv_float_registry_contract(void) {
+  uint8_t lib_index = 0;
+  uint8_t call_index = 0;
+  uint8_t args = 0;
+
+  ASSERT_TRUE(libcall_lookup_pair("conv", "float", &lib_index, &call_index,
+                                 &args));
+  ASSERT_EQ_INT(9, lib_index);
+  ASSERT_EQ_INT(2, call_index);
+  ASSERT_EQ_INT(1, args);
+  ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_conv_float);
+  ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
+  ASSERT_EQ_INT(1, args);
+}
+
+void test_conv_float_converts_values(void) {
+  setup_libcall_runtime();
+
+  assert_float(call_float((VALUE_t){VALUE_float, {.f = -0.0}}), -0.0);
+  assert_float(call_float((VALUE_t){VALUE_int, {.i = INT64_MIN}}),
+               (double)INT64_MIN);
+  assert_float(call_float((VALUE_t){VALUE_int, {.i = INT64_MAX}}),
+               (double)INT64_MAX);
+  assert_float(call_float(VALUE_FALSE), 0.0);
+  assert_float(call_float(VALUE_TRUE), 1.0);
+  assert_float(call_float(VALUE_NIL), 0.0);
+
+  const char *valid[] = {"123", "+123", "-123", "123.45", "-0.0"};
+  const double expected[] = {123.0, 123.0, -123.0, 123.45, -0.0};
+  for (size_t i = 0; i < sizeof(valid) / sizeof(valid[0]); i++) {
+    VALUE_t value = {VALUE_str, {.s = strdup(valid[i])}};
+    ASSERT_NOT_NULL(value.s);
+    assert_float(call_float(value), expected[i]);
+  }
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_conv_float_rejects_invalid_values_and_boundaries(void) {
+  setup_libcall_runtime();
+
+  const char *invalid[] = {"", "123.45ghj", " 123.45", "123.45 ",
+                           "nan", "1.7976931348623159e308"};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
+    VALUE_t value = {VALUE_str, {.s = strdup(invalid[i])}};
+    ASSERT_NOT_NULL(value.s);
+    VALUE_t result = call_float(value);
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+    ASSERT_NOT_NULL(error);
+    ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
+  }
+
+  SIN_LIST_t *list = sin_list_build_owned(NULL, 0);
+  SIN_ITEMREF_t *itemref = sin_itemref_create("root.child");
+  ASSERT_NOT_NULL(list);
+  ASSERT_NOT_NULL(itemref);
+  VALUE_t result = call_float((VALUE_t){VALUE_list, {.list = list}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  result = call_float((VALUE_t){VALUE_itemref, {.itemref = itemref}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_conv_float_consumes_values_and_preserves_diagnostics(void) {
+  setup_libcall_runtime();
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior diagnostic", NULL);
+  VALUE_t owned = {VALUE_str, {.s = strdup("17.25")}};
+  ASSERT_NOT_NULL(owned.s);
+  assert_float(call_float(owned), 17.25);
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(error)->i);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_conv_float_source_integration_and_arity(void) {
+  setup_libcall_runtime();
+  VALUE_t source = {VALUE_str, {.s = strdup(
+      "result.a = conv.float{3}; result.b = conv.float{true}; "
+      "result.c = conv.float{\"123.45\"}; result.d = conv.float{nil};")}};
+  ASSERT_NOT_NULL(source.s);
+  push_stack(config.vm->stack, source);
+  (void)lc_sys_compile(test_ctx(), NULL, NULL);
+  VALUE_t compiled = pop_stack(config.vm->stack);
+  assert_bool(compiled, 1);
+  ITEM_t *a = find_item(itemstore_root(config.itemstore_ctx), "result.a");
+  ITEM_t *b = find_item(itemstore_root(config.itemstore_ctx), "result.b");
+  ITEM_t *c = find_item(itemstore_root(config.itemstore_ctx), "result.c");
+  ITEM_t *d = find_item(itemstore_root(config.itemstore_ctx), "result.d");
+  ASSERT_NOT_NULL(a);
+  ASSERT_NOT_NULL(b);
+  ASSERT_NOT_NULL(c);
+  ASSERT_NOT_NULL(d);
+  assert_float(*item_value(a), 3.0);
+  assert_float(*item_value(b), 1.0);
+  assert_float(*item_value(c), 123.45);
+  assert_float(*item_value(d), 0.0);
+
+  const char *invalid[] = {"conv.float;", "conv.float{1, 2};"};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
+    OUTPUT_t *out = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    ASSERT_TRUE(compile_source_to_bytecode_diag(invalid[i], strlen(invalid[i]),
+                                               &out, &diag) != 0);
+    ASSERT_TRUE(out == NULL);
+    ASSERT_EQ_INT(DIAG_PHASE_LOWER, diag.phase);
+    ASSERT_NOT_NULL(diag.message);
+    ASSERT_TRUE(strstr(diag.message, "invalid libcall argument count") != NULL);
+    compiler_diag_reset(&diag);
+  }
+  teardown_libcall_runtime();
 }
 
 void test_conv_int_registry_contract(void) {

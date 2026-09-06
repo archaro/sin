@@ -275,6 +275,7 @@ void test_libcall_registry_roundtrip(void) {
       {"sys", "call", 1, 24, 2, lc_sys_call},
       {"conv", "bool", 9, 0, 1, lc_conv_bool},
       {"conv", "int", 9, 1, 1, lc_conv_int},
+      {"conv", "float", 9, 2, 1, lc_conv_float},
       {"list", "length", 5, 0, 1, lc_list_length},
       {"list", "get", 5, 1, 2, lc_list_get},
       {"list", "append", 5, 2, 2, lc_list_append},

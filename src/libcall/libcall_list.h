@@ -37,6 +37,7 @@
   X("sys",  "call",        1, 24, 2, lc_sys_call) \
   X("conv", "bool",        9,  0, 1, lc_conv_bool) \
   X("conv", "int",         9,  1, 1, lc_conv_int) \
+  X("conv", "float",       9,  2, 1, lc_conv_float) \
   X("list", "length",      5,  0, 1, lc_list_length) \
   X("list", "get",         5,  1, 2, lc_list_get) \
   X("list", "append",      5,  2, 2, lc_list_append) \
