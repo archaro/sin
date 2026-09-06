@@ -35,6 +35,18 @@ static VALUE_t call_float(VALUE_t value) {
   return pop_stack(config.vm->stack);
 }
 
+static VALUE_t call_str(VALUE_t value) {
+  push_stack(config.vm->stack, value);
+  (void)lc_conv_str(test_ctx(), NULL, NULL);
+  return pop_stack(config.vm->stack);
+}
+
+static void assert_str(VALUE_t value, const char *expected) {
+  ASSERT_EQ_INT(VALUE_str, value.type);
+  ASSERT_TRUE(strcmp(value.s, expected) == 0);
+  FREE_STR(value);
+}
+
 static void assert_bool(VALUE_t value, int expected) {
   ASSERT_EQ_INT(VALUE_bool, value.type);
   ASSERT_EQ_INT(expected, value.i);
@@ -57,7 +69,7 @@ void test_conv_bool_registry_contract(void) {
   size_t count = 0;
 
   while (libcalls[count].libname != NULL) count++;
-  ASSERT_EQ_INT(99, count);
+  ASSERT_EQ_INT(100, count);
   ASSERT_TRUE(libcall_lookup_pair("conv", "bool", &lib_index, &call_index,
                                  &args));
   ASSERT_EQ_INT(9, lib_index);
@@ -84,6 +96,127 @@ void test_conv_bool_registry_contract(void) {
   ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_conv_float);
   ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
   ASSERT_EQ_INT(1, args);
+
+  ASSERT_TRUE(libcall_lookup_pair("conv", "str", &lib_index, &call_index,
+                                 &args));
+  ASSERT_EQ_INT(9, lib_index);
+  ASSERT_EQ_INT(3, call_index);
+  ASSERT_EQ_INT(1, args);
+  ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_conv_str);
+  ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
+  ASSERT_EQ_INT(1, args);
+}
+
+void test_conv_str_registry_contract(void) {
+  uint8_t lib_index = 0;
+  uint8_t call_index = 0;
+  uint8_t args = 0;
+
+  ASSERT_TRUE(libcall_lookup_pair("conv", "str", &lib_index, &call_index,
+                                 &args));
+  ASSERT_EQ_INT(9, lib_index);
+  ASSERT_EQ_INT(3, call_index);
+  ASSERT_EQ_INT(1, args);
+  ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_conv_str);
+  ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
+  ASSERT_EQ_INT(1, args);
+}
+
+void test_conv_str_converts_values(void) {
+  setup_libcall_runtime();
+
+  assert_str(call_str((VALUE_t){VALUE_int, {.i = -42}}), "-42");
+  assert_str(call_str((VALUE_t){VALUE_float, {.f = 3.5}}), "3.5");
+  assert_str(call_str(VALUE_TRUE), "true");
+  assert_str(call_str(VALUE_FALSE), "false");
+  assert_str(call_str(VALUE_NIL), "nil");
+
+  SIN_ITEMREF_t *itemref = sin_itemref_create("root.child");
+  ASSERT_NOT_NULL(itemref);
+  assert_str(call_str((VALUE_t){VALUE_itemref, {.itemref = itemref}}),
+             "&root.child");
+
+  VALUE_t elements[] = {{VALUE_int, {.i = 1}},
+                        {VALUE_bool, {.i = 1}},
+                        {VALUE_str, {.s = strdup("text")}}};
+  ASSERT_NOT_NULL(elements[2].s);
+  SIN_LIST_t *list = sin_list_build_owned(elements, 3);
+  ASSERT_NOT_NULL(list);
+  assert_str(call_str((VALUE_t){VALUE_list, {.list = list}}),
+             "#[1, true, \"text\"]");
+
+  VALUE_t malformed = call_str((VALUE_t){VALUE_list, {.list = NULL}});
+  ASSERT_EQ_INT(VALUE_nil, malformed.type);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_conv_str_consumes_values_and_preserves_diagnostics(void) {
+  setup_libcall_runtime();
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior diagnostic", NULL);
+
+  char *original = strdup("already text");
+  ASSERT_NOT_NULL(original);
+  VALUE_t result = call_str((VALUE_t){VALUE_str, {.s = original}});
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(result.s == original);
+  FREE_STR(result);
+
+  SIN_ITEMREF_t *itemref = sin_itemref_create("owned.ref");
+  ASSERT_NOT_NULL(itemref);
+  result = call_str((VALUE_t){VALUE_itemref, {.itemref = itemref}});
+  assert_str(result, "&owned.ref");
+  VALUE_t list_value = {VALUE_int, {.i = 7}};
+  SIN_LIST_t *list = sin_list_build_owned(&list_value, 1);
+  ASSERT_NOT_NULL(list);
+  result = call_str((VALUE_t){VALUE_list, {.list = list}});
+  assert_str(result, "#[7]");
+
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(error)->i);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_conv_str_source_integration_and_arity(void) {
+  setup_libcall_runtime();
+  VALUE_t source = {VALUE_str, {.s = strdup(
+      "result.a = conv.str{3}; result.b = conv.str{3.5}; "
+      "result.c = conv.str{true}; result.d = conv.str{nil}; "
+      "result.e = conv.str{\"text\"}; result.f = conv.str{#[1, true]};")}};
+  ASSERT_NOT_NULL(source.s);
+  push_stack(config.vm->stack, source);
+  (void)lc_sys_compile(test_ctx(), NULL, NULL);
+  VALUE_t compiled = pop_stack(config.vm->stack);
+  assert_bool(compiled, 1);
+
+  const char *names[] = {"result.a", "result.b", "result.c", "result.d",
+                         "result.e", "result.f"};
+  const char *expected[] = {"3", "3.5", "true", "nil", "text",
+                            "#[1, true]"};
+  for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+    ITEM_t *result = find_item(itemstore_root(config.itemstore_ctx), names[i]);
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ_INT(VALUE_str, item_value(result)->type);
+    ASSERT_TRUE(strcmp(item_value(result)->s, expected[i]) == 0);
+  }
+
+  const char *invalid[] = {"conv.str;", "conv.str{1, 2};"};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
+    OUTPUT_t *out = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    ASSERT_TRUE(compile_source_to_bytecode_diag(invalid[i], strlen(invalid[i]),
+                                               &out, &diag) != 0);
+    ASSERT_TRUE(out == NULL);
+    ASSERT_EQ_INT(DIAG_PHASE_LOWER, diag.phase);
+    ASSERT_NOT_NULL(diag.message);
+    ASSERT_TRUE(strstr(diag.message, "invalid libcall argument count") != NULL);
+    compiler_diag_reset(&diag);
+  }
+  teardown_libcall_runtime();
 }
 
 void test_conv_float_registry_contract(void) {

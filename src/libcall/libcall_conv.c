@@ -92,6 +92,10 @@ uint8_t *lc_conv_bool(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+uint8_t *lc_conv_str(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  return lc_str_valtostr(ctx, nextop, item);
+}
+
 uint8_t *lc_conv_float(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   VALUE_t value = pop_stack(ctx->vm->stack);
