@@ -57,6 +57,9 @@ static bool time_format_value(const struct tm *utc, TimeFormat format,
   };
   int64_t year = (int64_t)utc->tm_year + 1900;
   int month = utc->tm_mon + 1;
+  if (format != TIME_FORMAT_TIME && (year < 0 || year > 9999)) {
+    return false;
+  }
   const char *suffix = "th";
   if (utc->tm_mday % 100 < 11 || utc->tm_mday % 100 > 13) {
     switch (utc->tm_mday % 10) {

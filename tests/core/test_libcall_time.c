@@ -316,15 +316,30 @@ void test_time_formatted_unrepresentable_timestamp_publishes_error(void) {
   setup_libcall_runtime();
   VALUE_t result = call_time(lc_time_timestamp,
       (VALUE_t){VALUE_int, {.i = INT64_MAX}});
-  if (result.type == VALUE_nil) {
-    ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
-    ASSERT_NOT_NULL(error);
-    ASSERT_EQ_INT(ERR_RUNTIME_UNDEFINED, item_value(error)->i);
-  } else {
-    ASSERT_EQ_INT(VALUE_str, result.type);
-    ASSERT_TRUE(strchr(result.s, '-') != NULL);
-    value_free(&result);
-  }
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_UNDEFINED, item_value(error)->i);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_time_formatted_success_preserves_existing_error(void) {
+  setup_libcall_runtime();
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
+                 "prior error", NULL);
+  VALUE_t result = call_time(lc_time_timestamp,
+      (VALUE_t){VALUE_int, {.i = 0}});
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, "1970-01-01 00:00:00") == 0);
+  value_free(&result);
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
+  ITEM_t *message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_TRUE(strcmp(item_value(message)->s,
+                    "Invalid arguments to library call. (prior error)") == 0);
   ASSERT_EQ_INT(0, size_stack(config.vm->stack));
   teardown_libcall_runtime();
 }
