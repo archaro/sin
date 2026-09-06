@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "libcall.h"
+#include "libcall_handlers.h"
 #include "config.h"
 #include "compiler/compiler_pipeline.h"
 #include "error.h"
@@ -272,6 +273,7 @@ void test_libcall_registry_roundtrip(void) {
       {"sys", "itemname", 1, 22, 1, lc_sys_itemname},
       {"sys", "fetch", 1, 23, 1, lc_sys_fetch},
       {"sys", "call", 1, 24, 2, lc_sys_call},
+      {"conv", "bool", 9, 0, 1, lc_conv_bool},
       {"list", "length", 5, 0, 1, lc_list_length},
       {"list", "get", 5, 1, 2, lc_list_get},
       {"list", "append", 5, 2, 2, lc_list_append},

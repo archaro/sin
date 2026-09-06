@@ -246,6 +246,7 @@ crlf        \r\n
   "foreach"     { return TFOREACH; }
   "if"          { return TIF; }
   "in"          { return TIN; }
+  "conv"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "list"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "net"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "or"          { return TOR; }

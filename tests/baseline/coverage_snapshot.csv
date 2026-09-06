@@ -1,4 +1,5 @@
 module,owner,status,lines_covered,lines_total,lines_percent,branches_covered,branches_total,branches_percent,functions_covered,functions_total,functions_percent,notes
+src/libcall/libcall_conv.c,libcall,unavailable,0,0,n/a,0,0,n/a,0,0,n/a,Post-baseline conv library module added after the recorded GCC baseline commit
 src/bytecode/bytecode_abi.c,bytecode,measured,40,41,97.56,28,42,66.67,4,4,100.00,GCC gcov JSON from full make test
 src/bytecode/bytecode_convert.c,bytecode,measured,271,325,83.38,167,227,73.57,15,15,100.00,GCC gcov JSON from full make test
 src/bytecode/bytecode_format.c,bytecode,measured,42,42,100.00,17,20,85.00,2,2,100.00,GCC gcov JSON from full make test

@@ -51,7 +51,7 @@ Token forms are:
 
 Reserved words are `and`, `break`, `code`, `continue`, `do`, `else`, `elsif`,
 `endif`, `endfor`, `endwhile`, `foreach`, `if`, `in`, `nil`, `or`, `return`, `then`, `true`,
-`false`, and `while`. Library prefixes `list`, `net`, `str`, `sys`, and `task` are recognized
+`false`, and `while`. Library prefixes `conv`, `list`, `net`, `str`, `sys`, and `task` are recognized
 for libcall syntax. Punctuation tokens are `=`, `==`, `!`, `!=`, `<`, `<=`,
 `>`, `>=`, `++`, `+`, `--`, `-`, `*`, `%`, `/`, `(`, `)`, `,`, `{`, `}`, `;`,
 `.`, `#[`, `&`, `[` and `]`. Any character that does not begin one of these
@@ -167,7 +167,7 @@ layer            ::= identifier-layer | integer | dereference ;
 dereference      ::= "[" (item | local) "]" ;
 ```
 
-Here `local` is the local token, `library` is one of `list`, `net`, `str`,
+Here `local` is the local token, `library` is one of `conv`, `list`, `net`, `str`,
 `sys`, or `task`, and `identifier-layer` is a layer token. `code-body` is the
 raw text between the balanced parentheses after `code`; nested parentheses
 delimit the body, while quoted strings protect embedded parentheses. During

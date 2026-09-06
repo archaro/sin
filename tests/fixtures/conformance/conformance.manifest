@@ -18,6 +18,7 @@ case|negative-semantic-local|negative|tests/fixtures/conformance/negative/semant
 case|negative-unknown-libcall|negative|tests/fixtures/conformance/negative-unknown-libcall.src|conformance.framework.negative|1|-|tests/fixtures/conformance/negative-unknown-libcall.diag.txt|contains|skip|-|-|skip|skip|0|skip|-|skip|unknown libcall rejection
 case|negative-language-bundle|negative|tests/fixtures/conformance/negative-language-bundle.src|conformance.framework.negative|1|-|tests/fixtures/conformance/negative-language-bundle.diag.txt|contains|skip|-|-|skip|skip|0|skip|-|skip|negative control and syntax witness
 exclude|language.diagnostic.allocation-error|allocation failures remain covered by native failure-path tests
+exclude|libcall.conv.bool|native conv.bool tests cover shared truthiness semantics and source integration; no dedicated source-level golden fixture is needed
 exclude|libcall.math.abs|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
 exclude|libcall.math.min|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
 exclude|libcall.math.max|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task

@@ -35,6 +35,7 @@
   X("sys",  "itemname",    1, 22, 1, lc_sys_itemname) \
   X("sys",  "fetch",       1, 23, 1, lc_sys_fetch) \
   X("sys",  "call",        1, 24, 2, lc_sys_call) \
+  X("conv", "bool",        9,  0, 1, lc_conv_bool) \
   X("list", "length",      5,  0, 1, lc_list_length) \
   X("list", "get",         5,  1, 2, lc_list_get) \
   X("list", "append",      5,  2, 2, lc_list_append) \

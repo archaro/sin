@@ -41,6 +41,7 @@ Examples:
 
 ## Registered libraries
 
+- [conv](libcalls-conv.md) - value conversions
 - [sys](libcalls-sys.md) - essential system calls (compile, backup, etc)
 - [str](libcalls-str.md) - string manipulation
 - [net](libcalls-net.md) - network operations

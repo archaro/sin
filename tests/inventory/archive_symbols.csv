@@ -1,4 +1,5 @@
 symbol,object,module,declaration,api_contract_id
+lc_conv_bool,libcall_conv.o,libcall,src/libcall/libcall_conv.c:11: lc_conv_bool definition/provenance,api.libcall.conv
 VALUE_FALSE,value.o,runtime,src/runtime/value.c:25: VALUE_FALSE definition/provenance,api.runtime.value
 VALUE_NIL,value.o,runtime,src/runtime/value.c:23: VALUE_NIL definition/provenance,api.runtime.value
 VALUE_TRUE,value.o,runtime,src/runtime/value.c:24: VALUE_TRUE definition/provenance,api.runtime.value

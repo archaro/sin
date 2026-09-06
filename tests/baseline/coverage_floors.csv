@@ -1,4 +1,5 @@
 module,owner,status,lines_floor,branches_floor,functions_floor,rationale,compiler
+src/libcall/libcall_conv.c,libcall,measured,100.00,100.00,100.00,Focused conv.bool tests cover the single conversion handler and source dispatch path.,gcc-13
 src/bytecode/bytecode_abi.c,bytecode,measured,97.56,66.67,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/bytecode/bytecode_convert.c,bytecode,measured,83.38,73.57,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/bytecode/bytecode_format.c,bytecode,measured,100.00,85.00,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13

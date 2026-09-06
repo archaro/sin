@@ -159,7 +159,8 @@ revision, and durability invariants and
 ### Libcalls
 
 Files: `src/libcall/libcall*.c`, `src/libcall/libcall*.h`, including the
-dedicated immutable list handlers in `libcall_list.c`, random handlers and
+value-conversion handler in `libcall_conv.c`, dedicated immutable list handlers
+in `libcall_list.c`, random handlers and
 internal initialization/test hooks in `libcall_rand.c` / `libcall_rand.h`, and
 the UTC calendar handler in `libcall_time.c` / `libcall_time.h`.
 
