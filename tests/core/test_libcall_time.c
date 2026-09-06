@@ -250,6 +250,62 @@ void test_time_formatted_utc_boundaries_and_negative_flooring(void) {
   teardown_libcall_runtime();
 }
 
+void test_time_formatted_year_boundaries(void) {
+  static const TimeHandler handlers[] = {lc_time_timestamp, lc_time_date,
+                                         lc_time_fulldate};
+  static const char *const year_zero[] = {"0000-01-01 00:00:00",
+                                          "0000-01-01",
+                                          "1st January 0000"};
+  static const char *const year_9999[] = {"9999-12-31 00:00:00",
+                                          "9999-12-31",
+                                          "31st December 9999"};
+  static const int64_t supported_timestamps[] = {
+      INT64_C(-62167219200000), INT64_C(253402214400000)};
+  static const int64_t out_of_range_timestamps[] = {
+      INT64_C(-62198755200000), INT64_C(253402300800000)};
+
+  setup_libcall_runtime();
+  for (size_t i = 0; i < sizeof(handlers) / sizeof(handlers[0]); i++) {
+    VALUE_t result = call_time(handlers[i],
+        (VALUE_t){VALUE_int, {.i = supported_timestamps[0]}});
+    ASSERT_EQ_INT(VALUE_str, result.type);
+    ASSERT_TRUE(strcmp(result.s, year_zero[i]) == 0);
+    value_free(&result);
+
+    result = call_time(handlers[i],
+        (VALUE_t){VALUE_int, {.i = supported_timestamps[1]}});
+    ASSERT_EQ_INT(VALUE_str, result.type);
+    ASSERT_TRUE(strcmp(result.s, year_9999[i]) == 0);
+    value_free(&result);
+  }
+
+  VALUE_t result = call_time(lc_time_time,
+      (VALUE_t){VALUE_int, {.i = out_of_range_timestamps[1]}});
+  if (result.type == VALUE_str) {
+    ASSERT_TRUE(strcmp(result.s, "00:00:00") == 0);
+    value_free(&result);
+  } else {
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+    ASSERT_NOT_NULL(error);
+    ASSERT_EQ_INT(ERR_RUNTIME_UNDEFINED, item_value(error)->i);
+  }
+
+  for (size_t i = 0; i < sizeof(handlers) / sizeof(handlers[0]); i++) {
+    for (size_t j = 0; j < sizeof(out_of_range_timestamps) /
+        sizeof(out_of_range_timestamps[0]); j++) {
+      result = call_time(handlers[i],
+          (VALUE_t){VALUE_int, {.i = out_of_range_timestamps[j]}});
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+      ASSERT_NOT_NULL(error);
+      ASSERT_EQ_INT(ERR_RUNTIME_UNDEFINED, item_value(error)->i);
+    }
+  }
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
 void test_time_fulldate_ordinal_suffixes_and_month_names(void) {
   static const int64_t timestamps[] = {
       INT64_C(1577836800000), INT64_C(1580601600000),
