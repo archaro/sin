@@ -2,12 +2,12 @@
 
 [Libraries and Libcalls](libcalls.md) · [Reference Manual](README.md)
 
-| Call | Result | Arguments |
-| --- | --- | --- |
-| `rand.int{min, max}` | Uniform integer in the inclusive range `[min, max]`. | Two integers with `min <= max`; the entire signed 64-bit range is supported. |
-| `rand.float` | Float in `[0.0, 1.0)`, with 53 random bits. | None. |
-| `rand.chance{p}` | Boolean; true when a random float is less than `p`. | Integer or float in `[0, 1]`; zero always returns false and one always returns true. |
-| `rand.choice{list}` | Uniformly selected element, or `nil` for an empty list. | A list. |
+| Libcall | Arguments | Returns | Side effects | Failure behaviour | Example |
+| --- | --- | --- | --- | --- | --- |
+| `rand.int{min, max}` | Two integers with `min <= max`; the entire signed 64-bit range is supported. | Uniform integer in the inclusive range `[min, max]`. | Consumes both arguments and advances the process-wide random stream. | Wrong types or reversed bounds return `nil` with `ERR_RUNTIME_INVALIDARGS`. | `@damage = rand.int{3, 8};` |
+| `rand.float` | None. | Float in `[0.0, 1.0)`, with 53 random bits. | Advances the process-wide random stream. | Entropy initialization failure returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@offset = rand.float;` |
+| `rand.chance{p}` | Integer or float in `[0, 1]`; zero always returns false and one always returns true. | Boolean; true when a random float is less than `p`. | Consumes `p`; probabilities strictly between zero and one advance the random stream. | Wrong types, out-of-range values, or infinities return `nil` with `ERR_RUNTIME_INVALIDARGS`; NaN returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@critical = rand.chance{0.15};` |
+| `rand.choice{list}` | A list. | Uniformly selected owned element, or `nil` for an empty list. | Consumes the list and advances the process-wide random stream for non-empty lists. | A wrong type returns `nil` with `ERR_RUNTIME_INVALIDARGS`; clone or allocation failure returns `nil` while preserving `error`. | `@direction = rand.choice{#["north", "south", "east", "west"]};` |
 
 `rand` is recognized as a library prefix in source, like `list` and `sys`.
 All arguments are consumed. `rand.choice` returns an owned value: strings,
