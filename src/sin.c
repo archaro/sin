@@ -245,6 +245,12 @@ static bool init_signal_handler(void) {
     logerr("Unable to install signal handler.\n");
     return false;
   }
+
+  act.sa_handler = SIG_IGN;
+  if (sigaction(SIGPIPE, &act, NULL) < 0) {
+    logerr("Unable to ignore SIGPIPE.\n");
+    return false;
+  }
   return true;
 }
 
