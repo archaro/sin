@@ -101,4 +101,8 @@
   X("time", "day",         8,  2, 1, lc_time_day) \
   X("time", "hour",        8,  3, 1, lc_time_hour) \
   X("time", "minute",      8,  4, 1, lc_time_minute) \
-  X("time", "second",      8,  5, 1, lc_time_second)
+  X("time", "second",      8,  5, 1, lc_time_second) \
+  X("time", "timestamp",   8,  6, 1, lc_time_timestamp) \
+  X("time", "time",        8,  7, 1, lc_time_time) \
+  X("time", "date",        8,  8, 1, lc_time_date) \
+  X("time", "fulldate",    8,  9, 1, lc_time_fulldate)

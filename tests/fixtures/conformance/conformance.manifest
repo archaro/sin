@@ -47,6 +47,10 @@ exclude|libcall.time.day|native time calendar tests cover UTC conversion, millis
 exclude|libcall.time.hour|native time calendar tests cover UTC conversion, millisecond flooring, and source integration; no dedicated source-to-runtime golden fixture is needed
 exclude|libcall.time.minute|native time calendar tests cover UTC conversion, millisecond flooring, and source integration; no dedicated source-to-runtime golden fixture is needed
 exclude|libcall.time.second|native time calendar tests cover UTC conversion, millisecond flooring, and source integration; no dedicated source-to-runtime golden fixture is needed
+exclude|libcall.time.timestamp|native time formatting tests cover UTC conversion, millisecond flooring, diagnostics, and source integration; no dedicated source-to-runtime golden fixture is needed
+exclude|libcall.time.time|native time formatting tests cover UTC conversion, millisecond flooring, diagnostics, and source integration; no dedicated source-to-runtime golden fixture is needed
+exclude|libcall.time.date|native time formatting tests cover UTC conversion, millisecond flooring, diagnostics, and source integration; no dedicated source-to-runtime golden fixture is needed
+exclude|libcall.time.fulldate|native time formatting tests cover UTC conversion, ordinal suffixes, month names, diagnostics, and source integration; no dedicated source-to-runtime golden fixture is needed
 exclude|libcall.sys.backup|writes itemstore backups; exercised by native persistence tests
 exclude|libcall.sys.shutdown|stops the runtime event loop; unsafe in load-only conformance
 exclude|libcall.sys.abort|aborts runtime shutdown state; unsafe in load-only conformance

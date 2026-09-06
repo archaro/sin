@@ -10,6 +10,10 @@
 | `time.hour{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | The UTC hour (0–23). | Consumes the timestamp; performs no persistent mutation. | A non-integer returns `nil` with `ERR_RUNTIME_INVALIDARGS`; an unrepresentable timestamp returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@hour = time.hour{sys.now};` |
 | `time.minute{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | The UTC minute (0–59). | Consumes the timestamp; performs no persistent mutation. | A non-integer returns `nil` with `ERR_RUNTIME_INVALIDARGS`; an unrepresentable timestamp returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@minute = time.minute{sys.now};` |
 | `time.second{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | The UTC second (0–60), after flooring milliseconds. | Consumes the timestamp; performs no persistent mutation. | A non-integer returns `nil` with `ERR_RUNTIME_INVALIDARGS`; an unrepresentable timestamp returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@second = time.second{sys.now};` |
+| `time.timestamp{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | Fixed-width UTC timestamp `YYYY-MM-DD HH:MM:SS`. | Consumes the timestamp; performs no persistent mutation. | A non-integer returns `nil` with `ERR_RUNTIME_INVALIDARGS`; an unrepresentable timestamp or formatting failure returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@stamp = time.timestamp{sys.now};` |
+| `time.time{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | Fixed-width UTC 24-hour time `HH:MM:SS`. | Consumes the timestamp; performs no persistent mutation. | A non-integer returns `nil` with `ERR_RUNTIME_INVALIDARGS`; an unrepresentable timestamp or formatting failure returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@clock = time.time{sys.now};` |
+| `time.date{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | Fixed-width UTC date `YYYY-MM-DD`. | Consumes the timestamp; performs no persistent mutation. | A non-integer returns `nil` with `ERR_RUNTIME_INVALIDARGS`; an unrepresentable timestamp or formatting failure returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@date = time.date{sys.now};` |
+| `time.fulldate{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | English UTC date `Dth Month YYYY`, with English month names and ordinal suffixes. | Consumes the timestamp; performs no persistent mutation. | A non-integer returns `nil` with `ERR_RUNTIME_INVALIDARGS`; an unrepresentable timestamp or formatting failure returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@readable = time.fulldate{sys.now};` |
 
 `time` is recognized as a library prefix in source. The timestamp is floored
 to the containing Unix second, so negative sub-second values are in the
@@ -24,4 +28,5 @@ represent the timestamp as a UTC calendar value, the call returns `nil` with
 ```sin
 @year = time.year{sys.now};
 @minute = time.minute{sys.now};
+@readable = time.fulldate{sys.now};
 ```

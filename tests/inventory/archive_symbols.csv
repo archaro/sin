@@ -588,3 +588,7 @@ lc_time_day,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_day defin
 lc_time_hour,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_hour definition/provenance,api.libcall.time
 lc_time_minute,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_minute definition/provenance,api.libcall.time
 lc_time_second,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_second definition/provenance,api.libcall.time
+lc_time_timestamp,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_timestamp definition/provenance,api.libcall.time
+lc_time_time,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_time definition/provenance,api.libcall.time
+lc_time_date,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_date definition/provenance,api.libcall.time
+lc_time_fulldate,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_fulldate definition/provenance,api.libcall.time

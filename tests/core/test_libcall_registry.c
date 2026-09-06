@@ -66,6 +66,10 @@ uint8_t *lc_time_day(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_time_hour(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_time_minute(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_time_second(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_time_timestamp(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_time_time(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_time_date(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_time_fulldate(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 void execute_task_cb(uv_timer_t *req);
 uint8_t *lc_net_write(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_net_input(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -335,6 +339,10 @@ void test_libcall_registry_roundtrip(void) {
       {"time", "hour", 8, 3, 1, lc_time_hour},
       {"time", "minute", 8, 4, 1, lc_time_minute},
       {"time", "second", 8, 5, 1, lc_time_second},
+      {"time", "timestamp", 8, 6, 1, lc_time_timestamp},
+      {"time", "time", 8, 7, 1, lc_time_time},
+      {"time", "date", 8, 8, 1, lc_time_date},
+      {"time", "fulldate", 8, 9, 1, lc_time_fulldate},
       {NULL, NULL, 0, 0, 0, NULL},
   };
   size_t manifest_count = sizeof(manifest) / sizeof(manifest[0]) - 1;

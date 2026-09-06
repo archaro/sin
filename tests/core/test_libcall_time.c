@@ -36,7 +36,7 @@ void test_time_year_registry_contract(void) {
   size_t count = 0;
 
   while (libcalls[count].libname != NULL) count++;
-  ASSERT_EQ_INT(92, count);
+  ASSERT_EQ_INT(96, count);
   ASSERT_TRUE(libcall_lookup_pair("time", "year", &lib_index, &call_index,
                                  &args));
   ASSERT_EQ_INT(8, lib_index);
@@ -46,9 +46,11 @@ void test_time_year_registry_contract(void) {
   ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
   ASSERT_EQ_INT(1, args);
 
-  const char *names[] = {"month", "day", "hour", "minute", "second"};
+  const char *names[] = {"month", "day", "hour", "minute", "second",
+                         "timestamp", "time", "date", "fulldate"};
   TimeHandler handlers[] = {lc_time_month, lc_time_day, lc_time_hour,
-                            lc_time_minute, lc_time_second};
+                            lc_time_minute, lc_time_second, lc_time_timestamp,
+                            lc_time_time, lc_time_date, lc_time_fulldate};
   for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
     ASSERT_TRUE(libcall_lookup_pair("time", names[i], &lib_index, &call_index,
                                    &args));
@@ -201,6 +203,162 @@ void test_time_calendar_source_integration_and_arity(void) {
 
   const char *invalid[] = {"time.month;", "time.day{1, 2};",
       "time.hour;", "time.minute{1, 2};", "time.second;"};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
+    OUTPUT_t *out = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    ASSERT_TRUE(compile_source_to_bytecode_diag(invalid[i], strlen(invalid[i]),
+                                                &out, &diag) != 0);
+    ASSERT_TRUE(out == NULL);
+    ASSERT_EQ_INT(DIAG_PHASE_LOWER, diag.phase);
+    ASSERT_NOT_NULL(diag.message);
+    ASSERT_TRUE(strstr(diag.message, "invalid libcall argument count") != NULL);
+    compiler_diag_reset(&diag);
+  }
+  teardown_libcall_runtime();
+}
+
+void test_time_formatted_utc_boundaries_and_negative_flooring(void) {
+  static const TimeHandler handlers[] = {lc_time_timestamp, lc_time_time,
+      lc_time_date, lc_time_fulldate};
+  static const char *const epoch[] = {"1970-01-01 00:00:00", "00:00:00",
+                                      "1970-01-01", "1st January 1970"};
+  static const char *const leap[] = {"2020-02-29 12:34:56", "12:34:56",
+                                     "2020-02-29", "29th February 2020"};
+  static const char *const negative[] = {"1969-12-31 23:59:59", "23:59:59",
+                                         "1969-12-31", "31st December 1969"};
+
+  setup_libcall_runtime();
+  for (size_t i = 0; i < sizeof(handlers) / sizeof(handlers[0]); i++) {
+    VALUE_t result = call_time(handlers[i],
+        (VALUE_t){VALUE_int, {.i = 0}});
+    ASSERT_EQ_INT(VALUE_str, result.type);
+    ASSERT_TRUE(strcmp(result.s, epoch[i]) == 0);
+    value_free(&result);
+    result = call_time(handlers[i],
+        (VALUE_t){VALUE_int, {.i = INT64_C(1582979696000)}});
+    ASSERT_EQ_INT(VALUE_str, result.type);
+    ASSERT_TRUE(strcmp(result.s, leap[i]) == 0);
+    value_free(&result);
+    result = call_time(handlers[i],
+        (VALUE_t){VALUE_int, {.i = -1}});
+    ASSERT_EQ_INT(VALUE_str, result.type);
+    ASSERT_TRUE(strcmp(result.s, negative[i]) == 0);
+    value_free(&result);
+  }
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_time_fulldate_ordinal_suffixes_and_month_names(void) {
+  static const int64_t timestamps[] = {
+      INT64_C(1577836800000), INT64_C(1580601600000),
+      INT64_C(1583193600000), INT64_C(1585958400000),
+      INT64_C(1589155200000), INT64_C(1591920000000),
+      INT64_C(1594598400000), INT64_C(1597968000000),
+      INT64_C(1600732800000), INT64_C(1603411200000),
+      INT64_C(1604448000000), INT64_C(1609372800000),
+  };
+  static const char *const expected[] = {
+      "1st January 2020", "2nd February 2020", "3rd March 2020",
+      "4th April 2020", "11th May 2020", "12th June 2020",
+      "13th July 2020", "21st August 2020", "22nd September 2020",
+      "23rd October 2020", "4th November 2020", "31st December 2020",
+  };
+
+  setup_libcall_runtime();
+  for (size_t i = 0; i < sizeof(timestamps) / sizeof(timestamps[0]); i++) {
+    VALUE_t result = call_time(lc_time_fulldate,
+        (VALUE_t){VALUE_int, {.i = timestamps[i]}});
+    ASSERT_EQ_INT(VALUE_str, result.type);
+    ASSERT_TRUE(strcmp(result.s, expected[i]) == 0);
+    value_free(&result);
+  }
+  const int64_t ordinal_timestamps[] = {INT64_C(1580601600000),
+      INT64_C(1583193600000), INT64_C(1585958400000), INT64_C(1589155200000),
+      INT64_C(1591920000000), INT64_C(1594598400000), INT64_C(1597968000000),
+      INT64_C(1600732800000), INT64_C(1603411200000), INT64_C(1609372800000)};
+  const char *ordinal_expected[] = {"2nd February 2020", "3rd March 2020",
+      "4th April 2020", "11th May 2020", "12th June 2020",
+      "13th July 2020", "21st August 2020", "22nd September 2020",
+      "23rd October 2020", "31st December 2020"};
+  for (size_t i = 0; i < sizeof(ordinal_timestamps) /
+      sizeof(ordinal_timestamps[0]); i++) {
+    VALUE_t result = call_time(lc_time_fulldate,
+        (VALUE_t){VALUE_int, {.i = ordinal_timestamps[i]}});
+    ASSERT_EQ_INT(VALUE_str, result.type);
+    ASSERT_TRUE(strcmp(result.s, ordinal_expected[i]) == 0);
+    value_free(&result);
+  }
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_time_formatted_rejects_invalid_types_and_publishes_details(void) {
+  static const TimeHandler handlers[] = {lc_time_timestamp, lc_time_time,
+      lc_time_date, lc_time_fulldate};
+  static const char *const names[] = {"time.timestamp", "time.time",
+                                      "time.date", "time.fulldate"};
+
+  setup_libcall_runtime();
+  for (size_t i = 0; i < sizeof(handlers) / sizeof(handlers[0]); i++) {
+    VALUE_t invalid = {VALUE_str, {.s = strdup("not milliseconds")}};
+    ASSERT_NOT_NULL(invalid.s);
+    VALUE_t result = call_time(handlers[i], invalid);
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_invalid_args_detail_contains(names[i]);
+  }
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_time_formatted_unrepresentable_timestamp_publishes_error(void) {
+  setup_libcall_runtime();
+  VALUE_t result = call_time(lc_time_timestamp,
+      (VALUE_t){VALUE_int, {.i = INT64_MAX}});
+  if (result.type == VALUE_nil) {
+    ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+    ASSERT_NOT_NULL(error);
+    ASSERT_EQ_INT(ERR_RUNTIME_UNDEFINED, item_value(error)->i);
+  } else {
+    ASSERT_EQ_INT(VALUE_str, result.type);
+    ASSERT_TRUE(strchr(result.s, '-') != NULL);
+    value_free(&result);
+  }
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_time_formatted_source_integration_and_arity(void) {
+  setup_libcall_runtime();
+  VALUE_t source = {VALUE_str, {.s = strdup(
+      "result.timestamp = time.timestamp{-1};"
+      "result.time = time.time{1582979696789};"
+      "result.date = time.date{1582979696789};"
+      "result.fulldate = time.fulldate{1582979696789};")}};
+  ASSERT_NOT_NULL(source.s);
+  push_stack(config.vm->stack, source);
+  (void)lc_sys_compile(test_ctx(), NULL, NULL);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, result.type);
+  ASSERT_EQ_INT(1, result.i);
+
+  static const char *const names[] = {"timestamp", "time", "date",
+                                      "fulldate"};
+  static const char *const expected[] = {"1969-12-31 23:59:59", "12:34:56",
+                                         "2020-02-29", "29th February 2020"};
+  for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+    char path[32];
+    ASSERT_TRUE(snprintf(path, sizeof(path), "result.%s", names[i]) > 0);
+    ITEM_t *value = find_item(itemstore_root(config.itemstore_ctx), path);
+    ASSERT_NOT_NULL(value);
+    ASSERT_EQ_INT(VALUE_str, item_value(value)->type);
+    ASSERT_TRUE(strcmp(item_value(value)->s, expected[i]) == 0);
+  }
+
+  const char *invalid[] = {"time.timestamp;", "time.timestamp{1, 2};",
+      "time.time;", "time.time{1, 2};", "time.date;", "time.date{1, 2};",
+      "time.fulldate;", "time.fulldate{1, 2};"};
   for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
     OUTPUT_t *out = NULL;
     CompilerDiagnostic diag;

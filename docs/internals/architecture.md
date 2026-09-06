@@ -182,7 +182,9 @@ ensure initialization too. Internal deterministic entropy/draw hooks are
 for serial tests under process quiescence only.
 
 `libcall_time.c` exposes `time.year`, `time.month`, `time.day`, `time.hour`,
-`time.minute`, and `time.second` at ABI pairs `(8, 0)` through `(8, 5)`. They
+`time.minute`, and `time.second` at ABI pairs `(8, 0)` through `(8, 5)`, plus
+the fixed UTC formatters `time.timestamp`, `time.time`, `time.date`, and
+`time.fulldate` at `(8, 6)` through `(8, 9)`. They
 floor Unix milliseconds to seconds, convert with a thread-safe UTC routine,
 and return Gregorian calendar components without consulting the host local
 timezone.
