@@ -553,27 +553,41 @@ void test_list_libcall_ordering(void) {
   ASSERT_EQ_INT(3, sin_list_get(numbers, 0)->i);
   sin_list_release(numbers);
 
-  VALUE_t promoted_boundary_values[] = {
+  VALUE_t promoted_ascending_values[] = {
       {VALUE_int, {.i = INT64_C(9007199254740993)}},
-      {VALUE_float, {.f = 9007199254740992.0}},
-      {VALUE_int, {.i = INT64_C(9007199254740992)}}};
-  SIN_LIST_t *promoted_boundary = sin_list_build_owned(promoted_boundary_values, 3);
-  ASSERT_NOT_NULL(promoted_boundary);
-  const VALUE_t promoted_boundary_expected[] = {
+      {VALUE_int, {.i = INT64_C(9007199254740992)}},
+      {VALUE_float, {.f = 9007199254740992.0}}};
+  SIN_LIST_t *promoted_ascending =
+      sin_list_build_owned(promoted_ascending_values, 3);
+  ASSERT_NOT_NULL(promoted_ascending);
+  const VALUE_t promoted_ascending_expected[] = {
       {VALUE_int, {.i = INT64_C(9007199254740993)}},
-      {VALUE_float, {.f = 9007199254740992.0}},
-      {VALUE_int, {.i = INT64_C(9007199254740992)}}};
+      {VALUE_int, {.i = INT64_C(9007199254740992)}},
+      {VALUE_float, {.f = 9007199254740992.0}}};
   sorted = call_list_unary(
       lc_list_asc,
-      (VALUE_t){VALUE_list, {.list = sin_list_retain(promoted_boundary)}});
-  assert_list_values(&sorted, promoted_boundary_expected, 3);
+      (VALUE_t){VALUE_list, {.list = sin_list_retain(promoted_ascending)}});
+  assert_list_values(&sorted, promoted_ascending_expected, 3);
   value_free(&sorted);
+
+  VALUE_t promoted_descending_values[] = {
+      {VALUE_int, {.i = INT64_C(9007199254740992)}},
+      {VALUE_int, {.i = INT64_C(9007199254740993)}},
+      {VALUE_float, {.f = 9007199254740992.0}}};
+  SIN_LIST_t *promoted_descending =
+      sin_list_build_owned(promoted_descending_values, 3);
+  ASSERT_NOT_NULL(promoted_descending);
+  const VALUE_t promoted_descending_expected[] = {
+      {VALUE_int, {.i = INT64_C(9007199254740992)}},
+      {VALUE_int, {.i = INT64_C(9007199254740993)}},
+      {VALUE_float, {.f = 9007199254740992.0}}};
   sorted = call_list_unary(
       lc_list_desc,
-      (VALUE_t){VALUE_list, {.list = sin_list_retain(promoted_boundary)}});
-  assert_list_values(&sorted, promoted_boundary_expected, 3);
+      (VALUE_t){VALUE_list, {.list = sin_list_retain(promoted_descending)}});
+  assert_list_values(&sorted, promoted_descending_expected, 3);
   value_free(&sorted);
-  sin_list_release(promoted_boundary);
+  sin_list_release(promoted_ascending);
+  sin_list_release(promoted_descending);
 
   VALUE_t exact_integer_values[] = {
       {VALUE_int, {.i = INT64_C(9007199254740993)}},
