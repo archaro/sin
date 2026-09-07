@@ -35,9 +35,10 @@ typedef enum {
 } LIST_SORT_VALIDATION_e;
 
 static LIST_SORT_VALIDATION_e list_sort_validate(
-    const SIN_LIST_t *list, LIST_SORT_DOMAIN_e *domain) {
+    const SIN_LIST_t *list, LIST_SORT_DOMAIN_e *domain, bool *numeric_float) {
   size_t count;
-  if (!list || !domain) return LIST_SORT_INVALID;
+  if (!list || !domain || !numeric_float) return LIST_SORT_INVALID;
+  *numeric_float = false;
   count = sin_list_count(list);
   if (count == 0) {
     *domain = LIST_SORT_DOMAIN_EMPTY;
@@ -60,6 +61,7 @@ static LIST_SORT_VALIDATION_e list_sort_validate(
     if (value->type == VALUE_float && isnan(value->f)) {
       return LIST_SORT_UNDEFINED;
     }
+    if (value->type == VALUE_float) *numeric_float = true;
     if ((*domain == LIST_SORT_DOMAIN_NUMERIC &&
          (value->type == VALUE_int || value->type == VALUE_float)) ||
         (*domain == LIST_SORT_DOMAIN_STRING && value->type == VALUE_str) ||
@@ -82,9 +84,16 @@ static int list_string_order(const char *left, const char *right) {
 }
 
 static bool list_sort_order(const VALUE_t *left, const VALUE_t *right,
-                            LIST_SORT_DOMAIN_e domain, int *comparison) {
+                            LIST_SORT_DOMAIN_e domain, bool numeric_float,
+                            int *comparison) {
   if (domain == LIST_SORT_DOMAIN_STRING) {
     *comparison = list_string_order(left->s, right->s);
+    return true;
+  }
+  if (domain == LIST_SORT_DOMAIN_NUMERIC && numeric_float) {
+    double lhs = left->type == VALUE_int ? (double)left->i : left->f;
+    double rhs = right->type == VALUE_int ? (double)right->i : right->f;
+    *comparison = (lhs > rhs) - (lhs < rhs);
     return true;
   }
   return value_order(left, right, comparison);
@@ -115,7 +124,7 @@ static SIN_LIST_t *list_clone_in_order(const SIN_LIST_t *source, bool reverse) {
 
 static void list_merge_sort(VALUE_t *values, VALUE_t *scratch, size_t first,
                             size_t last, LIST_SORT_DOMAIN_e domain,
-                            bool descending) {
+                            bool numeric_float, bool descending) {
   size_t middle;
   size_t left;
   size_t right;
@@ -123,14 +132,17 @@ static void list_merge_sort(VALUE_t *values, VALUE_t *scratch, size_t first,
 
   if (last - first < 2u) return;
   middle = first + (last - first) / 2u;
-  list_merge_sort(values, scratch, first, middle, domain, descending);
-  list_merge_sort(values, scratch, middle, last, domain, descending);
+  list_merge_sort(values, scratch, first, middle, domain, numeric_float,
+                  descending);
+  list_merge_sort(values, scratch, middle, last, domain, numeric_float,
+                  descending);
   left = first;
   right = middle;
   out = first;
   while (left < middle && right < last) {
     int comparison = 0;
-    (void)list_sort_order(&values[left], &values[right], domain, &comparison);
+    (void)list_sort_order(&values[left], &values[right], domain, numeric_float,
+                          &comparison);
     if ((!descending && comparison <= 0) ||
         (descending && comparison >= 0)) {
       scratch[out++] = values[left++];
@@ -144,7 +156,8 @@ static void list_merge_sort(VALUE_t *values, VALUE_t *scratch, size_t first,
 }
 
 static SIN_LIST_t *list_sorted_clone(const SIN_LIST_t *source,
-                                     LIST_SORT_DOMAIN_e domain, bool descending) {
+                                     LIST_SORT_DOMAIN_e domain,
+                                     bool numeric_float, bool descending) {
   size_t count = sin_list_count(source);
   VALUE_t *values;
   VALUE_t *scratch;
@@ -166,7 +179,7 @@ static SIN_LIST_t *list_sorted_clone(const SIN_LIST_t *source,
     free(values);
     return NULL;
   }
-  list_merge_sort(values, scratch, 0, count, domain, descending);
+  list_merge_sort(values, scratch, 0, count, domain, numeric_float, descending);
   free(scratch);
   result = sin_list_build_owned(values, count);
   free(values);
@@ -334,12 +347,13 @@ static uint8_t *lc_list_sort(RuntimeContext *ctx, uint8_t *nextop,
                              VALUE_t list, bool descending, const char *name) {
   LIST_SORT_DOMAIN_e domain;
   LIST_SORT_VALIDATION_e validation;
+  bool numeric_float;
   SIN_LIST_t *result;
   if (list.type != VALUE_list || !list.list) {
     value_free(&list);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL, name);
   }
-  validation = list_sort_validate(list.list, &domain);
+  validation = list_sort_validate(list.list, &domain, &numeric_float);
   if (validation == LIST_SORT_UNDEFINED) {
     value_free(&list);
     return lc_undefined_nil_return(ctx, nextop);
@@ -348,7 +362,7 @@ static uint8_t *lc_list_sort(RuntimeContext *ctx, uint8_t *nextop,
     value_free(&list);
     return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL, name);
   }
-  result = list_sorted_clone(list.list, domain, descending);
+  result = list_sorted_clone(list.list, domain, numeric_float, descending);
   value_free(&list);
   if (!result) return list_range_nil(ctx, nextop);
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_list, {.list = result}});
