@@ -1,10 +1,12 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <limits.h>
+#include <math.h>
 
 #include "libcall_common.h"
 #include "libcall_handlers.h"
 #include "list.h"
+#include "memory.h"
 #include "stack.h"
 
 static bool list_index(VALUE_t value, size_t *out) {
@@ -17,6 +19,133 @@ static bool list_index(VALUE_t value, size_t *out) {
 static uint8_t *list_range_nil(RuntimeContext *ctx, uint8_t *nextop) {
   push_stack(ctx->vm->stack, VALUE_NIL);
   return nextop;
+}
+
+typedef enum {
+  LIST_SORT_DOMAIN_EMPTY,
+  LIST_SORT_DOMAIN_NUMERIC,
+  LIST_SORT_DOMAIN_STRING,
+  LIST_SORT_DOMAIN_BOOL
+} LIST_SORT_DOMAIN_e;
+
+typedef enum {
+  LIST_SORT_VALID,
+  LIST_SORT_INVALID,
+  LIST_SORT_UNDEFINED
+} LIST_SORT_VALIDATION_e;
+
+static LIST_SORT_VALIDATION_e list_sort_validate(
+    const SIN_LIST_t *list, LIST_SORT_DOMAIN_e *domain) {
+  size_t count;
+  if (!list || !domain) return LIST_SORT_INVALID;
+  count = sin_list_count(list);
+  if (count == 0) {
+    *domain = LIST_SORT_DOMAIN_EMPTY;
+    return LIST_SORT_VALID;
+  }
+  const VALUE_t *first = sin_list_get(list, 0);
+  if (!first) return LIST_SORT_INVALID;
+  if (first->type == VALUE_int || first->type == VALUE_float) {
+    *domain = LIST_SORT_DOMAIN_NUMERIC;
+  } else if (first->type == VALUE_str) {
+    *domain = LIST_SORT_DOMAIN_STRING;
+  } else if (first->type == VALUE_bool) {
+    *domain = LIST_SORT_DOMAIN_BOOL;
+  } else {
+    return LIST_SORT_INVALID;
+  }
+  for (size_t i = 0; i < count; ++i) {
+    const VALUE_t *value = sin_list_get(list, i);
+    if (!value) return LIST_SORT_INVALID;
+    if (value->type == VALUE_float && isnan(value->f)) {
+      return LIST_SORT_UNDEFINED;
+    }
+    if ((*domain == LIST_SORT_DOMAIN_NUMERIC &&
+         (value->type == VALUE_int || value->type == VALUE_float)) ||
+        (*domain == LIST_SORT_DOMAIN_STRING && value->type == VALUE_str) ||
+        (*domain == LIST_SORT_DOMAIN_BOOL && value->type == VALUE_bool)) {
+      continue;
+    }
+    return LIST_SORT_INVALID;
+  }
+  return LIST_SORT_VALID;
+}
+
+static int list_string_order(const char *left, const char *right) {
+  const unsigned char *lhs = (const unsigned char *)(left ? left : "");
+  const unsigned char *rhs = (const unsigned char *)(right ? right : "");
+  while (*lhs != '\0' && *lhs == *rhs) {
+    ++lhs;
+    ++rhs;
+  }
+  return (*lhs > *rhs) - (*lhs < *rhs);
+}
+
+static bool list_sort_order(const VALUE_t *left, const VALUE_t *right,
+                            LIST_SORT_DOMAIN_e domain, int *comparison) {
+  if (domain == LIST_SORT_DOMAIN_STRING) {
+    *comparison = list_string_order(left->s, right->s);
+    return true;
+  }
+  return value_order(left, right, comparison);
+}
+
+static SIN_LIST_t *list_clone_in_order(const SIN_LIST_t *source, bool reverse) {
+  size_t count;
+  VALUE_t *values;
+  SIN_LIST_t *result;
+  if (!source) return NULL;
+  count = sin_list_count(source);
+  if (count == 0) return sin_list_build_owned(NULL, 0);
+  values = alloc_calloc(count, sizeof(*values));
+  if (!values) return NULL;
+  for (size_t i = 0; i < count; ++i) {
+    size_t source_index = reverse ? count - i - 1u : i;
+    const VALUE_t *value = sin_list_get(source, source_index);
+    if (!value || !value_clone_fallible(value, &values[i])) {
+      lc_cleanup_values(values, count);
+      free(values);
+      return NULL;
+    }
+  }
+  result = sin_list_build_owned(values, count);
+  free(values);
+  return result;
+}
+
+static SIN_LIST_t *list_sorted_clone(const SIN_LIST_t *source,
+                                     LIST_SORT_DOMAIN_e domain, bool descending) {
+  size_t count = sin_list_count(source);
+  VALUE_t *values;
+  SIN_LIST_t *result;
+  if (count == 0) return sin_list_build_owned(NULL, 0);
+  values = alloc_calloc(count, sizeof(*values));
+  if (!values) return NULL;
+  for (size_t i = 0; i < count; ++i) {
+    const VALUE_t *value = sin_list_get(source, i);
+    if (!value || !value_clone_fallible(value, &values[i])) {
+      lc_cleanup_values(values, count);
+      free(values);
+      return NULL;
+    }
+  }
+  for (size_t i = 1; i < count; ++i) {
+    VALUE_t candidate = values[i];
+    size_t at = i;
+    while (at > 0) {
+      int comparison = 0;
+      (void)list_sort_order(&values[at - 1u], &candidate, domain,
+                            &comparison);
+      if ((!descending && comparison <= 0) ||
+          (descending && comparison >= 0)) break;
+      values[at] = values[at - 1u];
+      --at;
+    }
+    values[at] = candidate;
+  }
+  result = sin_list_build_owned(values, count);
+  free(values);
+  return result;
 }
 
 uint8_t *lc_list_length(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
@@ -158,4 +287,57 @@ uint8_t *lc_list_slice(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   if (!result) return list_range_nil(ctx, nextop);
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_list, {.list = result}});
   return nextop;
+}
+
+uint8_t *lc_list_reverse(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  VALUE_t list = pop_stack(ctx->vm->stack);
+  SIN_LIST_t *result;
+  if (list.type != VALUE_list || !list.list) {
+    value_free(&list);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL,
+        "list.reverse expects a list");
+  }
+  result = list_clone_in_order(list.list, true);
+  value_free(&list);
+  if (!result) return list_range_nil(ctx, nextop);
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_list, {.list = result}});
+  return nextop;
+}
+
+static uint8_t *lc_list_sort(RuntimeContext *ctx, uint8_t *nextop,
+                             VALUE_t list, bool descending, const char *name) {
+  LIST_SORT_DOMAIN_e domain;
+  LIST_SORT_VALIDATION_e validation;
+  SIN_LIST_t *result;
+  if (list.type != VALUE_list || !list.list) {
+    value_free(&list);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL, name);
+  }
+  validation = list_sort_validate(list.list, &domain);
+  if (validation == LIST_SORT_UNDEFINED) {
+    value_free(&list);
+    return lc_undefined_nil_return(ctx, nextop);
+  }
+  if (validation != LIST_SORT_VALID) {
+    value_free(&list);
+    return lc_invalid_args_detail_return(ctx, nextop, VALUE_NIL, name);
+  }
+  result = list_sorted_clone(list.list, domain, descending);
+  value_free(&list);
+  if (!result) return list_range_nil(ctx, nextop);
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_list, {.list = result}});
+  return nextop;
+}
+
+uint8_t *lc_list_asc(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  return lc_list_sort(ctx, nextop, pop_stack(ctx->vm->stack), false,
+                      "list.asc expects a list of numbers, strings, or booleans");
+}
+
+uint8_t *lc_list_desc(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  return lc_list_sort(ctx, nextop, pop_stack(ctx->vm->stack), true,
+                      "list.desc expects a list of numbers, strings, or booleans");
 }

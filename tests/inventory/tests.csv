@@ -408,8 +408,9 @@ rewrite.runtime.test_str_libcall_invalidargs_uses_context_itemroot,test.runtime.
 rewrite.runtime.test_list_libcall_registry_contract,test.runtime.test_list_libcall_registry_contract
 rewrite.runtime.test_list_libcall_valid_operations_and_ownership,language.expression.list;api.libcall.list;libcall.list.length;libcall.list.get;libcall.list.append;libcall.list.set;libcall.list.concat;libcall.list.slice
 rewrite.runtime.test_list_libcall_invalid_types_and_ranges,api.libcall.list;libcall.list.get
-rewrite.runtime.test_list_libcall_source_integration,api.libcall.list
+rewrite.runtime.test_list_libcall_source_integration,api.libcall.list;libcall.list.reverse;libcall.list.asc;libcall.list.desc
 rewrite.runtime.test_list_libcall_islist,libcall.list.islist
+rewrite.runtime.test_list_libcall_ordering,test.runtime.test_list_libcall_ordering;api.libcall.list;libcall.list.reverse;libcall.list.asc;libcall.list.desc
 rewrite.runtime.test_math_abs_float_inputs_and_signed_zero,api.libcall.math;libcall.math.abs
 rewrite.runtime.test_math_abs_integer_inputs,api.libcall.math;libcall.math.abs
 rewrite.runtime.test_math_abs_rejects_nonnumeric_and_consumes_owned_value,api.libcall.math;libcall.math.abs

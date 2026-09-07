@@ -6,5 +6,8 @@ sys.log{#[
   list.set{#[1, 2], 0, 9} == #[9, 2],
   list.concat{#[1], #[2]} == #[1, 2],
   list.slice{#[1, 2], 0, 1} == #[1],
-  list.islist{#[]}
+  list.islist{#[]},
+  list.reverse{#[1, 2]} == #[2, 1],
+  list.asc{#[2, 1]} == #[1, 2],
+  list.desc{#[1, 2]} == #[2, 1]
 ]};

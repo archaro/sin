@@ -46,6 +46,9 @@
   X("list", "concat",      5,  4, 2, lc_list_concat) \
   X("list", "slice",       5,  5, 3, lc_list_slice) \
   X("list", "islist",      5,  6, 1, lc_list_islist) \
+  X("list", "reverse",     5,  7, 1, lc_list_reverse) \
+  X("list", "asc",         5,  8, 1, lc_list_asc) \
+  X("list", "desc",        5,  9, 1, lc_list_desc) \
   X("math", "abs",         6,  0, 1, lc_math_abs) \
   X("math", "min",         6,  1, 2, lc_math_min) \
   X("math", "max",         6,  2, 2, lc_math_max) \

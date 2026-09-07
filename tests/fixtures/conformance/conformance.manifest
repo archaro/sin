@@ -222,6 +222,9 @@ coverage|libcall.list.set|libcall-list|tests/fixtures/conformance/libcall-list.s
 coverage|libcall.list.concat|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
 coverage|libcall.list.slice|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
 coverage|libcall.list.islist|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
+coverage|libcall.list.reverse|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
+coverage|libcall.list.asc|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
+coverage|libcall.list.desc|libcall-list|tests/fixtures/conformance/libcall-list.src|native|-|yes
 coverage|libcall.str.capitalise|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
 coverage|libcall.str.upper|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes
 coverage|libcall.str.lower|libcall-str|tests/fixtures/conformance/libcall-str.src|native|-|yes

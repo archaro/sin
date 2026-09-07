@@ -243,6 +243,9 @@ lc_list_islist,libcall_list.o,libcall,src/libcall/libcall_list.c:36: lc_list_isl
 lc_list_length,libcall_list.o,libcall,src/libcall/libcall_list.c:22: lc_list_length definition/provenance,api.libcall.list
 lc_list_set,libcall_list.o,libcall,src/libcall/libcall_list.c:90: lc_list_set definition/provenance,api.libcall.list
 lc_list_slice,libcall_list.o,libcall,src/libcall/libcall_list.c:135: lc_list_slice definition/provenance,api.libcall.list
+lc_list_reverse,libcall_list.o,libcall,src/libcall/libcall_list.c:292: lc_list_reverse definition/provenance,api.libcall.list
+lc_list_asc,libcall_list.o,libcall,src/libcall/libcall_list.c:333: lc_list_asc definition/provenance,api.libcall.list
+lc_list_desc,libcall_list.o,libcall,src/libcall/libcall_list.c:339: lc_list_desc definition/provenance,api.libcall.list
 lc_math_abs,libcall_math.o,libcall,src/libcall/libcall_math.c:17: lc_math_abs definition/provenance,api.libcall.math
 lc_math_acos,libcall_math.o,libcall,src/libcall/libcall_math.c:407: lc_math_acos definition/provenance,api.libcall.math
 lc_math_asin,libcall_math.o,libcall,src/libcall/libcall_math.c:401: lc_math_asin definition/provenance,api.libcall.math

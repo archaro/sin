@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <math.h>
 
 #include "config.h"
 #include "error.h"
@@ -60,12 +61,12 @@ void test_list_libcall_registry_contract(void) {
   uint8_t lib_index = 0, call_index = 0;
   uint8_t args = 0;
   const char *names[] = {"length", "get", "append", "set", "concat", "slice",
-                         "islist"};
-  const uint8_t arities[] = {1, 2, 2, 3, 2, 3, 1};
+                         "islist", "reverse", "asc", "desc"};
+  const uint8_t arities[] = {1, 2, 2, 3, 2, 3, 1, 1, 1, 1};
   OP_t handlers[] = {lc_list_length, lc_list_get, lc_list_append,
                      lc_list_set, lc_list_concat, lc_list_slice,
-                     lc_list_islist};
-  for (size_t i = 0; i < 7; ++i) {
+                     lc_list_islist, lc_list_reverse, lc_list_asc, lc_list_desc};
+  for (size_t i = 0; i < 10; ++i) {
     ASSERT_TRUE(libcall_lookup_pair("list", names[i], &lib_index, &call_index, &args));
     ASSERT_EQ_INT(5, lib_index);
     ASSERT_EQ_INT(i, call_index);
@@ -320,7 +321,9 @@ void test_list_libcall_source_integration(void) {
       "result.a = list.length{#[1, 2]}; result.b = list.get{#[1, 2], 0}; "
       "result.c = list.append{#[1], 2}; result.d = list.set{#[1, 2], 0, 3}; "
       "result.e = list.concat{#[1], #[2]}; result.f = list.slice{#[1, 2], 0, 1}; "
-      "result.g = list.islist{#[1]}; result.h = list.islist{1};")}};
+      "result.g = list.islist{#[1]}; result.h = list.islist{1}; "
+      "result.i = list.reverse{#[1, 2, 3]}; result.j = list.asc{#[3, 1, 2]}; "
+      "result.k = list.desc{#[1, 3, 2]};")}};
   push_stack(config.vm->stack, source);
   (void)lc_sys_compile(test_ctx(), NULL, NULL);
   VALUE_t compiled = pop_stack(config.vm->stack);
@@ -334,6 +337,9 @@ void test_list_libcall_source_integration(void) {
   ITEM_t *f = find_item(itemstore_root(config.itemstore_ctx), "result.f");
   ITEM_t *g = find_item(itemstore_root(config.itemstore_ctx), "result.g");
   ITEM_t *h = find_item(itemstore_root(config.itemstore_ctx), "result.h");
+  ITEM_t *i = find_item(itemstore_root(config.itemstore_ctx), "result.i");
+  ITEM_t *j = find_item(itemstore_root(config.itemstore_ctx), "result.j");
+  ITEM_t *k = find_item(itemstore_root(config.itemstore_ctx), "result.k");
   ASSERT_NOT_NULL(a);
   ASSERT_NOT_NULL(b);
   ASSERT_NOT_NULL(c);
@@ -342,6 +348,9 @@ void test_list_libcall_source_integration(void) {
   ASSERT_NOT_NULL(f);
   ASSERT_NOT_NULL(g);
   ASSERT_NOT_NULL(h);
+  ASSERT_NOT_NULL(i);
+  ASSERT_NOT_NULL(j);
+  ASSERT_NOT_NULL(k);
   ASSERT_EQ_INT(2, item_value(a)->i);
   ASSERT_EQ_INT(1, item_value(b)->i);
   const int pair[] = {1, 2};
@@ -355,6 +364,12 @@ void test_list_libcall_source_integration(void) {
   ASSERT_EQ_INT(1, item_value(g)->i);
   ASSERT_EQ_INT(VALUE_bool, item_value(h)->type);
   ASSERT_EQ_INT(0, item_value(h)->i);
+  const int reversed[] = {3, 2, 1};
+  const int ascending[] = {1, 2, 3};
+  const int descending[] = {3, 2, 1};
+  assert_list_ints(item_value(i), reversed, 3);
+  assert_list_ints(item_value(j), ascending, 3);
+  assert_list_ints(item_value(k), descending, 3);
   teardown_libcall_runtime();
 }
 
@@ -395,5 +410,182 @@ void test_list_libcall_islist(void) {
 
   sin_list_release(nonempty);
   sin_list_release(empty);
+  teardown_libcall_runtime();
+}
+
+static VALUE_t call_list_unary(OP_t handler, VALUE_t value) {
+  push_stack(config.vm->stack, value);
+  (void)handler(test_ctx(), NULL, itemstore_root(config.itemstore_ctx));
+  return pop_stack(config.vm->stack);
+}
+
+static void assert_list_values(const VALUE_t *value, const VALUE_t *expected,
+                               size_t count) {
+  ASSERT_EQ_INT(VALUE_list, value->type);
+  ASSERT_EQ_INT(count, sin_list_count(value->list));
+  for (size_t i = 0; i < count; ++i) {
+    const VALUE_t *actual = sin_list_get(value->list, i);
+    ASSERT_NOT_NULL(actual);
+    ASSERT_TRUE(value_equal(actual, &expected[i]));
+  }
+}
+
+void test_list_libcall_ordering(void) {
+  setup_libcall_runtime();
+
+  SIN_LIST_t *nested = list_of_ints(8, 9);
+  VALUE_t heterogeneous_values[] = {
+      {VALUE_int, {.i = 1}},
+      {VALUE_str, {.s = strdup("text")}},
+      {VALUE_bool, {.i = 1}},
+      VALUE_NIL,
+      {VALUE_list, {.list = sin_list_retain(nested)}},
+      {VALUE_itemref, {.itemref = sin_itemref_create("root.child")}}};
+  SIN_LIST_t *nested_handle = heterogeneous_values[4].list;
+  SIN_ITEMREF_t *ref_handle = heterogeneous_values[5].itemref;
+  SIN_LIST_t *heterogeneous = sin_list_build_owned(heterogeneous_values,
+                                                   sizeof(heterogeneous_values) /
+                                                       sizeof(heterogeneous_values[0]));
+  ASSERT_NOT_NULL(heterogeneous);
+  VALUE_t reversed = call_list_unary(
+      lc_list_reverse,
+      (VALUE_t){VALUE_list, {.list = sin_list_retain(heterogeneous)}});
+  VALUE_t expected_reversed[] = {
+      {VALUE_itemref, {.itemref = ref_handle}},
+      {VALUE_list, {.list = nested_handle}},
+      VALUE_NIL,
+      {VALUE_bool, {.i = 1}},
+      {VALUE_str, {.s = "text"}},
+      {VALUE_int, {.i = 1}}};
+  assert_list_values(&reversed, expected_reversed,
+                     sizeof(expected_reversed) / sizeof(expected_reversed[0]));
+  ASSERT_EQ_INT(6, sin_list_count(heterogeneous));
+  ASSERT_EQ_INT(VALUE_int, sin_list_get(heterogeneous, 0)->type);
+  ASSERT_EQ_INT(1, sin_list_get(heterogeneous, 0)->i);
+  value_free(&reversed);
+  sin_list_release(nested);
+
+  SIN_LIST_t *numbers;
+  VALUE_t number_values[] = {
+      {VALUE_int, {.i = 3}},
+      {VALUE_float, {.f = 1.5}},
+      {VALUE_int, {.i = 1}},
+      {VALUE_float, {.f = 1.0}},
+      {VALUE_int, {.i = -2}},
+      {VALUE_float, {.f = INFINITY}}};
+  numbers = sin_list_build_owned(number_values,
+                                 sizeof(number_values) / sizeof(number_values[0]));
+  ASSERT_NOT_NULL(numbers);
+  VALUE_t expected_ascending[] = {
+      {VALUE_int, {.i = -2}}, {VALUE_int, {.i = 1}},
+      {VALUE_float, {.f = 1.0}}, {VALUE_float, {.f = 1.5}},
+      {VALUE_int, {.i = 3}}, {VALUE_float, {.f = INFINITY}}};
+  VALUE_t sorted = call_list_unary(
+      lc_list_asc, (VALUE_t){VALUE_list, {.list = sin_list_retain(numbers)}});
+  assert_list_values(&sorted, expected_ascending,
+                     sizeof(expected_ascending) / sizeof(expected_ascending[0]));
+  value_free(&sorted);
+  VALUE_t expected_descending[] = {
+      {VALUE_float, {.f = INFINITY}}, {VALUE_int, {.i = 3}},
+      {VALUE_float, {.f = 1.5}}, {VALUE_int, {.i = 1}},
+      {VALUE_float, {.f = 1.0}}, {VALUE_int, {.i = -2}}};
+  sorted = call_list_unary(
+      lc_list_desc, (VALUE_t){VALUE_list, {.list = sin_list_retain(numbers)}});
+  assert_list_values(&sorted, expected_descending,
+                     sizeof(expected_descending) / sizeof(expected_descending[0]));
+  value_free(&sorted);
+  ASSERT_EQ_INT(3, sin_list_get(numbers, 0)->i);
+  sin_list_release(numbers);
+
+  VALUE_t bool_values[] = {{VALUE_bool, {.i = 1}}, {VALUE_bool, {.i = 0}},
+                           {VALUE_bool, {.i = 1}}};
+  SIN_LIST_t *bools = sin_list_build_owned(bool_values, 3);
+  ASSERT_NOT_NULL(bools);
+  sorted = call_list_unary(
+      lc_list_asc, (VALUE_t){VALUE_list, {.list = sin_list_retain(bools)}});
+  VALUE_t expected_bools[] = {{VALUE_bool, {.i = 0}}, {VALUE_bool, {.i = 1}},
+                              {VALUE_bool, {.i = 1}}};
+  assert_list_values(&sorted, expected_bools, 3);
+  value_free(&sorted);
+  sin_list_release(bools);
+
+  VALUE_t string_values[] = {{VALUE_str, {.s = strdup("a")}},
+                             {VALUE_str, {.s = strdup("A")}},
+                             {VALUE_str, {.s = strdup("aa")}},
+                             {VALUE_str, {.s = strdup("a")}}};
+  SIN_LIST_t *strings = sin_list_build_owned(string_values, 4);
+  ASSERT_NOT_NULL(strings);
+  sorted = call_list_unary(
+      lc_list_asc, (VALUE_t){VALUE_list, {.list = sin_list_retain(strings)}});
+  VALUE_t expected_strings[] = {{VALUE_str, {.s = "A"}},
+                                {VALUE_str, {.s = "a"}},
+                                {VALUE_str, {.s = "a"}},
+                                {VALUE_str, {.s = "aa"}}};
+  assert_list_values(&sorted, expected_strings, 4);
+  value_free(&sorted);
+  sin_list_release(strings);
+
+  SIN_LIST_t *empty = sin_list_build_owned(NULL, 0);
+  ASSERT_NOT_NULL(empty);
+  sorted = call_list_unary(
+      lc_list_asc, (VALUE_t){VALUE_list, {.list = sin_list_retain(empty)}});
+  ASSERT_EQ_INT(VALUE_list, sorted.type);
+  ASSERT_EQ_INT(0, sin_list_count(sorted.list));
+  value_free(&sorted);
+  sin_list_release(empty);
+
+  VALUE_t invalid_values[] = {
+      VALUE_NIL,
+      {VALUE_itemref, {.itemref = sin_itemref_create("root.child")}},
+      {VALUE_list, {.list = sin_list_build_owned(NULL, 0)}}};
+  for (size_t i = 0; i < sizeof(invalid_values) / sizeof(invalid_values[0]); ++i) {
+    VALUE_t one[] = {invalid_values[i]};
+    SIN_LIST_t *invalid = sin_list_build_owned(one, 1);
+    invalid_values[i] = VALUE_NIL;
+    ASSERT_NOT_NULL(invalid);
+    VALUE_t result = call_list_unary(
+        lc_list_asc, (VALUE_t){VALUE_list, {.list = sin_list_retain(invalid)}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_invalid_args_detail_contains("list.asc");
+    sin_list_release(invalid);
+  }
+
+  VALUE_t mixed[] = {{VALUE_int, {.i = 1}}, {VALUE_str, {.s = strdup("x")}}};
+  SIN_LIST_t *mixed_list = sin_list_build_owned(mixed, 2);
+  ASSERT_NOT_NULL(mixed_list);
+  VALUE_t result = call_list_unary(
+      lc_list_desc,
+      (VALUE_t){VALUE_list, {.list = sin_list_retain(mixed_list)}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_invalid_args_detail_contains("list.desc");
+  sin_list_release(mixed_list);
+
+  VALUE_t nan_value = {VALUE_float, {.f = NAN}};
+  SIN_LIST_t *nan_list = sin_list_build_owned(&nan_value, 1);
+  ASSERT_NOT_NULL(nan_list);
+  result = call_list_unary(
+      lc_list_asc, (VALUE_t){VALUE_list, {.list = sin_list_retain(nan_list)}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_UNDEFINED, item_value(error)->i);
+  sin_list_release(nan_list);
+
+  result = call_list_unary(lc_list_asc, (VALUE_t){VALUE_int, {.i = 1}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_invalid_args_detail_contains("list.asc");
+
+  SIN_LIST_t *failure = list_of_ints(4, 2);
+  ASSERT_NOT_NULL(failure);
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior error", NULL);
+  alloc_test_fail_after(0);
+  result = call_list_unary(
+      lc_list_reverse, (VALUE_t){VALUE_list, {.list = sin_list_retain(failure)}});
+  alloc_test_fail_after(-1);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(error)->i);
+  ASSERT_EQ_INT(4, sin_list_get(failure, 0)->i);
+  sin_list_release(failure);
   teardown_libcall_runtime();
 }
