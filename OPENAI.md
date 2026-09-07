@@ -6,11 +6,15 @@ Read this file alongside the repository-root `AGENTS.md`.
 
 ## Agent roles
 
-Orchestration Agent: Terra (Medium)
-Planning, work-packaging, and critical review agent: Astra (High)
-Code-writing agent: Luna (High)
-Compilation and test-execution agent: Luna (Low)
-All other work should use the same agent as for code-writing.
+- Terra (Medium) is the orchestrator.
+- Use the Astra (Medium) agent to create work-packages for the less-capable
+  models.
+- When Astra has produced bounded work-packages, the orchestrator hands them
+  to Luna (High) agent for writing code.
+- Tests are run with the Luna (Low) agent and relevant output from the test is
+  fed back to the calling agent.
+- Astra is called again by the orchestrator to review the work done against the
+  work-package, and to recommend changes where appropriate and necessary.
 
 Disable history forking and provide a self-contained prompt with only the
 bounded task context.
