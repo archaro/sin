@@ -727,19 +727,27 @@ void test_list_libcall_ordering(void) {
   }
   sin_list_release(prior_error_list);
 
-  VALUE_t clone_failure_value = {VALUE_str, {.s = strdup("clone failure")}};
-  SIN_LIST_t *clone_failure = sin_list_build_owned(&clone_failure_value, 1);
+  VALUE_t clone_failure_values[] = {
+      {VALUE_str, {.s = strdup("first")}},
+      {VALUE_str, {.s = strdup("second")}}};
+  SIN_LIST_t *clone_failure = sin_list_build_owned(clone_failure_values, 2);
   ASSERT_NOT_NULL(clone_failure);
   set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
                  "prior error", NULL);
+  const long clone_failure_points[] = {3, 4, 5};
   for (size_t i = 0; i < 3; ++i) {
-    alloc_test_fail_after(2);
+    alloc_test_fail_after(clone_failure_points[i]);
     result = call_list_unary(
         ordering_handlers[i],
         (VALUE_t){VALUE_list, {.list = sin_list_retain(clone_failure)}});
     alloc_test_fail_after(-1);
     ASSERT_EQ_INT(VALUE_nil, result.type);
     ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(error)->i);
+    ASSERT_EQ_INT(2, sin_list_count(clone_failure));
+    ASSERT_EQ_INT(VALUE_str, sin_list_get(clone_failure, 0)->type);
+    ASSERT_EQ_INT(VALUE_str, sin_list_get(clone_failure, 1)->type);
+    ASSERT_TRUE(strcmp(sin_list_get(clone_failure, 0)->s, "first") == 0);
+    ASSERT_TRUE(strcmp(sin_list_get(clone_failure, 1)->s, "second") == 0);
   }
   sin_list_release(clone_failure);
 
