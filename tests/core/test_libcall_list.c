@@ -734,11 +734,13 @@ void test_list_libcall_ordering(void) {
   ASSERT_NOT_NULL(clone_failure);
   set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
                  "prior error", NULL);
-  const long clone_failure_points[] = {3, 4, 5};
-  for (size_t i = 0; i < 3; ++i) {
+  const OP_t clone_failure_handlers[] = {
+      lc_list_reverse, lc_list_asc, lc_list_desc, lc_list_asc, lc_list_desc};
+  const long clone_failure_points[] = {3, 3, 3, 4, 5};
+  for (size_t i = 0; i < 5; ++i) {
     alloc_test_fail_after(clone_failure_points[i]);
     result = call_list_unary(
-        ordering_handlers[i],
+        clone_failure_handlers[i],
         (VALUE_t){VALUE_list, {.list = sin_list_retain(clone_failure)}});
     alloc_test_fail_after(-1);
     ASSERT_EQ_INT(VALUE_nil, result.type);
