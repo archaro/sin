@@ -113,10 +113,41 @@ static SIN_LIST_t *list_clone_in_order(const SIN_LIST_t *source, bool reverse) {
   return result;
 }
 
+static void list_merge_sort(VALUE_t *values, VALUE_t *scratch, size_t first,
+                            size_t last, LIST_SORT_DOMAIN_e domain,
+                            bool descending) {
+  size_t middle;
+  size_t left;
+  size_t right;
+  size_t out;
+
+  if (last - first < 2u) return;
+  middle = first + (last - first) / 2u;
+  list_merge_sort(values, scratch, first, middle, domain, descending);
+  list_merge_sort(values, scratch, middle, last, domain, descending);
+  left = first;
+  right = middle;
+  out = first;
+  while (left < middle && right < last) {
+    int comparison = 0;
+    (void)list_sort_order(&values[left], &values[right], domain, &comparison);
+    if ((!descending && comparison <= 0) ||
+        (descending && comparison >= 0)) {
+      scratch[out++] = values[left++];
+    } else {
+      scratch[out++] = values[right++];
+    }
+  }
+  while (left < middle) scratch[out++] = values[left++];
+  while (right < last) scratch[out++] = values[right++];
+  for (size_t i = first; i < last; ++i) values[i] = scratch[i];
+}
+
 static SIN_LIST_t *list_sorted_clone(const SIN_LIST_t *source,
                                      LIST_SORT_DOMAIN_e domain, bool descending) {
   size_t count = sin_list_count(source);
   VALUE_t *values;
+  VALUE_t *scratch;
   SIN_LIST_t *result;
   if (count == 0) return sin_list_build_owned(NULL, 0);
   values = alloc_calloc(count, sizeof(*values));
@@ -129,20 +160,14 @@ static SIN_LIST_t *list_sorted_clone(const SIN_LIST_t *source,
       return NULL;
     }
   }
-  for (size_t i = 1; i < count; ++i) {
-    VALUE_t candidate = values[i];
-    size_t at = i;
-    while (at > 0) {
-      int comparison = 0;
-      (void)list_sort_order(&values[at - 1u], &candidate, domain,
-                            &comparison);
-      if ((!descending && comparison <= 0) ||
-          (descending && comparison >= 0)) break;
-      values[at] = values[at - 1u];
-      --at;
-    }
-    values[at] = candidate;
+  scratch = alloc_calloc(count, sizeof(*scratch));
+  if (!scratch) {
+    lc_cleanup_values(values, count);
+    free(values);
+    return NULL;
   }
+  list_merge_sort(values, scratch, 0, count, domain, descending);
+  free(scratch);
   result = sin_list_build_owned(values, count);
   free(values);
   return result;

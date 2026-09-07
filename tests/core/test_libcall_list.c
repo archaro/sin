@@ -419,6 +419,8 @@ static VALUE_t call_list_unary(OP_t handler, VALUE_t value) {
   return pop_stack(config.vm->stack);
 }
 
+static void assert_value_payload(const VALUE_t *actual, const VALUE_t *expected);
+
 static void assert_list_values(const VALUE_t *value, const VALUE_t *expected,
                                size_t count) {
   ASSERT_EQ_INT(VALUE_list, value->type);
@@ -426,12 +428,46 @@ static void assert_list_values(const VALUE_t *value, const VALUE_t *expected,
   for (size_t i = 0; i < count; ++i) {
     const VALUE_t *actual = sin_list_get(value->list, i);
     ASSERT_NOT_NULL(actual);
-    ASSERT_TRUE(value_equal(actual, &expected[i]));
+    assert_value_payload(actual, &expected[i]);
+  }
+}
+
+static void assert_value_payload(const VALUE_t *actual, const VALUE_t *expected) {
+  ASSERT_EQ_INT(expected->type, actual->type);
+  switch (actual->type) {
+    case VALUE_nil:
+      break;
+    case VALUE_int:
+    case VALUE_bool:
+      ASSERT_EQ_INT(expected->i, actual->i);
+      break;
+    case VALUE_float:
+      ASSERT_TRUE(expected->f == actual->f);
+      break;
+    case VALUE_str:
+      ASSERT_TRUE(strcmp(expected->s ? expected->s : "",
+                         actual->s ? actual->s : "") == 0);
+      break;
+    case VALUE_itemref:
+      ASSERT_TRUE(strcmp(sin_itemref_path(expected->itemref),
+                         sin_itemref_path(actual->itemref)) == 0);
+      break;
+    case VALUE_list:
+      ASSERT_EQ_INT(sin_list_count(expected->list), sin_list_count(actual->list));
+      for (size_t i = 0; i < sin_list_count(actual->list); ++i) {
+        const VALUE_t *nested_actual = sin_list_get(actual->list, i);
+        const VALUE_t *nested_expected = sin_list_get(expected->list, i);
+        ASSERT_NOT_NULL(nested_actual);
+        ASSERT_NOT_NULL(nested_expected);
+        assert_value_payload(nested_actual, nested_expected);
+      }
+      break;
   }
 }
 
 void test_list_libcall_ordering(void) {
   setup_libcall_runtime();
+  VALUE_t result = VALUE_NIL;
 
   SIN_LIST_t *nested = list_of_ints(8, 9);
   VALUE_t heterogeneous_values[] = {
@@ -464,6 +500,26 @@ void test_list_libcall_ordering(void) {
   ASSERT_EQ_INT(1, sin_list_get(heterogeneous, 0)->i);
   value_free(&reversed);
   sin_list_release(nested);
+  sin_list_release(heterogeneous);
+
+  SIN_LIST_t *reverse_empty = sin_list_build_owned(NULL, 0);
+  ASSERT_NOT_NULL(reverse_empty);
+  reversed = call_list_unary(
+      lc_list_reverse, (VALUE_t){VALUE_list, {.list = sin_list_retain(reverse_empty)}});
+  assert_list_values(&reversed, NULL, 0);
+  value_free(&reversed);
+  sin_list_release(reverse_empty);
+
+  VALUE_t reverse_singleton_value = {VALUE_int, {.i = 42}};
+  SIN_LIST_t *reverse_singleton = sin_list_build_owned(&reverse_singleton_value, 1);
+  ASSERT_NOT_NULL(reverse_singleton);
+  reversed = call_list_unary(
+      lc_list_reverse,
+      (VALUE_t){VALUE_list, {.list = sin_list_retain(reverse_singleton)}});
+  const VALUE_t reverse_singleton_expected[] = {{VALUE_int, {.i = 42}}};
+  assert_list_values(&reversed, reverse_singleton_expected, 1);
+  value_free(&reversed);
+  sin_list_release(reverse_singleton);
 
   SIN_LIST_t *numbers;
   VALUE_t number_values[] = {
@@ -534,6 +590,68 @@ void test_list_libcall_ordering(void) {
   value_free(&sorted);
   sin_list_release(empty);
 
+  VALUE_t singleton_int_value = {VALUE_int, {.i = 7}};
+  SIN_LIST_t *singleton_int = sin_list_build_owned(
+      &singleton_int_value, 1);
+  ASSERT_NOT_NULL(singleton_int);
+  const VALUE_t singleton_int_expected[] = {{VALUE_int, {.i = 7}}};
+  const OP_t sort_handlers[] = {lc_list_asc, lc_list_desc};
+  for (size_t i = 0; i < 2; ++i) {
+    sorted = call_list_unary(
+        sort_handlers[i],
+        (VALUE_t){VALUE_list, {.list = sin_list_retain(singleton_int)}});
+    assert_list_values(&sorted, singleton_int_expected, 1);
+    value_free(&sorted);
+  }
+  sin_list_release(singleton_int);
+
+  VALUE_t singleton_string_value = {VALUE_str, {.s = strdup("singleton")}};
+  SIN_LIST_t *singleton_string = sin_list_build_owned(&singleton_string_value, 1);
+  ASSERT_NOT_NULL(singleton_string);
+  const VALUE_t singleton_string_expected[] = {{VALUE_str, {.s = "singleton"}}};
+  for (size_t i = 0; i < 2; ++i) {
+    sorted = call_list_unary(
+        sort_handlers[i],
+        (VALUE_t){VALUE_list, {.list = sin_list_retain(singleton_string)}});
+    assert_list_values(&sorted, singleton_string_expected, 1);
+    value_free(&sorted);
+  }
+  sin_list_release(singleton_string);
+
+  VALUE_t singleton_bool_value = {VALUE_bool, {.i = 1}};
+  SIN_LIST_t *singleton_bool = sin_list_build_owned(
+      &singleton_bool_value, 1);
+  ASSERT_NOT_NULL(singleton_bool);
+  const VALUE_t singleton_bool_expected[] = {{VALUE_bool, {.i = 1}}};
+  for (size_t i = 0; i < 2; ++i) {
+    sorted = call_list_unary(
+        sort_handlers[i],
+        (VALUE_t){VALUE_list, {.list = sin_list_retain(singleton_bool)}});
+    assert_list_values(&sorted, singleton_bool_expected, 1);
+    value_free(&sorted);
+  }
+  sin_list_release(singleton_bool);
+
+  VALUE_t large_values[40];
+  int large_ascending[40];
+  int large_descending[40];
+  for (size_t i = 0; i < 40; ++i) {
+    large_values[i] = (VALUE_t){VALUE_int, {.i = (int64_t)(39u - i)}};
+    large_ascending[i] = (int)i;
+    large_descending[i] = 39 - (int)i;
+  }
+  SIN_LIST_t *large = sin_list_build_owned(large_values, 40);
+  ASSERT_NOT_NULL(large);
+  sorted = call_list_unary(
+      lc_list_asc, (VALUE_t){VALUE_list, {.list = sin_list_retain(large)}});
+  assert_list_ints(&sorted, large_ascending, 40);
+  value_free(&sorted);
+  sorted = call_list_unary(
+      lc_list_desc, (VALUE_t){VALUE_list, {.list = sin_list_retain(large)}});
+  assert_list_ints(&sorted, large_descending, 40);
+  value_free(&sorted);
+  sin_list_release(large);
+
   VALUE_t invalid_values[] = {
       VALUE_NIL,
       {VALUE_itemref, {.itemref = sin_itemref_create("root.child")}},
@@ -543,21 +661,41 @@ void test_list_libcall_ordering(void) {
     SIN_LIST_t *invalid = sin_list_build_owned(one, 1);
     invalid_values[i] = VALUE_NIL;
     ASSERT_NOT_NULL(invalid);
-    VALUE_t result = call_list_unary(
-        lc_list_asc, (VALUE_t){VALUE_list, {.list = sin_list_retain(invalid)}});
-    ASSERT_EQ_INT(VALUE_nil, result.type);
-    assert_invalid_args_detail_contains("list.asc");
+    for (size_t handler_index = 0; handler_index < 2; ++handler_index) {
+      result = call_list_unary(
+          sort_handlers[handler_index],
+          (VALUE_t){VALUE_list, {.list = sin_list_retain(invalid)}});
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      assert_invalid_args_detail_contains(handler_index == 0 ? "list.asc" :
+                                                                  "list.desc");
+    }
     sin_list_release(invalid);
+  }
+
+  const OP_t ordering_handlers[] = {lc_list_reverse, lc_list_asc, lc_list_desc};
+  const char *ordering_names[] = {"list.reverse", "list.asc", "list.desc"};
+  for (size_t i = 0; i < 3; ++i) {
+    result = call_list_unary(ordering_handlers[i],
+                             (VALUE_t){VALUE_list, {.list = NULL}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_invalid_args_detail_contains(ordering_names[i]);
+    result = call_list_unary(ordering_handlers[i],
+                             (VALUE_t){VALUE_int, {.i = 1}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_invalid_args_detail_contains(ordering_names[i]);
   }
 
   VALUE_t mixed[] = {{VALUE_int, {.i = 1}}, {VALUE_str, {.s = strdup("x")}}};
   SIN_LIST_t *mixed_list = sin_list_build_owned(mixed, 2);
   ASSERT_NOT_NULL(mixed_list);
-  VALUE_t result = call_list_unary(
-      lc_list_desc,
-      (VALUE_t){VALUE_list, {.list = sin_list_retain(mixed_list)}});
-  ASSERT_EQ_INT(VALUE_nil, result.type);
-  assert_invalid_args_detail_contains("list.desc");
+  for (size_t handler_index = 0; handler_index < 2; ++handler_index) {
+    result = call_list_unary(
+        sort_handlers[handler_index],
+        (VALUE_t){VALUE_list, {.list = sin_list_retain(mixed_list)}});
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_invalid_args_detail_contains(handler_index == 0 ? "list.asc" :
+                                                                "list.desc");
+  }
   sin_list_release(mixed_list);
 
   VALUE_t nan_value = {VALUE_float, {.f = NAN}};
@@ -574,6 +712,58 @@ void test_list_libcall_ordering(void) {
   result = call_list_unary(lc_list_asc, (VALUE_t){VALUE_int, {.i = 1}});
   ASSERT_EQ_INT(VALUE_nil, result.type);
   assert_invalid_args_detail_contains("list.asc");
+
+  SIN_LIST_t *prior_error_list = list_of_ints(2, 1);
+  ASSERT_NOT_NULL(prior_error_list);
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior error", NULL);
+  for (size_t i = 0; i < 3; ++i) {
+    result = call_list_unary(
+        ordering_handlers[i],
+        (VALUE_t){VALUE_list, {.list = sin_list_retain(prior_error_list)}});
+    ASSERT_EQ_INT(VALUE_list, result.type);
+    value_free(&result);
+    ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(error)->i);
+  }
+  sin_list_release(prior_error_list);
+
+  VALUE_t clone_failure_value = {VALUE_str, {.s = strdup("clone failure")}};
+  SIN_LIST_t *clone_failure = sin_list_build_owned(&clone_failure_value, 1);
+  ASSERT_NOT_NULL(clone_failure);
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior error", NULL);
+  for (size_t i = 0; i < 3; ++i) {
+    alloc_test_fail_after(2);
+    result = call_list_unary(
+        ordering_handlers[i],
+        (VALUE_t){VALUE_list, {.list = sin_list_retain(clone_failure)}});
+    alloc_test_fail_after(-1);
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(error)->i);
+  }
+  sin_list_release(clone_failure);
+
+  SIN_LIST_t *build_failure = list_of_ints(2, 1);
+  ASSERT_NOT_NULL(build_failure);
+  for (size_t i = 1; i < 3; ++i) {
+    alloc_test_fail_after(2);
+    result = call_list_unary(
+        ordering_handlers[i],
+        (VALUE_t){VALUE_list, {.list = sin_list_retain(build_failure)}});
+    alloc_test_fail_after(-1);
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(error)->i);
+  }
+  for (size_t i = 0; i < 3; ++i) {
+    alloc_test_fail_after(i == 0 ? 2 : 3);
+    result = call_list_unary(
+        ordering_handlers[i],
+        (VALUE_t){VALUE_list, {.list = sin_list_retain(build_failure)}});
+    alloc_test_fail_after(-1);
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    ASSERT_EQ_INT(ERR_NETWORK_ERROR, item_value(error)->i);
+  }
+  sin_list_release(build_failure);
 
   SIN_LIST_t *failure = list_of_ints(4, 2);
   ASSERT_NOT_NULL(failure);
