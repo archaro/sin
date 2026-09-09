@@ -88,6 +88,7 @@ endef
 $(foreach c,$(REWRITE_COMMON_CASES),$(eval $(call rewrite_common_template,$(word 1,$(subst |, ,$(c))),$(word 2,$(subst |, ,$(c))),$(word 3,$(subst |, ,$(c))))))
 
 $(OBJ_DIR)/$(REWRITE_DIR)/test_item_cache: LDFLAGS += -Wl,--wrap=calloc
+$(OBJ_DIR)/$(REWRITE_DIR)/test_libcall_conv: LDFLAGS += -Wl,--wrap=strlen
 
 REWRITE_FRAMEWORK_ONLY_CASES := \
  group1/test_output_contract|group1/adapter_output_contract.c \

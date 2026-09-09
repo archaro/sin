@@ -10,12 +10,22 @@
 #include "libcall.h"
 #include "libcall_handlers.h"
 #include "list.h"
+#include "memory.h"
 #include "stack.h"
 #include "test_assert.h"
 
 #include "shared/test_libcall_support.h"
 
 extern CONFIG_t config;
+
+static const char *g_conv_strlen_overflow_text;
+
+size_t __real_strlen(const char *text);
+
+size_t __wrap_strlen(const char *text) {
+  if (text == g_conv_strlen_overflow_text) return SIZE_MAX - 2u;
+  return __real_strlen(text);
+}
 
 static VALUE_t call_bool(VALUE_t value) {
   push_stack(config.vm->stack, value);
@@ -260,7 +270,7 @@ void test_conv_float_converts_values(void) {
 void test_conv_float_rejects_invalid_values_and_boundaries(void) {
   setup_libcall_runtime();
 
-  const char *invalid[] = {"", "123.45ghj", " 123.45", "123.45 ",
+  const char *invalid[] = {"", "123.45ghj", "123x", " 123.45", "123.45 ",
                            "nan", "1.7976931348623159e308"};
   for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
     VALUE_t value = {VALUE_str, {.s = strdup(invalid[i])}};
@@ -272,11 +282,26 @@ void test_conv_float_rejects_invalid_values_and_boundaries(void) {
     ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
   }
 
+  VALUE_t result = call_float((VALUE_t){VALUE_str, {.s = NULL}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+
+  alloc_test_fail_after(1);
+  result = call_float((VALUE_t){VALUE_str, {.s = strdup("123")}});
+  alloc_test_fail_after(-1);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+
+  char *overflow_text = strdup("123");
+  ASSERT_NOT_NULL(overflow_text);
+  g_conv_strlen_overflow_text = overflow_text;
+  result = call_float((VALUE_t){VALUE_str, {.s = overflow_text}});
+  g_conv_strlen_overflow_text = NULL;
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+
   SIN_LIST_t *list = sin_list_build_owned(NULL, 0);
   SIN_ITEMREF_t *itemref = sin_itemref_create("root.child");
   ASSERT_NOT_NULL(list);
   ASSERT_NOT_NULL(itemref);
-  VALUE_t result = call_float((VALUE_t){VALUE_list, {.list = list}});
+  result = call_float((VALUE_t){VALUE_list, {.list = list}});
   ASSERT_EQ_INT(VALUE_nil, result.type);
   result = call_float((VALUE_t){VALUE_itemref, {.itemref = itemref}});
   ASSERT_EQ_INT(VALUE_nil, result.type);
@@ -393,7 +418,7 @@ void test_conv_int_rejects_invalid_values_and_boundaries(void) {
     ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
   }
 
-  const char *invalid_strings[] = {"", "123h", " 123", "123 ",
+  const char *invalid_strings[] = {"", "123h", "h", " 123", "123 ",
                                    "9223372036854775808",
                                    "-9223372036854775809"};
   for (size_t i = 0; i < sizeof(invalid_strings) / sizeof(invalid_strings[0]);
@@ -407,11 +432,14 @@ void test_conv_int_rejects_invalid_values_and_boundaries(void) {
     ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
   }
 
+  VALUE_t result = call_int((VALUE_t){VALUE_str, {.s = NULL}});
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+
   SIN_LIST_t *list = sin_list_build_owned(NULL, 0);
   SIN_ITEMREF_t *itemref = sin_itemref_create("root.child");
   ASSERT_NOT_NULL(list);
   ASSERT_NOT_NULL(itemref);
-  VALUE_t result = call_int((VALUE_t){VALUE_list, {.list = list}});
+  result = call_int((VALUE_t){VALUE_list, {.list = list}});
   ASSERT_EQ_INT(VALUE_nil, result.type);
   result = call_int((VALUE_t){VALUE_itemref, {.itemref = itemref}});
   ASSERT_EQ_INT(VALUE_nil, result.type);

@@ -11,6 +11,7 @@
 #include "floatconv.h"
 #include "libcall_common.h"
 #include "libcall_handlers.h"
+#include "memory.h"
 #include "stack.h"
 
 static bool conv_int_parse_string(const char *text, int64_t *out) {
@@ -68,7 +69,7 @@ static bool conv_float_parse_string(const char *text, double *out) {
   if (conv_float_integer_string(text)) {
     size_t length = strlen(text);
     if (length > SIZE_MAX - 3u) return false;
-    normalized = malloc(length + 3u);
+    normalized = alloc_malloc(length + 3u);
     if (!normalized) return false;
     memcpy(normalized, text, length);
     memcpy(normalized + length, ".0", 3u);
