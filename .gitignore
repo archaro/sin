@@ -73,6 +73,13 @@ sin.code-workspace
 *.idb
 *.pdb
 
+# Coverage and profiling output
+*.gcov
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+
 # Kernel Module Compile Results
 *.mod*
 *.cmd
