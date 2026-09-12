@@ -2,6 +2,7 @@
 
 // Licensed under the MIT License - see LICENSE file for details.
 
+#include <ctype.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -246,5 +247,99 @@ uint8_t *lc_text_join(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   value_free(&list);
   value_free(&separator);
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = output}});
+  return nextop;
+}
+
+static uint8_t *text_words_failure(RuntimeContext *ctx, uint8_t *nextop,
+                                   VALUE_t text, VALUE_t *parts,
+                                   size_t count) {
+  text_free_parts(parts, count);
+  value_free(&text);
+  push_stack(ctx->vm->stack, VALUE_NIL);
+  return nextop;
+}
+
+uint8_t *lc_text_words(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume one string and return independently owned non-whitespace words.
+  // Whitespace is defined by the C locale's byte-oriented isspace contract;
+  // all other bytes, including punctuation and UTF-8 continuation bytes, are
+  // copied literally.
+  (void)item;
+
+  VALUE_t text = pop_stack(ctx->vm->stack);
+  if (text.type != VALUE_str || !text.s) {
+    lc_cleanup_values(&text, 1);
+    return lc_invalid_args_nil_return(ctx, nextop,
+        "text.words text must be a string");
+  }
+
+  size_t text_len = strlen(text.s);
+  if (text_len > SIN_MAX_STRING_BYTES)
+    return text_words_failure(ctx, nextop, text, NULL, 0);
+
+  size_t count = 0;
+  bool in_word = false;
+  for (size_t i = 0; i < text_len; ++i) {
+    bool whitespace = isspace((unsigned char)text.s[i]) != 0;
+    if (whitespace) {
+      in_word = false;
+    } else if (!in_word) {
+      if (count == SIN_LIST_MAX_ELEMENTS)
+        return text_words_failure(ctx, nextop, text, NULL, 0);
+      ++count;
+      in_word = true;
+    }
+  }
+
+  if (count == 0) {
+    value_free(&text);
+    SIN_LIST_t *result = sin_list_build_owned(NULL, 0);
+    if (!result) {
+      push_stack(ctx->vm->stack, VALUE_NIL);
+      return nextop;
+    }
+    push_stack(ctx->vm->stack, (VALUE_t){VALUE_list, {.list = result}});
+    return nextop;
+  }
+
+  if (alloc_mul_overflow(count, sizeof(VALUE_t), NULL))
+    return text_words_failure(ctx, nextop, text, NULL, 0);
+  VALUE_t *parts = alloc_calloc(count, sizeof(*parts));
+  if (!parts) return text_words_failure(ctx, nextop, text, NULL, 0);
+
+  size_t part_index = 0;
+  size_t cursor = 0;
+  while (cursor < text_len) {
+    while (cursor < text_len &&
+           isspace((unsigned char)text.s[cursor]) != 0) {
+      ++cursor;
+    }
+    if (cursor == text_len) break;
+    size_t start = cursor;
+    while (cursor < text_len &&
+           isspace((unsigned char)text.s[cursor]) == 0) {
+      ++cursor;
+    }
+    size_t part_len = cursor - start;
+    size_t allocation_size = 0;
+    if (part_len > SIN_MAX_STRING_BYTES ||
+        alloc_add_overflow(part_len, 1u, &allocation_size) ||
+        allocation_size > (size_t)SIN_MAX_STRING_BYTES + 1u) {
+      return text_words_failure(ctx, nextop, text, parts, part_index);
+    }
+    parts[part_index].type = VALUE_str;
+    parts[part_index].s = alloc_malloc(allocation_size);
+    if (!parts[part_index].s)
+      return text_words_failure(ctx, nextop, text, parts, part_index + 1u);
+    memcpy(parts[part_index].s, text.s + start, part_len);
+    parts[part_index].s[part_len] = '\0';
+    ++part_index;
+  }
+
+  value_free(&text);
+  SIN_LIST_t *result = sin_list_build_owned(parts, count);
+  if (!result) return text_words_failure(ctx, nextop, VALUE_NIL, parts, count);
+  free(parts);
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_list, {.list = result}});
   return nextop;
 }

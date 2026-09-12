@@ -40,6 +40,25 @@ static void assert_split_strings(VALUE_t result, const char *const *expected,
   value_free(&result);
 }
 
+static VALUE_t call_words(const char *text) {
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(text)}});
+  (void)lc_text_words(test_ctx(), NULL, NULL);
+  return pop_stack(config.vm->stack);
+}
+
+static void assert_words_strings(VALUE_t result, const char *const *expected,
+                                 size_t count) {
+  ASSERT_EQ_INT(VALUE_list, result.type);
+  ASSERT_EQ_INT(count, sin_list_count(result.list));
+  for (size_t i = 0; i < count; ++i) {
+    const VALUE_t *element = sin_list_get(result.list, i);
+    ASSERT_NOT_NULL(element);
+    ASSERT_EQ_INT(VALUE_str, element->type);
+    ASSERT_TRUE(strcmp(element->s, expected[i]) == 0);
+  }
+  value_free(&result);
+}
+
 void test_text_split_registry_contract(void) {
   uint8_t library = 0, call = 0, args = 0;
   ASSERT_TRUE(libcall_lookup_pair("text", "split", &library, &call, &args));
@@ -309,6 +328,185 @@ void test_text_split_source_integration_and_arity(void) {
 
   const char *invalid[] = {"text.split{\"a\"};",
                            "text.split{\"a\", \",\", \",\"};"};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+    OUTPUT_t *out = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    ASSERT_TRUE(compile_source_to_bytecode_diag(invalid[i], strlen(invalid[i]),
+                                                &out, &diag) != 0);
+    ASSERT_TRUE(out == NULL);
+    ASSERT_EQ_INT(DIAG_PHASE_LOWER, diag.phase);
+    ASSERT_TRUE(strstr(diag.message, "invalid libcall argument count") != NULL);
+    compiler_diag_reset(&diag);
+  }
+  teardown_libcall_runtime();
+}
+
+void test_text_words_registry_contract(void) {
+  uint8_t library = 0, call = 0, args = 0;
+  ASSERT_TRUE(libcall_lookup_pair("text", "words", &library, &call, &args));
+  ASSERT_EQ_INT(10, library);
+  ASSERT_EQ_INT(2, call);
+  ASSERT_EQ_INT(1, args);
+  ASSERT_TRUE(libcall_func_pair(library, call) == lc_text_words);
+  ASSERT_TRUE(libcall_pair_arg_count(library, call, &args));
+  ASSERT_EQ_INT(1, args);
+}
+
+void test_text_words_literal_whitespace_and_utf8(void) {
+  setup_libcall_runtime();
+  const char *expected[] = {"one", "two", "three", "four\\five",
+                            "caf\xC3\xA9"};
+  assert_words_strings(call_words(" \tone\n two\vthree\ffour\\five\r caf\xC3\xA9 "),
+                       expected, 5);
+  const char *punctuated[] = {"put", "brass", "key", "in", "box"};
+  assert_words_strings(call_words("   put   brass key   in box  "), punctuated,
+                       5);
+  const char *quoted[] = {"say", "\"hello", "there\""};
+  assert_words_strings(call_words("say \"hello there\""), quoted, 3);
+  teardown_libcall_runtime();
+}
+
+void test_text_words_empty_single_and_ownership(void) {
+  setup_libcall_runtime();
+  assert_words_strings(call_words(""), NULL, 0);
+  assert_words_strings(call_words(" \t\n\v\f\r"), NULL, 0);
+  const char *single[] = {"single"};
+  assert_words_strings(call_words("single"), single, 1);
+
+  VALUE_t result = call_words("first second");
+  ASSERT_EQ_INT(VALUE_list, result.type);
+  VALUE_t *first = (VALUE_t *)sin_list_get(result.list, 0);
+  ASSERT_NOT_NULL(first);
+  first->s[0] = 'F';
+  ASSERT_TRUE(strcmp(sin_list_get(result.list, 1)->s, "second") == 0);
+  value_free(&result);
+  teardown_libcall_runtime();
+}
+
+void test_text_words_invalid_types_and_stack_contract(void) {
+  setup_libcall_runtime();
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 77}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_nil, {.i = 0}});
+  (void)lc_text_words(test_ctx(), NULL, NULL);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(1, size_stack(config.vm->stack));
+  ASSERT_EQ_INT(77, pop_stack(config.vm->stack).i);
+  assert_invalid_args_detail_contains("text.words");
+
+  VALUE_t invalid[] = {{VALUE_float, {.f = 1.0}},
+                       {VALUE_list, {.list = sin_list_build_owned(NULL, 0)}},
+                       {VALUE_str, {.s = NULL}}};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+    push_stack(config.vm->stack, invalid[i]);
+    invalid[i] = VALUE_NIL;
+    (void)lc_text_words(test_ctx(), NULL, NULL);
+    result = pop_stack(config.vm->stack);
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_invalid_args_detail_contains("text.words");
+  }
+  teardown_libcall_runtime();
+}
+
+void test_text_words_invalid_context_root_and_return_pointer(void) {
+  setup_libcall_runtime();
+  ITEM_t *context_root = make_root_item("words_context");
+  ASSERT_NOT_NULL(context_root);
+  ITEM_t *caller = test_item_set_value(context_root, "caller",
+                                       (VALUE_t){VALUE_int, {.i = 1}});
+  ASSERT_NOT_NULL(caller);
+  RuntimeContext context = *test_ctx();
+  context.itemstore = itemstore_owner(context_root);
+  context.current_item = caller;
+  push_stack(config.vm->stack, (VALUE_t){VALUE_nil, {.i = 0}});
+  uint8_t *sentinel = (uint8_t *)(uintptr_t)0x1234u;
+  ASSERT_TRUE(lc_text_words(&context, sentinel, context_root) == sentinel);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS,
+                item_value(find_item(context_root, "error"))->i);
+  ASSERT_TRUE(strstr(item_value(find_item(context_root, "error.msg"))->s,
+                     "text.words") != NULL);
+  ASSERT_TRUE(strcmp(item_value(find_item(context_root, "error.item"))->s,
+                     "caller") == 0);
+  destroy_item(context_root);
+  teardown_libcall_runtime();
+}
+
+static void assert_words_allocation_failure(const char *text, long failure) {
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior diagnostic", NULL);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup(text)}});
+  alloc_test_fail_after(failure);
+  (void)lc_text_words(test_ctx(), NULL, NULL);
+  alloc_test_fail_after(-1);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  ASSERT_TRUE(strstr(item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                         "error.msg"))->s,
+                     "prior diagnostic") != NULL);
+}
+
+void test_text_words_distinct_allocation_failures(void) {
+  setup_libcall_runtime();
+  for (long failure = 0; failure <= 5; ++failure)
+    assert_words_allocation_failure("a b c", failure);
+  teardown_libcall_runtime();
+}
+
+void test_text_words_string_limit_boundaries(void) {
+  setup_libcall_runtime();
+  char *maximum = malloc(SIN_MAX_STRING_BYTES + 1u);
+  ASSERT_NOT_NULL(maximum);
+  memset(maximum, 'x', SIN_MAX_STRING_BYTES);
+  maximum[SIN_MAX_STRING_BYTES] = '\0';
+  VALUE_t result = call_words(maximum);
+  ASSERT_EQ_INT(VALUE_list, result.type);
+  ASSERT_EQ_INT(1, sin_list_count(result.list));
+  ASSERT_EQ_INT(SIN_MAX_STRING_BYTES,
+                strlen(sin_list_get(result.list, 0)->s));
+  value_free(&result);
+  free(maximum);
+
+  char *too_large = malloc(SIN_MAX_STRING_BYTES + 2u);
+  ASSERT_NOT_NULL(too_large);
+  memset(too_large, 'y', SIN_MAX_STRING_BYTES + 1u);
+  too_large[SIN_MAX_STRING_BYTES + 1u] = '\0';
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior diagnostic", NULL);
+  result = call_words(too_large);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR,
+                item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                     "error"))->i);
+  ASSERT_TRUE(strstr(item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                         "error.msg"))->s,
+                     "prior diagnostic") != NULL);
+  free(too_large);
+  teardown_libcall_runtime();
+}
+
+void test_text_words_source_integration_and_arity(void) {
+  setup_libcall_runtime();
+  VALUE_t source = {VALUE_str, {.s = strdup(
+      "result.words = text.words{\"a\\tb\\n c\"};")}};
+  push_stack(config.vm->stack, source);
+  (void)lc_sys_compile(test_ctx(), NULL, NULL);
+  VALUE_t compiled = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, compiled.type);
+  ASSERT_EQ_INT(1, compiled.i);
+  ITEM_t *words = find_item(itemstore_root(config.itemstore_ctx),
+                            "result.words");
+  ASSERT_NOT_NULL(words);
+  const char *expected[] = {"a", "b", "c"};
+  assert_words_strings((VALUE_t){VALUE_list, {.list = sin_list_retain(
+      item_value(words)->list)}}, expected, 3);
+
+  const char *invalid[] = {"text.words{\"a\", \"b\"};",
+                           "text.words{\"a\", \"b\", \"c\"};"};
   for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
     OUTPUT_t *out = NULL;
     CompilerDiagnostic diag;

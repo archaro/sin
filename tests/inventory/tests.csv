@@ -521,6 +521,14 @@ rewrite.runtime.test_text_split_source_integration_and_arity,api.libcall.text;li
 rewrite.runtime.test_text_split_invalid_context_root_and_return_pointer,api.libcall.text;libcall.text.split
 rewrite.runtime.test_text_split_distinct_allocation_failures,api.libcall.text;libcall.text.split
 rewrite.runtime.test_text_split_list_limit_boundaries,api.libcall.text;libcall.text.split
+rewrite.runtime.test_text_words_registry_contract,api.libcall.table;api.libcall.text.words;libcall.text.words
+rewrite.runtime.test_text_words_literal_whitespace_and_utf8,api.libcall.text.words;libcall.text.words
+rewrite.runtime.test_text_words_empty_single_and_ownership,api.libcall.text.words;libcall.text.words
+rewrite.runtime.test_text_words_invalid_types_and_stack_contract,api.libcall.text.words;libcall.text.words
+rewrite.runtime.test_text_words_invalid_context_root_and_return_pointer,api.libcall.text.words;libcall.text.words
+rewrite.runtime.test_text_words_distinct_allocation_failures,api.libcall.text.words;libcall.text.words
+rewrite.runtime.test_text_words_string_limit_boundaries,api.libcall.text.words;libcall.text.words
+rewrite.runtime.test_text_words_source_integration_and_arity,api.libcall.text.words;libcall.text.words
 rewrite.runtime.test_text_join_registry_contract,api.libcall.text.join;libcall.text.join
 rewrite.runtime.test_text_join_literal_fields_and_utf8,api.libcall.text.join;libcall.text.join
 rewrite.runtime.test_text_join_empty_and_separator_behavior,api.libcall.text.join;libcall.text.join

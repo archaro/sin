@@ -105,6 +105,7 @@
   X("task", "count",       2,  4, 0, lc_task_count) \
   X("text", "split",      10, 0, 2, lc_text_split) \
   X("text", "join",       10, 1, 2, lc_text_join) \
+  X("text", "words",      10, 2, 1, lc_text_words) \
   X("time", "year",        8,  0, 1, lc_time_year) \
   X("time", "month",       8,  1, 1, lc_time_month) \
   X("time", "day",         8,  2, 1, lc_time_day) \

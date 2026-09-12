@@ -48,3 +48,20 @@ return `nil` and set `ERR_RUNTIME_INVALIDARGS` with a `text.join` detail.
 Output at or below `SIN_MAX_STRING_BYTES` succeeds. Larger output, overflow,
 and allocation failure return `nil`, clean up both arguments, and preserve any
 unrelated existing diagnostic.
+
+`text.words` splits a string into words using C byte whitespace:
+
+```sinistra
+words = text.words{"one\ttwo\nthree"};
+```
+
+The call requires exactly one non-null string argument. Spaces, tabs, newlines,
+vertical tabs, form feeds, and carriage returns delimit fields; empty fields
+are omitted. Quotes, punctuation, backslashes, and UTF-8 bytes are copied
+literally. Empty and all-whitespace input returns an owned empty list.
+
+The input is consumed, and the returned list and every string element own
+independent storage. Invalid values and malformed null string payloads return
+`nil` with `ERR_RUNTIME_INVALIDARGS` and a `text.words` detail. String/list
+limits, overflow, allocation, and list-construction failures return `nil` after
+cleanup while preserving unrelated diagnostics.
