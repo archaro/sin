@@ -170,3 +170,81 @@ uint8_t *lc_text_split(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_list, {.list = result}});
   return nextop;
 }
+
+static uint8_t *text_join_failure(RuntimeContext *ctx, uint8_t *nextop,
+                                  VALUE_t list, VALUE_t separator) {
+  value_free(&list);
+  value_free(&separator);
+  push_stack(ctx->vm->stack, VALUE_NIL);
+  return nextop;
+}
+
+uint8_t *lc_text_join(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume a homogeneous list of strings and a separator, returning an
+  // independently owned byte-string joined with separators between fields.
+  // The list is first validated in full so a later malformed element wins
+  // over any output-size failure found during the subsequent length pass.
+  (void)item;
+
+  VALUE_t separator = pop_stack(ctx->vm->stack);
+  VALUE_t list = pop_stack(ctx->vm->stack);
+  if (list.type != VALUE_list || !list.list || separator.type != VALUE_str ||
+      !separator.s) {
+    VALUE_t args[] = {separator, list};
+    lc_cleanup_values(args, sizeof(args) / sizeof(args[0]));
+    return lc_invalid_args_nil_return(ctx, nextop,
+        "text.join list must contain only non-null strings and separator must be a string");
+  }
+
+  size_t count = sin_list_count(list.list);
+  for (size_t i = 0; i < count; ++i) {
+    const VALUE_t *value = sin_list_get(list.list, i);
+    if (!value || value->type != VALUE_str || !value->s) {
+      value_free(&list);
+      value_free(&separator);
+      return lc_invalid_args_nil_return(ctx, nextop,
+          "text.join list must contain only non-null strings and separator must be a string");
+    }
+  }
+
+  size_t separator_len = strlen(separator.s);
+  size_t output_len = 0;
+  for (size_t i = 0; i < count; ++i) {
+    const VALUE_t *value = sin_list_get(list.list, i);
+    size_t value_len = strlen(value->s);
+    if (alloc_add_overflow(output_len, value_len, &output_len))
+      return text_join_failure(ctx, nextop, list, separator);
+  }
+  if (count > 1u) {
+    size_t separators_len = 0;
+    if (alloc_mul_overflow(count - 1u, separator_len, &separators_len) ||
+        alloc_add_overflow(output_len, separators_len, &output_len))
+      return text_join_failure(ctx, nextop, list, separator);
+  }
+  if (output_len > SIN_MAX_STRING_BYTES)
+    return text_join_failure(ctx, nextop, list, separator);
+
+  size_t allocation_size = 0;
+  if (alloc_add_overflow(output_len, 1u, &allocation_size))
+    return text_join_failure(ctx, nextop, list, separator);
+  char *output = alloc_malloc(allocation_size);
+  if (!output) return text_join_failure(ctx, nextop, list, separator);
+
+  char *cursor = output;
+  for (size_t i = 0; i < count; ++i) {
+    const VALUE_t *value = sin_list_get(list.list, i);
+    size_t value_len = strlen(value->s);
+    memcpy(cursor, value->s, value_len);
+    cursor += value_len;
+    if (i + 1u < count) {
+      memcpy(cursor, separator.s, separator_len);
+      cursor += separator_len;
+    }
+  }
+  *cursor = '\0';
+
+  value_free(&list);
+  value_free(&separator);
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = output}});
+  return nextop;
+}

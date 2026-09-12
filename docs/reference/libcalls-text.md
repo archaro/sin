@@ -1,6 +1,8 @@
 # text library
 
-`text.split` divides byte-oriented text into an owned list of strings:
+The `text` library provides byte-oriented operations on owned strings and lists.
+
+`text.split` divides text into an owned list of strings:
 
 ```sinistra
 parts = text.split{"one::two::three", "::"};
@@ -29,3 +31,20 @@ any unrelated existing diagnostic.
 Unlike `str` calls, which provide byte-string manipulation and in-place text
 operations, `text.split` is a block-producing operation whose result is an
 immutable runtime list.
+
+`text.join` combines a homogeneous list of non-null strings with a separator:
+
+```sinistra
+line = text.join{#["one", "two", "three"], "::"};
+```
+
+The list and separator are required and both are consumed. The output contains
+each field exactly as stored, with the separator only between fields; empty
+fields and empty separators are preserved. An empty list returns an owned empty
+string. The returned string always owns independent storage.
+
+Invalid list elements, invalid arguments, and malformed null string payloads
+return `nil` and set `ERR_RUNTIME_INVALIDARGS` with a `text.join` detail.
+Output at or below `SIN_MAX_STRING_BYTES` succeeds. Larger output, overflow,
+and allocation failure return `nil`, clean up both arguments, and preserve any
+unrelated existing diagnostic.

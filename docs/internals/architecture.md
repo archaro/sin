@@ -163,7 +163,7 @@ value-conversion handler in `libcall_conv.c`, dedicated immutable list handlers
 in `libcall_list.c`, random handlers and
 internal initialization/test hooks in `libcall_rand.c` / `libcall_rand.h`, and
 the UTC calendar handler in `libcall_time.c` / `libcall_time.h`, and the
-byte-oriented splitting handler in `libcall_text.c`.
+byte-oriented joining and splitting handlers in `libcall_text.c`.
 
 Ownership: Sinistra standard library primitives exposed to bytecode. Libcalls
 bridge runtime values to host services such as tasks, networking, system

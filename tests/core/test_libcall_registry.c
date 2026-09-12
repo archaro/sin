@@ -62,6 +62,7 @@ uint8_t *lc_task_thisid(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_exists(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_task_count(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_text_split(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_text_join(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_time_year(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_time_month(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_time_day(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -343,6 +344,7 @@ void test_libcall_registry_roundtrip(void) {
       {"task", "exists", 2, 3, 1, lc_task_exists},
       {"task", "count", 2, 4, 0, lc_task_count},
       {"text", "split", 10, 0, 2, lc_text_split},
+      {"text", "join", 10, 1, 2, lc_text_join},
       {"time", "year", 8, 0, 1, lc_time_year},
       {"time", "month", 8, 1, 1, lc_time_month},
       {"time", "day", 8, 2, 1, lc_time_day},

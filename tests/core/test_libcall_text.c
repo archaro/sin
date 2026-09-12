@@ -11,6 +11,7 @@
 #include "list.h"
 #include "memory.h"
 #include "stack.h"
+#include "string_limits.h"
 #include "test_assert.h"
 #include "test_helpers.h"
 
@@ -308,6 +309,285 @@ void test_text_split_source_integration_and_arity(void) {
 
   const char *invalid[] = {"text.split{\"a\"};",
                            "text.split{\"a\", \",\", \",\"};"};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+    OUTPUT_t *out = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    ASSERT_TRUE(compile_source_to_bytecode_diag(invalid[i], strlen(invalid[i]),
+                                                &out, &diag) != 0);
+    ASSERT_TRUE(out == NULL);
+    ASSERT_EQ_INT(DIAG_PHASE_LOWER, diag.phase);
+    ASSERT_TRUE(strstr(diag.message, "invalid libcall argument count") != NULL);
+    compiler_diag_reset(&diag);
+  }
+  teardown_libcall_runtime();
+}
+
+static SIN_LIST_t *make_join_string_list(const char *const *strings,
+                                         size_t count) {
+  if (count == 0) return sin_list_build_owned(NULL, 0);
+  VALUE_t *values = calloc(count, sizeof(*values));
+  ASSERT_NOT_NULL(values);
+  for (size_t i = 0; i < count; ++i) {
+    values[i] = (VALUE_t){VALUE_str, {.s = strdup(strings[i])}};
+    ASSERT_NOT_NULL(values[i].s);
+  }
+  SIN_LIST_t *list = sin_list_build_owned(values, count);
+  ASSERT_NOT_NULL(list);
+  free(values);
+  return list;
+}
+
+static VALUE_t call_join(SIN_LIST_t *list, const char *separator) {
+  push_stack(config.vm->stack, (VALUE_t){VALUE_list, {.list = list}});
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup(separator)}});
+  (void)lc_text_join(test_ctx(), NULL, NULL);
+  return pop_stack(config.vm->stack);
+}
+
+void test_text_join_registry_contract(void) {
+  uint8_t library = 0, call = 0, args = 0;
+  ASSERT_TRUE(libcall_lookup_pair("text", "join", &library, &call, &args));
+  ASSERT_EQ_INT(10, library);
+  ASSERT_EQ_INT(1, call);
+  ASSERT_EQ_INT(2, args);
+  ASSERT_TRUE(libcall_func_pair(library, call) == lc_text_join);
+  ASSERT_TRUE(libcall_pair_arg_count(library, call, &args));
+  ASSERT_EQ_INT(2, args);
+  ASSERT_TRUE(libcall_lookup_pair("text", "split", &library, &call, &args));
+  ASSERT_EQ_INT(0, call);
+  ASSERT_EQ_INT(2, args);
+}
+
+void test_text_join_literal_fields_and_utf8(void) {
+  setup_libcall_runtime();
+  const char *fields[] = {"one", "", "three"};
+  VALUE_t result = call_join(make_join_string_list(fields, 3), "::");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, "one::::three") == 0);
+  value_free(&result);
+
+  const char *unicode[] = {"caf\xC3\xA9", "\xE6\x9D\xB1"};
+  result = call_join(make_join_string_list(unicode, 2), "<->");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, "caf\xC3\xA9<->\xE6\x9D\xB1") == 0);
+  value_free(&result);
+
+  const char *source_fields[] = {"first", "second"};
+  SIN_LIST_t *source = make_join_string_list(source_fields, 2);
+  SIN_LIST_t *surviving = sin_list_retain(source);
+  result = call_join(source, "|");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  sin_list_get(surviving, 0)->s[0] = 'M';
+  ASSERT_TRUE(strcmp(result.s, "first|second") == 0);
+  value_free(&result);
+  sin_list_release(surviving);
+  teardown_libcall_runtime();
+}
+
+void test_text_join_empty_and_separator_behavior(void) {
+  setup_libcall_runtime();
+  VALUE_t result = call_join(make_join_string_list(NULL, 0), ",");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, "") == 0);
+  value_free(&result);
+  const char *fields[] = {"a", "", "b"};
+  result = call_join(make_join_string_list(fields, 3), "");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, "ab") == 0);
+  value_free(&result);
+  const char *single[] = {"single"};
+  result = call_join(make_join_string_list(single, 1), "separator");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, "single") == 0);
+  value_free(&result);
+  teardown_libcall_runtime();
+}
+
+void test_text_join_invalid_types_and_stack_contract(void) {
+  setup_libcall_runtime();
+  const char *fields[] = {"valid"};
+  VALUE_t invalid_lists[] = {
+      {VALUE_nil, {.i = 0}},
+      {VALUE_int, {.i = 7}},
+      {VALUE_list, {.list = NULL}}};
+  for (size_t i = 0; i < sizeof(invalid_lists) / sizeof(invalid_lists[0]); ++i) {
+    push_stack(config.vm->stack, invalid_lists[i]);
+    invalid_lists[i] = VALUE_NIL;
+    push_stack(config.vm->stack,
+               (VALUE_t){VALUE_str, {.s = strdup(",")}});
+    (void)lc_text_join(test_ctx(), NULL, NULL);
+    VALUE_t result = pop_stack(config.vm->stack);
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_invalid_args_detail_contains("text.join");
+  }
+  SIN_LIST_t *heterogeneous = make_join_string_list(fields, 1);
+  VALUE_t extra = (VALUE_t){VALUE_int, {.i = 42}};
+  SIN_LIST_t *invalid = sin_list_append(heterogeneous, &extra);
+  ASSERT_NOT_NULL(invalid);
+  sin_list_release(heterogeneous);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_list, {.list = invalid}});
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup(",")}});
+  (void)lc_text_join(test_ctx(), NULL, NULL);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_invalid_args_detail_contains("text.join");
+
+  VALUE_t malformed = {VALUE_str, {.s = NULL}};
+  SIN_LIST_t *with_null = sin_list_build_owned(&malformed, 1);
+  ASSERT_NOT_NULL(with_null);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_list, {.list = with_null}});
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup(",")}});
+  (void)lc_text_join(test_ctx(), NULL, NULL);
+  result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_invalid_args_detail_contains("text.join");
+  teardown_libcall_runtime();
+}
+
+void test_text_join_invalid_context_root_and_return_pointer(void) {
+  setup_libcall_runtime();
+  ITEM_t *context_root = make_root_item("join_context");
+  ASSERT_NOT_NULL(context_root);
+  ITEM_t *caller = test_item_set_value(context_root, "caller",
+                                       (VALUE_t){VALUE_int, {.i = 1}});
+  ASSERT_NOT_NULL(caller);
+  RuntimeContext context = *test_ctx();
+  context.itemstore = itemstore_owner(context_root);
+  context.current_item = caller;
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_list, {.list = make_join_string_list(NULL, 0)}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_nil, {.i = 0}});
+  uint8_t *sentinel = (uint8_t *)(uintptr_t)0x1234u;
+  ASSERT_TRUE(lc_text_join(&context, sentinel, context_root) == sentinel);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  ITEM_t *error = find_item(context_root, "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
+  ITEM_t *message = find_item(context_root, "error.msg");
+  ITEM_t *provenance = find_item(context_root, "error.item");
+  ASSERT_NOT_NULL(message);
+  ASSERT_NOT_NULL(provenance);
+  ASSERT_TRUE(strstr(item_value(message)->s, "text.join") != NULL);
+  ASSERT_EQ_INT(VALUE_str, item_value(provenance)->type);
+  ASSERT_TRUE(strcmp(item_value(provenance)->s, "caller") == 0);
+  destroy_item(context_root);
+  teardown_libcall_runtime();
+}
+
+void test_text_join_string_limit_boundaries(void) {
+  setup_libcall_runtime();
+  char *maximum = malloc(SIN_MAX_STRING_BYTES + 1u);
+  ASSERT_NOT_NULL(maximum);
+  memset(maximum, 'x', SIN_MAX_STRING_BYTES);
+  maximum[SIN_MAX_STRING_BYTES] = '\0';
+  VALUE_t element = {VALUE_str, {.s = maximum}};
+  SIN_LIST_t *list = sin_list_build_owned(&element, 1);
+  ASSERT_NOT_NULL(list);
+  VALUE_t result = call_join(list, ",");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_EQ_INT(SIN_MAX_STRING_BYTES, strlen(result.s));
+  value_free(&result);
+
+  char *too_large = malloc(SIN_MAX_STRING_BYTES + 1u);
+  ASSERT_NOT_NULL(too_large);
+  memset(too_large, 'y', SIN_MAX_STRING_BYTES);
+  too_large[SIN_MAX_STRING_BYTES] = '\0';
+  VALUE_t values[] = {{VALUE_str, {.s = strdup("z")}},
+                      {VALUE_str, {.s = too_large}}};
+  list = sin_list_build_owned(values, 2);
+  ASSERT_NOT_NULL(list);
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior diagnostic", NULL);
+  result = call_join(list, ",");
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR,
+                item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                     "error"))->i);
+  ASSERT_TRUE(strstr(item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                         "error.msg"))->s,
+                     "prior diagnostic") != NULL);
+
+  char *valid_limit = malloc(SIN_MAX_STRING_BYTES + 1u);
+  ASSERT_NOT_NULL(valid_limit);
+  memset(valid_limit, 'v', SIN_MAX_STRING_BYTES);
+  valid_limit[SIN_MAX_STRING_BYTES] = '\0';
+  VALUE_t invalid_values[] = {{VALUE_str, {.s = valid_limit}},
+                              {VALUE_int, {.i = 7}}};
+  list = sin_list_build_owned(invalid_values, 2);
+  ASSERT_NOT_NULL(list);
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior diagnostic", NULL);
+  result = call_join(list, ",");
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_invalid_args_detail_contains("text.join");
+  teardown_libcall_runtime();
+}
+
+static void assert_join_allocation_failure(const char *separator,
+                                           long failure) {
+  const char *fields[] = {"a", "b", "c"};
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior diagnostic", NULL);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_list, {.list = make_join_string_list(fields, 3)}});
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup(separator)}});
+  alloc_test_fail_after(failure);
+  (void)lc_text_join(test_ctx(), NULL, NULL);
+  alloc_test_fail_after(-1);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  ASSERT_TRUE(strstr(item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                         "error.msg"))->s,
+                     "prior diagnostic") != NULL);
+}
+
+void test_text_join_distinct_allocation_failures(void) {
+  setup_libcall_runtime();
+  assert_join_allocation_failure(",", 0);
+  teardown_libcall_runtime();
+}
+
+void test_text_join_failures_preserve_diagnostic_and_cleanup(void) {
+  setup_libcall_runtime();
+  assert_join_allocation_failure(",", 0);
+  const char *fields[] = {"a", "b"};
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior diagnostic", NULL);
+  VALUE_t result = call_join(make_join_string_list(fields, 2), ",");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, "a,b") == 0);
+  value_free(&result);
+  ASSERT_TRUE(strstr(item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                         "error.msg"))->s,
+                     "prior diagnostic") != NULL);
+  teardown_libcall_runtime();
+}
+
+void test_text_join_source_integration_and_arity(void) {
+  setup_libcall_runtime();
+  VALUE_t source = {VALUE_str, {.s = strdup(
+      "result.joined = text.join{#[\"a\", \"b\", \"c\"], \"::\"};")}};
+  push_stack(config.vm->stack, source);
+  (void)lc_sys_compile(test_ctx(), NULL, NULL);
+  VALUE_t compiled = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, compiled.type);
+  ASSERT_EQ_INT(1, compiled.i);
+  ITEM_t *joined = find_item(itemstore_root(config.itemstore_ctx),
+                             "result.joined");
+  ASSERT_NOT_NULL(joined);
+  ASSERT_EQ_INT(VALUE_str, item_value(joined)->type);
+  ASSERT_TRUE(strcmp(item_value(joined)->s, "a::b::c") == 0);
+
+  const char *invalid[] = {"text.join{#[\"a\"]};",
+                           "text.join{#[\"a\"], \"::\", \"extra\"};"};
   for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
     OUTPUT_t *out = NULL;
     CompilerDiagnostic diag;
