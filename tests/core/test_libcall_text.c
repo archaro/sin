@@ -78,6 +78,12 @@ static void assert_lines_strings(VALUE_t result, const char *const *expected,
   value_free(&result);
 }
 
+static VALUE_t call_condense(const char *text) {
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = strdup(text)}});
+  (void)lc_text_condense(test_ctx(), NULL, NULL);
+  return pop_stack(config.vm->stack);
+}
+
 void test_text_split_registry_contract(void) {
   uint8_t library = 0, call = 0, args = 0;
   ASSERT_TRUE(libcall_lookup_pair("text", "split", &library, &call, &args));
@@ -718,6 +724,199 @@ void test_text_lines_source_integration_and_arity(void) {
 
   const char *invalid[] = {"text.lines{\"a\", \"b\"};",
                            "text.lines{\"a\", \"b\", \"c\"};"};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+    OUTPUT_t *out = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    ASSERT_TRUE(compile_source_to_bytecode_diag(invalid[i], strlen(invalid[i]),
+                                                &out, &diag) != 0);
+    ASSERT_TRUE(out == NULL);
+    ASSERT_EQ_INT(DIAG_PHASE_LOWER, diag.phase);
+    ASSERT_TRUE(strstr(diag.message, "invalid libcall argument count") != NULL);
+    compiler_diag_reset(&diag);
+  }
+  teardown_libcall_runtime();
+}
+
+void test_text_condense_registry_contract(void) {
+  uint8_t library = 0, call = 0, args = 0;
+  ASSERT_TRUE(libcall_lookup_pair("text", "condense", &library, &call,
+                                  &args));
+  ASSERT_EQ_INT(10, library);
+  ASSERT_EQ_INT(4, call);
+  ASSERT_EQ_INT(1, args);
+  ASSERT_TRUE(libcall_func_pair(library, call) == lc_text_condense);
+  ASSERT_TRUE(libcall_pair_arg_count(library, call, &args));
+  ASSERT_EQ_INT(1, args);
+}
+
+void test_text_condense_literal_whitespace_and_utf8(void) {
+  setup_libcall_runtime();
+  VALUE_t result = call_condense(" \r\n this   is\t a\n\nnew string  \n");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, "this is a new string") == 0);
+  value_free(&result);
+
+  result = call_condense("one two\tthree\nfour\vfive\ffive2\rsix");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, "one two three four five five2 six") == 0);
+  value_free(&result);
+
+  result = call_condense("caf\xC3\xA9 \xE6\x9D\xB1\x80");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(strcmp(result.s, "caf\xC3\xA9 \xE6\x9D\xB1\x80") == 0);
+  value_free(&result);
+  teardown_libcall_runtime();
+}
+
+void test_text_condense_empty_and_ownership(void) {
+  setup_libcall_runtime();
+  VALUE_t result = call_condense("");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_NOT_NULL(result.s);
+  ASSERT_TRUE(strcmp(result.s, "") == 0);
+  value_free(&result);
+
+  result = call_condense(" \t\n\v\f\r ");
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_NOT_NULL(result.s);
+  ASSERT_TRUE(strcmp(result.s, "") == 0);
+  value_free(&result);
+
+  char *input = strdup(" first   second ");
+  ASSERT_NOT_NULL(input);
+  push_stack(config.vm->stack, (VALUE_t){VALUE_str, {.s = input}});
+  (void)lc_text_condense(test_ctx(), NULL, NULL);
+  result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_TRUE(result.s != input);
+  ASSERT_TRUE(strcmp(result.s, "first second") == 0);
+  value_free(&result);
+  teardown_libcall_runtime();
+}
+
+void test_text_condense_invalid_types_and_stack_contract(void) {
+  setup_libcall_runtime();
+  push_stack(config.vm->stack, (VALUE_t){VALUE_int, {.i = 77}});
+  push_stack(config.vm->stack, (VALUE_t){VALUE_nil, {.i = 0}});
+  (void)lc_text_condense(test_ctx(), NULL, NULL);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(1, size_stack(config.vm->stack));
+  ASSERT_EQ_INT(77, pop_stack(config.vm->stack).i);
+  assert_invalid_args_detail_contains("text.condense");
+
+  VALUE_t invalid[] = {
+      {VALUE_float, {.f = 1.0}},
+      {VALUE_itemref, {.itemref = sin_itemref_create("root.child")}},
+      {VALUE_list, {.list = sin_list_build_owned(NULL, 0)}},
+      {VALUE_str, {.s = NULL}}};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+    push_stack(config.vm->stack, invalid[i]);
+    invalid[i] = VALUE_NIL;
+    (void)lc_text_condense(test_ctx(), NULL, NULL);
+    result = pop_stack(config.vm->stack);
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_invalid_args_detail_contains("text.condense");
+  }
+  teardown_libcall_runtime();
+}
+
+void test_text_condense_invalid_context_root_and_return_pointer(void) {
+  setup_libcall_runtime();
+  ITEM_t *context_root = make_root_item("condense_context");
+  ASSERT_NOT_NULL(context_root);
+  ITEM_t *caller = test_item_set_value(context_root, "caller",
+                                       (VALUE_t){VALUE_int, {.i = 1}});
+  ASSERT_NOT_NULL(caller);
+  RuntimeContext context = *test_ctx();
+  context.itemstore = itemstore_owner(context_root);
+  context.current_item = caller;
+  push_stack(config.vm->stack, (VALUE_t){VALUE_nil, {.i = 0}});
+  uint8_t *sentinel = (uint8_t *)(uintptr_t)0x1234u;
+  ASSERT_TRUE(lc_text_condense(&context, sentinel, context_root) == sentinel);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS,
+                item_value(find_item(context_root, "error"))->i);
+  ASSERT_TRUE(strstr(item_value(find_item(context_root, "error.msg"))->s,
+                     "text.condense") != NULL);
+  ASSERT_TRUE(strcmp(item_value(find_item(context_root, "error.item"))->s,
+                     "caller") == 0);
+  destroy_item(context_root);
+  teardown_libcall_runtime();
+}
+
+static void assert_condense_allocation_failure(const char *text) {
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior diagnostic", NULL);
+  push_stack(config.vm->stack,
+             (VALUE_t){VALUE_str, {.s = strdup(text)}});
+  alloc_test_fail_after(0);
+  (void)lc_text_condense(test_ctx(), NULL, NULL);
+  alloc_test_fail_after(-1);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  ASSERT_TRUE(strstr(item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                         "error.msg"))->s,
+                     "prior diagnostic") != NULL);
+}
+
+void test_text_condense_distinct_allocation_failures(void) {
+  setup_libcall_runtime();
+  assert_condense_allocation_failure("a b c");
+  assert_condense_allocation_failure("");
+  teardown_libcall_runtime();
+}
+
+void test_text_condense_string_limit_boundaries(void) {
+  setup_libcall_runtime();
+  char *maximum = malloc(SIN_MAX_STRING_BYTES + 1u);
+  ASSERT_NOT_NULL(maximum);
+  memset(maximum, 'x', SIN_MAX_STRING_BYTES);
+  maximum[SIN_MAX_STRING_BYTES] = '\0';
+  VALUE_t result = call_condense(maximum);
+  ASSERT_EQ_INT(VALUE_str, result.type);
+  ASSERT_EQ_INT(SIN_MAX_STRING_BYTES, strlen(result.s));
+  value_free(&result);
+  free(maximum);
+
+  char *too_large = malloc(SIN_MAX_STRING_BYTES + 2u);
+  ASSERT_NOT_NULL(too_large);
+  memset(too_large, 'y', SIN_MAX_STRING_BYTES + 1u);
+  too_large[SIN_MAX_STRING_BYTES + 1u] = '\0';
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_NETWORK_ERROR,
+                 "prior diagnostic", NULL);
+  result = call_condense(too_large);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(ERR_NETWORK_ERROR,
+                item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                     "error"))->i);
+  ASSERT_TRUE(strstr(item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                     "error.msg"))->s,
+                     "prior diagnostic") != NULL);
+  free(too_large);
+  teardown_libcall_runtime();
+}
+
+void test_text_condense_source_integration_and_arity(void) {
+  setup_libcall_runtime();
+  VALUE_t source = {VALUE_str, {.s = strdup(
+      "result.condensed = text.condense{\"  a\\tb \\n\"};")}};
+  push_stack(config.vm->stack, source);
+  (void)lc_sys_compile(test_ctx(), NULL, NULL);
+  VALUE_t compiled = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, compiled.type);
+  ASSERT_EQ_INT(1, compiled.i);
+  ITEM_t *condensed = find_item(itemstore_root(config.itemstore_ctx),
+                                "result.condensed");
+  ASSERT_NOT_NULL(condensed);
+  ASSERT_EQ_INT(VALUE_str, item_value(condensed)->type);
+  ASSERT_TRUE(strcmp(item_value(condensed)->s, "a b") == 0);
+
+  const char *invalid[] = {"text.condense;",
+                           "text.condense{\"a\", \"b\"};"};
   for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
     OUTPUT_t *out = NULL;
     CompilerDiagnostic diag;

@@ -537,6 +537,14 @@ rewrite.runtime.test_text_lines_invalid_context_root_and_return_pointer,api.libc
 rewrite.runtime.test_text_lines_distinct_allocation_failures,api.libcall.text.lines;libcall.text.lines
 rewrite.runtime.test_text_lines_string_and_list_boundaries,api.libcall.text.lines;libcall.text.lines
 rewrite.runtime.test_text_lines_source_integration_and_arity,api.libcall.text.lines;libcall.text.lines
+rewrite.runtime.test_text_condense_registry_contract,api.libcall.table;api.libcall.text.condense;libcall.text.condense
+rewrite.runtime.test_text_condense_literal_whitespace_and_utf8,api.libcall.text.condense;libcall.text.condense
+rewrite.runtime.test_text_condense_empty_and_ownership,api.libcall.text.condense;libcall.text.condense
+rewrite.runtime.test_text_condense_invalid_types_and_stack_contract,api.libcall.text.condense;libcall.text.condense
+rewrite.runtime.test_text_condense_invalid_context_root_and_return_pointer,api.libcall.text.condense;libcall.text.condense
+rewrite.runtime.test_text_condense_distinct_allocation_failures,api.libcall.text.condense;libcall.text.condense
+rewrite.runtime.test_text_condense_string_limit_boundaries,api.libcall.text.condense;libcall.text.condense
+rewrite.runtime.test_text_condense_source_integration_and_arity,api.libcall.text.condense;libcall.text.condense
 rewrite.runtime.test_text_join_registry_contract,api.libcall.text.join;libcall.text.join
 rewrite.runtime.test_text_join_literal_fields_and_utf8,api.libcall.text.join;libcall.text.join
 rewrite.runtime.test_text_join_empty_and_separator_behavior,api.libcall.text.join;libcall.text.join

@@ -65,6 +65,7 @@ uint8_t *lc_text_split(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_text_join(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_text_words(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_text_lines(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
+uint8_t *lc_text_condense(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_time_year(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_time_month(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_time_day(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -349,6 +350,7 @@ void test_libcall_registry_roundtrip(void) {
       {"text", "join", 10, 1, 2, lc_text_join},
       {"text", "words", 10, 2, 1, lc_text_words},
       {"text", "lines", 10, 3, 1, lc_text_lines},
+      {"text", "condense", 10, 4, 1, lc_text_condense},
       {"time", "year", 8, 0, 1, lc_time_year},
       {"time", "month", 8, 1, 1, lc_time_month},
       {"time", "day", 8, 2, 1, lc_time_day},

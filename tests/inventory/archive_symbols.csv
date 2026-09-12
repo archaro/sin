@@ -603,3 +603,4 @@ lc_text_split,libcall_text.o,libcall,src/libcall/libcall_text.c:53: lc_text_spli
 lc_text_join,libcall_text.o,libcall,src/libcall/libcall_text.c:182: lc_text_join definition/provenance,api.libcall.text.join
 lc_text_words,libcall_text.o,libcall,src/libcall/libcall_text.c:262: lc_text_words definition/provenance,api.libcall.text.words
 lc_text_lines,libcall_text.o,libcall,src/libcall/libcall_text.c:379: lc_text_lines definition/provenance,api.libcall.text.lines
+lc_text_condense,libcall_text.o,libcall,src/libcall/libcall_text.c:182: lc_text_condense definition/provenance,api.libcall.text.condense

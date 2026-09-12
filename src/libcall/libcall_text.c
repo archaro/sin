@@ -172,6 +172,79 @@ uint8_t *lc_text_split(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   return nextop;
 }
 
+static uint8_t *text_condense_failure(RuntimeContext *ctx, uint8_t *nextop,
+                                     VALUE_t text) {
+  value_free(&text);
+  push_stack(ctx->vm->stack, VALUE_NIL);
+  return nextop;
+}
+
+uint8_t *lc_text_condense(RuntimeContext *ctx, uint8_t *nextop,
+                          ITEM_t *item) {
+  // Consume one string and return a separately owned string with leading and
+  // trailing C whitespace removed and interior whitespace runs collapsed to a
+  // single ASCII space. Non-whitespace bytes, including UTF-8 bytes, are
+  // copied literally.
+  (void)item;
+
+  VALUE_t text = pop_stack(ctx->vm->stack);
+  if (text.type != VALUE_str || !text.s) {
+    lc_cleanup_values(&text, 1);
+    return lc_invalid_args_nil_return(ctx, nextop,
+        "text.condense text must be a string");
+  }
+
+  size_t text_len = strlen(text.s);
+  if (text_len > SIN_MAX_STRING_BYTES)
+    return text_condense_failure(ctx, nextop, text);
+
+  size_t output_len = 0;
+  bool saw_non_whitespace = false;
+  bool pending_space = false;
+  for (size_t i = 0; i < text_len; ++i) {
+    if (isspace((unsigned char)text.s[i]) != 0) {
+      if (saw_non_whitespace) pending_space = true;
+      continue;
+    }
+    if (pending_space) {
+      if (alloc_add_overflow(output_len, 1u, &output_len))
+        return text_condense_failure(ctx, nextop, text);
+      pending_space = false;
+    }
+    if (alloc_add_overflow(output_len, 1u, &output_len) ||
+        output_len > SIN_MAX_STRING_BYTES)
+      return text_condense_failure(ctx, nextop, text);
+    saw_non_whitespace = true;
+  }
+
+  size_t allocation_size = 0;
+  if (alloc_add_overflow(output_len, 1u, &allocation_size))
+    return text_condense_failure(ctx, nextop, text);
+  char *output = alloc_malloc(allocation_size);
+  if (!output) return text_condense_failure(ctx, nextop, text);
+
+  size_t output_index = 0;
+  saw_non_whitespace = false;
+  pending_space = false;
+  for (size_t i = 0; i < text_len; ++i) {
+    if (isspace((unsigned char)text.s[i]) != 0) {
+      if (saw_non_whitespace) pending_space = true;
+      continue;
+    }
+    if (pending_space) {
+      output[output_index++] = ' ';
+      pending_space = false;
+    }
+    output[output_index++] = text.s[i];
+    saw_non_whitespace = true;
+  }
+  output[output_index] = '\0';
+
+  value_free(&text);
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_str, {.s = output}});
+  return nextop;
+}
+
 static uint8_t *text_join_failure(RuntimeContext *ctx, uint8_t *nextop,
                                   VALUE_t list, VALUE_t separator) {
   value_free(&list);

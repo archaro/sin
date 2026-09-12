@@ -25,6 +25,14 @@ void test_text_lines_invalid_context_root_and_return_pointer(void);
 void test_text_lines_distinct_allocation_failures(void);
 void test_text_lines_string_and_list_boundaries(void);
 void test_text_lines_source_integration_and_arity(void);
+void test_text_condense_registry_contract(void);
+void test_text_condense_literal_whitespace_and_utf8(void);
+void test_text_condense_empty_and_ownership(void);
+void test_text_condense_invalid_types_and_stack_contract(void);
+void test_text_condense_invalid_context_root_and_return_pointer(void);
+void test_text_condense_distinct_allocation_failures(void);
+void test_text_condense_string_limit_boundaries(void);
+void test_text_condense_source_integration_and_arity(void);
 void test_text_join_registry_contract(void);
 void test_text_join_literal_fields_and_utf8(void);
 void test_text_join_empty_and_separator_behavior(void);
@@ -61,6 +69,14 @@ static const TF_TestDescriptor tests[] = {
     {"rewrite.runtime.test_text_lines_distinct_allocation_failures", test_text_lines_distinct_allocation_failures, "exclusive", 30000, "api.libcall.text.lines,libcall.text.lines"},
     {"rewrite.runtime.test_text_lines_string_and_list_boundaries", test_text_lines_string_and_list_boundaries, "exclusive", 30000, "api.libcall.text.lines,libcall.text.lines"},
     {"rewrite.runtime.test_text_lines_source_integration_and_arity", test_text_lines_source_integration_and_arity, "exclusive", 30000, "api.libcall.text.lines,libcall.text.lines"},
+    {"rewrite.runtime.test_text_condense_registry_contract", test_text_condense_registry_contract, "exclusive", 30000, "api.libcall.table,api.libcall.text.condense,libcall.text.condense"},
+    {"rewrite.runtime.test_text_condense_literal_whitespace_and_utf8", test_text_condense_literal_whitespace_and_utf8, "exclusive", 30000, "api.libcall.text.condense,libcall.text.condense"},
+    {"rewrite.runtime.test_text_condense_empty_and_ownership", test_text_condense_empty_and_ownership, "exclusive", 30000, "api.libcall.text.condense,libcall.text.condense"},
+    {"rewrite.runtime.test_text_condense_invalid_types_and_stack_contract", test_text_condense_invalid_types_and_stack_contract, "exclusive", 30000, "api.libcall.text.condense,libcall.text.condense"},
+    {"rewrite.runtime.test_text_condense_invalid_context_root_and_return_pointer", test_text_condense_invalid_context_root_and_return_pointer, "exclusive", 30000, "api.libcall.text.condense,libcall.text.condense"},
+    {"rewrite.runtime.test_text_condense_distinct_allocation_failures", test_text_condense_distinct_allocation_failures, "exclusive", 30000, "api.libcall.text.condense,libcall.text.condense"},
+    {"rewrite.runtime.test_text_condense_string_limit_boundaries", test_text_condense_string_limit_boundaries, "exclusive", 30000, "api.libcall.text.condense,libcall.text.condense"},
+    {"rewrite.runtime.test_text_condense_source_integration_and_arity", test_text_condense_source_integration_and_arity, "exclusive", 30000, "api.libcall.text.condense,libcall.text.condense"},
     {"rewrite.runtime.test_text_join_registry_contract", test_text_join_registry_contract, "exclusive", 30000, "api.libcall.text,libcall.text.join"},
     {"rewrite.runtime.test_text_join_literal_fields_and_utf8", test_text_join_literal_fields_and_utf8, "exclusive", 30000, "api.libcall.text,libcall.text.join"},
     {"rewrite.runtime.test_text_join_empty_and_separator_behavior", test_text_join_empty_and_separator_behavior, "exclusive", 30000, "api.libcall.text,libcall.text.join"},

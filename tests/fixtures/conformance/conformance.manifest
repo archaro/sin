@@ -72,6 +72,7 @@ exclude|libcall.text.split|native text.split tests cover literal splitting, empt
 exclude|libcall.text.join|native text.join tests cover joining, empty fields, diagnostics, ownership, limits, and source integration; no dedicated source-level golden fixture is needed
 exclude|libcall.text.words|native text.words tests cover C-whitespace splitting, empty behavior, diagnostics, ownership, limits, and source integration; no dedicated source-level golden fixture is needed
 exclude|libcall.text.lines|native text.lines tests cover LF/CRLF splitting, empty behavior, diagnostics, ownership, limits, and source integration; no dedicated source-level golden fixture is needed
+exclude|libcall.text.condense|native text.condense tests cover C-whitespace normalization, empty behavior, diagnostics, ownership, limits, and source integration; no dedicated source-level golden fixture is needed
 exclude|libcall.sys.now|wall-clock output is nondeterministic; covered by native runtime tests
 exclude|libcall.sys.monotime|monotonic-clock output is nondeterministic; covered by native runtime tests
 exclude|libcall.sys.compile|nested-compile source currently fails mandatory strict verifier stack-flow validation; covered by rewrite.runtime.test_sys_compile_libcall_runtime and interpreter source-integration tests

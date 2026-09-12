@@ -83,3 +83,22 @@ independent storage. Invalid values and malformed null string payloads return
 `nil` with `ERR_RUNTIME_INVALIDARGS` and a `text.lines` detail. String/list
 limits, overflow, allocation, and list-construction failures return `nil` after
 releasing staged ownership while preserving unrelated diagnostics.
+
+`text.condense` normalizes C byte whitespace in a string:
+
+```sinistra
+summary = text.condense{"  one\ttwo\nthree  "};
+```
+
+The call requires exactly one non-null string argument. Leading and trailing
+whitespace is removed, and every interior run of spaces, tabs, newlines,
+vertical tabs, form feeds, or carriage returns becomes one ASCII space.
+Non-whitespace bytes, including punctuation and UTF-8 bytes, are copied
+literally. Empty and all-whitespace input return separately owned empty
+strings.
+
+The input is consumed and the returned string has independent ownership.
+Invalid values and malformed null string payloads return `nil` with
+`ERR_RUNTIME_INVALIDARGS` and a `text.condense` detail. Too-large input,
+overflow, and allocation failure return `nil` after cleanup while preserving
+unrelated diagnostics.
