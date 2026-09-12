@@ -36,7 +36,7 @@ void test_time_year_registry_contract(void) {
   size_t count = 0;
 
   while (libcalls[count].libname != NULL) count++;
-  ASSERT_EQ_INT(106, count);
+  ASSERT_EQ_INT(107, count);
   ASSERT_TRUE(libcall_lookup_pair("time", "year", &lib_index, &call_index,
                                  &args));
   ASSERT_EQ_INT(8, lib_index);

@@ -343,3 +343,109 @@ uint8_t *lc_text_words(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   push_stack(ctx->vm->stack, (VALUE_t){VALUE_list, {.list = result}});
   return nextop;
 }
+
+static bool text_lines_count(const char *text, size_t text_len,
+                             size_t *count) {
+  size_t found = 0;
+  size_t start = 0;
+
+  for (size_t i = 0; i < text_len; ++i) {
+    if (text[i] != '\n') continue;
+    size_t end = i;
+    if (end > start && text[end - 1u] == '\r') --end;
+    if (end > start) {
+      if (found == SIN_LIST_MAX_ELEMENTS) return false;
+      ++found;
+    }
+    start = i + 1u;
+  }
+  if (start < text_len) {
+    if (found == SIN_LIST_MAX_ELEMENTS) return false;
+    ++found;
+  }
+  if (count) *count = found;
+  return true;
+}
+
+static uint8_t *text_lines_failure(RuntimeContext *ctx, uint8_t *nextop,
+                                   VALUE_t text, VALUE_t *parts,
+                                   size_t count) {
+  text_free_parts(parts, count);
+  value_free(&text);
+  push_stack(ctx->vm->stack, VALUE_NIL);
+  return nextop;
+}
+
+uint8_t *lc_text_lines(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  // Consume one string and return independently owned non-empty lines.
+  // LF terminates a line; a CR immediately before LF is part of the
+  // terminator, while every other CR and byte is copied literally.
+  (void)item;
+
+  VALUE_t text = pop_stack(ctx->vm->stack);
+  if (text.type != VALUE_str || !text.s) {
+    lc_cleanup_values(&text, 1);
+    return lc_invalid_args_nil_return(ctx, nextop,
+        "text.lines text must be a string");
+  }
+
+  size_t text_len = strlen(text.s);
+  if (text_len > SIN_MAX_STRING_BYTES)
+    return text_lines_failure(ctx, nextop, text, NULL, 0);
+
+  size_t count = 0;
+  if (!text_lines_count(text.s, text_len, &count))
+    return text_lines_failure(ctx, nextop, text, NULL, 0);
+  if (count == 0) {
+    value_free(&text);
+    SIN_LIST_t *result = sin_list_build_owned(NULL, 0);
+    if (!result) {
+      push_stack(ctx->vm->stack, VALUE_NIL);
+      return nextop;
+    }
+    push_stack(ctx->vm->stack, (VALUE_t){VALUE_list, {.list = result}});
+    return nextop;
+  }
+
+  if (alloc_mul_overflow(count, sizeof(VALUE_t), NULL))
+    return text_lines_failure(ctx, nextop, text, NULL, 0);
+  VALUE_t *parts = alloc_calloc(count, sizeof(*parts));
+  if (!parts) return text_lines_failure(ctx, nextop, text, NULL, 0);
+
+  size_t start = 0;
+  size_t part_index = 0;
+  for (size_t i = 0; i <= text_len; ++i) {
+    if (i < text_len && text.s[i] != '\n') continue;
+    size_t end = i;
+    if (end > start && text.s[end - 1u] == '\r') --end;
+    if (end > start) {
+      size_t part_len = end - start;
+      size_t allocation_size = 0;
+      if (alloc_add_overflow(part_len, 1u, &allocation_size) ||
+          allocation_size > (size_t)SIN_MAX_STRING_BYTES + 1u) {
+        return text_lines_failure(ctx, nextop, text, parts, part_index);
+      }
+      parts[part_index].type = VALUE_str;
+      parts[part_index].s = alloc_malloc(allocation_size);
+      if (!parts[part_index].s)
+        return text_lines_failure(ctx, nextop, text, parts, part_index + 1u);
+      memcpy(parts[part_index].s, text.s + start, part_len);
+      parts[part_index].s[part_len] = '\0';
+      ++part_index;
+    }
+    start = i + 1u;
+  }
+
+  value_free(&text);
+  SIN_LIST_t *result = sin_list_build_owned(parts, count);
+  if (!result) {
+    // sin_list_build_owned consumes every staged element on construction
+    // failure; only its staging array remains ours to release.
+    free(parts);
+    push_stack(ctx->vm->stack, VALUE_NIL);
+    return nextop;
+  }
+  free(parts);
+  push_stack(ctx->vm->stack, (VALUE_t){VALUE_list, {.list = result}});
+  return nextop;
+}

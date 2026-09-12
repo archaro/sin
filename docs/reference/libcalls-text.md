@@ -65,3 +65,21 @@ independent storage. Invalid values and malformed null string payloads return
 `nil` with `ERR_RUNTIME_INVALIDARGS` and a `text.words` detail. String/list
 limits, overflow, allocation, and list-construction failures return `nil` after
 cleanup while preserving unrelated diagnostics.
+
+`text.lines` splits a string into non-empty lines:
+
+```sinistra
+lines = text.lines{"first\nsecond\r\nthird"};
+```
+
+The call requires exactly one non-null string argument. LF bytes terminate
+lines; an immediately preceding CR is consumed as part of a CRLF terminator.
+Bare CR bytes and every other byte remain in the returned field. Leading,
+trailing, and repeated LF/CRLF terminators omit empty fields. Empty and
+all-terminator input returns an owned empty list.
+
+The input is consumed, and the returned list and every string element own
+independent storage. Invalid values and malformed null string payloads return
+`nil` with `ERR_RUNTIME_INVALIDARGS` and a `text.lines` detail. String/list
+limits, overflow, allocation, and list-construction failures return `nil` after
+releasing staged ownership while preserving unrelated diagnostics.
