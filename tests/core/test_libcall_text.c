@@ -557,6 +557,9 @@ void test_text_lines_literal_terminators_and_bytes(void) {
   assert_lines_strings(call_lines("this\nis\na\nstring"), example, 4);
   const char *mixed[] = {"one", "two", "three", "four"};
   assert_lines_strings(call_lines("one\ntwo\r\n\nthree\r\nfour"), mixed, 4);
+  const char *required_example[] = {"line 1", "line 2", "line 3"};
+  assert_lines_strings(call_lines("\nline 1\r\n\r\nline 2\r\nline 3\r\n\n"),
+                       required_example, 3);
   const char *literal[] = {"left\rmiddle", "caf\xC3\xA9", "quote\\value"};
   assert_lines_strings(call_lines("left\rmiddle\ncaf\xC3\xA9\r\nquote\\value"),
                        literal, 3);
