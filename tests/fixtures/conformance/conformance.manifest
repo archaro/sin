@@ -22,25 +22,25 @@ exclude|libcall.conv.bool|native conv.bool tests cover shared truthiness semanti
 exclude|libcall.conv.int|native conv.int tests cover conversion semantics, boundaries, diagnostics, ownership, and source integration; no dedicated source-level golden fixture is needed
 exclude|libcall.conv.float|native conv.float tests cover conversion semantics, parser boundaries, diagnostics, ownership, and source integration; no dedicated source-level golden fixture is needed
 exclude|libcall.conv.str|native conv.str tests cover shared str.valtostr rendering semantics, value ownership, and source integration; no dedicated source-level golden fixture is needed
-exclude|libcall.math.abs|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.min|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.max|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.floor|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.ceil|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.round|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.sqrt|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.pow|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.log|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.log2|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.log10|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.exp|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.sin|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.cos|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.tan|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.asin|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.acos|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.atan|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
-exclude|libcall.math.atan2|covered by the focused native math libcall tests; no source-level golden fixture in this first-call task
+exclude|libcall.math.abs|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.min|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.max|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.floor|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.ceil|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.round|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.sqrt|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.pow|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.log|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.log2|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.log10|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.exp|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.sin|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.cos|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.tan|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.asin|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.acos|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.atan|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
+exclude|libcall.math.atan2|covered by focused native math tests, including source-to-runtime integration and arity diagnostics; no dedicated source-level golden fixture is needed
 exclude|libcall.rand.int|native deterministic rand tests cover generated-word endpoints and rejection sampling; test_rand_source_integration_and_arity compiles and runs all four rand calls; random draws do not have fixed golden output
 exclude|libcall.rand.float|native deterministic rand tests cover zero and maximum 53-bit generated-word results; test_rand_source_integration_and_arity compiles and runs all four rand calls; random draws do not have fixed golden output
 exclude|libcall.rand.chance|native deterministic rand tests cover generated-word probability boundaries and exact endpoints; test_rand_source_integration_and_arity compiles and runs all four rand calls; random draws do not have fixed golden output

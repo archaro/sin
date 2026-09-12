@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "compiler/compiler_pipeline.h"
 #include "config.h"
 #include "error.h"
 #include "item.h"
@@ -1322,6 +1323,99 @@ void test_math_float_result_stack_and_diagnostic_contract(void) {
     ASSERT_TRUE(strcmp(preserved.s, "preserved lower stack value") == 0);
     value_free(&preserved);
     ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  }
+  teardown_libcall_runtime();
+}
+
+void test_math_source_integration_and_arity(void) {
+  setup_libcall_runtime();
+  VALUE_t source = {VALUE_str, {.s = strdup(
+      "result.abs = mAtH.AbS{-7};"
+      "result.min = math.min{-2, 3};"
+      "result.max = math.max{-2, 3};"
+      "result.floor = math.floor{3.75};"
+      "result.ceil = math.ceil{3.25};"
+      "result.round = math.round{-2.5};"
+      "result.sqrt = math.sqrt{9};"
+      "result.pow = math.pow{2, 3};"
+      "result.log = math.log{1};"
+      "result.log2 = math.log2{8};"
+      "result.log10 = math.log10{1000};"
+      "result.exp = math.exp{0};"
+      "result.sin = math.sin{0};"
+      "result.cos = math.cos{0};"
+      "result.tan = math.tan{0};"
+      "result.asin = math.asin{0};"
+      "result.acos = math.acos{1};"
+      "result.atan = math.atan{0};"
+      "result.atan2 = math.atan2{1, 1};")}};
+  ASSERT_NOT_NULL(source.s);
+  push_stack(config.vm->stack, source);
+  (void)lc_sys_compile(test_ctx(), NULL, NULL);
+  VALUE_t compiled = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, compiled.type);
+  ASSERT_EQ_INT(1, compiled.i);
+
+  const struct {
+    const char *path;
+    VALUE_e type;
+    int64_t integer;
+    double floating;
+  } expected[] = {
+      {"result.abs", VALUE_int, 7, 0.0},
+      {"result.min", VALUE_int, -2, 0.0},
+      {"result.max", VALUE_int, 3, 0.0},
+      {"result.floor", VALUE_int, 3, 0.0},
+      {"result.ceil", VALUE_int, 4, 0.0},
+      {"result.round", VALUE_int, -3, 0.0},
+      {"result.sqrt", VALUE_float, 0, 3.0},
+      {"result.pow", VALUE_float, 0, 8.0},
+      {"result.log", VALUE_float, 0, 0.0},
+      {"result.log2", VALUE_float, 0, 3.0},
+      {"result.log10", VALUE_float, 0, 3.0},
+      {"result.exp", VALUE_float, 0, 1.0},
+      {"result.sin", VALUE_float, 0, 0.0},
+      {"result.cos", VALUE_float, 0, 1.0},
+      {"result.tan", VALUE_float, 0, 0.0},
+      {"result.asin", VALUE_float, 0, 0.0},
+      {"result.acos", VALUE_float, 0, 0.0},
+      {"result.atan", VALUE_float, 0, 0.0},
+      {"result.atan2", VALUE_float, 0, M_PI / 4.0},
+  };
+  ITEM_t *root = itemstore_root(config.itemstore_ctx);
+  for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); i++) {
+    ITEM_t *item = find_item(root, expected[i].path);
+    ASSERT_NOT_NULL(item);
+    ASSERT_EQ_INT(expected[i].type, item_value(item)->type);
+    if (expected[i].type == VALUE_int) {
+      ASSERT_EQ_INT(expected[i].integer, item_value(item)->i);
+    } else {
+      assert_math_float_close(item_value(item)->f, expected[i].floating);
+    }
+  }
+
+  const struct {
+    const char *source;
+    const char *message;
+  } invalid[] = {
+      {"math.abs;", "invalid libcall argument count"},
+      {"math.abs{1, 2};", "invalid libcall argument count"},
+      {"math.min{1};", "invalid libcall argument count"},
+      {"math.min{1, 2, 3};", "invalid libcall argument count"},
+      {"math.unknown{1};", "unknown libcall target"},
+  };
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
+    OUTPUT_t *out = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    ASSERT_TRUE(compile_source_to_bytecode_diag(
+                    invalid[i].source, strlen(invalid[i].source), &out,
+                    &diag) != 0);
+    ASSERT_TRUE(out == NULL);
+    ASSERT_EQ_INT(DIAG_PHASE_LOWER, diag.phase);
+    ASSERT_NOT_NULL(diag.message);
+    ASSERT_TRUE(strstr(diag.message, invalid[i].message) != NULL);
+    compiler_diag_reset(&diag);
   }
   teardown_libcall_runtime();
 }

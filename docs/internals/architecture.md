@@ -159,7 +159,8 @@ revision, and durability invariants and
 ### Libcalls
 
 Files: `src/libcall/libcall*.c`, `src/libcall/libcall*.h`, including the
-value-conversion handler in `libcall_conv.c`, dedicated immutable list handlers
+numeric and trigonometric math handlers in `libcall_math.c`, value-conversion
+handler in `libcall_conv.c`, dedicated immutable list handlers
 in `libcall_list.c`, random handlers and
 internal initialization/test hooks in `libcall_rand.c` / `libcall_rand.h`, and
 the UTC calendar handler in `libcall_time.c` / `libcall_time.h`, and the
@@ -174,6 +175,9 @@ The libcall registry owns the permanent `(library index, call index)` ABI
 shared by compiler lowering and runtime dispatch. `libcall_lookup_pair()`
 resolves compiler-side names, while `libcall_func_pair()` resolves runtime
 dispatch. Handlers are named `lc_<library>_<name>`.
+
+`libcall_math.c` owns the numeric and trigonometric math primitives and their
+fixed numeric result/type and undefined-result contracts.
 
 `libcall_rand.c` owns a process-wide xoshiro256** stream confined to the
 runtime thread. `runtime_init()` seeds it once through synchronous libuv

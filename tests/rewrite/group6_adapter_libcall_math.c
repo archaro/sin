@@ -50,8 +50,10 @@ void test_math_rounding_undefined_inputs_publish_error(void);
 void test_math_rounding_success_preserves_existing_error(void);
 
 void test_math_float_result_stack_and_diagnostic_contract(void);
+void test_math_source_integration_and_arity(void);
 
 static const TF_TestDescriptor tests[] = {
+    {"rewrite.runtime.test_math_source_integration_and_arity", test_math_source_integration_and_arity, "exclusive", 30000, "api.libcall.math,language.token.tlibname,libcall.math.abs,libcall.math.min,libcall.math.max,libcall.math.floor,libcall.math.ceil,libcall.math.round,libcall.math.sqrt,libcall.math.pow,libcall.math.log,libcall.math.log2,libcall.math.log10,libcall.math.exp,libcall.math.sin,libcall.math.cos,libcall.math.tan,libcall.math.asin,libcall.math.acos,libcall.math.atan,libcall.math.atan2"},
     {"rewrite.runtime.test_math_float_result_stack_and_diagnostic_contract", test_math_float_result_stack_and_diagnostic_contract, "exclusive", 30000, "api.common.errors,api.libcall.math,libcall.math.sqrt,libcall.math.pow,libcall.math.log,libcall.math.exp,libcall.math.sin,libcall.math.atan2"},
     {"rewrite.runtime.test_math_abs_registry_contract", test_math_abs_registry_contract, "exclusive", 30000, "api.libcall.math,api.libcall.table,libcall.math.abs"},
     {"rewrite.runtime.test_math_abs_integer_inputs", test_math_abs_integer_inputs, "exclusive", 30000, "api.libcall.math,libcall.math.abs"},

@@ -248,6 +248,7 @@ crlf        \r\n
   "in"          { return TIN; }
   "conv"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "list"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
+  "math"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "net"         { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
   "or"          { return TOR; }
   "rand"        { yylval->TSTRINGLIT = strdup_lc(yytext); return TLIBNAME; }
