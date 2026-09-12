@@ -48,6 +48,12 @@ gcov -b -f --json-format -o obj/debug-gcc/<module-dir> src/<module>.c
 
 ## Rand floor provenance
 
+`src/libcall/libcall_text.c` was added after the recorded baseline and is
+recorded as unavailable in the historical snapshot. Its GCC and Clang floors
+come from the six focused text.split descriptors, measured independently with
+GCC 13/gcov 13 and Clang 18/LLVM 18 native collectors; the compiler-specific
+floor files retain their own line and branch coordinates.
+
 `src/libcall/libcall_rand.c` did not exist at the recorded historical commit,
 so its snapshot row is `unavailable`; historical counts remain unchanged.
 Its reviewed floors come from the nine focused rand descriptors with the

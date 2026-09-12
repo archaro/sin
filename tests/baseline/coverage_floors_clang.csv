@@ -56,3 +56,4 @@ src/scomp.c,executable,measured,88.02,65.63,100.00,Reviewed initial LLVM 18 nati
 src/sconv.c,executable,measured,98.89,90.74,100.00,Reviewed initial LLVM 18 native baseline (not GCC snapshot); manual floor; see tests/baseline/README.md,clang-18
 src/sdiss.c,executable,measured,82.50,78.57,100.00,Reviewed initial LLVM 18 native baseline (not GCC snapshot); manual floor; see tests/baseline/README.md,clang-18
 src/sin.c,executable,measured,73.20,62.33,100.00,Reviewed initial LLVM 18 native baseline (not GCC snapshot); manual floor; see tests/baseline/README.md,clang-18
+src/libcall/libcall_text.c,libcall,measured,89.66,79.31,100.00,"Focused text.split descriptors with Clang 18/LLVM 18: 104/116 lines, 46/58 branches, and 4/4 functions; native LLVM metrics include invalid, empty, ownership, and allocation paths.",clang-18

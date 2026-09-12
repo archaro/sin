@@ -103,6 +103,7 @@
   X("task", "thisid",      2,  2, 0, lc_task_thisid) \
   X("task", "exists",      2,  3, 1, lc_task_exists) \
   X("task", "count",       2,  4, 0, lc_task_count) \
+  X("text", "split",      10, 0, 2, lc_text_split) \
   X("time", "year",        8,  0, 1, lc_time_year) \
   X("time", "month",       8,  1, 1, lc_time_month) \
   X("time", "day",         8,  2, 1, lc_time_day) \

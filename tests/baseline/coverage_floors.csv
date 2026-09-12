@@ -56,3 +56,4 @@ src/scomp.c,executable,measured,89.93,63.48,100.00,Reviewed pre-rewrite baseline
 src/sconv.c,executable,measured,98.15,87.80,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/sdiss.c,executable,measured,82.76,73.53,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
 src/sin.c,executable,measured,78.25,64.21,100.00,Reviewed pre-rewrite baseline; manual floor; see tests/baseline/README.md,gcc-13
+src/libcall/libcall_text.c,libcall,measured,94.62,79.31,100.00,"Focused text.split descriptors with GCC 13/gcov 13: 88/93 lines, 46/58 branches, and 4/4 functions; native measurement includes invalid, empty, ownership, and allocation paths.",gcc-13

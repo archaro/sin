@@ -56,3 +56,4 @@ src/scomp.c,executable,measured,125,139,89.93,73,115,63.48,8,8,100.00,GCC gcov J
 src/sconv.c,executable,measured,53,54,98.15,36,41,87.80,4,4,100.00,GCC gcov JSON from full make test
 src/sdiss.c,executable,measured,72,87,82.76,25,34,73.53,4,4,100.00,GCC gcov JSON from full make test
 src/sin.c,executable,measured,403,515,78.25,183,285,64.21,22,22,100.00,GCC gcov JSON from full make test
+src/libcall/libcall_text.c,libcall,unavailable,0,0,n/a,0,0,n/a,0,0,n/a,Post-baseline text library module added after the recorded GCC baseline commit
