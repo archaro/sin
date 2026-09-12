@@ -417,7 +417,7 @@ uint8_t *lc_text_lines(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   for (size_t i = 0; i <= text_len; ++i) {
     if (i < text_len && text.s[i] != '\n') continue;
     size_t end = i;
-    if (end > start && text.s[end - 1u] == '\r') --end;
+    if (i < text_len && end > start && text.s[end - 1u] == '\r') --end;
     if (end > start) {
       size_t part_len = end - start;
       size_t allocation_size = 0;

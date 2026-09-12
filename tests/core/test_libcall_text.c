@@ -560,6 +560,12 @@ void test_text_lines_literal_terminators_and_bytes(void) {
   const char *required_example[] = {"line 1", "line 2", "line 3"};
   assert_lines_strings(call_lines("\nline 1\r\n\r\nline 2\r\nline 3\r\n\n"),
                        required_example, 3);
+  const char *final_cr[] = {"last\r"};
+  assert_lines_strings(call_lines("last\r"), final_cr, 1);
+  const char *only_cr[] = {"\r"};
+  assert_lines_strings(call_lines("\r"), only_cr, 1);
+  const char *post_lf_cr[] = {"first", "\r"};
+  assert_lines_strings(call_lines("first\n\r"), post_lf_cr, 2);
   const char *literal[] = {"left\rmiddle", "caf\xC3\xA9", "quote\\value"};
   assert_lines_strings(call_lines("left\rmiddle\ncaf\xC3\xA9\r\nquote\\value"),
                        literal, 3);
