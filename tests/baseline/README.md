@@ -46,13 +46,39 @@ authored C source):
 gcov -b -f --json-format -o obj/debug-gcc/<module-dir> src/<module>.c
 ```
 
-## Rand floor provenance
+## Post-baseline libcall floor provenance
 
-`src/libcall/libcall_text.c` was added after the recorded baseline and is
-recorded as unavailable in the historical snapshot. Its GCC and Clang floors
-come from the six focused text.split descriptors, measured independently with
-GCC 13/gcov 13 and Clang 18/LLVM 18 native collectors; the compiler-specific
-floor files retain their own line and branch coordinates.
+The historical snapshot is preserved unchanged. `src/libcall/libcall_math.c`
+and `src/libcall/libcall_text.c` were added after the recorded baseline and
+remain `unavailable` there; the time row records the earlier scaffold with no
+executable handlers. The current active floor files separately contain the
+reviewed thresholds for the implemented libcall modules. Their numeric floors
+are retained as conservative thresholds; this refresh changes provenance only.
+
+The fresh GCC 13/gcov 13 observation used the coverage inventory target:
+
+```sh
+make CC=gcc _coverage-inventory
+```
+
+It produced `obj/coverage-gcc/coverage/coverage.csv` at `2026-09-13
+07:40:57` (BST, UTC+01:00). The equivalent `make CC=clang _coverage-inventory` fresh
+native Clang 18/LLVM 18 measurement produced
+`obj/coverage-clang/coverage/coverage.csv` at `2026-09-13 07:43:03` (BST, UTC+01:00).
+Each target composes the `BUILD=coverage _test` workload and the subsequent
+`coverage_gate` collection.
+
+The resulting full-workload counts and active floors are:
+
+| Module and current descriptor family | Fresh GCC 13/gcov 13 observation | Fresh Clang 18/LLVM 18 observation | Retained GCC floor | Retained Clang floor |
+| --- | ---: | ---: | ---: | ---: |
+| `libcall_math.c`: 19 public handlers plus helpers | 200/200 lines; 135/144 branches; 25/25 functions | 316/316 lines; 145/154 branches; 25/25 functions | 100.00 / 70.00 / 100.00 | 100.00 / 70.00 / 100.00 |
+| `libcall_time.c`: 10 public handlers plus helpers | 135/147 lines; 49/63 branches; 15/15 functions | 198/217 lines; 70/88 branches; 15/15 functions | 90.90 / 70.00 / 100.00 | 81.08 / 50.00 / 100.00 |
+| `libcall_text.c`: `split`, `words`, `lines`, `condense`, `join` | 328/344 lines; 207/240 branches; 14/14 functions | 397/425 lines; 207/240 branches; 14/14 functions | 94.62 / 79.31 / 100.00 | 89.66 / 79.31 / 100.00 |
+
+Each triplet is lines / branches / functions. A fresh native Clang 18
+full-workload run completed successfully; its counts are observations, while
+the compiler-specific floor values remain the reviewed active thresholds.
 
 `src/libcall/libcall_rand.c` did not exist at the recorded historical commit,
 so its snapshot row is `unavailable`; historical counts remain unchanged.
@@ -79,7 +105,8 @@ LLVM 18 native tools respectively. Clang descriptor runs used
 `LLVM_PROFILE_FILE=obj/coverage-clang/coverage-data/%m.profraw`. Counts retain
 each collector's native line, branch, and function metrics. The floors match
 these focused observations; the full suite also exercises OS entropy
-initialization and may cover additional branches.
+initialization and may cover additional branches. This rand provenance applies
+only to `libcall_rand.c`, not to the math, time, or text floors above.
 
 ## Active coverage gate
 
