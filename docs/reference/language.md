@@ -152,7 +152,7 @@ expression       ::= local | integer | float | string | "true" | "false" | "nil"
                    | expression "*" expression | expression "/" expression
                    | expression "%" expression | "(" expression ")"
                    | "!" expression | "-" expression | libcall ;
-libcall          ::= library "." layer arguments ;
+libcall          ::= library "." identifier-layer arguments ;
 parameters       ::= ε | "{" parameter-list "}" ;
 parameter-list   ::= local | local "," parameter-list ;
 arguments        ::= ε | "{" argument-list "}" ;
@@ -162,7 +162,7 @@ list-elements    ::= expression | expression "," list-elements ;
 item-reference   ::= "&" item ;
 item             ::= first-layer subsequent-layers
                    | "." first-layer subsequent-layers ;
-first-layer      ::= layer | dereference ;
+first-layer      ::= identifier-layer | dereference ;
 subsequent-layers ::= ε | "." layer subsequent-layers ;
 layer            ::= identifier-layer | integer | dereference ;
 dereference      ::= "[" (item | local) "]" ;
@@ -234,15 +234,14 @@ not expression operators.
 - For `local = expression`, the value is evaluated before storing the local.
   For `item = expression`, the item path (including dereferences) is evaluated
   first, then the value, then the store.
-- For an item call, argument expressions are evaluated in source order before
-  the call target expression; the call then runs. An expression directly
-  followed by `{` or `(` with argument expressions always constructs an item
-  call: the compiler does not inspect the target item's kind first. This means
-  `str.len{foo.bar}` evaluates `foo.bar` as the argument, executing it when
-  it is code, before resolving `str.len` as the target. The value-item
-  argument rules in the item-calls section apply when the resolved target is
-  not a code item. Libcall arguments are also evaluated left-to-right before
-  the fixed library call.
+- For an item call, the brace argument expressions are evaluated in source
+  order before the item path; the call then runs. Item-call targets use the
+  item-path grammar, including its dereference layers, rather than arbitrary
+  expressions. `str.len{foo.bar}` is a fixed libcall: it evaluates `foo.bar`
+  as its argument, executing it when it is code, then selects `str.len` using
+  static library-registry metadata. Fixed libcalls do not resolve a runtime
+  target path. The value-item argument rules in the item-calls section apply
+  when the resolved item-call target is not a code item.
 - Statements execute in source order. `return` evaluates its optional
   expression once and exits; `return;` returns `nil`. `break` and `continue`
   transfer to the nearest enclosing loop.
@@ -252,10 +251,11 @@ not expression operators.
 
 ## Item calls and code-item execution
 
-An item expression with an argument block evaluates each argument from left to
-right, then evaluates the target expression, and then performs the call. Each
-argument and the target expression is evaluated once. The target is resolved
-relative to the executing item using the ordinary item-name rules.
+An item call uses an item path followed by a brace argument block. It evaluates
+each argument from left to right, then evaluates the item path, and then
+performs the call. Each argument and each path component is evaluated once.
+The path is resolved relative to the executing item using the ordinary
+item-name rules; the call target is not an arbitrary expression.
 
 - A **code item** runs synchronously. The caller resumes at the next statement
   only after the callee has terminated by `RETURN`, `RETURN expression`, or
@@ -318,7 +318,7 @@ execute. `BREAK` and `CONTINUE` affect only the nearest enclosing loop; a return
 from inside a loop exits the whole current code item, while a break/continue
 continues with that loop's normal control flow.
 
-Argument expressions, target expressions, return expressions, and any side
+Argument expressions, item-path expressions, return expressions, and any side
 effects they perform obey the evaluation order above and happen once. Effects
 that complete before a value is discarded, a callee falls through, or a return
 is taken remain visible (for example item assignments, persistence operations,

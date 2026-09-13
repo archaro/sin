@@ -2,10 +2,11 @@
 
 The compiler is a single bounded pipeline coordinated through
 `CompilerContext`. The public entry points in
-`src/compiler/compiler_pipeline.h` all return `CompilerDiagnostic` values;
-parameter-aware compilation is provided by
-`compile_source_to_bytecode_diag_with_params()`. All variants use the same
-stage order.
+`src/compiler/compiler_pipeline.h` return `int8_t` status codes and write
+compiled output through an `OUTPUT_t **out` parameter and structured
+diagnostics through a `CompilerDiagnostic *out_diag` parameter. Parameter-aware
+compilation is provided by `compile_source_to_bytecode_diag_with_params()`.
+All variants use the same stage order.
 
 ## Data Flow
 
@@ -41,12 +42,16 @@ and post-verifies the completed output before returning it.
 ## Context and Destruction
 
 `CompilerContext` borrows the source bytes and owns the AST root, semantic
-context, IR unit, and temporary `OUTPUT_t`. Diagnostics are owned by the
-public caller and passed through each stage. Its reset path
-destroys those in their owning APIs (`as_delete`, `sem_delete_ctx`,
-`ir_destroy_unit`, and output buffers); the successful output is detached from
-the context before cleanup. Every error path goes through the same cleanup, so
-callers receive no partial output.
+context, IR unit, and temporary `OUTPUT_t`. The public caller must initialize a
+`CompilerDiagnostic` with `compiler_diag_init()` before the first call and
+eventually release its allocated fields with `compiler_diag_reset()`; the
+pipeline resets it at the start of every invocation and passes it through each
+stage. Its reset path destroys context-owned state in the owning APIs
+(`as_delete`, `sem_delete_ctx`, `ir_destroy_unit`, and output buffers). On
+success, the `OUTPUT_t` is detached and its `bytecode` buffer and structure
+become caller-owned; on failure, the output parameter remains `NULL` and any
+temporary output is freed during cleanup. Every error path therefore returns no
+partial output.
 
 Compiler APIs return a caller-owned `CompilerDiagnostic`. At runtime
 crossings, `set_compiler_error_item()` publishes that diagnostic to the full

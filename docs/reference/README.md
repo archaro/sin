@@ -12,6 +12,7 @@ for Sinistra's language, runtime diagnostics, tools, and library calls.
 
 ## Libraries
 
+- [conv](libcalls-conv.md)
 - [sys](libcalls-sys.md)
 - [str](libcalls-str.md)
 - [net](libcalls-net.md)
