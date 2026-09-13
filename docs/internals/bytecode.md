@@ -156,7 +156,7 @@ error. Malformed or truncated encodings are verifier errors.
 | `x` | `IR_OP_NOT` | none | Pop the top value, apply logical not, and push the boolean result. |
 | `y` | `IR_OP_AND` | none | Pop the top two values, apply logical and, and push the boolean result. |
 | `z` | `IR_OP_OR` | none | Pop the top two values, apply logical or, and push the boolean result. |
-| `B` | `IR_OP_ITEM_SAVE_CODE` | optional params, then source block | Compile embedded source code and assign the compiled code item to the item name on top of the stack. On success, clear the error item. Malformed embedded payloads set `ERR_RUNTIME_BYTECODE`; invalid target item names set `ERR_RUNTIME_INVALIDITEM`; source compilation failures set the compiler error item. |
+| `B` | `IR_OP_ITEM_SAVE_CODE` | v1 mandatory parameter block (zero or more names), then source block | Compile embedded source code and assign the compiled code item to the item name on top of the stack. On success, clear the error item. Malformed embedded payloads set `ERR_RUNTIME_BYTECODE`; invalid target item names set `ERR_RUNTIME_INVALIDITEM`; source compilation failures set the compiler error item. |
 | `[` | `IR_OP_BUILD_LIST` | `u32 count` (little-endian) | Consume `count` values in source order and push one list. |
 | `&` | `IR_OP_MAKE_ITEMREF` | none | Canonicalise the assembled item name and push an owning item reference. |
 | `C` | `IR_OP_ITEM_SAVE` | none | Pop an item name and value, then save the value into the item. |

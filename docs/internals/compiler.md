@@ -53,8 +53,9 @@ become caller-owned; on failure, the output parameter remains `NULL` and any
 temporary output is freed during cleanup. Every error path therefore returns no
 partial output.
 
-Compiler APIs return a caller-owned `CompilerDiagnostic`. At runtime
-crossings, `set_compiler_error_item()` publishes that diagnostic to the full
+Compiler APIs do not return a `CompilerDiagnostic`; they populate the
+caller-owned diagnostic through the `CompilerDiagnostic *out_diag` output
+parameter. At runtime crossings, `set_compiler_error_item()` publishes that diagnostic to the full
 `error` namespace: `error`, `error.msg`, `error.code`, `error.stage`,
 `error.file`, `error.line`, `error.column`, and `error.excerpt`.
 

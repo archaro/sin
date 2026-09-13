@@ -251,11 +251,12 @@ not expression operators.
 
 ## Item calls and code-item execution
 
-An item call uses an item path followed by a brace argument block. It evaluates
-each argument from left to right, then evaluates the item path, and then
-performs the call. Each argument and each path component is evaluated once.
-The path is resolved relative to the executing item using the ordinary
-item-name rules; the call target is not an arbitrary expression.
+An item call may omit arguments; when arguments are present, they use a brace
+argument block after the item path. It evaluates each argument from left to
+right, then evaluates the item path, and then performs the call. Each argument
+and each path component is evaluated once. The path is resolved relative to the
+executing item using the ordinary item-name rules; the call target is not an
+arbitrary expression.
 
 - A **code item** runs synchronously. The caller resumes at the next statement
   only after the callee has terminated by `RETURN`, `RETURN expression`, or
