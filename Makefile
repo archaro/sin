@@ -51,7 +51,7 @@ ifneq ($(CC_MAJOR),18)
 $(error BUILD=coverage requires reviewed Clang 18 tools; found $(CC_MAJOR))
 endif
 CFLAGS += -fprofile-instr-generate -fcoverage-mapping -DSIN_COVERAGE_CLANG=1
-LDFLAGS += -fprofile-instr-generate -fcoverage-mapping
+LDFLAGS += -fprofile-instr-generate -fcoverage-mapping -fuse-ld=lld
 else ifeq ($(CC_VENDOR),gcc)
 ifneq ($(CC_MAJOR),13)
 $(error BUILD=coverage requires reviewed GCC 13 tools; found $(CC_MAJOR))
