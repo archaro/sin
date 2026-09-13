@@ -139,6 +139,14 @@ TEST_RUN_LIST := $(FRAMEWORK_SELF_BIN) $(CONFORMANCE_BIN) $(REWRITE_BINS)
 TEST_TMP_ROOT := $(abspath $(OBJ_DIR)/tmp)
 COVERAGE_OBJ_DIR := obj/coverage-$(notdir $(CC))
 COVERAGE_LIB_DIR := lib/coverage-$(notdir $(CC))
+LLVM_COVERAGE_PROFILE_DIR :=
+ifeq ($(BUILD),coverage)
+ifeq ($(CC_VENDOR),clang)
+LLVM_COVERAGE_PROFILE_DIR := $(abspath $(COVERAGE_OBJ_DIR)/coverage-data)
+export LLVM_PROFILE_FILE := $(LLVM_COVERAGE_PROFILE_DIR)/%m.profraw
+endif
+endif
+
 ifeq ($(CC_VENDOR),gcc)
 COVERAGE_RUN_ENV := GCOV_PREFIX_BASE="$(abspath $(COVERAGE_OBJ_DIR)/coverage-data)" GCOV_PREFIX_STRIP=0
 COVERAGE_COLLECT_ARGS := --gcov-profile-root "$(COVERAGE_OBJ_DIR)/coverage-data" --gcov-tool "$(GCOV_TOOL)"
@@ -148,6 +156,7 @@ endif
 test: _test
 _test: $(TEST_BINS) $(TEST_PROGRAMS)
 	@mkdir -p "$(TEST_TMP_ROOT)"
+	@if [ -n "$(LLVM_COVERAGE_PROFILE_DIR)" ]; then mkdir -p "$(LLVM_COVERAGE_PROFILE_DIR)"; fi
 	@SIN_TEST_TMP_ROOT="$(TEST_TMP_ROOT)" TF_TMP_ROOT="$(TEST_TMP_ROOT)" PYTHONDONTWRITEBYTECODE=1 python3 tests/inventory/audit.py --archive "$(LIB)" >/dev/null
 	@SIN_TEST_TMP_ROOT="$(TEST_TMP_ROOT)" TF_TMP_ROOT="$(TEST_TMP_ROOT)" TMPDIR="$(TEST_TMP_ROOT)" bash tests/inventory/test_audit.sh "$(LIB)"
 	@SIN_TEST_TMP_ROOT="$(TEST_TMP_ROOT)" TF_TMP_ROOT="$(TEST_TMP_ROOT)" TMPDIR="$(TEST_TMP_ROOT)" PYTHONDONTWRITEBYTECODE=1 python3 tests/baseline/audit_baseline.py
