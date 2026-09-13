@@ -18,11 +18,14 @@ non-finite results are undefined.
 either signed zero. Non-finite inputs and finite inputs whose exponential
 overflows are undefined; finite underflow to zero is representable and
 succeeds.
-The trigonometric operations use radians. `math.sin`, `math.cos`, `math.tan`,
-and `math.atan` accept every finite integer or float. `math.asin` and
-`math.acos` require a finite input in the inclusive domain `[-1, 1]`.
-`math.atan2{y, x}` follows the C argument order and returns the angle for the
-point `(x, y)`. All trigonometric operations return floats on success.
+The direct trigonometric operations `math.sin`, `math.cos`, and `math.tan`
+interpret every finite integer or float input as radians. The inverse
+trigonometric operations `math.asin`, `math.acos`, and `math.atan` return
+angles in radians; `math.atan` takes a finite numeric ratio, not an angle in
+radians, while `math.asin` and `math.acos` require a finite input in the
+inclusive domain `[-1, 1]`. `math.atan2{y, x}` follows the C argument order and
+returns the angle for the point `(x, y)` in radians. All trigonometric
+operations return floats on success.
 The unary rounding operations always return integers. `math.round` rounds
 exact halfway cases away from zero. Float results are accepted only in the
 binary64-safe interval `[-0x1p63, 0x1p63)` after rounding.
@@ -46,5 +49,5 @@ binary64-safe interval `[-0x1p63, 0x1p63)` after rounding.
 | `math.tan{value}` | `value` must be a finite integer or float, interpreted as radians. | The tangent, always returned as a float. | Consumes the input value. | A nonnumeric input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.tan-specific detail. Non-finite numeric input or result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@tangent = math.tan{@radians};` |
 | `math.asin{value}` | `value` must be a finite integer or float in the inclusive domain `[-1, 1]`. | The inverse sine in radians, always returned as a float. | Consumes the input value. | A nonnumeric or out-of-domain input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.asin-specific detail. A non-finite numeric input or result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@angle = math.asin{@value};` |
 | `math.acos{value}` | `value` must be a finite integer or float in the inclusive domain `[-1, 1]`. | The inverse cosine in radians, always returned as a float. | Consumes the input value. | A nonnumeric or out-of-domain input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.acos-specific detail. A non-finite numeric input or result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@angle = math.acos{@value};` |
-| `math.atan{value}` | `value` must be a finite integer or float, interpreted as radians. | The inverse tangent in radians, always returned as a float. | Consumes the input value. | A nonnumeric input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.atan-specific detail. Non-finite numeric input or result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@angle = math.atan{@value};` |
+| `math.atan{value}` | `value` must be a finite integer or float ratio (not radians). | The inverse tangent angle in radians, always returned as a float. | Consumes the input value. | A nonnumeric input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.atan-specific detail. Non-finite numeric input or result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@angle = math.atan{@value};` |
 | `math.atan2{y, x}` | `y` and `x` must be finite integers or floats; arguments are in source order `y, x`. | The angle of `(x, y)` in radians, always returned as a float. | Consumes both input values. | A nonnumeric input returns `nil` and sets `ERR_RUNTIME_INVALIDARGS` with math.atan2-specific detail. Non-finite numeric input or result returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@angle = math.atan2{@y, @x};` |

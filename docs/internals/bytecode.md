@@ -78,11 +78,12 @@ SIN_LIST_MAX_ELEMENTS. One-byte fields are unchanged.
   use `D` followed by the nested dereference kind, currently `V` plus a one-byte
   local index for a local variable layer, or another item assembly. Nested item
   assemblies are limited to eight levels.
-- **Embedded code** (`B`) begins with a parameter marker `P`, zero or more
-  parameter names as `u16 length + bytes`, then a terminating zero `u16` length.
-  The parameter block is followed by the mandatory source block encoded as
-  `u16 source_length + source bytes`. New emitters always write `P, u16(0)` for
-  parameterless code, making source lengths whose low byte is `0x50`
+- **Embedded code** (`B`) in v1 always begins with a mandatory parameter block:
+  a parameter marker `P`, zero or more parameter names as `u16 length + bytes`,
+  then a terminating zero `u16` length. The block is present even when it has
+  zero parameter names and is followed by the mandatory source block encoded
+  as `u16 source_length + source bytes`. New emitters always write `P, u16(0)`
+  for parameterless code, making source lengths whose low byte is `0x50`
   unambiguous. Version-1 payloads without the marker are invalid. During legacy
   conversion, markerless payloads whose source-length low byte is not `P` gain
   an empty parameter block. If that byte is `P`, the historical payload is
@@ -155,7 +156,7 @@ error. Malformed or truncated encodings are verifier errors.
 | `x` | `IR_OP_NOT` | none | Pop the top value, apply logical not, and push the boolean result. |
 | `y` | `IR_OP_AND` | none | Pop the top two values, apply logical and, and push the boolean result. |
 | `z` | `IR_OP_OR` | none | Pop the top two values, apply logical or, and push the boolean result. |
-| `B` | `IR_OP_ITEM_SAVE_CODE` | optional params, then source block | Compile embedded source code and assign the compiled code item to the item name on top of the stack. On success, clear the error item. Malformed embedded payloads set `ERR_RUNTIME_BYTECODE`; invalid target item names set `ERR_RUNTIME_INVALIDITEM`; source compilation failures set the compiler error item. |
+| `B` | `IR_OP_ITEM_SAVE_CODE` | v1 mandatory parameter block (zero or more names), then source block | Compile embedded source code and assign the compiled code item to the item name on top of the stack. On success, clear the error item. Malformed embedded payloads set `ERR_RUNTIME_BYTECODE`; invalid target item names set `ERR_RUNTIME_INVALIDITEM`; source compilation failures set the compiler error item. |
 | `[` | `IR_OP_BUILD_LIST` | `u32 count` (little-endian) | Consume `count` values in source order and push one list. |
 | `&` | `IR_OP_MAKE_ITEMREF` | none | Canonicalise the assembled item name and push an owning item reference. |
 | `C` | `IR_OP_ITEM_SAVE` | none | Pop an item name and value, then save the value into the item. |

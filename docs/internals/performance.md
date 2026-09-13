@@ -40,8 +40,9 @@ SIN_EXTENDED_BENCH=1 \
 
 `SIN_EXTENDED_BENCH=1` enables the extended matrix (network, lists, itemstore,
 item references/syscalls, runtime verification, and string-registry samples).
-`SIN_STRICT_BENCH=1` additionally enforces the small deterministic threshold
-checks in the descriptor. Without the extended flag, the descriptor still
+`SIN_STRICT_BENCH=1` is an opt-in set of elapsed-time budget checks in the
+descriptor; these budgets depend on the machine running the benchmark and are
+not deterministic thresholds. Without the extended flag, the descriptor still
 runs its baseline deterministic measurements.
 
 ## Adding Evidence
