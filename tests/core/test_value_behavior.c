@@ -99,7 +99,7 @@ void test_error_message_table_defines_active_errors(void) {
   ASSERT_EQ_INT(31, ERR_RUNTIME_INUSE);
   ASSERT_EQ_INT(32, ERR_RUNTIME_UNDEFINED);
   ASSERT_TRUE(strcmp(errmsg[ERR_RUNTIME_UNDEFINED],
-                     "Undefined mathematical result.") == 0);
+                     "Undefined or unrepresentable result.") == 0);
 
   int active_errors[] = {
       ERR_NOERROR,

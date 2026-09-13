@@ -54,7 +54,7 @@ gaps are explicit.
 | 29 | `ERR_RUNTIME_SOURCE` | Item source is unavailable. |
 | 30 | `ERR_NETWORK_ERROR` | Network error. |
 | 31 | `ERR_RUNTIME_INUSE` | Item or descendant is execution-pinned; cannot delete. |
-| 32 | `ERR_RUNTIME_UNDEFINED` | Undefined mathematical result. |
+| 32 | `ERR_RUNTIME_UNDEFINED` | Undefined or unrepresentable result. |
 
 An operation may add detail to the default message. A return value of `nil` or
 `false` does not by itself imply that an error was published; consult the
