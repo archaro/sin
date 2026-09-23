@@ -1,0 +1,55 @@
+#include "test_framework.h"
+
+void test_sys_source_libcall(void);
+void test_sys_item_libcalls(void);
+void test_sys_fetch_and_call_semantic_misses_preserve_prior_error(void);
+void test_sys_fetch_and_call_malformed_code_abort_and_diagnose(void);
+void test_sys_call_capacity_failure_aborts_and_unwinds(void);
+void test_sys_fetch_and_call_clone_failures_abort_and_clean_inputs(void);
+void test_sys_delete_result_contract(void);
+void test_sys_delete_rejects_error_namespace(void);
+void test_sys_itemref_contracts(void);
+void test_sys_persistence_libcalls(void);
+void test_sys_introspection_libcalls(void);
+void test_sys_wall_milliseconds_boundaries(void);
+void test_sys_caller_paramcount_libcalls(void);
+
+static const TF_TestDescriptor tests[] = {
+    {"test.runtime.test_sys_delete_result_contract", test_sys_delete_result_contract,
+     "exclusive", 30000, "api.libcall.sys,libcall.sys.delete,api.itemstore.item-error"},
+    {"test.runtime.test_sys_delete_rejects_error_namespace", test_sys_delete_rejects_error_namespace,
+     "exclusive", 30000, "api.libcall.sys,api.itemstore.item-error,libcall.sys.delete"},
+    {"test.runtime.test_sys_item_libcalls", test_sys_item_libcalls,
+     "exclusive", 30000,
+     "api.libcall.sys,libcall.sys.exists,libcall.sys.delete,libcall.sys.nthname,libcall.sys.rootname,libcall.sys.itemtype,libcall.sys.childcount,libcall.sys.call"},
+    {"test.runtime.test_sys_fetch_and_call_semantic_misses_preserve_prior_error", test_sys_fetch_and_call_semantic_misses_preserve_prior_error,
+     "exclusive", 30000, "test.runtime.test_sys_fetch_and_call_semantic_misses_preserve_prior_error"},
+    {"test.runtime.test_sys_fetch_and_call_malformed_code_abort_and_diagnose", test_sys_fetch_and_call_malformed_code_abort_and_diagnose,
+     "exclusive", 30000, "test.runtime.test_sys_fetch_and_call_malformed_code_abort_and_diagnose"},
+    {"test.runtime.test_sys_call_capacity_failure_aborts_and_unwinds", test_sys_call_capacity_failure_aborts_and_unwinds,
+     "exclusive", 30000, "test.runtime.test_sys_call_capacity_failure_aborts_and_unwinds"},
+    {"test.runtime.test_sys_fetch_and_call_clone_failures_abort_and_clean_inputs", test_sys_fetch_and_call_clone_failures_abort_and_clean_inputs,
+     "exclusive", 30000, "test.runtime.test_sys_fetch_and_call_clone_failures_abort_and_clean_inputs"},
+    {"test.runtime.test_sys_itemref_contracts", test_sys_itemref_contracts,
+     "exclusive", 30000,
+     "libcall.sys.thisitem,libcall.sys.parentitem,libcall.sys.itemref,libcall.sys.itemname,libcall.sys.fetch"},
+    {"test.runtime.test_sys_persistence_libcalls", test_sys_persistence_libcalls,
+     "exclusive", 30000,
+     "language.item-syntax.item-save,api.libcall.sys,libcall.sys.backup,libcall.sys.save"},
+    {"test.runtime.test_sys_introspection_libcalls", test_sys_introspection_libcalls,
+     "exclusive", 30000,
+     "libcall.sys.rootcount,libcall.sys.version"},
+    {"test.runtime.test_sys_wall_milliseconds_boundaries", test_sys_wall_milliseconds_boundaries,
+     "exclusive", 30000,
+     "libcall.sys.now,libcall.sys.monotime"},
+    {"test.runtime.test_sys_caller_paramcount_libcalls", test_sys_caller_paramcount_libcalls,
+     "exclusive", 30000,
+     "libcall.sys.calleritem,libcall.sys.paramcount"},
+    {"test.runtime.test_sys_source_libcall", test_sys_source_libcall,
+     "exclusive", 30000,
+     "api.common.logging,libcall.sys.source"},
+};
+
+int main(int argc, char **argv) {
+  return tf_main(argc, argv, tests, sizeof tests / sizeof tests[0]);
+}

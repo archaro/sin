@@ -1,0 +1,39 @@
+#include "test_framework.h"
+
+void test_newgametask_rejects_invalid_intervals_before_timer_start(void);
+void test_newgametask_rejects_missing_event_loop_before_returning_task_id(void);
+void test_task_introspection_thisid_ordinary_context_returns_nil(void);
+void test_task_introspection_exists_valid_and_invalid_ids(void);
+void test_task_exists_rejects_non_integer(void);
+void test_task_introspection_count_and_exists_with_lifecycle(void);
+void test_task_thisid_in_callback_survives_self_close(void);
+void test_task_callback_frees_aggregate_return_values(void);
+void test_newgametask_child_callback_uses_own_identity(void);
+void test_newgametask_itemref_creates_and_executes_one_shot(void);
+void test_newgametask_copies_canonical_target_and_defers_zero_delay(void);
+void test_newgametask_deleted_target_retires_one_shot(void);
+void test_newgametask_resolves_target_on_each_firing(void);
+void test_task_callback_pins_target_during_execution(void);
+void test_tasks_are_runtime_only_across_sys_save_and_load(void);
+
+static const TF_TestDescriptor tests[] = {
+    {"test.runtime.test_newgametask_rejects_invalid_intervals_before_timer_start", test_newgametask_rejects_invalid_intervals_before_timer_start, "exclusive", 30000, "api.libcall.task,api.runtime.task,libcall.task.newgametask"},
+    {"test.runtime.test_newgametask_rejects_missing_event_loop_before_returning_task_id", test_newgametask_rejects_missing_event_loop_before_returning_task_id, "exclusive", 30000, "test.runtime.test_newgametask_rejects_missing_event_loop_before_returning_task_id"},
+    {"test.runtime.test_task_introspection_thisid_ordinary_context_returns_nil", test_task_introspection_thisid_ordinary_context_returns_nil, "exclusive", 30000, "libcall.task.thisid"},
+    {"test.runtime.test_task_introspection_exists_valid_and_invalid_ids", test_task_introspection_exists_valid_and_invalid_ids, "exclusive", 30000, "api.libcall.task,libcall.task.exists"},
+    {"test.runtime.test_task_exists_rejects_non_integer", test_task_exists_rejects_non_integer, "exclusive", 30000, "test.runtime.test_task_exists_rejects_non_integer"},
+    {"test.runtime.test_task_introspection_count_and_exists_with_lifecycle", test_task_introspection_count_and_exists_with_lifecycle, "exclusive", 30000, "libcall.task.count"},
+    {"test.runtime.test_task_thisid_in_callback_survives_self_close", test_task_thisid_in_callback_survives_self_close, "exclusive", 30000, "test.runtime.test_task_thisid_in_callback_survives_self_close"},
+    {"test.runtime.test_task_callback_frees_aggregate_return_values", test_task_callback_frees_aggregate_return_values, "exclusive", 30000, "test.runtime.test_task_callback_frees_aggregate_return_values"},
+    {"test.runtime.test_newgametask_child_callback_uses_own_identity", test_newgametask_child_callback_uses_own_identity, "exclusive", 30000, "libcall.task.newgametask"},
+    {"test.runtime.test_newgametask_itemref_creates_and_executes_one_shot", test_newgametask_itemref_creates_and_executes_one_shot, "exclusive", 30000, "libcall.task.newgametask"},
+    {"test.runtime.test_newgametask_copies_canonical_target_and_defers_zero_delay", test_newgametask_copies_canonical_target_and_defers_zero_delay, "exclusive", 30000, "test.runtime.test_newgametask_copies_canonical_target_and_defers_zero_delay"},
+    {"test.runtime.test_newgametask_deleted_target_retires_one_shot", test_newgametask_deleted_target_retires_one_shot, "exclusive", 30000, "test.runtime.test_newgametask_deleted_target_retires_one_shot"},
+    {"test.runtime.test_newgametask_resolves_target_on_each_firing", test_newgametask_resolves_target_on_each_firing, "exclusive", 30000, "test.runtime.test_newgametask_resolves_target_on_each_firing"},
+    {"test.runtime.test_task_callback_pins_target_during_execution", test_task_callback_pins_target_during_execution, "exclusive", 30000, "test.runtime.test_task_callback_pins_target_during_execution"},
+    {"test.runtime.test_tasks_are_runtime_only_across_sys_save_and_load", test_tasks_are_runtime_only_across_sys_save_and_load, "exclusive", 30000, "test.runtime.test_tasks_are_runtime_only_across_sys_save_and_load"},
+};
+
+int main(int argc, char **argv) {
+  return tf_main(argc, argv, tests, sizeof tests / sizeof tests[0]);
+}
