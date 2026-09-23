@@ -32,7 +32,7 @@ source data.
 
 ## Test groups
 
-The adapters under `tests/rewrite/` preserve native test bodies while giving
+The adapters under `tests/adapters/` preserve native test bodies while giving
 each group an isolated framework executable:
 
 - Group 1: AST, parser, CLI I/O, libcalls, fixture policy, values, and memory.

@@ -247,7 +247,7 @@ class CoverageGateTests(unittest.TestCase):
             root = Path(directory)
             build_dir = root / "obj/coverage-gcc"
             (build_dir / "net").mkdir(parents=True)
-            missing_adapter = build_dir / "tests/objects/tests/rewrite/group7_adapter_network.o"
+            missing_adapter = build_dir / "tests/objects/tests/adapters/group7_adapter_network.o"
             with mock.patch.object(coverage, "find_gcov", return_value="gcov"):
                 with self.assertRaisesRegex(coverage.CoverageError,
                                              "missing network adapter coverage object"):
@@ -269,7 +269,7 @@ class CoverageGateTests(unittest.TestCase):
             write_report(decoy, [{"file": str(root / "src/common/error.c"),
                                  "lines": [{"line_number": 1, "count": 9}]}])
             write_report(correct, [
-                {"file": str(root / "tests/rewrite/group7_adapter_network.c"),
+                {"file": str(root / "tests/adapters/group7_adapter_network.c"),
                  "lines": [{"line_number": 1, "count": 1}]},
                 {"file": str(root / "src/net/network.c"),
                  "lines": [{"line_number": 42, "count": 3}],

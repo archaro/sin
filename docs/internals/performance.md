@@ -22,7 +22,7 @@ make bench
 ```
 
 The target delegates to the release build, selects the
-`rewrite.runtime.test_runtime_benchmark_optin` descriptor, and sets/retains
+`test.runtime.test_runtime_benchmark_optin` descriptor, and sets/retains
 the existing `SIN_EXTENDED_BENCH=1 SIN_BENCH_REPORT=1` environment contract.
 `SIN_EXTENDED_BENCH=1` enables the extended matrix for this entry point;
 benchmark stdout may be captured by the caller.
@@ -32,10 +32,10 @@ benchmark stdout may be captured by the caller.
 Build the release benchmark binary, then select its descriptor directly:
 
 ```sh
-make BUILD=release obj/release-gcc/tests/rewrite/test_runtime_benchmark
+make BUILD=release obj/release-gcc/tests/adapters/test_runtime_benchmark
 SIN_EXTENDED_BENCH=1 \
-  ./obj/release-gcc/tests/rewrite/test_runtime_benchmark \
-  --run rewrite.runtime.test_runtime_benchmark_optin
+  ./obj/release-gcc/tests/adapters/test_runtime_benchmark \
+  --run test.runtime.test_runtime_benchmark_optin
 ```
 
 `SIN_EXTENDED_BENCH=1` enables the extended matrix (network, lists, itemstore,

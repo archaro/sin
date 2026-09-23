@@ -9,12 +9,12 @@ focused descriptor while iterating, then run `make test` once on the final tree.
 
 1. Add a function to the owning `tests/core`, `tests/compiler`,
    `tests/interpreter`, or `tests/network` translation unit.
-2. Add a descriptor to the corresponding `tests/rewrite` adapter (or create a
+2. Add a descriptor to the corresponding `tests/adapters` adapter (or create a
    new adapter and Make rule). Use `TF_*` assertions, a stable ID, a contract,
    timeout, and tags.
 3. Add/update the `tests/inventory/tests.csv` and relevant API/catalog edge.
 4. Build and focus it, for example:
-   `./obj/debug-gcc/tests/rewrite/test_semant --run rewrite.core.test_sem_foreach_semantics`.
+   `./obj/debug-gcc/tests/adapters/test_semant --run test.core.test_sem_foreach_semantics`.
 
 ### Conformance Case
 

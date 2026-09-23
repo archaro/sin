@@ -51,7 +51,7 @@ the catalogue schema and reconciliation rules.
 ## Test Architecture
 
 Tests use the C17/POSIX framework under `tests/framework/`. Native white-box
-test bodies remain grouped by subsystem, while adapters under `tests/rewrite/`
+test bodies remain grouped by subsystem, while adapters under `tests/adapters/`
 supply framework descriptors and executable ownership. Fixture-driven language
 conformance tests live under `tests/conformance/`.
 

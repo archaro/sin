@@ -466,7 +466,7 @@ def collect_gcc(root: Path, build_dir: Path, modules: Iterable[str], report_dir:
         results[module] = _collect_gcov_module(
             gcov, root, object_dir, source, module, report_dir, no_instrumentable_set)
         if module == "src/net/network.c" and network_adapter is not None:
-            adapter_source = root / "tests/rewrite/group7_adapter_network.c"
+            adapter_source = root / "tests/adapters/group7_adapter_network.c"
             adapter_gcno = network_adapter.with_suffix(".gcno")
             if not adapter_source.is_file():
                 fail(f"missing network adapter source: {adapter_source}")
@@ -496,7 +496,7 @@ def collect_clang(root: Path, build_dir: Path, modules: Iterable[str], report_di
                 for name in ("scomp", "sdiss", "sin", "sconv")]
     binaries.extend(sorted((build_dir / "tests/framework").glob("*")))
     binaries.extend(sorted((build_dir / "tests/conformance").glob("*")))
-    binaries.extend(sorted((build_dir / "tests/rewrite").glob("**/test_*")))
+    binaries.extend(sorted((build_dir / "tests/adapters").glob("**/test_*")))
     binaries = [binary for binary in binaries if binary.is_file()]
     if not binaries:
         fail("Clang coverage export has no gate binaries")
@@ -680,7 +680,7 @@ def main() -> int:
                 gcov_tool = args.gcov_tool or f"gcov-tool-{major}"
                 merge_gcc_profiles(profile_root, build_dir, report_dir,
                                    gcov_tool)
-            network_adapter = build_dir / "tests/objects/tests/rewrite/group7_adapter_network.o"
+            network_adapter = build_dir / "tests/objects/tests/adapters/group7_adapter_network.o"
             results = collect_gcc(root, build_dir, measured + no_instrumentable,
                                   report_dir, major, args.gcov, no_instrumentable,
                                   network_adapter)

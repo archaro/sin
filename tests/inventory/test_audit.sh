@@ -33,47 +33,47 @@ static const TF_TestDescriptor tests[] = {
 '''
 assert audit.conformance_descriptor_ids(descriptor_source) == {"conformance.real"}
 with tempfile.TemporaryDirectory() as directory:
-    rewrite_dir = Path(directory) / "tests/rewrite/group1"
-    rewrite_dir.mkdir(parents=True)
+    adapter_dir = Path(directory) / "tests/adapters/group1"
+    adapter_dir.mkdir(parents=True)
     valid = '''
-const char *spoof = "{\\"rewrite.spoof\\", not_a_descriptor}";
+const char *spoof = "{\\"test.spoof\\", not_a_descriptor}";
 static const TF_TestDescriptor tests[] = {
-  {"rewrite.real", real_test, "", 100, "contract.real"},
+  {"test.real", real_test, "", 100, "contract.real"},
 };
 '''
-    (rewrite_dir / "valid.c").write_text(valid, encoding="utf-8")
-    assert audit.rewrite_descriptor_ids(Path(directory)) == {"rewrite.real"}
+    (adapter_dir / "valid.c").write_text(valid, encoding="utf-8")
+    assert audit.adapter_descriptor_ids(Path(directory)) == {"test.real"}
 
     malformed = '''
 static const TF_TestDescriptor tests[] = {
   {"not-a-rewrite-id", real_test, "", 100, "contract.real"},
 };
 '''
-    malformed_path = rewrite_dir / "malformed.c"
+    malformed_path = adapter_dir / "malformed.c"
     malformed_path.write_text(malformed, encoding="utf-8")
     try:
-        audit.rewrite_descriptor_ids(Path(directory))
+        audit.adapter_descriptor_ids(Path(directory))
     except audit.AuditError as error:
         assert str(malformed_path) in str(error)
         assert "unparseable row" in str(error)
     else:
-        raise AssertionError("malformed rewrite descriptor was accepted")
+        raise AssertionError("malformed adapter descriptor was accepted")
     malformed_path.unlink()
 
     duplicate = '''
 static const TF_TestDescriptor tests[] = {
-  {"rewrite.real", other_test, "", 100, "contract.other"},
+  {"test.real", other_test, "", 100, "contract.other"},
 };
 '''
-    duplicate_path = rewrite_dir / "duplicate.c"
+    duplicate_path = adapter_dir / "duplicate.c"
     duplicate_path.write_text(duplicate, encoding="utf-8")
     try:
-        audit.rewrite_descriptor_ids(Path(directory))
+        audit.adapter_descriptor_ids(Path(directory))
     except audit.AuditError as error:
         assert str(duplicate_path) in str(error)
-        assert "duplicate rewrite descriptor ID rewrite.real" in str(error)
+        assert "duplicate adapter descriptor ID test.real" in str(error)
     else:
-        raise AssertionError("duplicate rewrite descriptor was accepted")
+        raise AssertionError("duplicate adapter descriptor was accepted")
 try:
     audit.grammar_tokens("%left TPLUS\n%right TPLUS\n")
 except audit.AuditError as error:
@@ -158,7 +158,7 @@ expect_root_failure() {
 # Precedence directives declare lexer tokens too; canonical drift must fail.
 mkdir -p "$work/root/src/compiler" "$work/root/src/bytecode" \
   "$work/root/src/libcall" "$work/root/tests/conformance" \
-  "$work/root/tests/rewrite"
+  "$work/root/tests/adapters"
 cp "$repo_root/src/compiler/parser.y" "$work/root/src/compiler/parser.y"
 cp "$repo_root/src/compiler/absyn.h" "$work/root/src/compiler/absyn.h"
 cp "$repo_root/src/bytecode/bytecode_abi.h" "$work/root/src/bytecode/bytecode_abi.h"
@@ -166,11 +166,11 @@ cp "$repo_root/src/bytecode/opcode_schema.def" "$work/root/src/bytecode/opcode_s
 cp "$repo_root/src/libcall/libcall_list.h" "$work/root/src/libcall/libcall_list.h"
 cp "$repo_root/tests/conformance/test_conformance.c" \
   "$work/root/tests/conformance/test_conformance.c"
-cp -a "$repo_root/tests/rewrite/." "$work/root/tests/rewrite/"
+cp -a "$repo_root/tests/adapters/." "$work/root/tests/adapters/"
 sed -i 's/^%left TAND$/%left/' "$work/root/src/compiler/parser.y"
 expect_root_failure precedence_token 'language token inventory mismatch'
 
-# Removing a rewrite catalog row and its reciprocal API edge must expose the
+# Removing an adapter catalog row and its reciprocal API edge must expose the
 # exact descriptor/catalog reconciliation.
 python3 - "$work/catalog/tests.csv" "$work/catalog/api.csv" <<'PY'
 import csv
@@ -179,7 +179,7 @@ from pathlib import Path
 
 tests_path = Path(sys.argv[1])
 api_path = Path(sys.argv[2])
-removed = "rewrite.common.memory_allocation_boundaries"
+removed = "test.common.memory_allocation_boundaries"
 
 tests = list(csv.DictReader(tests_path.open(newline="", encoding="utf-8")))
 tests = [row for row in tests if row["test_id"] != removed]
@@ -196,7 +196,7 @@ with api_path.open("w", newline="", encoding="utf-8") as stream:
     writer.writeheader()
     writer.writerows(api)
 PY
-expect_failure rewrite_descriptor_catalog 'rewrite descriptor inventory mismatch'
+expect_failure adapter_descriptor_catalog 'adapter descriptor inventory mismatch'
 cp -a "$repo_root/tests/inventory/." "$work/catalog"
 
 # Duplicate contract IDs are rejected before any canonical comparison.

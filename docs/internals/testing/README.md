@@ -26,9 +26,9 @@ These documents are checked-in inputs or policy owned by the test suite:
   — manifest schema and conformance expectations.
 - [`tests/inventory/README.md`](../../../tests/inventory/README.md) — inventory
   catalogs and audit rules.
-- [`tests/rewrite/README.md`](../../../tests/rewrite/README.md) — native adapter
+- [`tests/adapters/README.md`](../../../tests/adapters/README.md) — native adapter
   ownership and descriptor layout.
-- [`tests/rewrite/group1/README.md`](../../../tests/rewrite/group1/README.md)
+- [`tests/adapters/group1/README.md`](../../../tests/adapters/group1/README.md)
   — Group 1 adapter layout.
 
 The checked-in catalogs and current adapter descriptors are the authoritative

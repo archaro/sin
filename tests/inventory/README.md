@@ -30,8 +30,10 @@ Focused drift checks mutate temporary copies only and are included in `make test
 
 Catalogs are reviewed source data. Normal test commands never rewrite catalog
 files; canonical-definition changes require an intentional catalog edit and a
-fresh audit. The audit discovers checked-in `rewrite.*` descriptors under
-`tests/rewrite/` and requires their IDs to match the catalog rewrite rows
-exactly. Conformance descriptors and their catalog rows are checked the same
-way. `tests.csv` is a reciprocal index generated from the forward catalog
-edges, and unknown test namespaces remain rejected.
+fresh audit. The audit discovers checked-in `test.*` descriptors under
+`tests/adapters/` and requires their IDs to match the catalog test rows exactly.
+The `test.<namespace>.<id>` namespace identifies native adapter descriptors;
+conformance descriptors retain their separate `conformance.*` namespace and
+their catalog rows are checked the same way. `tests.csv` is a reciprocal index
+generated from the forward catalog edges, and unknown test namespaces remain
+rejected.

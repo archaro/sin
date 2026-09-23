@@ -2,7 +2,7 @@
 """Audit Sinistra's checked-in contract inventories.
 
 The source files named in the project brief are the authority for language,
-IR, opcode, and libcall identifiers.  Current rewrite and conformance
+IR, opcode, and libcall identifiers.  Current adapter and conformance
 descriptors are the authority for executable test identifiers.  This script
 deliberately uses only the Python standard library so it can run before the
 test framework.
@@ -142,9 +142,9 @@ def conformance_descriptor_ids(source: str) -> set[str]:
     return descriptors
 
 
-def rewrite_descriptor_ids(root: Path) -> set[str]:
-    """Discover explicit rewrite descriptors in checked-in adapters."""
-    directory = root / "tests/rewrite"
+def adapter_descriptor_ids(root: Path) -> set[str]:
+    """Discover explicit adapter descriptors in checked-in adapters."""
+    directory = root / "tests/adapters"
     if not directory.is_dir():
         return set()
     descriptors: dict[str, Path] = {}
@@ -153,27 +153,27 @@ def rewrite_descriptor_ids(root: Path) -> set[str]:
         try:
             source = strip_c_comments(source_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError) as error:
-            fail(f"cannot read rewrite descriptors from {source_path}: {error}")
+            fail(f"cannot read adapter descriptors from {source_path}: {error}")
         if source.count(marker) != 1:
-            fail(f"{source_path}: rewrite descriptor array is missing or ambiguous")
+            fail(f"{source_path}: adapter descriptor array is missing or ambiguous")
         remainder = source.split(marker, 1)[1]
         closing = re.search(r"(?m)^\s*};\s*$", remainder)
         if closing is None:
-            fail(f"{source_path}: rewrite descriptor array is unterminated")
+            fail(f"{source_path}: adapter descriptor array is unterminated")
         body = remainder[:closing.start()]
         initializer_rows = re.findall(r"^\s*\{", body, re.MULTILINE)
         rows = re.findall(
-            r'^\s*\{"(rewrite\.[A-Za-z0-9_.-]+)",', body, re.MULTILINE)
+            r'^\s*\{"(test\.[A-Za-z0-9_.-]+)",', body, re.MULTILINE)
         if not rows or len(rows) != len(initializer_rows):
-            fail(f"{source_path}: rewrite descriptor array contains an unparseable row")
+            fail(f"{source_path}: adapter descriptor array contains an unparseable row")
         seen: set[str] = set()
         for descriptor_id in rows:
             if descriptor_id in seen:
-                fail(f"{source_path}: duplicate rewrite descriptor ID {descriptor_id}")
+                fail(f"{source_path}: duplicate adapter descriptor ID {descriptor_id}")
             seen.add(descriptor_id)
             previous = descriptors.get(descriptor_id)
             if previous is not None:
-                fail(f"duplicate rewrite descriptor ID {descriptor_id}: "
+                fail(f"duplicate adapter descriptor ID {descriptor_id}: "
                      f"{previous} and {source_path}")
             descriptors[descriptor_id] = source_path
     return set(descriptors)
@@ -459,12 +459,12 @@ def main() -> int:
         catalog_descriptor_ids = {test_id for test_id in tests if test_id.startswith("conformance.")}
         if catalog_descriptor_ids != descriptor_ids:
             fail(f"conformance descriptor inventory mismatch (missing={sorted(descriptor_ids - catalog_descriptor_ids)[:1]}, unknown={sorted(catalog_descriptor_ids - descriptor_ids)[:1]})")
-        rewrite_descriptors = rewrite_descriptor_ids(root)
-        catalog_rewrite_ids = {test_id for test_id in tests
-                               if test_id.startswith("rewrite.")}
-        if rewrite_descriptors != catalog_rewrite_ids:
-            fail(f"rewrite descriptor inventory mismatch (missing={sorted(catalog_rewrite_ids - rewrite_descriptors)[:1]}, unknown={sorted(rewrite_descriptors - catalog_rewrite_ids)[:1]})")
-        expected_tests = rewrite_descriptors | descriptor_ids
+        adapter_descriptors = adapter_descriptor_ids(root)
+        catalog_test_ids = {test_id for test_id in tests
+                             if test_id.startswith("test.")}
+        if adapter_descriptors != catalog_test_ids:
+            fail(f"adapter descriptor inventory mismatch (missing={sorted(catalog_test_ids - adapter_descriptors)[:1]}, unknown={sorted(adapter_descriptors - catalog_test_ids)[:1]})")
+        expected_tests = adapter_descriptors | descriptor_ids
         missing = expected_tests - tests
         unknown_tests = tests - expected_tests
         if missing or unknown_tests:
@@ -536,7 +536,7 @@ def main() -> int:
             if row["canonical_metadata"] != opcode_fingerprint(opcode_by_name[name]):
                 fail(f"opcode {name} has stale canonical metadata")
             if ("requires_runtime_handler=true" in row["canonical_metadata"]
-                    and "rewrite.runtime.test_runtime_opcode_schema_witnesses"
+                    and "test.runtime.test_runtime_opcode_schema_witnesses"
                     not in split_refs(row["test_ids"])):
                 fail(f"runtime opcode {name} lacks an execution witness")
         expected_libcalls = {(library, call): (lib_index, call_index, args, handler)
