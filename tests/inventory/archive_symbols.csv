@@ -600,6 +600,7 @@ lc_time_time,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_time def
 lc_time_date,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_date definition/provenance,api.libcall.time
 lc_time_fulldate,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_fulldate definition/provenance,api.libcall.time
 lc_time_weekday,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_weekday definition/provenance,api.libcall.time
+lc_time_make,libcall_time.o,libcall,src/libcall/libcall_time.c: lc_time_make definition/provenance,api.libcall.time
 lc_text_split,libcall_text.o,libcall,src/libcall/libcall_text.c:53: lc_text_split definition/provenance,api.libcall.text
 lc_text_join,libcall_text.o,libcall,src/libcall/libcall_text.c:182: lc_text_join definition/provenance,api.libcall.text.join
 lc_text_words,libcall_text.o,libcall,src/libcall/libcall_text.c:262: lc_text_words definition/provenance,api.libcall.text.words

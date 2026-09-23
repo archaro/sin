@@ -21,6 +21,10 @@ void test_time_formatted_rejects_invalid_types_and_publishes_details(void);
 void test_time_formatted_unrepresentable_timestamp_publishes_error(void);
 void test_time_formatted_success_preserves_existing_error(void);
 void test_time_formatted_source_integration_and_arity(void);
+void test_time_make_utc_calendar_and_epoch_vectors(void);
+void test_time_make_validates_all_components_and_consumes_owned_values(void);
+void test_time_make_overflow_error_priority_and_preserved_error(void);
+void test_time_make_source_integration_and_arity(void);
 
 static const TF_TestDescriptor tests[] = {
     {"rewrite.runtime.test_time_year_registry_contract", test_time_year_registry_contract, "exclusive", 30000, "api.libcall.time,api.libcall.table,libcall.time.year,libcall.time.month,libcall.time.day,libcall.time.hour,libcall.time.minute,libcall.time.second,libcall.time.timestamp,libcall.time.time,libcall.time.date,libcall.time.fulldate,libcall.time.weekday"},
@@ -44,6 +48,10 @@ static const TF_TestDescriptor tests[] = {
     {"rewrite.runtime.test_time_formatted_unrepresentable_timestamp_publishes_error", test_time_formatted_unrepresentable_timestamp_publishes_error, "exclusive", 30000, "api.common.errors,api.libcall.time,libcall.time.timestamp"},
     {"rewrite.runtime.test_time_formatted_success_preserves_existing_error", test_time_formatted_success_preserves_existing_error, "exclusive", 30000, "api.common.errors,api.libcall.time,libcall.time.timestamp"},
     {"rewrite.runtime.test_time_formatted_source_integration_and_arity", test_time_formatted_source_integration_and_arity, "exclusive", 30000, "api.libcall.time,language.token.tlibname,libcall.time.timestamp,libcall.time.time,libcall.time.date,libcall.time.fulldate"},
+    {"rewrite.runtime.test_time_make_utc_calendar_and_epoch_vectors", test_time_make_utc_calendar_and_epoch_vectors, "exclusive", 30000, "api.libcall.time,libcall.time.make"},
+    {"rewrite.runtime.test_time_make_validates_all_components_and_consumes_owned_values", test_time_make_validates_all_components_and_consumes_owned_values, "exclusive", 30000, "api.common.errors,api.libcall.time,libcall.time.make"},
+    {"rewrite.runtime.test_time_make_overflow_error_priority_and_preserved_error", test_time_make_overflow_error_priority_and_preserved_error, "exclusive", 30000, "api.common.errors,api.libcall.time,libcall.time.make"},
+    {"rewrite.runtime.test_time_make_source_integration_and_arity", test_time_make_source_integration_and_arity, "exclusive", 30000, "api.libcall.time,language.token.tlibname,libcall.time.make"},
 };
 
 int main(int argc, char **argv) {

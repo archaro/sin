@@ -518,6 +518,10 @@ rewrite.runtime.test_time_formatted_rejects_invalid_types_and_publishes_details,
 rewrite.runtime.test_time_formatted_unrepresentable_timestamp_publishes_error,api.common.errors;api.libcall.time;libcall.time.timestamp
 rewrite.runtime.test_time_formatted_success_preserves_existing_error,api.common.errors;api.libcall.time;libcall.time.timestamp
 rewrite.runtime.test_time_formatted_source_integration_and_arity,api.libcall.time;language.token.tlibname;libcall.time.timestamp;libcall.time.time;libcall.time.date;libcall.time.fulldate
+rewrite.runtime.test_time_make_utc_calendar_and_epoch_vectors,api.libcall.time;libcall.time.make
+rewrite.runtime.test_time_make_validates_all_components_and_consumes_owned_values,api.common.errors;api.libcall.time;libcall.time.make
+rewrite.runtime.test_time_make_overflow_error_priority_and_preserved_error,api.common.errors;api.libcall.time;libcall.time.make
+rewrite.runtime.test_time_make_source_integration_and_arity,api.libcall.time;language.token.tlibname;libcall.time.make
 rewrite.runtime.test_math_float_result_stack_and_diagnostic_contract,api.common.errors;api.libcall.math;libcall.math.sqrt;libcall.math.pow;libcall.math.log;libcall.math.exp;libcall.math.sin;libcall.math.atan2
 rewrite.runtime.test_text_split_registry_contract,api.libcall.text;libcall.text.split
 rewrite.runtime.test_text_split_literal_fields_and_utf8,api.libcall.text;libcall.text.split

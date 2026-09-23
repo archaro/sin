@@ -41,6 +41,20 @@ static VALUE_t call_time(TimeHandler handler, VALUE_t input) {
   return pop_stack(config.vm->stack);
 }
 
+static VALUE_t call_make(VALUE_t year, VALUE_t month, VALUE_t day,
+                         VALUE_t hour, VALUE_t minute, VALUE_t second,
+                         uint8_t *sentinel) {
+  push_stack(config.vm->stack, year);
+  push_stack(config.vm->stack, month);
+  push_stack(config.vm->stack, day);
+  push_stack(config.vm->stack, hour);
+  push_stack(config.vm->stack, minute);
+  push_stack(config.vm->stack, second);
+  uint8_t *nextop = lc_time_make(test_ctx(), sentinel, NULL);
+  ASSERT_TRUE(nextop == sentinel);
+  return pop_stack(config.vm->stack);
+}
+
 void test_time_year_registry_contract(void) {
   uint8_t lib_index = 0;
   uint8_t call_index = 0;
@@ -48,7 +62,7 @@ void test_time_year_registry_contract(void) {
   size_t count = 0;
 
   while (libcalls[count].libname != NULL) count++;
-  ASSERT_EQ_INT(109, count);
+  ASSERT_EQ_INT(110, count);
   ASSERT_TRUE(libcall_lookup_pair("time", "year", &lib_index, &call_index,
                                  &args));
   ASSERT_EQ_INT(8, lib_index);
@@ -59,21 +73,283 @@ void test_time_year_registry_contract(void) {
   ASSERT_EQ_INT(1, args);
 
   const char *names[] = {"month", "day", "hour", "minute", "second",
-                         "timestamp", "time", "date", "fulldate", "weekday"};
+                         "timestamp", "time", "date", "fulldate", "weekday",
+                         "make"};
   TimeHandler handlers[] = {lc_time_month, lc_time_day, lc_time_hour,
                             lc_time_minute, lc_time_second, lc_time_timestamp,
                             lc_time_time, lc_time_date, lc_time_fulldate,
-                            lc_time_weekday};
+                            lc_time_weekday, lc_time_make};
   for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
     ASSERT_TRUE(libcall_lookup_pair("time", names[i], &lib_index, &call_index,
                                    &args));
     ASSERT_EQ_INT(8, lib_index);
     ASSERT_EQ_INT((int)i + 1, call_index);
-    ASSERT_EQ_INT(1, args);
+    ASSERT_EQ_INT(strcmp(names[i], "make") == 0 ? 6 : 1, args);
     ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == handlers[i]);
     ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
-    ASSERT_EQ_INT(1, args);
+    ASSERT_EQ_INT(strcmp(names[i], "make") == 0 ? 6 : 1, args);
   }
+}
+
+void test_time_make_utc_calendar_and_epoch_vectors(void) {
+  static const struct {
+    int64_t year, month, day, hour, minute, second, expected;
+  } cases[] = {
+      {1970, 1, 1, 0, 0, 0, INT64_C(0)},
+      {2026, 9, 23, 12, 30, 0, INT64_C(1790166600000)},
+      {1969, 12, 31, 23, 59, 59, INT64_C(-1000)},
+      {1900, 2, 28, 23, 59, 59, INT64_C(-2203891201000)},
+      {2000, 2, 29, 0, 0, 0, INT64_C(951782400000)},
+      {2100, 2, 28, 0, 0, 0, INT64_C(4107456000000)},
+      {2400, 2, 29, 0, 0, 0, INT64_C(13574563200000)},
+      {0, 1, 1, 0, 0, 0, INT64_C(-62167219200000)},
+      {-1, 1, 1, 0, 0, 0, INT64_C(-62198755200000)},
+      {-4, 2, 29, 0, 0, 0, INT64_C(-62288352000000)},
+      {2020, 1, 31, 0, 0, 0, INT64_C(1580428800000)},
+      {2020, 2, 29, 0, 0, 0, INT64_C(1582934400000)},
+      {2020, 3, 31, 0, 0, 0, INT64_C(1585612800000)},
+      {2020, 4, 30, 0, 0, 0, INT64_C(1588204800000)},
+      {2020, 5, 31, 0, 0, 0, INT64_C(1590883200000)},
+      {2020, 6, 30, 0, 0, 0, INT64_C(1593475200000)},
+      {2020, 7, 31, 0, 0, 0, INT64_C(1596153600000)},
+      {2020, 8, 31, 0, 0, 0, INT64_C(1598832000000)},
+      {2020, 9, 30, 0, 0, 0, INT64_C(1601424000000)},
+      {2020, 10, 31, 0, 0, 0, INT64_C(1604102400000)},
+      {2020, 11, 30, 0, 0, 0, INT64_C(1606694400000)},
+      {2020, 12, 31, 0, 0, 0, INT64_C(1609372800000)},
+  };
+  const char *previous = getenv("TZ");
+  bool had_previous = previous != NULL;
+  char *saved = previous ? strdup(previous) : NULL;
+  ASSERT_TRUE(!previous || saved != NULL);
+  ASSERT_EQ_INT(0, setenv("TZ", "UTC+8", 1));
+  tzset();
+
+  setup_libcall_runtime();
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+    uint8_t sentinel = 0xa5;
+    VALUE_t result = call_make(
+        (VALUE_t){VALUE_int, {.i = cases[i].year}},
+        (VALUE_t){VALUE_int, {.i = cases[i].month}},
+        (VALUE_t){VALUE_int, {.i = cases[i].day}},
+        (VALUE_t){VALUE_int, {.i = cases[i].hour}},
+        (VALUE_t){VALUE_int, {.i = cases[i].minute}},
+        (VALUE_t){VALUE_int, {.i = cases[i].second}}, &sentinel);
+    ASSERT_EQ_INT(VALUE_int, result.type);
+    ASSERT_EQ_INT(cases[i].expected, result.i);
+  }
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+
+  if (had_previous) {
+    ASSERT_EQ_INT(0, setenv("TZ", saved, 1));
+  } else {
+    ASSERT_EQ_INT(0, unsetenv("TZ"));
+  }
+  tzset();
+  free(saved);
+}
+
+void test_time_make_validates_all_components_and_consumes_owned_values(void) {
+  static const int64_t valid[] = {2026, 9, 23, 12, 30, 0};
+  static const VALUE_e invalid_types[] = {
+      VALUE_float, VALUE_str, VALUE_bool, VALUE_nil, VALUE_list,
+  };
+
+  setup_libcall_runtime();
+  for (size_t position = 0; position < 6; ++position) {
+    for (size_t kind = 0; kind < sizeof(invalid_types) /
+        sizeof(invalid_types[0]); ++kind) {
+      VALUE_t values[6];
+      for (size_t i = 0; i < 6; ++i) {
+        values[i] = (VALUE_t){VALUE_int, {.i = valid[i]}};
+      }
+      switch (invalid_types[kind]) {
+        case VALUE_float:
+          values[position] = (VALUE_t){VALUE_float, {.f = 1.0}};
+          break;
+        case VALUE_str:
+          values[position] = (VALUE_t){VALUE_str, {.s = strdup("bad")}};
+          ASSERT_NOT_NULL(values[position].s);
+          break;
+        case VALUE_bool:
+          values[position] = (VALUE_t){VALUE_bool, {.i = 1}};
+          break;
+        case VALUE_nil:
+          values[position] = VALUE_NIL;
+          break;
+        case VALUE_list:
+          values[position] = (VALUE_t){VALUE_list,
+              {.list = sin_list_build_owned(NULL, 0)}};
+          ASSERT_NOT_NULL(values[position].list);
+          break;
+        default:
+          ASSERT_TRUE(false);
+      }
+      VALUE_t result = call_make(values[0], values[1], values[2], values[3],
+                                 values[4], values[5], NULL);
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      assert_invalid_args_detail_contains("time.make");
+      ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+    }
+  }
+
+  VALUE_t first = {VALUE_str, {.s = strdup("bad year")}};
+  VALUE_t second = {VALUE_str, {.s = strdup("bad month")}};
+  ASSERT_NOT_NULL(first.s);
+  ASSERT_NOT_NULL(second.s);
+  VALUE_t result = call_make(first, second,
+      (VALUE_t){VALUE_int, {.i = 23}}, (VALUE_t){VALUE_int, {.i = 12}},
+      (VALUE_t){VALUE_int, {.i = 30}}, (VALUE_t){VALUE_int, {.i = 0}},
+      NULL);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_invalid_args_detail_contains("time.make");
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+
+  static const struct {
+    int64_t year, month, day, hour, minute, second;
+  } invalid_calendar[] = {
+      {2026, 0, 23, 12, 30, 0}, {2026, 13, 23, 12, 30, 0},
+      {2026, 2, 29, 12, 30, 0}, {1900, 2, 29, 12, 30, 0},
+      {2026, 4, 31, 12, 30, 0}, {2026, 9, 0, 12, 30, 0},
+      {2026, 9, 23, -1, 30, 0}, {2026, 9, 23, 24, 30, 0},
+      {2026, 9, 23, 12, -1, 0}, {2026, 9, 23, 12, 60, 0},
+      {2026, 9, 23, 12, 30, -1}, {2026, 9, 23, 12, 30, 60},
+  };
+  for (size_t i = 0; i < sizeof(invalid_calendar) /
+      sizeof(invalid_calendar[0]); ++i) {
+    result = call_make(
+        (VALUE_t){VALUE_int, {.i = invalid_calendar[i].year}},
+        (VALUE_t){VALUE_int, {.i = invalid_calendar[i].month}},
+        (VALUE_t){VALUE_int, {.i = invalid_calendar[i].day}},
+        (VALUE_t){VALUE_int, {.i = invalid_calendar[i].hour}},
+        (VALUE_t){VALUE_int, {.i = invalid_calendar[i].minute}},
+        (VALUE_t){VALUE_int, {.i = invalid_calendar[i].second}}, NULL);
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_invalid_args_detail_contains("time.make");
+  }
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_time_make_overflow_error_priority_and_preserved_error(void) {
+  static const int64_t min_year = -292275055;
+  static const int64_t max_year = 292278994;
+  setup_libcall_runtime();
+
+  VALUE_t result = call_make(
+      (VALUE_t){VALUE_int, {.i = min_year}},
+      (VALUE_t){VALUE_int, {.i = 5}}, (VALUE_t){VALUE_int, {.i = 16}},
+      (VALUE_t){VALUE_int, {.i = 16}}, (VALUE_t){VALUE_int, {.i = 47}},
+      (VALUE_t){VALUE_int, {.i = 5}}, NULL);
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(INT64_C(-9223372036854775000), result.i);
+  result = call_make(
+      (VALUE_t){VALUE_int, {.i = min_year}},
+      (VALUE_t){VALUE_int, {.i = 5}}, (VALUE_t){VALUE_int, {.i = 16}},
+      (VALUE_t){VALUE_int, {.i = 16}}, (VALUE_t){VALUE_int, {.i = 47}},
+      (VALUE_t){VALUE_int, {.i = 4}}, NULL);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_UNDEFINED,
+                item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                     "error"))->i);
+
+  result = call_make(
+      (VALUE_t){VALUE_int, {.i = max_year}},
+      (VALUE_t){VALUE_int, {.i = 8}}, (VALUE_t){VALUE_int, {.i = 17}},
+      (VALUE_t){VALUE_int, {.i = 7}}, (VALUE_t){VALUE_int, {.i = 12}},
+      (VALUE_t){VALUE_int, {.i = 55}}, NULL);
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(INT64_C(9223372036854775000), result.i);
+  result = call_make(
+      (VALUE_t){VALUE_int, {.i = max_year}},
+      (VALUE_t){VALUE_int, {.i = 8}}, (VALUE_t){VALUE_int, {.i = 17}},
+      (VALUE_t){VALUE_int, {.i = 7}}, (VALUE_t){VALUE_int, {.i = 12}},
+      (VALUE_t){VALUE_int, {.i = 56}}, NULL);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_UNDEFINED,
+                item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                     "error"))->i);
+
+  result = call_make(
+      (VALUE_t){VALUE_int, {.i = INT64_MAX}},
+      (VALUE_t){VALUE_int, {.i = 0}}, (VALUE_t){VALUE_int, {.i = 0}},
+      (VALUE_t){VALUE_int, {.i = 0}}, (VALUE_t){VALUE_int, {.i = 0}},
+      (VALUE_t){VALUE_int, {.i = 0}}, NULL);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS,
+                item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                     "error"))->i);
+  assert_invalid_args_detail_contains("time.make");
+
+  result = call_make(
+      (VALUE_t){VALUE_int, {.i = INT64_MAX}},
+      (VALUE_t){VALUE_int, {.i = 1}}, (VALUE_t){VALUE_int, {.i = 1}},
+      (VALUE_t){VALUE_int, {.i = 0}}, (VALUE_t){VALUE_int, {.i = 0}},
+      (VALUE_t){VALUE_int, {.i = 0}}, NULL);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_UNDEFINED,
+                item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                     "error"))->i);
+
+  result = call_make(
+      (VALUE_t){VALUE_int, {.i = INT64_MIN}},
+      (VALUE_t){VALUE_int, {.i = 1}}, (VALUE_t){VALUE_int, {.i = 1}},
+      (VALUE_t){VALUE_int, {.i = 0}}, (VALUE_t){VALUE_int, {.i = 0}},
+      (VALUE_t){VALUE_int, {.i = 0}}, NULL);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ASSERT_EQ_INT(ERR_RUNTIME_UNDEFINED,
+                item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                     "error"))->i);
+
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
+                 "prior error", NULL);
+  result = call_make(
+      (VALUE_t){VALUE_int, {.i = 1970}}, (VALUE_t){VALUE_int, {.i = 1}},
+      (VALUE_t){VALUE_int, {.i = 1}}, (VALUE_t){VALUE_int, {.i = 0}},
+      (VALUE_t){VALUE_int, {.i = 0}}, (VALUE_t){VALUE_int, {.i = 0}}, NULL);
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(0, result.i);
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
+  ASSERT_TRUE(strstr(item_value(find_item(itemstore_root(config.itemstore_ctx),
+                                         "error.msg"))->s,
+                     "prior error") != NULL);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_time_make_source_integration_and_arity(void) {
+  setup_libcall_runtime();
+  VALUE_t source = {VALUE_str, {.s = strdup(
+      "result.made = time.make{2026, 9, 23, 12, 30, 0};")}};
+  ASSERT_NOT_NULL(source.s);
+  push_stack(config.vm->stack, source);
+  (void)lc_sys_compile(test_ctx(), NULL, NULL);
+  VALUE_t result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, result.type);
+  ASSERT_EQ_INT(1, result.i);
+  ITEM_t *made = find_item(itemstore_root(config.itemstore_ctx), "result.made");
+  ASSERT_NOT_NULL(made);
+  ASSERT_EQ_INT(VALUE_int, item_value(made)->type);
+  ASSERT_EQ_INT(INT64_C(1790166600000), item_value(made)->i);
+
+  const char *invalid[] = {"time.make;", "time.make{1, 2, 3, 4, 5};",
+                           "time.make{1, 2, 3, 4, 5, 6, 7};"};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+    OUTPUT_t *out = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    ASSERT_TRUE(compile_source_to_bytecode_diag(invalid[i], strlen(invalid[i]),
+                                                &out, &diag) != 0);
+    ASSERT_TRUE(out == NULL);
+    ASSERT_EQ_INT(DIAG_PHASE_LOWER, diag.phase);
+    ASSERT_NOT_NULL(diag.message);
+    ASSERT_TRUE(strstr(diag.message, "invalid libcall argument count") != NULL);
+    compiler_diag_reset(&diag);
+  }
+  teardown_libcall_runtime();
 }
 
 void test_time_weekday_utc_all_days_and_boundaries(void) {

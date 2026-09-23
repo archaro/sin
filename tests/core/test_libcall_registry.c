@@ -418,6 +418,7 @@ void test_libcall_registry_roundtrip(void) {
       {"time", "date", 8, 8, 1, lc_time_date},
       {"time", "fulldate", 8, 9, 1, lc_time_fulldate},
       {"time", "weekday", 8, 10, 1, lc_time_weekday},
+      {"time", "make", 8, 11, 6, lc_time_make},
       {NULL, NULL, 0, 0, 0, NULL},
   };
   size_t manifest_count = sizeof(manifest) / sizeof(manifest[0]) - 1;

@@ -20,6 +20,98 @@ static bool time_to_utc(const time_t *seconds, struct tm *result) {
 #endif
 }
 
+static bool time_is_leap_year(int64_t year) {
+  return year % INT64_C(4) == 0 &&
+      (year % INT64_C(100) != 0 || year % INT64_C(400) == 0);
+}
+
+static int64_t time_days_from_civil(int64_t year, int64_t month,
+                                    int64_t day) {
+  /* March-based 400-year eras keep every intermediate bounded for the
+   * representable calendar range. The adjustment implements floor division
+   * for negative astronomical years using C's truncation-toward-zero divide. */
+  int64_t adjusted_year = year - (month <= 2 ? 1 : 0);
+  int64_t era = adjusted_year >= 0
+      ? adjusted_year / INT64_C(400)
+      : (adjusted_year - INT64_C(399)) / INT64_C(400);
+  int64_t year_of_era = adjusted_year - era * INT64_C(400);
+  int64_t month_index = month + (month > 2 ? -3 : 9);
+  int64_t day_of_year = (INT64_C(153) * month_index + 2) / 5 + day - 1;
+  int64_t day_of_era = year_of_era * INT64_C(365) + year_of_era / 4 -
+      year_of_era / 100 + day_of_year;
+  return era * INT64_C(146097) + day_of_era - INT64_C(719468);
+}
+
+static uint8_t *time_make_invalid(RuntimeContext *ctx, uint8_t *nextop,
+                                  VALUE_t *values) {
+  lc_cleanup_values(values, 6);
+  return lc_invalid_args_nil_return(ctx, nextop,
+      "time.make expects six integer calendar components");
+}
+
+uint8_t *lc_time_make(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  VALUE_t values[6];
+  int64_t year;
+  int64_t month;
+  int64_t day;
+  int64_t hour;
+  int64_t minute;
+  int64_t second;
+  int64_t days;
+  int64_t seconds;
+  (void)item;
+
+  /* Source arguments are pushed left-to-right; pop them right-to-left. */
+  values[5] = pop_stack(ctx->vm->stack);
+  values[4] = pop_stack(ctx->vm->stack);
+  values[3] = pop_stack(ctx->vm->stack);
+  values[2] = pop_stack(ctx->vm->stack);
+  values[1] = pop_stack(ctx->vm->stack);
+  values[0] = pop_stack(ctx->vm->stack);
+
+  for (size_t i = 0; i < 6; ++i) {
+    if (values[i].type != VALUE_int) {
+      return time_make_invalid(ctx, nextop, values);
+    }
+  }
+  year = values[0].i;
+  month = values[1].i;
+  day = values[2].i;
+  hour = values[3].i;
+  minute = values[4].i;
+  second = values[5].i;
+
+  if (month < 1 || month > 12 || day < 1 ||
+      day > (month == 2 ? (time_is_leap_year(year) ? 29 : 28)
+                         : (month == 4 || month == 6 || month == 9 ||
+                            month == 11 ? 30 : 31)) ||
+      hour < 0 || hour > 23 || minute < 0 || minute > 59 ||
+      second < 0 || second > 59) {
+    return time_make_invalid(ctx, nextop, values);
+  }
+
+  /* A wider year would necessarily place the result outside int64
+   * milliseconds; this guard also keeps all civil-date intermediates safe. */
+  if (year < -INT64_C(300000000) || year > INT64_C(300000000)) {
+    lc_cleanup_values(values, 6);
+    return lc_undefined_nil_return(ctx, nextop);
+  }
+
+  days = time_days_from_civil(year, month, day);
+  seconds = days * INT64_C(86400) + hour * INT64_C(3600) +
+      minute * INT64_C(60) + second;
+  if (seconds < INT64_MIN / INT64_C(1000) ||
+      seconds > INT64_MAX / INT64_C(1000)) {
+    lc_cleanup_values(values, 6);
+    return lc_undefined_nil_return(ctx, nextop);
+  }
+
+  lc_cleanup_values(values, 6);
+  push_stack(ctx->vm->stack,
+             (VALUE_t){VALUE_int, {.i = seconds * INT64_C(1000)}});
+  return nextop;
+}
+
 static bool int64_to_time_t(int64_t seconds, time_t *result) {
   time_t converted = (time_t)seconds;
   if ((time_t)-1 > (time_t)0) {
