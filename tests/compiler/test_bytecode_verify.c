@@ -14,6 +14,18 @@
 #include "test_helpers.h"
 #include "shared/test_pipeline_cases.h"
 
+#if defined(__SANITIZE_ADDRESS__)
+#define SIN_TEST_ADDRESS_SANITIZER 1
+#elif defined(__clang__)
+#if __has_feature(address_sanitizer)
+#define SIN_TEST_ADDRESS_SANITIZER 1
+#else
+#define SIN_TEST_ADDRESS_SANITIZER 0
+#endif
+#else
+#define SIN_TEST_ADDRESS_SANITIZER 0
+#endif
+
 
 static void assert_verify_status(const uint8_t *bytes, uint32_t len,
                                  BC_VerifyStatus expected,
@@ -135,7 +147,8 @@ void test_bytecode_verify_dense_budget_and_growth_failures(void) {
 }
 
 void test_bytecode_verify_constrained_address_space(void) {
-#if defined(RLIMIT_AS) && !defined(__SANITIZE_ADDRESS__)
+#if defined(RLIMIT_AS) && !SIN_TEST_ADDRESS_SANITIZER
+  /* ASan reserves shadow memory outside this RLIMIT_AS budget. */
   const size_t n = 60u * 1024u * 1024u;
   uint8_t *bytes = malloc(n + 3u);
   ASSERT_NOT_NULL(bytes);
@@ -165,6 +178,8 @@ void test_bytecode_verify_constrained_address_space(void) {
   free(bytes);
 #endif
 }
+
+#undef SIN_TEST_ADDRESS_SANITIZER
 
 void test_bytecode_verify_minimal_and_header_errors(void) {
   test_bytecode_verify_push_nil_return_flow();

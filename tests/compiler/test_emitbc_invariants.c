@@ -14,6 +14,7 @@
 #include "bytecode_convert.h"
 #include "bytecode_wire.h"
 #include "sdiss_core.h"
+#include "string_limits.h"
 
 enum { TEST_SEED = 0x5EED1234u };
 
@@ -223,6 +224,62 @@ static void test_emitbc_checked_size_boundaries(void) {
   total = SIZE_MAX;
   ASSERT_TRUE(!emitbc_checked_size_add(&total, 1));
   ASSERT_TRUE(total == SIZE_MAX);
+}
+
+static void test_emitbc_rejects_total_size_overflow(void) {
+  const size_t encoded_instruction_size = SIN_MAX_STRING_BYTES + 3u;
+  const size_t instruction_count =
+      ((size_t)UINT32_MAX - BC_V1_HEADER_SIZE) /
+          encoded_instruction_size +
+      1u;
+  const unsigned char sentinel[] = {0xC1, 0xC2, 0xC3, 0xC4, 0xC5};
+  char *payload = malloc(SIN_MAX_STRING_BYTES + 1u);
+  IR_Unit *u = t_new_unit();
+  unsigned char *storage;
+  OUTPUT_t out;
+  OUTPUT_t before;
+  CompilerDiagnostic diag;
+
+  /* Reuse one maximum-length payload so only the IR metadata grows; the
+   * preflight arithmetic reaches UINT32_MAX without allocating output bytes. */
+  ASSERT_NOT_NULL(payload);
+  memset(payload, 'x', SIN_MAX_STRING_BYTES);
+  payload[SIN_MAX_STRING_BYTES] = '\0';
+  ASSERT_NOT_NULL(u);
+  u->function.code = calloc(instruction_count, sizeof(*u->function.code));
+  ASSERT_NOT_NULL(u->function.code);
+  u->function.count = instruction_count;
+  u->function.capacity = instruction_count;
+  for (size_t i = 0; i < instruction_count; i++) {
+    u->function.code[i] =
+        (IR_Inst){.op = IR_OP_PUSH_STRING,
+                  .imm = (int64_t)(intptr_t)payload};
+  }
+
+  storage = malloc(sizeof(sentinel));
+  ASSERT_NOT_NULL(storage);
+  memcpy(storage, sentinel, sizeof(sentinel));
+  out = (OUTPUT_t){.bytecode = storage,
+                   .nextbyte = storage + 2,
+                   .maxsize = sizeof(sentinel)};
+  before = out;
+  compiler_diag_init(&diag);
+
+  ASSERT_EQ_INT(ERR_COMP_SYNTAX,
+                t_emit_bytecode_diag(u, 0, 0, &out, &diag));
+  ASSERT_EQ_INT(DIAG_PHASE_EMITBC, diag.phase);
+  ASSERT_NOT_NULL(diag.message);
+  ASSERT_TRUE(strstr(diag.message, "bytecode size overflow") != NULL);
+  ASSERT_TRUE(!diag.has_loc);
+  ASSERT_EQ_INT(0, memcmp(storage, sentinel, sizeof(sentinel)));
+  ASSERT_TRUE(out.bytecode == before.bytecode);
+  ASSERT_TRUE(out.nextbyte == before.nextbyte);
+  ASSERT_EQ_INT(before.maxsize, out.maxsize);
+
+  compiler_diag_reset(&diag);
+  free(storage);
+  free(payload);
+  ir_destroy_unit(u);
 }
 
 static uint32_t lcg_next(uint32_t *state) {
@@ -606,6 +663,7 @@ static void test_emitbc_label_heavy_jump_targets_in_bounds(void) {
 void test_emitbc_invariants(void) {
   test_emitbc_preflight_rejects_malformed_ir();
   test_emitbc_checked_size_boundaries();
+  test_emitbc_rejects_total_size_overflow();
   test_emitbc_accepts_unencoded_embedded_locals();
   test_emitbc_accepts_unreferenced_terminal_label();
   test_emitbc_op_class_invariants();

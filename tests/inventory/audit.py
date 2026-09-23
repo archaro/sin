@@ -35,7 +35,9 @@ ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 # These scanner/parser hooks are implemented in the authored .l/.y sources;
 # generated Flex/Bison entry points remain the only excluded yy* symbols.
 AUTHORED_YY_SYMBOLS = {"yyalloc", "yyfree", "yyrealloc", "yyerror"}
-INSTRUMENTATION_SYMBOL_PREFIXES = ("__odr_asan.", "__covrec_")
+# ASan toolchains emit dot-qualified or generated ODR marker names.
+INSTRUMENTATION_SYMBOL_PREFIXES = ("__odr_asan.", "__odr_asan_gen_", "__covrec_")
+INSTRUMENTATION_SYMBOLS = {"___asan_globals_registered"}
 ARCHIVE_OBJECT_MODULES = {
     "log.o": "common", "memory.o": "common", "cli_io.o": "common", "floatconv.o": "common", "error.o": "common", "util.o": "common",
     "bytecode_abi.o": "bytecode", "bytecode_wire.o": "bytecode", "bytecode_format.o": "bytecode", "bytecode_verify.o": "bytecode", "bytecode_convert.o": "bytecode", "sdiss_core.o": "bytecode",
@@ -376,7 +378,8 @@ def archive_symbol_objects(archive: Path) -> dict[str, str]:
         fields = line.split()
         if len(fields) >= 3 and len(fields[-2]) == 1:
             symbol = fields[-1]
-            if symbol.startswith(INSTRUMENTATION_SYMBOL_PREFIXES):
+            if (symbol in INSTRUMENTATION_SYMBOLS or
+                    symbol.startswith(INSTRUMENTATION_SYMBOL_PREFIXES)):
                 continue
             symbols[symbol] = object_name
     if not symbols:

@@ -1,8 +1,11 @@
 #include "item.h"
+#include <errno.h>
+#include <fcntl.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <glob.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <stdint.h>
 
@@ -25,6 +28,12 @@
 
 #include "list.h"
 #include "itemref.h"
+
+#if defined(SIN_COVERAGE_GCC)
+extern void __gcov_dump(void);
+#elif defined(SIN_COVERAGE_CLANG)
+extern int __llvm_profile_write_file(void);
+#endif
 
 uint8_t *lc_task_newgametask(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
 uint8_t *lc_list_length(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item);
@@ -196,6 +205,52 @@ static void assert_logging_controls_and_redirection(void) {
 
   ASSERT_EQ_INT(0, unlink(log_path));
   ASSERT_EQ_INT(0, unlink(err_path));
+}
+
+static void assert_close_log_without_controlling_tty(void) {
+  /* A nested child is not a process-group leader, so setsid() creates a
+   * session without a controlling terminal while isolating the test streams. */
+  pid_t child = fork();
+  ASSERT_TRUE(child >= 0);
+  if (child == 0) {
+    int null_fd;
+    int tty_fd;
+
+    if (setsid() < 0) _exit(120);
+    tty_fd = open("/dev/tty", O_WRONLY);
+    if (tty_fd >= 0) {
+      close(tty_fd);
+      _exit(121);
+    }
+    null_fd = open("/dev/null", O_RDWR);
+    if (null_fd < 0 || dup2(null_fd, STDOUT_FILENO) < 0 ||
+        dup2(null_fd, STDERR_FILENO) < 0) {
+      _exit(122);
+    }
+    if (null_fd > STDERR_FILENO) close(null_fd);
+
+    close_log();
+    errno = 0;
+    if (fcntl(STDOUT_FILENO, F_GETFD) != -1 || errno != EBADF) _exit(124);
+    errno = 0;
+    if (fcntl(STDERR_FILENO, F_GETFD) != -1 || errno != EBADF) _exit(125);
+#if defined(SIN_COVERAGE_GCC)
+    __gcov_dump();
+#elif defined(SIN_COVERAGE_CLANG)
+    (void)__llvm_profile_write_file();
+#endif
+    _exit(0);
+  }
+
+  int status = 0;
+  pid_t waited;
+  do {
+    waited = waitpid(child, &status, 0);
+  } while (waited < 0 && errno == EINTR);
+
+  ASSERT_EQ_INT(child, waited);
+  ASSERT_TRUE(WIFEXITED(status));
+  ASSERT_EQ_INT(0, WEXITSTATUS(status));
 }
 
 static void assert_sys_log_output(VALUE_t out, const char *expected) {
@@ -769,6 +824,7 @@ void test_libcall_output_formats_values(void) {
 
   setup_libcall_runtime();
   assert_logging_controls_and_redirection();
+  assert_close_log_without_controlling_tty();
 
   const output_case_t sys_cases[] = {
     {(VALUE_t){VALUE_str, {.s = strdup("%s literal")}}, "%s literal"},

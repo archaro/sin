@@ -68,6 +68,15 @@ native Clang 18/LLVM 18 measurement produced
 Each target composes the `BUILD=coverage _test` workload and the subsequent
 `coverage_gate` collection.
 
+After the Clang linker and profile-environment fixes, a fresh
+`make CC=clang _coverage-inventory` run at commit `ff352b7` reproduced the three
+Clang observations below using Ubuntu Clang 18.1.3 and LLVM 18.1.3. Its report
+was written at `2026-09-13 12:10:40` (BST, UTC+01:00). All 578 workload tests
+and the runner discovery/jobs check passed. The overall coverage comparison
+failed on `src/compiler/emitbc.c` (286/393 lines, 72.77%, against its 72.91%
+floor); math, time, and text each passed. This verifies their recorded
+provenance without changing any numeric floor or the historical snapshot.
+
 The resulting full-workload counts and active floors are:
 
 | Module and current descriptor family | Fresh GCC 13/gcov 13 observation | Fresh Clang 18/LLVM 18 observation | Retained GCC floor | Retained Clang floor |

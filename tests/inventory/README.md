@@ -9,6 +9,11 @@ symbol/object/module accountability map; `api.csv` contains grouped,
 observable module contracts that those symbols resolve to, rather than one
 prose row per private helper.
 
+The archive audit omits narrowly identified compiler/runtime instrumentation
+symbols, including Clang's `___asan_globals_registered` and
+`__odr_asan_gen_` markers, because they are generated bookkeeping rather than
+authored APIs.
+
 Grammar token reconciliation includes both `%token` and Bison precedence
 directives. Opcode rows store an exact fingerprint of all ten canonical
 `OP(...)` fields, including nested stack metadata, and non-opcode bytecode rows

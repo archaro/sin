@@ -18,6 +18,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$repo_root/tests/inventory" python3 - <<'P
 import audit
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 assert audit.grammar_tokens("%token TPLUS\n%left TPLUS\n") == ["TPLUS"]
 descriptor_source = r'''
@@ -92,8 +93,36 @@ assert libcall_opcode[8] == "STACK_DYNAMIC(0,1,IR_STACK_LIBCALL)"
 assert libcall_opcode[9] == "IR_CONTROL_STRAIGHT"
 assert next(row for row in libcalls if row[:2] == ("sys", "backup"))[5] == "lc_sys_backup"
 assert "__odr_asan.VALUE_FALSE".startswith(audit.INSTRUMENTATION_SYMBOL_PREFIXES)
+assert "__odr_asan_gen_VALUE_FALSE".startswith(audit.INSTRUMENTATION_SYMBOL_PREFIXES)
 assert "__covrec_101931F9928A8C6Fu".startswith(audit.INSTRUMENTATION_SYMBOL_PREFIXES)
 assert not "VALUE_FALSE".startswith(audit.INSTRUMENTATION_SYMBOL_PREFIXES)
+with tempfile.NamedTemporaryFile() as archive_file:
+    nm_output = "\n".join([
+        "keep.o:",
+        "0000000000000000 T real_symbol",
+        "0000000000000000 C ___asan_globals_registered",
+        "0000000000000000 T __odr_asan.VALUE_FALSE",
+        "0000000000000000 B __odr_asan_gen_VALUE_FALSE",
+        "0000000000000000 T __covrec_101931F9928A8C6Fu",
+        "0000000000000000 T __asan_globals_registered",
+        "0000000000000000 T __odr_asan_general",
+        "0000000000000000 T ___asan_globals_registered_extra",
+        "0000000000000000 T VALUE_FALSE",
+        "",
+    ])
+    with mock.patch.object(audit.subprocess, "run",
+                           return_value=mock.Mock(stdout=nm_output)) as run:
+        symbol_objects = audit.archive_symbol_objects(Path(archive_file.name))
+    run.assert_called_once_with(
+        ["nm", "-g", "--defined-only", archive_file.name],
+        check=True, capture_output=True, text=True)
+    assert symbol_objects == {
+        "real_symbol": "keep.o",
+        "__asan_globals_registered": "keep.o",
+        "__odr_asan_general": "keep.o",
+        "___asan_globals_registered_extra": "keep.o",
+        "VALUE_FALSE": "keep.o",
+    }
 print("[inventory-audit] exact grammar, IR, opcode, and libcall extraction passed")
 PY
 
