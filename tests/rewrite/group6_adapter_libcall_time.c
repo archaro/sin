@@ -1,6 +1,12 @@
 #include "test_framework.h"
 
 void test_time_year_registry_contract(void);
+void test_time_weekday_utc_all_days_and_boundaries(void);
+void test_time_weekday_is_utc_under_nonutc_timezone(void);
+void test_time_weekday_rejects_invalid_types_and_preserves_error(void);
+void test_time_weekday_conversion_failure_is_undefined(void);
+void test_time_weekday_extreme_timestamp_follows_host_support(void);
+void test_time_weekday_source_integration_and_arity(void);
 void test_time_year_utc_calendar_boundaries(void);
 void test_time_year_negative_millisecond_flooring(void);
 void test_time_calendar_components_are_utc_integers(void);
@@ -17,7 +23,13 @@ void test_time_formatted_success_preserves_existing_error(void);
 void test_time_formatted_source_integration_and_arity(void);
 
 static const TF_TestDescriptor tests[] = {
-    {"rewrite.runtime.test_time_year_registry_contract", test_time_year_registry_contract, "exclusive", 30000, "api.libcall.time,api.libcall.table,libcall.time.year,libcall.time.month,libcall.time.day,libcall.time.hour,libcall.time.minute,libcall.time.second,libcall.time.timestamp,libcall.time.time,libcall.time.date,libcall.time.fulldate"},
+    {"rewrite.runtime.test_time_year_registry_contract", test_time_year_registry_contract, "exclusive", 30000, "api.libcall.time,api.libcall.table,libcall.time.year,libcall.time.month,libcall.time.day,libcall.time.hour,libcall.time.minute,libcall.time.second,libcall.time.timestamp,libcall.time.time,libcall.time.date,libcall.time.fulldate,libcall.time.weekday"},
+    {"rewrite.runtime.test_time_weekday_utc_all_days_and_boundaries", test_time_weekday_utc_all_days_and_boundaries, "exclusive", 30000, "api.libcall.time,libcall.time.weekday"},
+    {"rewrite.runtime.test_time_weekday_is_utc_under_nonutc_timezone", test_time_weekday_is_utc_under_nonutc_timezone, "exclusive", 30000, "api.libcall.time,libcall.time.weekday"},
+    {"rewrite.runtime.test_time_weekday_rejects_invalid_types_and_preserves_error", test_time_weekday_rejects_invalid_types_and_preserves_error, "exclusive", 30000, "api.common.errors,api.libcall.time,libcall.time.weekday"},
+    {"rewrite.runtime.test_time_weekday_conversion_failure_is_undefined", test_time_weekday_conversion_failure_is_undefined, "exclusive", 30000, "api.common.errors,api.libcall.time,libcall.time.weekday"},
+    {"rewrite.runtime.test_time_weekday_extreme_timestamp_follows_host_support", test_time_weekday_extreme_timestamp_follows_host_support, "exclusive", 30000, "api.common.errors,api.libcall.time,libcall.time.weekday"},
+    {"rewrite.runtime.test_time_weekday_source_integration_and_arity", test_time_weekday_source_integration_and_arity, "exclusive", 30000, "api.libcall.time,language.token.tlibname,libcall.time.weekday"},
     {"rewrite.runtime.test_time_year_utc_calendar_boundaries", test_time_year_utc_calendar_boundaries, "exclusive", 30000, "api.libcall.time,libcall.time.year"},
     {"rewrite.runtime.test_time_year_negative_millisecond_flooring", test_time_year_negative_millisecond_flooring, "exclusive", 30000, "api.libcall.time,libcall.time.year"},
     {"rewrite.runtime.test_time_calendar_components_are_utc_integers", test_time_calendar_components_are_utc_integers, "exclusive", 30000, "api.libcall.time,libcall.time.month,libcall.time.day,libcall.time.hour,libcall.time.minute,libcall.time.second"},

@@ -10,6 +10,7 @@
 | `time.hour{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | The UTC hour (0–23). | Consumes the timestamp; performs no persistent mutation. | A non-integer returns `nil` with `ERR_RUNTIME_INVALIDARGS`; an unrepresentable timestamp returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@hour = time.hour{sys.now};` |
 | `time.minute{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | The UTC minute (0–59). | Consumes the timestamp; performs no persistent mutation. | A non-integer returns `nil` with `ERR_RUNTIME_INVALIDARGS`; an unrepresentable timestamp returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@minute = time.minute{sys.now};` |
 | `time.second{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | The UTC second (0–60), after flooring milliseconds. | Consumes the timestamp; performs no persistent mutation. | A non-integer returns `nil` with `ERR_RUNTIME_INVALIDARGS`; an unrepresentable timestamp returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@second = time.second{sys.now};` |
+| `time.weekday{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | The UTC weekday using Monday = 1 through Sunday = 7, after flooring milliseconds. | Consumes the timestamp; performs no persistent mutation. | A non-integer returns `nil` with `ERR_RUNTIME_INVALIDARGS`; an unrepresentable timestamp returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@weekday = time.weekday{sys.now};` |
 | `time.timestamp{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | Fixed-width UTC timestamp `YYYY-MM-DD HH:MM:SS` (year 0000–9999). | Consumes the timestamp; performs no persistent mutation. | A non-integer, an unrepresentable timestamp, or a UTC year outside 0000–9999 returns `nil` with `ERR_RUNTIME_INVALIDARGS` or `ERR_RUNTIME_UNDEFINED` respectively. | `@stamp = time.timestamp{sys.now};` |
 | `time.time{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | Fixed-width UTC 24-hour time `HH:MM:SS`. | Consumes the timestamp; performs no persistent mutation. | A non-integer returns `nil` with `ERR_RUNTIME_INVALIDARGS`; an unrepresentable timestamp or formatting failure returns `nil` with `ERR_RUNTIME_UNDEFINED`. | `@clock = time.time{sys.now};` |
 | `time.date{milliseconds}` | One integer count of milliseconds since 1970-01-01 00:00:00 UTC. | Fixed-width UTC date `YYYY-MM-DD` (year 0000–9999). | Consumes the timestamp; performs no persistent mutation. | A non-integer, an unrepresentable timestamp, or a UTC year outside 0000–9999 returns `nil` with `ERR_RUNTIME_INVALIDARGS` or `ERR_RUNTIME_UNDEFINED` respectively. | `@date = time.date{sys.now};` |
@@ -23,7 +24,8 @@ UTC and does not use the host local timezone.
 A non-integer argument is consumed and returns `nil` with
 `ERR_RUNTIME_INVALIDARGS` and a call-specific `time.*` diagnostic. If the host cannot
 represent the timestamp as a UTC calendar value, the call returns `nil` with
-`ERR_RUNTIME_UNDEFINED`.
+`ERR_RUNTIME_UNDEFINED`. Successful calls preserve an existing unrelated runtime
+error code and diagnostic.
 
 ```sin
 @year = time.year{sys.now};

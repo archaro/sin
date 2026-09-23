@@ -63,7 +63,7 @@ void test_math_abs_registry_contract(void) {
   ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_math_abs);
   ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
   ASSERT_EQ_INT(1, args);
-  ASSERT_EQ_INT(108, count);
+  ASSERT_EQ_INT(109, count);
 }
 
 void test_math_rounding_registry_contract(void) {
@@ -80,7 +80,7 @@ void test_math_rounding_registry_contract(void) {
   size_t count = 0;
 
   for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
-  ASSERT_EQ_INT(108, count);
+  ASSERT_EQ_INT(109, count);
   for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
     uint8_t lib_index = 0;
     uint8_t call_index = 0;
@@ -588,7 +588,7 @@ void test_math_sqrt_pow_registry_contract(void) {
   size_t count = 0;
 
   for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
-  ASSERT_EQ_INT(108, count);
+  ASSERT_EQ_INT(109, count);
   for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
     uint8_t lib_index = 0;
     uint8_t call_index = 0;
@@ -800,7 +800,7 @@ void test_math_log_registry_contract(void) {
   size_t count = 0;
 
   for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
-  ASSERT_EQ_INT(108, count);
+  ASSERT_EQ_INT(109, count);
   for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
     uint8_t lib_index = 0;
     uint8_t call_index = 0;
@@ -963,7 +963,7 @@ void test_math_exp_registry_contract(void) {
   ASSERT_TRUE(libcall_func_pair(lib_index, call_index) == lc_math_exp);
   ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
   ASSERT_EQ_INT(1, args);
-  ASSERT_EQ_INT(108, count);
+  ASSERT_EQ_INT(109, count);
 }
 
 void test_math_exp_integer_float_and_signed_zero_inputs(void) {
@@ -1073,7 +1073,7 @@ void test_math_trig_registry_contract(void) {
   size_t count = 0;
 
   for (size_t i = 0; libcalls[i].libname != NULL; i++) count++;
-  ASSERT_EQ_INT(108, count);
+  ASSERT_EQ_INT(109, count);
   for (size_t i = 0; i < sizeof(manifest) / sizeof(manifest[0]); i++) {
     uint8_t lib_index = 0;
     uint8_t call_index = 0;

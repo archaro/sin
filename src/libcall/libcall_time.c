@@ -40,6 +40,7 @@ typedef enum TimeCalendarPart {
   TIME_HOUR,
   TIME_MINUTE,
   TIME_SECOND,
+  TIME_WEEKDAY,
 } TimeCalendarPart;
 
 typedef enum TimeFormat {
@@ -203,6 +204,9 @@ static uint8_t *time_calendar_part(RuntimeContext *ctx, uint8_t *nextop,
     case TIME_SECOND:
       value = utc.tm_sec;
       break;
+    case TIME_WEEKDAY:
+      value = utc.tm_wday == 0 ? 7 : utc.tm_wday;
+      break;
     default:
       return lc_undefined_nil_return(ctx, nextop);
   }
@@ -244,6 +248,13 @@ uint8_t *lc_time_second(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
   (void)item;
   return time_calendar_part(ctx, nextop,
       "time.second expects an integer timestamp in milliseconds", TIME_SECOND);
+}
+
+uint8_t *lc_time_weekday(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {
+  (void)item;
+  return time_calendar_part(ctx, nextop,
+      "time.weekday expects an integer timestamp in milliseconds",
+      TIME_WEEKDAY);
 }
 
 uint8_t *lc_time_timestamp(RuntimeContext *ctx, uint8_t *nextop, ITEM_t *item) {

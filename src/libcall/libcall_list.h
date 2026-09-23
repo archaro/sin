@@ -117,4 +117,5 @@
   X("time", "timestamp",   8,  6, 1, lc_time_timestamp) \
   X("time", "time",        8,  7, 1, lc_time_time) \
   X("time", "date",        8,  8, 1, lc_time_date) \
-  X("time", "fulldate",    8,  9, 1, lc_time_fulldate)
+  X("time", "fulldate",    8,  9, 1, lc_time_fulldate) \
+  X("time", "weekday",     8, 10, 1, lc_time_weekday)

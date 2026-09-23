@@ -1,19 +1,31 @@
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "compiler/compiler_pipeline.h"
 #include "config.h"
 #include "error.h"
 #include "libcall.h"
 #include "libcall_handlers.h"
+#include "list.h"
 #include "stack.h"
 #include "test_assert.h"
 
 #include "shared/test_libcall_support.h"
 
 extern CONFIG_t config;
+
+static bool force_gmtime_r_failure;
+
+extern struct tm *__real_gmtime_r(const time_t *timep, struct tm *result);
+
+struct tm *__wrap_gmtime_r(const time_t *timep, struct tm *result) {
+  if (force_gmtime_r_failure) return NULL;
+  return __real_gmtime_r(timep, result);
+}
 
 static VALUE_t call_year(VALUE_t input) {
   push_stack(config.vm->stack, input);
@@ -36,7 +48,7 @@ void test_time_year_registry_contract(void) {
   size_t count = 0;
 
   while (libcalls[count].libname != NULL) count++;
-  ASSERT_EQ_INT(108, count);
+  ASSERT_EQ_INT(109, count);
   ASSERT_TRUE(libcall_lookup_pair("time", "year", &lib_index, &call_index,
                                  &args));
   ASSERT_EQ_INT(8, lib_index);
@@ -47,10 +59,11 @@ void test_time_year_registry_contract(void) {
   ASSERT_EQ_INT(1, args);
 
   const char *names[] = {"month", "day", "hour", "minute", "second",
-                         "timestamp", "time", "date", "fulldate"};
+                         "timestamp", "time", "date", "fulldate", "weekday"};
   TimeHandler handlers[] = {lc_time_month, lc_time_day, lc_time_hour,
                             lc_time_minute, lc_time_second, lc_time_timestamp,
-                            lc_time_time, lc_time_date, lc_time_fulldate};
+                            lc_time_time, lc_time_date, lc_time_fulldate,
+                            lc_time_weekday};
   for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
     ASSERT_TRUE(libcall_lookup_pair("time", names[i], &lib_index, &call_index,
                                    &args));
@@ -61,6 +74,184 @@ void test_time_year_registry_contract(void) {
     ASSERT_TRUE(libcall_pair_arg_count(lib_index, call_index, &args));
     ASSERT_EQ_INT(1, args);
   }
+}
+
+void test_time_weekday_utc_all_days_and_boundaries(void) {
+  static const int64_t midnight_timestamps[] = {
+      INT64_C(259200000), INT64_C(345600000), INT64_C(432000000),
+      INT64_C(518400000), INT64_C(604800000), INT64_C(691200000),
+      INT64_C(777600000),
+  };
+  static const int64_t expected[] = {7, 1, 2, 3, 4, 5, 6};
+
+  setup_libcall_runtime();
+  for (size_t i = 0; i < sizeof(midnight_timestamps) /
+      sizeof(midnight_timestamps[0]); i++) {
+    VALUE_t result = call_time(lc_time_weekday,
+        (VALUE_t){VALUE_int, {.i = midnight_timestamps[i]}});
+    ASSERT_EQ_INT(VALUE_int, result.type);
+    ASSERT_EQ_INT(expected[i], result.i);
+  }
+
+  VALUE_t result = call_time(lc_time_weekday,
+      (VALUE_t){VALUE_int, {.i = INT64_C(259199999)}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(6, result.i);
+  result = call_time(lc_time_weekday,
+      (VALUE_t){VALUE_int, {.i = INT64_C(345599999)}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(7, result.i);
+  result = call_time(lc_time_weekday,
+      (VALUE_t){VALUE_int, {.i = -1}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(3, result.i);
+  result = call_time(lc_time_weekday,
+      (VALUE_t){VALUE_int, {.i = INT64_C(-345600000)}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(7, result.i);
+  result = call_time(lc_time_weekday,
+      (VALUE_t){VALUE_int, {.i = INT64_C(-259200001)}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(7, result.i);
+  result = call_time(lc_time_weekday,
+      (VALUE_t){VALUE_int, {.i = INT64_C(-259200000)}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(1, result.i);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_time_weekday_is_utc_under_nonutc_timezone(void) {
+  const char *previous = getenv("TZ");
+  bool had_previous = previous != NULL;
+  char *saved = previous ? strdup(previous) : NULL;
+  ASSERT_TRUE(!previous || saved != NULL);
+  ASSERT_EQ_INT(0, setenv("TZ", "UTC+8", 1));
+  tzset();
+
+  setup_libcall_runtime();
+  VALUE_t result = call_time(lc_time_weekday,
+      (VALUE_t){VALUE_int, {.i = 0}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(4, result.i);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+
+  if (had_previous) {
+    ASSERT_EQ_INT(0, setenv("TZ", saved, 1));
+  } else {
+    ASSERT_EQ_INT(0, unsetenv("TZ"));
+  }
+  tzset();
+  ASSERT_TRUE((getenv("TZ") != NULL) == had_previous);
+  if (had_previous) ASSERT_TRUE(strcmp(getenv("TZ"), saved) == 0);
+  free(saved);
+}
+
+void test_time_weekday_rejects_invalid_types_and_preserves_error(void) {
+  setup_libcall_runtime();
+  VALUE_t invalid_string = {VALUE_str, {.s = strdup("not milliseconds")}};
+  ASSERT_NOT_NULL(invalid_string.s);
+  VALUE_t result = call_time(lc_time_weekday, invalid_string);
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  assert_invalid_args_detail_contains("time.weekday");
+
+  VALUE_t invalids[] = {
+      {VALUE_float, {.f = 1.5}},
+      {VALUE_bool, {.i = 1}},
+      VALUE_NIL,
+      {VALUE_list, {.list = sin_list_build_owned(NULL, 0)}},
+      {VALUE_float, {.f = 0.0}},
+  };
+  ASSERT_NOT_NULL(invalids[3].list);
+  for (size_t i = 0; i < sizeof(invalids) / sizeof(invalids[0]); i++) {
+    result = call_time(lc_time_weekday, invalids[i]);
+    ASSERT_EQ_INT(VALUE_nil, result.type);
+    assert_invalid_args_detail_contains("time.weekday");
+  }
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+
+  set_error_item(itemstore_root(config.itemstore_ctx), ERR_RUNTIME_INVALIDARGS,
+                 "prior error", NULL);
+  result = call_time(lc_time_weekday,
+      (VALUE_t){VALUE_int, {.i = 0}});
+  ASSERT_EQ_INT(VALUE_int, result.type);
+  ASSERT_EQ_INT(4, result.i);
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_INVALIDARGS, item_value(error)->i);
+  ITEM_t *message = find_item(itemstore_root(config.itemstore_ctx), "error.msg");
+  ASSERT_NOT_NULL(message);
+  ASSERT_TRUE(strcmp(item_value(message)->s,
+                    "Invalid arguments to library call. (prior error)") == 0);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_time_weekday_conversion_failure_is_undefined(void) {
+  setup_libcall_runtime();
+  force_gmtime_r_failure = true;
+  VALUE_t result = call_time(lc_time_weekday,
+      (VALUE_t){VALUE_int, {.i = 0}});
+  force_gmtime_r_failure = false;
+  ASSERT_EQ_INT(VALUE_nil, result.type);
+  ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+  ASSERT_NOT_NULL(error);
+  ASSERT_EQ_INT(ERR_RUNTIME_UNDEFINED, item_value(error)->i);
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_time_weekday_extreme_timestamp_follows_host_support(void) {
+  setup_libcall_runtime();
+  const int64_t extremes[] = {INT64_MIN, INT64_MAX};
+  for (size_t i = 0; i < sizeof(extremes) / sizeof(extremes[0]); i++) {
+    VALUE_t result = call_time(lc_time_weekday,
+        (VALUE_t){VALUE_int, {.i = extremes[i]}});
+    if (result.type == VALUE_int) {
+      ASSERT_TRUE(result.i >= 1 && result.i <= 7);
+    } else {
+      ASSERT_EQ_INT(VALUE_nil, result.type);
+      ITEM_t *error = find_item(itemstore_root(config.itemstore_ctx), "error");
+      ASSERT_NOT_NULL(error);
+      ASSERT_EQ_INT(ERR_RUNTIME_UNDEFINED, item_value(error)->i);
+    }
+  }
+  ASSERT_EQ_INT(0, size_stack(config.vm->stack));
+  teardown_libcall_runtime();
+}
+
+void test_time_weekday_source_integration_and_arity(void) {
+  setup_libcall_runtime();
+  VALUE_t source = {VALUE_str, {.s = strdup(
+      "result.weekday = time.weekday{0};")}};
+  ASSERT_NOT_NULL(source.s);
+  push_stack(config.vm->stack, source);
+  VALUE_t result;
+  (void)lc_sys_compile(test_ctx(), NULL, NULL);
+  result = pop_stack(config.vm->stack);
+  ASSERT_EQ_INT(VALUE_bool, result.type);
+  ASSERT_EQ_INT(1, result.i);
+  ITEM_t *weekday = find_item(itemstore_root(config.itemstore_ctx),
+                              "result.weekday");
+  ASSERT_NOT_NULL(weekday);
+  ASSERT_EQ_INT(VALUE_int, item_value(weekday)->type);
+  ASSERT_EQ_INT(4, item_value(weekday)->i);
+
+  const char *invalid[] = {"time.weekday;", "time.weekday{1, 2};"};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
+    OUTPUT_t *out = NULL;
+    CompilerDiagnostic diag;
+    compiler_diag_init(&diag);
+    ASSERT_TRUE(compile_source_to_bytecode_diag(invalid[i], strlen(invalid[i]),
+                                                &out, &diag) != 0);
+    ASSERT_TRUE(out == NULL);
+    ASSERT_EQ_INT(DIAG_PHASE_LOWER, diag.phase);
+    ASSERT_NOT_NULL(diag.message);
+    ASSERT_TRUE(strstr(diag.message, "invalid libcall argument count") != NULL);
+    compiler_diag_reset(&diag);
+  }
+  teardown_libcall_runtime();
 }
 
 void test_time_year_utc_calendar_boundaries(void) {

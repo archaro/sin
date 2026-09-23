@@ -497,7 +497,13 @@ rewrite.runtime.test_rand_float_and_chance_boundaries,api.libcall.rand;libcall.r
 rewrite.runtime.test_rand_choice_ownership_and_selection,api.libcall.rand;libcall.rand.choice
 rewrite.runtime.test_rand_preserves_errors_and_clone_failure,api.libcall.rand;libcall.rand.chance;libcall.rand.choice;libcall.rand.float;libcall.rand.int
 rewrite.runtime.test_rand_source_integration_and_arity,api.libcall.rand;language.token.tlibname;libcall.rand.chance;libcall.rand.choice;libcall.rand.float;libcall.rand.int
-rewrite.runtime.test_time_year_registry_contract,api.libcall.table;api.libcall.time;libcall.time.year;libcall.time.month;libcall.time.day;libcall.time.hour;libcall.time.minute;libcall.time.second;libcall.time.timestamp;libcall.time.time;libcall.time.date;libcall.time.fulldate
+rewrite.runtime.test_time_year_registry_contract,api.libcall.table;api.libcall.time;libcall.time.year;libcall.time.month;libcall.time.day;libcall.time.hour;libcall.time.minute;libcall.time.second;libcall.time.timestamp;libcall.time.time;libcall.time.date;libcall.time.fulldate;libcall.time.weekday
+rewrite.runtime.test_time_weekday_utc_all_days_and_boundaries,api.libcall.time;libcall.time.weekday
+rewrite.runtime.test_time_weekday_is_utc_under_nonutc_timezone,api.libcall.time;libcall.time.weekday
+rewrite.runtime.test_time_weekday_rejects_invalid_types_and_preserves_error,api.common.errors;api.libcall.time;libcall.time.weekday
+rewrite.runtime.test_time_weekday_conversion_failure_is_undefined,api.common.errors;api.libcall.time;libcall.time.weekday
+rewrite.runtime.test_time_weekday_extreme_timestamp_follows_host_support,api.common.errors;api.libcall.time;libcall.time.weekday
+rewrite.runtime.test_time_weekday_source_integration_and_arity,api.libcall.time;language.token.tlibname;libcall.time.weekday
 rewrite.runtime.test_time_year_utc_calendar_boundaries,api.libcall.time;libcall.time.year
 rewrite.runtime.test_time_year_negative_millisecond_flooring,api.libcall.time;libcall.time.year
 rewrite.runtime.test_time_calendar_components_are_utc_integers,api.libcall.time;libcall.time.month;libcall.time.day;libcall.time.hour;libcall.time.minute;libcall.time.second
