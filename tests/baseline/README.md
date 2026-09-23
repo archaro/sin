@@ -55,34 +55,27 @@ executable handlers. The current active floor files separately contain the
 reviewed thresholds for the implemented libcall modules. Their numeric floors
 are retained as conservative thresholds; this refresh changes provenance only.
 
-The fresh GCC 13/gcov 13 observation used the coverage inventory target:
+The latest GCC 13/gcov 13 and Clang 18/LLVM 18 observations used the coverage
+inventory target:
 
 ```sh
 make CC=gcc _coverage-inventory
+make CC=clang _coverage-inventory
 ```
 
-It produced `obj/coverage-gcc/coverage/coverage.csv` at `2026-09-13
-07:40:57` (BST, UTC+01:00). The equivalent `make CC=clang _coverage-inventory` fresh
-native Clang 18/LLVM 18 measurement produced
-`obj/coverage-clang/coverage/coverage.csv` at `2026-09-13 07:43:03` (BST, UTC+01:00).
-Each target composes the `BUILD=coverage _test` workload and the subsequent
-`coverage_gate` collection.
-
-After the Clang linker and profile-environment fixes, a fresh
-`make CC=clang _coverage-inventory` run at commit `ff352b7` reproduced the three
-Clang observations below using Ubuntu Clang 18.1.3 and LLVM 18.1.3. Its report
-was written at `2026-09-13 12:10:40` (BST, UTC+01:00). All 578 workload tests
-and the runner discovery/jobs check passed. The overall coverage comparison
-failed on `src/compiler/emitbc.c` (286/393 lines, 72.77%, against its 72.91%
-floor); math, time, and text each passed. This verifies their recorded
-provenance without changing any numeric floor or the historical snapshot.
+The GCC report was written to `obj/coverage-gcc/coverage/coverage.csv` at
+`2026-09-23 21:03:16` (BST, UTC+01:00); the Clang report was written to
+`obj/coverage-clang/coverage/coverage.csv` at `2026-09-23 21:05:07` (BST,
+UTC+01:00). Each target composes the `BUILD=coverage _test` workload and the
+subsequent `coverage_gate` collection. Both full workloads passed all 588 tests,
+and both compiler-specific coverage gates passed all 58 module records.
 
 The resulting full-workload counts and active floors are:
 
 | Module and current descriptor family | Fresh GCC 13/gcov 13 observation | Fresh Clang 18/LLVM 18 observation | Retained GCC floor | Retained Clang floor |
 | --- | ---: | ---: | ---: | ---: |
 | `libcall_math.c`: 19 public handlers plus helpers | 200/200 lines; 135/144 branches; 25/25 functions | 316/316 lines; 145/154 branches; 25/25 functions | 100.00 / 70.00 / 100.00 | 100.00 / 70.00 / 100.00 |
-| `libcall_time.c`: 10 public handlers plus helpers | 135/147 lines; 49/63 branches; 15/15 functions | 198/217 lines; 70/88 branches; 15/15 functions | 90.90 / 70.00 / 100.00 | 81.08 / 50.00 / 100.00 |
+| `libcall_time.c`: 12 public handlers plus helpers | 193/204 lines; 109/122 branches; 20/20 functions | 283/300 lines; 131/148 branches; 20/20 functions | 90.90 / 70.00 / 100.00 | 81.08 / 50.00 / 100.00 |
 | `libcall_text.c`: `split`, `words`, `lines`, `condense`, `join` | 328/344 lines; 207/240 branches; 14/14 functions | 397/425 lines; 207/240 branches; 14/14 functions | 94.62 / 79.31 / 100.00 | 89.66 / 79.31 / 100.00 |
 
 Each triplet is lines / branches / functions. A fresh native Clang 18
