@@ -11,7 +11,8 @@ libcall-specific diagnostic, and return that libcall's documented
 invalid-argument value. Current invalid-argument return shapes are `false` for
 `sys.compile{source}`, `sys.exists{name}`, `str.contains`, `str.startswith`,
 `str.endswith`, and `str.eqcasei`; `nil` for other sys, task, network, string,
-list, and rand libcalls that have a typed or range-checked argument.
+list, conversion, text, rand, and time libcalls that have a typed or
+range-checked argument.
 Any-value calls such as `sys.log`, `str.valtostr`, and `list.islist` accept every
 defined value and never take the `ERR_RUNTIME_INVALIDARGS` path for value type.
 Failures that are not invalid arguments keep their own contract; for example a

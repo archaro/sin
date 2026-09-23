@@ -4,9 +4,11 @@ This page is the reference for the runtime-managed `error` namespace and its
 numeric error codes. For the conceptual distinction between failures, return
 values, and diagnostics, see the [Failure Model](../guide/failure-model.md).
 The exact return values, side effects, and error-setting rules for each
-operation are in the [libcall reference](libcalls.md) and the [sys](libcalls-sys.md),
-[str](libcalls-str.md), [net](libcalls-net.md), [list](libcalls-list.md),
-[task](libcalls-task.md), and [math](libcalls-math.md) library pages.
+operation are in the [libcall reference](libcalls.md) and the [conv](libcalls-conv.md),
+[sys](libcalls-sys.md), [str](libcalls-str.md), [net](libcalls-net.md),
+[list](libcalls-list.md), [math](libcalls-math.md), [rand](libcalls-rand.md),
+[task](libcalls-task.md), [text](libcalls-text.md), and [time](libcalls-time.md)
+library pages.
 
 [Reference Manual](README.md) · [Language Reference](language.md) ·
 [Libcalls](libcalls.md) · [Tool Reference](tools.md)
